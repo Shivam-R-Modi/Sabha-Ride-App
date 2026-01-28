@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Sabha Ride Seva</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              saffron: {
+                DEFAULT: '#FF6B35',
+                dark: '#F4722B',
+                light: '#FF8C5A'
+              },
+              cream: {
+                DEFAULT: '#FAF9F6',
+                dark: '#F2EFE9'
+              },
+              gold: '#D4AF37',
+              coffee: '#3D2914',
+              mocha: '#5C4033',
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              header: ['Poppins', 'sans-serif'],
+            },
+            animation: {
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'float': 'float 3s ease-in-out infinite',
+              'spin-slow': 'spin 8s linear infinite',
+            },
+            keyframes: {
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-5px)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root {
+        --sat: env(safe-area-inset-top);
+        --sar: env(safe-area-inset-right);
+        --sab: env(safe-area-inset-bottom);
+        --sal: env(safe-area-inset-left);
+      }
+      body {
+        background-color: #FAF9F6;
+        color: #3D2914;
+        -webkit-tap-highlight-color: transparent;
+        overflow-x: hidden;
+        width: 100%;
+      }
+      h1, h2, h3, h4 {
+        text-wrap: balance;
+      }
+      .pb-safe {
+        padding-bottom: var(--sab);
+      }
+      .pt-safe {
+        padding-top: var(--sat);
+      }
+      /* Prevent iOS Zoom on focus for inputs with font-size < 16px */
+      input, select, textarea {
+        font-size: 16px !important;
+      }
+      .rangoli-border {
+        position: relative;
+      }
+      .rangoli-border::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 10%;
+        right: 10%;
+        height: 4px;
+        background-image: radial-gradient(#D4AF37 1px, transparent 1.5px);
+        background-size: 8px 8px;
+        opacity: 0.4;
+      }
+      .gold-shimmer {
+        background: linear-gradient(135deg, #D4AF37 0%, #FFD700 50%, #D4AF37 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .btn-feedback:active {
+        transform: scale(0.96);
+        transition: transform 0.1s ease;
+      }
+      .success-draw {
+        stroke-dasharray: 100;
+        stroke-dashoffset: 100;
+        animation: draw 0.6s ease-out forwards;
+      }
+      @keyframes draw {
+        to { stroke-dashoffset: 0; }
+      }
+      /* Scrollbar refinements */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #D4AF3744;
+        border-radius: 10px;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "firebase/": "https://esm.sh/firebase@^12.8.0/",
+    "@firebase/app": "https://esm.sh/@firebase/app@^0.14.7",
+    "@firebase/auth": "https://esm.sh/@firebase/auth@^1.12.0",
+    "@firebase/firestore": "https://esm.sh/@firebase/firestore@^4.10.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

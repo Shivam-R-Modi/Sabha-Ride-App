@@ -1,0 +1,7 @@
+{
+  "name": "Sabha Ride Seva",
+  "description": "A community ride coordination app for Hindu temple gatherings, facilitating transport for students.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
