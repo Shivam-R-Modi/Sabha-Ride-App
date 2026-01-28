@@ -37,9 +37,9 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
     }
 
     return (
-        <div className="min-h-screen bg-cream flex flex-col items-center justify-center p-8 text-center">
-            <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-8 animate-pulse ${role === 'manager' ? 'bg-purple-100' : 'bg-orange-100'}`}>
-                {role === 'manager' ? <Lock className="w-10 h-10 text-purple-600" /> : <Clock className="w-10 h-10 text-saffron" />}
+        <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
+            <div className={`w-28 h-28 rounded-full flex items-center justify-center mb-8 animate-pulse clay-card ${role === 'manager' ? 'text-purple-600' : 'text-saffron'}`}>
+                {role === 'manager' ? <Lock className="w-10 h-10" /> : <Clock className="w-10 h-10" />}
             </div>
 
             <h2 className="font-header font-bold text-2xl text-coffee mb-3">{title}</h2>
@@ -47,7 +47,7 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                 {description}
             </p>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 w-full max-w-sm text-left space-y-4 mb-8">
+            <div className="clay-card w-full max-w-sm text-left space-y-4 mb-8">
                 {steps.map((step, idx) => (
                     <div key={idx} className={`flex items-start gap-3 ${step.completed ? '' : 'opacity-50'}`}>
                         {step.completed ? (
@@ -63,13 +63,13 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                 ))}
             </div>
 
-            <button 
+            <button
                 onClick={onBack}
-                className="text-gray-400 font-bold text-sm hover:text-coffee transition-colors"
+                className="clay-button-secondary w-full max-w-[200px]"
             >
                 Logout & Return
             </button>
-            
+
             <div className="mt-12 opacity-50">
                 <LotusIcon className="w-8 h-8 text-coffee mx-auto" />
             </div>

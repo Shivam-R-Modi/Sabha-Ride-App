@@ -16,7 +16,7 @@ export const VehicleSelection: React.FC<VehicleSelectionProps> = ({ onSelectionC
 
     const handleSelect = async (vehicle: Vehicle) => {
         if (!currentUser || !userProfile) return;
-        
+
         setAssigningId(vehicle.id);
         try {
             await assignVehicleToDriver(vehicle, currentUser.uid, userProfile.name);
@@ -30,40 +30,40 @@ export const VehicleSelection: React.FC<VehicleSelectionProps> = ({ onSelectionC
     };
 
     return (
-        <div className="min-h-screen bg-cream flex flex-col items-center p-6">
-             <div className="mt-8 mb-8 text-center">
-                 <div className="w-16 h-16 bg-saffron/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                     <LotusIcon className="w-8 h-8 text-saffron" />
-                 </div>
-                 <h1 className="font-header font-bold text-2xl text-coffee">Select Your Vehicle</h1>
-                 <p className="text-gray-500">Choose the car you are driving today.</p>
-             </div>
+        <div className="min-h-screen flex flex-col items-center p-6 pb-24">
+            <div className="mt-8 mb-8 text-center">
+                <div className="w-20 h-20 bg-saffron/10 rounded-full flex items-center justify-center mx-auto mb-4 clay-card">
+                    <LotusIcon className="w-10 h-10 text-saffron" />
+                </div>
+                <h1 className="font-header font-bold text-2xl text-coffee">Select Your Vehicle</h1>
+                <p className="text-gray-500">Choose the car you are driving today.</p>
+            </div>
 
-             {loading ? (
-                 <div className="flex flex-col items-center justify-center py-20 opacity-50">
-                     <Loader2 className="w-8 h-8 animate-spin text-saffron mb-2" />
-                     <p className="text-sm">Checking garage...</p>
-                 </div>
-             ) : (
-                 <div className="w-full max-w-md space-y-4">
-                     {availableVehicles.length === 0 ? (
-                         <div className="bg-white p-8 rounded-2xl text-center shadow-sm border border-gray-200">
-                             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
-                                 <Car size={32} />
-                             </div>
-                             <h3 className="font-bold text-gray-600">No Vehicles Available</h3>
-                             <p className="text-sm text-gray-400 mt-1">Please contact your coordinator.</p>
-                             <button onClick={() => window.location.reload()} className="mt-4 text-saffron font-bold text-sm flex items-center gap-1 justify-center">
-                                 <RefreshCcw size={14} /> Refresh
-                             </button>
-                         </div>
-                     ) : (
+            {loading ? (
+                <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                    <Loader2 className="w-8 h-8 animate-spin text-saffron mb-2" />
+                    <p className="text-sm">Checking garage...</p>
+                </div>
+            ) : (
+                <div className="w-full max-w-md space-y-4">
+                    {availableVehicles.length === 0 ? (
+                        <div className="clay-card p-8 text-center">
+                            <div className="w-16 h-16 bg-gray-100/50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+                                <Car size={32} />
+                            </div>
+                            <h3 className="font-bold text-gray-600">No Vehicles Available</h3>
+                            <p className="text-sm text-gray-400 mt-1">Please contact your coordinator.</p>
+                            <button onClick={() => window.location.reload()} className="mt-4 text-saffron font-bold text-sm flex items-center gap-1 justify-center hover:scale-105 transition-transform">
+                                <RefreshCcw size={14} /> Refresh
+                            </button>
+                        </div>
+                    ) : (
                         availableVehicles.map(v => (
-                            <button 
+                            <button
                                 key={v.id}
                                 onClick={() => handleSelect(v)}
                                 disabled={assigningId !== null}
-                                className="w-full bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between group hover:border-saffron hover:shadow-md transition-all active:scale-[0.98]"
+                                className="clay-card w-full p-5 flex items-center justify-between group hover:scale-[1.02] active:scale-[0.98] transition-all text-left"
                             >
                                 <div className="flex items-center gap-4 text-left">
                                     <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center text-green-600 border border-green-100">
@@ -80,7 +80,7 @@ export const VehicleSelection: React.FC<VehicleSelectionProps> = ({ onSelectionC
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 {assigningId === v.id ? (
                                     <Loader2 className="animate-spin text-saffron" />
                                 ) : (
@@ -90,9 +90,9 @@ export const VehicleSelection: React.FC<VehicleSelectionProps> = ({ onSelectionC
                                 )}
                             </button>
                         ))
-                     )}
-                 </div>
-             )}
+                    )}
+                </div>
+            )}
         </div>
     );
 };

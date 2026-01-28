@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, TabView } from '../../types';
 import { MOCK_HISTORY, DiyaIcon, LotusIcon } from '../../constants';
 import { PickupForm } from '../PickupForm';
-import { RideStatusCard } from '../RideStatus'; 
+import { RideStatusCard } from '../RideStatus';
 import { MyRides } from '../MyRides';
 import { Car, Navigation, AlertCircle, Loader2, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useActiveRide, markReadyToLeave } from '../../hooks/useFirestore';
@@ -16,7 +16,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
     const { currentTab } = useNavigation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [showReadyModal, setShowReadyModal] = useState(false);
-    
+
     // Use Firestore Hook
     const { activeRide, loading } = useActiveRide(user.id);
 
@@ -35,7 +35,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
         if (isFormOpen) {
             return <PickupForm user={user} onClose={() => setIsFormOpen(false)} onSubmit={handleRequestRide} />;
         }
-        
+
         if (loading) {
             return (
                 <div className="flex flex-col items-center justify-center h-64">
@@ -69,7 +69,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                     ) : (
                         <div
                             onClick={() => setIsFormOpen(true)}
-                            className="bg-white rounded-3xl p-6 shadow-sm border border-orange-100 flex items-center justify-between group btn-feedback transition-all cursor-pointer rangoli-border relative overflow-hidden"
+                            className="clay-card-accent flex items-center justify-between group cursor-pointer relative overflow-hidden"
                         >
                             <div className="absolute top-0 right-0 p-2 opacity-10">
                                 <Sparkles size={40} className="text-gold" />
@@ -81,7 +81,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                                 <div>
                                     <h3 className="font-header font-bold text-coffee text-xl leading-tight">Request Pickup</h3>
                                     <p className="text-xs text-mocha/60 mt-1 flex items-center gap-1">
-                                        <Sparkles size={10} className="text-gold" /> 
+                                        <Sparkles size={10} className="text-gold" />
                                         Click to join this Friday's ride
                                     </p>
                                 </div>
@@ -92,15 +92,15 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                         </div>
                     )}
 
-                    <div className="bg-white rounded-3xl p-8 shadow-md border border-gray-100 text-center relative overflow-hidden transition-all group">
+                    <div className="clay-card text-center relative overflow-hidden transition-all group">
                         {!activeRide && (
                             <div className="absolute inset-0 bg-cream/40 backdrop-blur-[1px] z-10 flex items-center justify-center">
-                                <span className="bg-white/90 px-3 py-1 rounded-full text-[10px] font-bold text-coffee/40 uppercase tracking-widest border border-gray-100">Pending Assignment</span>
+                                <span className="clay-badge-status">Pending Assignment</span>
                             </div>
                         )}
                         <h3 className="font-header font-bold text-coffee text-xl mb-1">Return Trip</h3>
                         <p className="text-xs text-mocha/60 mb-8">Ready to go home? Alert your sevak.</p>
-                        
+
                         {activeRide?.isReadyToLeave ? (
                             <div className="bg-green-50 border border-green-100 text-green-700 py-5 rounded-2xl font-bold flex flex-col items-center justify-center gap-2 animate-in slide-in-from-bottom-4">
                                 <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-100">
@@ -112,20 +112,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                             <button
                                 disabled={!activeRide}
                                 onClick={() => setShowReadyModal(true)}
-                                className="w-full bg-gradient-to-r from-coffee to-mocha text-white font-bold py-5 rounded-2xl shadow-xl shadow-gray-200 active:scale-95 btn-feedback transition-transform border-b-4 border-black/20"
+                                className="clay-btn-cta-large mx-auto"
                             >
                                 I'M READY TO LEAVE
                             </button>
                         )}
                     </div>
 
-                    <div className="bg-blue-50/50 border border-blue-100 rounded-3xl p-6 flex gap-4 items-start md:col-span-1">
-                        <div className="bg-blue-500/10 p-3 rounded-2xl text-blue-600">
+                    <div className="clay-card-notice flex gap-4 items-start md:col-span-1">
+                        <div className="bg-amber-500/10 p-3 rounded-2xl text-amber-600">
                             <AlertCircle size={24} />
                         </div>
                         <div>
-                            <h4 className="text-sm font-bold text-blue-900 leading-tight">Weekly Notice</h4>
-                            <p className="text-xs text-blue-700/80 mt-2 leading-relaxed">Please request your ride by Thursday evening to ensure we can coordinate a driver for your location.</p>
+                            <h4 className="text-sm font-bold text-amber-900 leading-tight">Weekly Notice</h4>
+                            <p className="text-xs text-amber-800/80 mt-2 leading-relaxed">Please request your ride by Thursday evening to ensure we can coordinate a driver for your location.</p>
                         </div>
                     </div>
                 </div>
@@ -144,9 +144,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
             </div>
             <h2 className="text-2xl font-header font-bold text-coffee">{user.name}</h2>
             <p className="text-gold font-medium text-sm tracking-wide mt-1 uppercase">Devoted Student</p>
-            <div className="mt-8 p-6 bg-white rounded-3xl border border-orange-50 shadow-sm flex items-center gap-4 text-left">
+            <div className="clay-card mt-8 flex items-center gap-4 text-left">
                 <div className="bg-orange-50 p-2 rounded-xl text-saffron">
-                  <MapPin size={20} />
+                    <MapPin size={20} />
                 </div>
                 <p className="text-sm text-mocha/70 line-clamp-2 leading-relaxed">{user.address}</p>
             </div>
@@ -168,22 +168,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
 
             {showReadyModal && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-coffee/60 backdrop-blur-md animate-in fade-in">
-                    <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl transform scale-100 animate-in zoom-in-95 duration-200 border-t-8 border-gold">
+                    <div className="clay-modal max-w-sm">
                         <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-6 text-saffron">
                             <Navigation size={32} />
                         </div>
                         <h3 className="font-header font-bold text-2xl text-coffee mb-2 text-center">Ready for Pickup?</h3>
                         <p className="text-mocha/60 text-sm mb-8 text-center leading-relaxed">Your driver will be notified to head towards the designated pickup point.</p>
                         <div className="flex gap-4">
-                            <button 
+                            <button
                                 onClick={() => setShowReadyModal(false)}
-                                className="flex-1 py-4 text-mocha font-bold bg-cream rounded-2xl hover:bg-orange-50 transition-colors btn-feedback"
+                                className="clay-button-secondary flex-1"
                             >
                                 Cancel
                             </button>
-                            <button 
+                            <button
                                 onClick={handleReadyToLeave}
-                                className="flex-1 py-4 text-white font-bold bg-saffron rounded-2xl shadow-lg shadow-orange-100 btn-feedback"
+                                className="clay-button-primary flex-1"
                             >
                                 Yes, Notify
                             </button>

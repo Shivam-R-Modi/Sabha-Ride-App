@@ -160,7 +160,7 @@ export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({
         </div>
         <div className="flex items-center gap-3">
           <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-[10px] font-bold text-coffee uppercase tracking-widest">Urgent (>30m)</span>
+          <span className="text-[10px] font-bold text-coffee uppercase tracking-widest">Urgent ({'>'} 30m)</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="w-6 h-3 rounded-full bg-blue-100 flex items-center justify-center">

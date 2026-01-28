@@ -22,7 +22,6 @@ export const LotusLoader: React.FC<{ size?: number }> = ({ size = 64 }) => (
       <LotusIcon className="w-full h-full text-saffron animate-pulse-slow drop-shadow-sm" />
       <div className="absolute inset-0 border-2 border-gold/20 rounded-full animate-spin-slow"></div>
     </div>
-    <p className="mt-4 text-[10px] font-bold tracking-[0.2em] text-gold uppercase">Jai Swaminarayan</p>
   </div>
 );
 
@@ -64,12 +63,12 @@ export const MOCK_DRIVER: Driver = {
 };
 
 export const MOCK_ALL_DRIVERS: Driver[] = [
-    { ...MOCK_DRIVER, id: 'd1', name: 'Rajesh Kumar', capacity: 7, status: 'available', currentVehicleId: 'v1' },
-    { id: 'd2', name: 'Sanjay Shah', address: '202 Driver Rd, Edison, NJ', carModel: 'Honda Odyssey', carColor: 'Blue', plateNumber: 'XYZ-987', phone: '555-0200', avatarUrl: 'https://ui-avatars.com/api/?name=Sanjay+Shah&background=random', capacity: 7, status: 'available', currentVehicleId: 'v2' },
-    { id: 'd3', name: 'Amit Patel', address: '303 Driver Ct, Edison, NJ', carModel: 'Toyota Camry', carColor: 'White', plateNumber: 'LMN-456', phone: '555-0201', avatarUrl: 'https://ui-avatars.com/api/?name=Amit+Patel&background=random', capacity: 4, status: 'available', currentVehicleId: 'v3' },
-    { id: 'd4', name: 'Priya Desai', address: '404 Driver Blvd, Edison, NJ', carModel: 'Tesla Model Y', carColor: 'Red', plateNumber: 'TES-123', phone: '555-0202', avatarUrl: 'https://ui-avatars.com/api/?name=Priya+Desai&background=random', capacity: 4, status: 'available', currentVehicleId: 'v4' },
-    { id: 'd5', name: 'Vikram Singh', address: '505 Driver Way, Edison, NJ', carModel: 'Ford Explorer', carColor: 'Black', plateNumber: 'FRD-555', phone: '555-0203', avatarUrl: 'https://ui-avatars.com/api/?name=Vikram+Singh&background=random', capacity: 6, status: 'available', currentVehicleId: 'v5' },
-    { id: 'd6', name: 'Rohan Gupta', address: '606 Driver Ln, Edison, NJ', carModel: 'Honda Pilot', carColor: 'Grey', plateNumber: 'HND-777', phone: '555-0204', avatarUrl: 'https://ui-avatars.com/api/?name=Rohan+Gupta&background=random', capacity: 7, status: 'available', currentVehicleId: 'v6' },
+  { ...MOCK_DRIVER, id: 'd1', name: 'Rajesh Kumar', capacity: 7, status: 'available', currentVehicleId: 'v1' },
+  { id: 'd2', name: 'Sanjay Shah', address: '202 Driver Rd, Edison, NJ', carModel: 'Honda Odyssey', carColor: 'Blue', plateNumber: 'XYZ-987', phone: '555-0200', avatarUrl: 'https://ui-avatars.com/api/?name=Sanjay+Shah&background=random', capacity: 7, status: 'available', currentVehicleId: 'v2' },
+  { id: 'd3', name: 'Amit Patel', address: '303 Driver Ct, Edison, NJ', carModel: 'Toyota Camry', carColor: 'White', plateNumber: 'LMN-456', phone: '555-0201', avatarUrl: 'https://ui-avatars.com/api/?name=Amit+Patel&background=random', capacity: 4, status: 'available', currentVehicleId: 'v3' },
+  { id: 'd4', name: 'Priya Desai', address: '404 Driver Blvd, Edison, NJ', carModel: 'Tesla Model Y', carColor: 'Red', plateNumber: 'TES-123', phone: '555-0202', avatarUrl: 'https://ui-avatars.com/api/?name=Priya+Desai&background=random', capacity: 4, status: 'available', currentVehicleId: 'v4' },
+  { id: 'd5', name: 'Vikram Singh', address: '505 Driver Way, Edison, NJ', carModel: 'Ford Explorer', carColor: 'Black', plateNumber: 'FRD-555', phone: '555-0203', avatarUrl: 'https://ui-avatars.com/api/?name=Vikram+Singh&background=random', capacity: 6, status: 'available', currentVehicleId: 'v5' },
+  { id: 'd6', name: 'Rohan Gupta', address: '606 Driver Ln, Edison, NJ', carModel: 'Honda Pilot', carColor: 'Grey', plateNumber: 'HND-777', phone: '555-0204', avatarUrl: 'https://ui-avatars.com/api/?name=Rohan+Gupta&background=random', capacity: 7, status: 'available', currentVehicleId: 'v6' },
 ];
 
 export const MOCK_PEERS: User[] = [
@@ -103,105 +102,105 @@ export const MOCK_HISTORY: Ride[] = [
 export const VENUE_ADDRESS = "BAPS Shri Swaminarayan Mandir, Edison";
 
 export const UNASSIGNED_STUDENTS: User[] = [
-    { id: 'u99', name: 'Rohan G.', address: '101 Pine Rd, Edison', avatarUrl: 'https://picsum.photos/108/108', phone: '555-0199' },
-    { id: 'u98', name: 'Kavya P.', address: '202 Birch Ln, Edison', avatarUrl: 'https://picsum.photos/109/109', phone: '555-0198' },
+  { id: 'u99', name: 'Rohan G.', address: '101 Pine Rd, Edison', avatarUrl: 'https://picsum.photos/108/108', phone: '555-0199' },
+  { id: 'u98', name: 'Kavya P.', address: '202 Birch Ln, Edison', avatarUrl: 'https://picsum.photos/109/109', phone: '555-0198' },
 ];
 
 export const MOCK_PICKUP_ASSIGNMENT: DriverAssignment = {
-    id: 'da_1',
-    type: 'pickup',
-    date: '2023-11-03',
-    status: 'active',
-    passengers: [
-        { ...MOCK_PEERS[0], stopStatus: 'completed', sequenceOrder: 1, eta: '5:15 PM', notes: 'Waiting at main gate' },
-        { ...MOCK_PEERS[1], stopStatus: 'pending', sequenceOrder: 2, eta: '5:30 PM' },
-        { ...CURRENT_USER, stopStatus: 'pending', sequenceOrder: 3, eta: '5:45 PM' },
-    ],
-    totalDistance: '12.5 mi',
-    totalTime: '45 min',
-    venueAddress: VENUE_ADDRESS
+  id: 'da_1',
+  type: 'pickup',
+  date: '2023-11-03',
+  status: 'active',
+  passengers: [
+    { ...MOCK_PEERS[0], stopStatus: 'completed', sequenceOrder: 1, eta: '5:15 PM', notes: 'Waiting at main gate' },
+    { ...MOCK_PEERS[1], stopStatus: 'pending', sequenceOrder: 2, eta: '5:30 PM' },
+    { ...CURRENT_USER, stopStatus: 'pending', sequenceOrder: 3, eta: '5:45 PM' },
+  ],
+  totalDistance: '12.5 mi',
+  totalTime: '45 min',
+  venueAddress: VENUE_ADDRESS
 };
 
 export const MOCK_DROPOFF_ASSIGNMENT: DriverAssignment = {
-    id: 'da_2',
-    type: 'dropoff',
-    date: '2023-11-03',
-    status: 'pending',
-    passengers: [
-        { ...MOCK_PEERS[0], stopStatus: 'pending', sequenceOrder: 1, eta: '8:45 PM' },
-        { ...MOCK_PEERS[1], stopStatus: 'pending', sequenceOrder: 2, eta: '9:00 PM' },
-        { ...CURRENT_USER, stopStatus: 'pending', sequenceOrder: 3, eta: '9:15 PM' },
-    ],
-    totalDistance: '12.8 mi',
-    totalTime: '50 min',
-    venueAddress: VENUE_ADDRESS
+  id: 'da_2',
+  type: 'dropoff',
+  date: '2023-11-03',
+  status: 'pending',
+  passengers: [
+    { ...MOCK_PEERS[0], stopStatus: 'pending', sequenceOrder: 1, eta: '8:45 PM' },
+    { ...MOCK_PEERS[1], stopStatus: 'pending', sequenceOrder: 2, eta: '9:00 PM' },
+    { ...CURRENT_USER, stopStatus: 'pending', sequenceOrder: 3, eta: '9:15 PM' },
+  ],
+  totalDistance: '12.8 mi',
+  totalTime: '50 min',
+  venueAddress: VENUE_ADDRESS
 };
 
 // --- Boston Mock Data for Clustering Test ---
 
 const BOSTON_ADDRESSES = [
-    "1 City Hall Sq, Boston, MA 02201 (City Hall)",
-    "75 State St, Boston, MA 02109 (Financial District)",
-    "100 Cambridge St, Boston, MA 02114 (Beacon Hill)",
-    "131 Cambridge St, Boston, MA 02114 (Old West Church)",
-    "141 Cambridge St, Boston, MA 02114 (First Harrison Gray Otis House)",
-    "307 Hanover St, Boston, MA 02113 (North End - Carmelina's)",
-    "77 N Washington St, Boston, MA 02114 (North End/West End)",
-    "30 Penniman Rd, Boston, MA 02134 (Allston)",
-    "430 Faneuil St, Boston, MA 02135 (Brighton)",
-    "109 Newbury St, Boston, MA 02116 (Back Bay - Brooks Brothers)",
-    "115 Newbury St, Boston, MA 02116 (Back Bay - See Eyewear)",
-    "117 Newbury St, Boston, MA 02116 (Back Bay - Faherty)",
-    "121 Newbury St, Boston, MA 02116 (Back Bay - Santa Maria Novella)",
-    "123 Newbury St, Boston, MA 02116 (Back Bay - Diptyque)",
-    "127-129 Newbury St, Boston, MA 02116 (Back Bay - The Rug Company)",
-    "131 Newbury St, Boston, MA 02116 (Back Bay - Winston Flowers)",
-    "135 Newbury St, Boston, MA 02116 (Back Bay - Suit Shop)",
-    "137 Newbury St, Boston, MA 02116 (Back Bay - L'Elite Bridal)",
-    "139 Newbury St, Boston, MA 02116 (Back Bay - Byredo)",
-    "141 Newbury St, Boston, MA 02116 (Back Bay - Allen Edmonds)",
-    "143 Newbury St, Boston, MA 02116 (Back Bay - Veronica Beard)",
-    "147 Newbury St, Boston, MA 02116 (Back Bay - Saltie Girl)",
-    "700 Boylston St, Boston, MA 02116 (Back Bay - BPL Central Library)",
-    "2 Boylston St, Boston, MA 02116 (Chinatown Library)",
-    "52 Academy Hill Rd, Brighton, MA 02135 (Brighton Municipal Court)",
-    "3 City Square, Charlestown, MA 02129 (Charlestown Municipal Court)",
-    "510 Washington St, Dorchester, MA 02124 (Dorchester Municipal Court)",
-    "37 Meridian St, East Boston, MA 02128 (East Boston Municipal Court)",
-    "85 Warren St, Roxbury, MA 02119 (Roxbury Municipal Court)",
-    "535 East Broadway, South Boston, MA 02127 (South Boston Municipal Court)"
+  "1 City Hall Sq, Boston, MA 02201 (City Hall)",
+  "75 State St, Boston, MA 02109 (Financial District)",
+  "100 Cambridge St, Boston, MA 02114 (Beacon Hill)",
+  "131 Cambridge St, Boston, MA 02114 (Old West Church)",
+  "141 Cambridge St, Boston, MA 02114 (First Harrison Gray Otis House)",
+  "307 Hanover St, Boston, MA 02113 (North End - Carmelina's)",
+  "77 N Washington St, Boston, MA 02114 (North End/West End)",
+  "30 Penniman Rd, Boston, MA 02134 (Allston)",
+  "430 Faneuil St, Boston, MA 02135 (Brighton)",
+  "109 Newbury St, Boston, MA 02116 (Back Bay - Brooks Brothers)",
+  "115 Newbury St, Boston, MA 02116 (Back Bay - See Eyewear)",
+  "117 Newbury St, Boston, MA 02116 (Back Bay - Faherty)",
+  "121 Newbury St, Boston, MA 02116 (Back Bay - Santa Maria Novella)",
+  "123 Newbury St, Boston, MA 02116 (Back Bay - Diptyque)",
+  "127-129 Newbury St, Boston, MA 02116 (Back Bay - The Rug Company)",
+  "131 Newbury St, Boston, MA 02116 (Back Bay - Winston Flowers)",
+  "135 Newbury St, Boston, MA 02116 (Back Bay - Suit Shop)",
+  "137 Newbury St, Boston, MA 02116 (Back Bay - L'Elite Bridal)",
+  "139 Newbury St, Boston, MA 02116 (Back Bay - Byredo)",
+  "141 Newbury St, Boston, MA 02116 (Back Bay - Allen Edmonds)",
+  "143 Newbury St, Boston, MA 02116 (Back Bay - Veronica Beard)",
+  "147 Newbury St, Boston, MA 02116 (Back Bay - Saltie Girl)",
+  "700 Boylston St, Boston, MA 02116 (Back Bay - BPL Central Library)",
+  "2 Boylston St, Boston, MA 02116 (Chinatown Library)",
+  "52 Academy Hill Rd, Brighton, MA 02135 (Brighton Municipal Court)",
+  "3 City Square, Charlestown, MA 02129 (Charlestown Municipal Court)",
+  "510 Washington St, Dorchester, MA 02124 (Dorchester Municipal Court)",
+  "37 Meridian St, East Boston, MA 02128 (East Boston Municipal Court)",
+  "85 Warren St, Roxbury, MA 02119 (Roxbury Municipal Court)",
+  "535 East Broadway, South Boston, MA 02127 (South Boston Municipal Court)"
 ];
 
 const getMockCoordinates = (address: string): { x: number, y: number } => {
-    const lower = address.toLowerCase();
-    if (lower.includes('back bay') || lower.includes('newbury') || lower.includes('boylston')) {
-        return { x: 20 + Math.random() * 20, y: 60 + Math.random() * 20 };
-    }
-    if (lower.includes('city hall') || lower.includes('state st') || lower.includes('cambridge st') || lower.includes('chinatown')) {
-        return { x: 45 + Math.random() * 10, y: 45 + Math.random() * 10 };
-    }
-    if (lower.includes('north end') || lower.includes('hanover') || lower.includes('charlestown') || lower.includes('east boston') || lower.includes('washington')) {
-        return { x: 60 + Math.random() * 20, y: 20 + Math.random() * 20 };
-    }
-    if (lower.includes('allston') || lower.includes('brighton') || lower.includes('faneuil') || lower.includes('penniman')) {
-        return { x: 5 + Math.random() * 10, y: 40 + Math.random() * 20 };
-    }
-    if (lower.includes('dorchester') || lower.includes('roxbury') || lower.includes('south boston') || lower.includes('broadway')) {
-        return { x: 60 + Math.random() * 20, y: 70 + Math.random() * 20 };
-    }
-    return { x: Math.random() * 100, y: Math.random() * 100 };
+  const lower = address.toLowerCase();
+  if (lower.includes('back bay') || lower.includes('newbury') || lower.includes('boylston')) {
+    return { x: 20 + Math.random() * 20, y: 60 + Math.random() * 20 };
+  }
+  if (lower.includes('city hall') || lower.includes('state st') || lower.includes('cambridge st') || lower.includes('chinatown')) {
+    return { x: 45 + Math.random() * 10, y: 45 + Math.random() * 10 };
+  }
+  if (lower.includes('north end') || lower.includes('hanover') || lower.includes('charlestown') || lower.includes('east boston') || lower.includes('washington')) {
+    return { x: 60 + Math.random() * 20, y: 20 + Math.random() * 20 };
+  }
+  if (lower.includes('allston') || lower.includes('brighton') || lower.includes('faneuil') || lower.includes('penniman')) {
+    return { x: 5 + Math.random() * 10, y: 40 + Math.random() * 20 };
+  }
+  if (lower.includes('dorchester') || lower.includes('roxbury') || lower.includes('south boston') || lower.includes('broadway')) {
+    return { x: 60 + Math.random() * 20, y: 70 + Math.random() * 20 };
+  }
+  return { x: Math.random() * 100, y: Math.random() * 100 };
 };
 
 export const MOCK_PENDING_REQUESTS: StudentRequest[] = BOSTON_ADDRESSES.map((address, i) => ({
-    id: `sr_${i}`,
-    name: `Student ${i + 1}`,
-    address: address,
-    phone: '555-0100',
-    avatarUrl: `https://ui-avatars.com/api/?name=Student+${i}&background=random`,
-    requestTime: new Date(Date.now() - Math.random() * 3600000).toISOString(),
-    requestedTimeSlot: i % 2 === 0 ? '5:30 PM' : '6:00 PM',
-    status: 'pending',
-    coordinates: getMockCoordinates(address)
+  id: `sr_${i}`,
+  name: `Student ${i + 1}`,
+  address: address,
+  phone: '555-0100',
+  avatarUrl: `https://ui-avatars.com/api/?name=Student+${i}&background=random`,
+  requestTime: new Date(Date.now() - Math.random() * 3600000).toISOString(),
+  requestedTimeSlot: i % 2 === 0 ? '5:30 PM' : '6:00 PM',
+  status: 'pending',
+  coordinates: getMockCoordinates(address)
 }));
 
 export const MOCK_OPTIMIZED_GROUPS: RideGroup[] = [];

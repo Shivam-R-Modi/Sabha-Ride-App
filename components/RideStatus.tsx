@@ -21,9 +21,9 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
 
   if (ride.status === 'requested') {
     return (
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-orange-200 text-center animate-pulse">
+      <div className="clay-card text-center animate-pulse">
         <div className="w-16 h-16 bg-orange-100 rounded-full mx-auto flex items-center justify-center mb-3">
-            <Clock className="text-saffron w-8 h-8" />
+          <Clock className="text-saffron w-8 h-8" />
         </div>
         <h3 className="text-lg font-bold text-coffee">Request Received</h3>
         <p className="text-gray-500 text-sm mt-1">Coordinating with nearby sevaks...</p>
@@ -34,7 +34,7 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
   if (!driver) return null;
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden w-full">
+    <div className="clay-card clay-card-lg overflow-hidden w-full">
       {/* Header Status */}
       <div className={`${config.bg} px-4 py-2.5 flex justify-between items-center`}>
         <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${config.color}`}>
@@ -50,9 +50,9 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
       <div className="p-4 sm:p-5">
         {/* Driver Info */}
         <div className="flex items-center sm:items-start gap-3 sm:gap-4 mb-5">
-          <img 
-            src={driver.avatarUrl} 
-            alt={driver.name} 
+          <img
+            src={driver.avatarUrl}
+            alt={driver.name}
             className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-white shadow-md shrink-0"
           />
           <div className="flex-1 min-w-0">
@@ -83,7 +83,7 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
             <p className="text-[10px] text-saffron font-bold">{ride.timeSlot}</p>
           </div>
           <div className="relative">
-             <div className="absolute -left-[27px] top-0 bg-white p-1">
+            <div className="absolute -left-[27px] top-0 bg-white p-1">
               <div className="w-3 h-3 rounded-full bg-coffee border-2 border-white shadow-sm ring-1 ring-gray-100"></div>
             </div>
             <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Drop-off</p>
@@ -97,9 +97,9 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
             <p className="text-[10px] text-gray-400 font-bold uppercase mb-2 tracking-wider">Riding with</p>
             <div className="flex items-center -space-x-2">
               {ride.peers.map(peer => (
-                <img 
+                <img
                   key={peer.id}
-                  src={peer.avatarUrl} 
+                  src={peer.avatarUrl}
                   alt={peer.name}
                   className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-white shadow-sm"
                   title={peer.name}
