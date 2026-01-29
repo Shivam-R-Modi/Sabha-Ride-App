@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, TabView } from '../../types';
-import { MOCK_HISTORY, DiyaIcon, LotusIcon } from '../../constants';
+import { DiyaIcon, LotusIcon } from '../../constants';
 import { PickupForm } from '../PickupForm';
 import { RideStatusCard } from '../RideStatus';
 import { MyRides } from '../MyRides';
@@ -156,7 +156,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
     const renderContent = () => {
         switch (currentTab) {
             case 'home': return renderHome();
-            case 'rides': return <MyRides history={MOCK_HISTORY} upcoming={activeRide ? [activeRide] : []} />;
+            case 'rides': return <MyRides history={[]} upcoming={activeRide ? [activeRide] : []} />;
             case 'profile': return renderProfile();
             default: return renderHome();
         }

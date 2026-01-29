@@ -1,6 +1,5 @@
 import React from 'react';
 import { Ride } from '../../types';
-import { MOCK_HISTORY } from '../../constants';
 import { CheckCircle2, Calendar } from 'lucide-react';
 
 export const DriverHistory: React.FC = () => {
@@ -11,16 +10,16 @@ export const DriverHistory: React.FC = () => {
          <div className="grid grid-cols-2 gap-3 mb-6">
             <div className="clay-card p-4 border-l-4 border-l-saffron">
                <p className="text-xs text-gray-500 uppercase font-bold">Total Rides</p>
-               <p className="text-2xl font-bold text-saffron">24</p>
+               <p className="text-2xl font-bold text-saffron">0</p>
             </div>
             <div className="clay-card p-4 border-l-4 border-l-blue-400">
                <p className="text-xs text-gray-500 uppercase font-bold">Students Moved</p>
-               <p className="text-2xl font-bold text-blue-600">86</p>
+               <p className="text-2xl font-bold text-blue-600">0</p>
             </div>
          </div>
 
          <div className="space-y-3">
-            {MOCK_HISTORY.map((ride, idx) => (
+            {[].map((ride: Ride, idx: number) => (
                <div key={idx} className="clay-card p-4 flex justify-between items-center transition-transform hover:scale-[1.01]">
                   <div className="flex items-center gap-3">
                      <div className="bg-gray-100 p-2 rounded-lg text-gray-500">
