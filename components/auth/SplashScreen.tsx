@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LotusIcon, OmWatermark, LotusLoader } from '../../constants';
-import { ChevronRight, Sparkles } from 'lucide-react';
+import { OmWatermark } from '../../constants';
 
 interface SplashScreenProps {
   onFinish: () => void;
@@ -8,24 +7,33 @@ interface SplashScreenProps {
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [showButton, setShowButton] = useState(false);
+  const [showTapPrompt, setShowTapPrompt] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setLoadingProgress((prev) => {
         if (prev >= 100) {
           clearInterval(interval);
-          setShowButton(true);
+          setShowTapPrompt(true);
           return 100;
         }
-        return prev + 4; // Faster progress bar for a better feel
+        return prev + 4;
       });
     }, 30);
     return () => clearInterval(interval);
   }, []);
 
+  const handleTap = () => {
+    if (showTapPrompt) {
+      onFinish();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-8 text-center overflow-hidden">
+    <div
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-8 text-center overflow-hidden cursor-pointer"
+      onClick={handleTap}
+    >
       {/* Background Image */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
@@ -38,8 +46,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
         <OmWatermark />
       </div>
 
-      <div className="absolute bottom-16 left-0 right-0 z-10 flex flex-col items-center animate-in zoom-in duration-1000">
-        {!showButton ? (
+      <div className="absolute bottom-16 left-0 right-0 z-10 flex flex-col items-center">
+        {!showTapPrompt ? (
           <div className="clay-progress-track w-64">
             <div
               className="clay-progress-fill"
@@ -47,22 +55,11 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
             />
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-6 duration-700">
-            <button
-              onClick={onFinish}
-              className="clay-button-primary clay-button-primary-lg clay-button-primary-pulse group relative overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out" />
-              <Sparkles size={18} className="text-gold animate-pulse" />
-              <span>Ride Seva</span>
-              <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-
-          </div>
+          <p className="text-white/80 text-lg font-medium tracking-wide animate-pulse">
+            Tap anywhere to continue
+          </p>
         )}
       </div>
-
-
     </div>
   );
 };
