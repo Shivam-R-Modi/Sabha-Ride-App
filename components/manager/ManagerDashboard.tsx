@@ -332,7 +332,7 @@ export const ManagerDashboard: React.FC = () => {
       </BottomSheet>
 
       {/* Fleet Bottom Panel - Fixed above bottom nav on mobile, normal flow on desktop */}
-      <div className="bg-white border-t border-gray-200 flex flex-col flex-shrink-0 fixed bottom-16 left-0 right-0 z-30 lg:relative lg:bottom-0">
+      <div className="bg-white border-t border-gray-200 flex flex-col flex-shrink-0 fixed bottom-[72px] left-0 right-0 z-50 lg:relative lg:bottom-0 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
         <div className="px-3 sm:px-4 py-1.5 sm:py-2 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
           <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest">Sevak Fleet Status</span>
           <span className="text-[10px] sm:text-xs font-bold text-green-600 bg-green-50 px-1.5 sm:px-2 py-0.5 rounded">
