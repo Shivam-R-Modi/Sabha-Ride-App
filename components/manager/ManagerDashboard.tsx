@@ -234,7 +234,7 @@ export const ManagerDashboard: React.FC = () => {
 
           <div className="h-6 w-px bg-gray-100 mx-1 hidden sm:block"></div>
 
-          <button onClick={() => setIsFleetManaging(true)} className="p-2.5 text-gray-500 hover:bg-gray-100 rounded-xl btn-feedback hidden sm:flex items-center gap-2">
+          <button onClick={() => setIsFleetManaging(true)} className="p-2.5 text-gray-500 hover:bg-gray-100 rounded-xl btn-feedback flex items-center gap-2">
             <Car size={18} />
             <span className="text-xs font-bold">Fleet</span>
           </button>
@@ -354,8 +354,8 @@ export const ManagerDashboard: React.FC = () => {
                 key={driver.id}
                 onClick={() => setSelectedEntityId(driver.id)}
                 className={`flex items-center gap-2 sm:gap-3 shrink-0 cursor-pointer rounded-xl border transition-all ${selectedEntityId === driver.id
-                    ? 'bg-orange-50 border-saffron shadow-md'
-                    : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
+                  ? 'bg-orange-50 border-saffron shadow-md'
+                  : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
                   } px-2 sm:px-3 py-1.5 sm:py-2`}
               >
                 <div className="relative shrink-0">
