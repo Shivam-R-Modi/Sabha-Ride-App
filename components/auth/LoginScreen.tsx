@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import { LotusIcon } from '../../constants';
 import { ChevronRight, Loader2, AlertCircle, Database, Mail, Lock, UserPlus } from 'lucide-react';
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from '@firebase/auth';
 import { auth, googleProvider } from '../../firebase/config';
@@ -93,17 +92,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-screen bg-cream flex flex-col">
       {/* Header Image/Art */}
-      <div className="h-[35vh] bg-saffron relative overflow-hidden rounded-b-[40px] shadow-lg">
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #fff 2px, transparent 2px)', backgroundSize: '20px 20px' }}></div>
-        <div className="absolute bottom-0 w-full h-16 bg-gradient-to-t from-black/10 to-transparent"></div>
-        <div className="flex flex-col items-center justify-center h-full text-white pt-8">
-          <LotusIcon className="w-16 h-16 mb-4 drop-shadow-lg" />
-          <h1 className="font-header font-bold text-3xl">Welcome</h1>
-          <p className="opacity-90">Sign in to coordinate your seva</p>
+      <div className="h-[28vh] relative overflow-hidden rounded-b-[40px] shadow-lg">
+        {/* Background Image */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: 'url(/assets/login-background.jpg)' }}
+        ></div>
+        {/* Gradient Overlay for better text readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/30"></div>
+        {/* Text Content - centered */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white z-10">
+          <h1 className="font-header font-bold text-3xl drop-shadow-lg">𝑱̲̅𝒂̲̅𝒊̲̅ 𝑺̲̅𝒘̲̅𝒂̲̅𝒎̲̅𝒊̲̅𝒏̲̅𝒂̲̅𝒓̲̅𝒂̲̅𝒚̲̅𝒂̲̅𝒏̲̅!</h1>
+          <p className="mt-2 drop-shadow-md">Sign in to coordinate your seva</p>
         </div>
       </div>
 
-      <div className="flex-1 px-6 -mt-10">
+      <div className="flex-1 px-6 mt-6">
         <div className="clay-card clay-card-lg min-h-[300px]">
           {error && (
             <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm rounded-xl flex items-start gap-2 border border-red-100 animate-in slide-in-from-top-2">
@@ -131,7 +135,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <div>
               <label className="block text-xs font-bold text-coffee mb-1 ml-1 uppercase">Email Address</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="email"
                   placeholder="name@example.com"
@@ -146,7 +150,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <div>
               <label className="block text-xs font-bold text-coffee mb-1 ml-1 uppercase">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="password"
                   placeholder="••••••••"
