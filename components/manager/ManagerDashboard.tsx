@@ -331,37 +331,44 @@ export const ManagerDashboard: React.FC = () => {
         )}
       </BottomSheet>
 
-      {/* Fleet Bottom Panel (Desktop only) */}
-      <div className="h-28 bg-white border-t border-gray-200 hidden lg:flex flex-col">
-        <div className="px-4 py-1.5 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sevak Fleet Status</span>
-          <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 rounded">
+      {/* Fleet Bottom Panel - Responsive on all devices */}
+      <div className="bg-white border-t border-gray-200 flex flex-col flex-shrink-0">
+        <div className="px-3 sm:px-4 py-1.5 sm:py-2 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+          <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest">Sevak Fleet Status</span>
+          <span className="text-[10px] sm:text-xs font-bold text-green-600 bg-green-50 px-1.5 sm:px-2 py-0.5 rounded">
             {availableDrivers.filter(d => d.status === 'available').length}/{availableDrivers.length} Online
           </span>
         </div>
-        <div className="flex-1 flex overflow-x-auto items-center px-4 gap-3 scrollbar-hide">
+        <div className="h-16 sm:h-20 lg:h-24 flex overflow-x-auto items-center px-3 sm:px-4 gap-2 sm:gap-3 scrollbar-hide">
           {driversLoading ? (
             <div className="flex items-center justify-center w-full">
-              <span className="text-[10px] text-gray-400">Loading drivers...</span>
+              <span className="text-[10px] sm:text-xs text-gray-400">Loading drivers...</span>
             </div>
           ) : availableDrivers.length === 0 ? (
             <div className="flex items-center justify-center w-full">
-              <span className="text-[10px] text-gray-400">No approved drivers found</span>
+              <span className="text-[10px] sm:text-xs text-gray-400">No approved drivers found</span>
             </div>
           ) : (
             availableDrivers.map(driver => (
               <div
                 key={driver.id}
                 onClick={() => setSelectedEntityId(driver.id)}
-                className={`clay-card min-w-[200px] flex items-center gap-3 shrink-0 cursor-pointer ${selectedEntityId === driver.id ? 'bg-orange-50 border-saffron shadow-md' : ''}`}
+                className={`flex items-center gap-2 sm:gap-3 shrink-0 cursor-pointer rounded-xl border transition-all ${selectedEntityId === driver.id
+                    ? 'bg-orange-50 border-saffron shadow-md'
+                    : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
+                  } px-2 sm:px-3 py-1.5 sm:py-2`}
               >
                 <div className="relative shrink-0">
-                  <img src={driver.avatarUrl || `https://ui-avatars.com/api/?name=${driver.name}&background=FF6B35&color=fff`} className="w-9 h-9 rounded-full" alt="" />
-                  <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${driver.status === 'available' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                  <img
+                    src={driver.avatarUrl || `https://ui-avatars.com/api/?name=${driver.name}&background=FF6B35&color=fff`}
+                    className="w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full"
+                    alt=""
+                  />
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full border-2 border-white ${driver.status === 'available' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                 </div>
                 <div className="min-w-0">
-                  <p className="font-bold text-xs text-coffee truncate">{driver.name}</p>
-                  <p className="text-[10px] text-gray-400 capitalize">{driver.status}</p>
+                  <p className="font-bold text-[10px] sm:text-xs text-coffee truncate max-w-[100px] sm:max-w-[140px] lg:max-w-[160px]">{driver.name}</p>
+                  <p className="text-[9px] sm:text-[10px] text-gray-400 capitalize hidden sm:block">{driver.status}</p>
                 </div>
               </div>
             ))
