@@ -58,8 +58,8 @@ body::before {
     z-index: 0;
 }
 
-/* Ensure content is above texture */
-#root>* {
+/* Ensure content is above texture - but don't override fixed positioning */
+#root>*:not([class*="fixed"]) {
     position: relative;
     z-index: 1;
 }
