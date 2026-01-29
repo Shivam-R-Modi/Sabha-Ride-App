@@ -46,7 +46,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
         <OmWatermark />
       </div>
 
-      <div className="absolute bottom-16 left-0 right-0 z-10 flex flex-col items-center">
+      <div className="absolute top-16 left-0 right-0 z-10 flex flex-col items-center">
         {!showTapPrompt ? (
           <div className="clay-progress-track w-64">
             <div
