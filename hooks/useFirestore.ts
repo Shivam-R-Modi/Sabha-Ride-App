@@ -8,45 +8,45 @@ import { VENUE_ADDRESS } from '../constants';
 // --- Rides ---
 
 export const useActiveRide = (userId: string) => {
-  const [activeRide, setActiveRide] = useState<Ride | null>(null);
-  const [loading, setLoading] = useState(true);
+    const [activeRide, setActiveRide] = useState<Ride | null>(null);
+    const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!userId) {
-        setLoading(false);
-        return;
-    }
+    useEffect(() => {
+        if (!userId) {
+            setLoading(false);
+            return;
+        }
 
-    const q = query(
-      collection(db, 'rides'),
-      where('studentId', '==', userId),
-      where('status', 'in', ['requested', 'assigned', 'driver_en_route', 'arriving', 'completed'])
-    );
+        const q = query(
+            collection(db, 'rides'),
+            where('studentId', '==', userId),
+            where('status', 'in', ['requested', 'assigned', 'driver_en_route', 'arriving', 'completed'])
+        );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      // Filter locally for today/future relevant rides if needed, 
-      // but for now just take the most recent active one
-      const active = snapshot.docs
-          .map(d => ({id: d.id, ...d.data()} as Ride))
-          .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-          
-      if (active) {
-          // If it's completed but ready to leave is true, we still want to show it for the return trip
-          // Or if it's 'requested'
-          setActiveRide(active);
-      } else {
-          setActiveRide(null);
-      }
-      setLoading(false);
-    }, (error) => {
-        console.error("Error fetching active ride:", error);
-        setLoading(false);
-    });
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            // Filter locally for today/future relevant rides if needed, 
+            // but for now just take the most recent active one
+            const active = snapshot.docs
+                .map(d => ({ id: d.id, ...d.data() } as Ride))
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
-    return unsubscribe;
-  }, [userId]);
+            if (active) {
+                // If it's completed but ready to leave is true, we still want to show it for the return trip
+                // Or if it's 'requested'
+                setActiveRide(active);
+            } else {
+                setActiveRide(null);
+            }
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching active ride:", error);
+            setLoading(false);
+        });
 
-  return { activeRide, loading };
+        return unsubscribe;
+    }, [userId]);
+
+    return { activeRide, loading };
 };
 
 export const useAllActiveRides = () => {
@@ -60,11 +60,11 @@ export const useAllActiveRides = () => {
             collection(db, 'rides'),
             where('status', 'in', ['assigned', 'driver_en_route', 'arriving', 'completed'])
         );
-        
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const list: Ride[] = [];
             snapshot.forEach(doc => {
-                list.push({id: doc.id, ...doc.data()} as Ride);
+                list.push({ id: doc.id, ...doc.data() } as Ride);
             });
             setRides(list);
             setLoading(false);
@@ -116,9 +116,9 @@ export const updateRideDetails = async (rideId: string, updates: Partial<Ride>) 
 };
 
 export const assignRideToDriver = async (rideId: string, driver: Driver) => {
-     try {
+    try {
         const rideRef = doc(db, 'rides', rideId);
-        await updateDoc(rideRef, { 
+        await updateDoc(rideRef, {
             status: 'assigned',
             driver: driver
         });
@@ -131,12 +131,12 @@ export const assignRideToDriver = async (rideId: string, driver: Driver) => {
 export const unassignRide = async (rideId: string) => {
     try {
         const rideRef = doc(db, 'rides', rideId);
-        await updateDoc(rideRef, { 
+        await updateDoc(rideRef, {
             status: 'requested',
             driver: null as any
         });
     } catch (error) {
-         console.error("Error unassigning ride:", error);
+        console.error("Error unassigning ride:", error);
         throw error;
     }
 };
@@ -190,8 +190,8 @@ export const usePendingRequests = () => {
             snapshot.forEach((doc) => {
                 const data = doc.data();
                 // Map fields to StudentRequest type for UI
-                list.push({ 
-                    id: doc.id, 
+                list.push({
+                    id: doc.id,
                     name: data.studentName,
                     address: data.pickupAddress,
                     avatarUrl: data.studentAvatarUrl,
@@ -228,6 +228,37 @@ export const setDriverAvailability = async (driverId: string, status: 'available
     } catch (error) {
         console.error("Error updating driver availability:", error);
     }
+};
+
+// --- Drivers ---
+
+export const useAvailableDrivers = () => {
+    const [drivers, setDrivers] = useState<Driver[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const q = query(
+            collection(db, 'users'),
+            where('role', '==', 'driver'),
+            where('accountStatus', '==', 'approved')
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const driverList: Driver[] = [];
+            snapshot.forEach((doc) => {
+                driverList.push({ id: doc.id, ...doc.data() } as Driver);
+            });
+            setDrivers(driverList);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching available drivers:", error);
+            setLoading(false);
+        });
+
+        return unsubscribe;
+    }, []);
+
+    return { drivers, loading };
 };
 
 // --- Vehicle Management ---
@@ -328,7 +359,7 @@ export const releaseVehicle = async (vehicleId: string, driverId: string) => {
         const vehicleRef = doc(db, 'vehicles', vehicleId);
         await updateDoc(vehicleRef, {
             status: 'available',
-            currentDriverId: null, 
+            currentDriverId: null,
             currentDriverName: null as any
         });
 
@@ -385,27 +416,27 @@ export const useDriverAssignments = (driverId: string) => {
             // In a real app, you'd group by Date/TimeSlot
             const activePickups = pickupRides.filter(r => r.status !== 'completed' && r.status !== 'cancelled');
             if (activePickups.length > 0) {
-                 newAssignments.push({
-                     id: 'pickup_round_1',
-                     type: 'pickup',
-                     date: activePickups[0].date,
-                     status: 'active',
-                     passengers: activePickups.map((r, idx) => ({
-                         ...r, // ride has studentId, studentName etc? No, User details are spread or fetched. 
-                         // Simplified: Assuming ride stores student snapshot. If not, we map what we have.
-                         id: r.id, // Using Ride ID as passenger key for now to avoid complexity
-                         name: (r as any).studentName || "Student",
-                         address: r.pickupAddress,
-                         phone: (r as any).studentPhone || "",
-                         avatarUrl: (r as any).studentAvatarUrl || "",
-                         stopStatus: r.status === 'completed' ? 'completed' : 'pending',
-                         sequenceOrder: idx + 1,
-                         eta: '5:30 PM'
-                     })),
-                     totalDistance: `${activePickups.length * 2.5} mi`,
-                     totalTime: `${activePickups.length * 10} min`,
-                     venueAddress: VENUE_ADDRESS
-                 });
+                newAssignments.push({
+                    id: 'pickup_round_1',
+                    type: 'pickup',
+                    date: activePickups[0].date,
+                    status: 'active',
+                    passengers: activePickups.map((r, idx) => ({
+                        ...r, // ride has studentId, studentName etc? No, User details are spread or fetched. 
+                        // Simplified: Assuming ride stores student snapshot. If not, we map what we have.
+                        id: r.id, // Using Ride ID as passenger key for now to avoid complexity
+                        name: (r as any).studentName || "Student",
+                        address: r.pickupAddress,
+                        phone: (r as any).studentPhone || "",
+                        avatarUrl: (r as any).studentAvatarUrl || "",
+                        stopStatus: r.status === 'completed' ? 'completed' : 'pending',
+                        sequenceOrder: idx + 1,
+                        eta: '5:30 PM'
+                    })),
+                    totalDistance: `${activePickups.length * 2.5} mi`,
+                    totalTime: `${activePickups.length * 10} min`,
+                    venueAddress: VENUE_ADDRESS
+                });
             }
 
             // Group Dropoff Rides
@@ -418,14 +449,14 @@ export const useDriverAssignments = (driverId: string) => {
                     date: activeDropoffs[0].date,
                     status: 'pending',
                     passengers: activeDropoffs.map((r, idx) => ({
-                         id: r.id,
-                         name: (r as any).studentName || "Student",
-                         address: r.pickupAddress, // Destination is home
-                         phone: (r as any).studentPhone || "",
-                         avatarUrl: (r as any).studentAvatarUrl || "",
-                         stopStatus: 'pending',
-                         sequenceOrder: idx + 1,
-                         eta: '8:30 PM'
+                        id: r.id,
+                        name: (r as any).studentName || "Student",
+                        address: r.pickupAddress, // Destination is home
+                        phone: (r as any).studentPhone || "",
+                        avatarUrl: (r as any).studentAvatarUrl || "",
+                        stopStatus: 'pending',
+                        sequenceOrder: idx + 1,
+                        eta: '8:30 PM'
                     })),
                     totalDistance: `${activeDropoffs.length * 3} mi`,
                     totalTime: `${activeDropoffs.length * 12} min`,
@@ -457,23 +488,23 @@ const getZone = (address: string): string => {
 
 export const useAutoDispatch = () => {
     // This hook will run in the Manager Dashboard and acts as the "Server" logic
-    
+
     useEffect(() => {
         // 1. Monitor Pending Requests
         const qRequests = query(collection(db, 'rides'), where('status', '==', 'requested'));
-        
+
         const unsubscribeRequests = onSnapshot(qRequests, async (snapshot) => {
             if (snapshot.empty) return;
 
             // Fetch available drivers (MUST be done inside snapshot to be fresh)
             const qDrivers = query(
-                collection(db, 'users'), 
+                collection(db, 'users'),
                 where('role', '==', 'driver'),
                 where('status', '==', 'available')
             );
             const driverSnap = await getDocs(qDrivers);
             const availableDrivers = driverSnap.docs
-                .map(d => ({id: d.id, ...d.data()} as Driver))
+                .map(d => ({ id: d.id, ...d.data() } as Driver))
                 .filter(d => d.currentVehicleId); // Must have a car
 
             if (availableDrivers.length === 0) return;
@@ -482,7 +513,7 @@ export const useAutoDispatch = () => {
             // We use 'assigned' status rides to see who is going where
             const qActiveRides = query(collection(db, 'rides'), where('status', '==', 'assigned'));
             const activeRidesSnap = await getDocs(qActiveRides);
-            
+
             // Map: DriverID -> Zone being covered
             const driverZones = new Map<string, string>();
             // Map: DriverID -> Load count
@@ -507,8 +538,8 @@ export const useAutoDispatch = () => {
                 // STRATEGY 1: Find a driver already in this zone with capacity
                 for (const driver of availableDrivers) {
                     const currentLoad = driverLoad.get(driver.id) || 0;
-                    const maxCapacity = driver.capacity || 4; 
-                    
+                    const maxCapacity = driver.capacity || 4;
+
                     // If driver is already working this zone and has space
                     if (driverZones.get(driver.id) === studentZone && currentLoad < maxCapacity) {
                         assignedDriver = driver;
@@ -526,8 +557,8 @@ export const useAutoDispatch = () => {
 
                 // STRATEGY 3: Round Robin / Random fallback (fill up anyone with space)
                 if (!assignedDriver) {
-                     const anyDriver = availableDrivers.find(d => (driverLoad.get(d.id) || 0) < (d.capacity || 4));
-                     if (anyDriver) assignedDriver = anyDriver;
+                    const anyDriver = availableDrivers.find(d => (driverLoad.get(d.id) || 0) < (d.capacity || 4));
+                    if (anyDriver) assignedDriver = anyDriver;
                 }
 
                 if (assignedDriver) {
@@ -548,26 +579,26 @@ export const useAutoDispatch = () => {
         // 2. Monitor Ready-To-Leave Requests (Dropoff)
         // Similar clustering logic could be applied here based on destination
         const qActive = query(collection(db, 'rides'), where('isReadyToLeave', '==', true));
-        
+
         const unsubscribeDropoff = onSnapshot(qActive, async (snapshot) => {
-             const ridesNeedingDriver = snapshot.docs.filter(d => {
-                 const data = d.data();
-                 return !data.returnDriver; // Not yet assigned a return driver
-             });
+            const ridesNeedingDriver = snapshot.docs.filter(d => {
+                const data = d.data();
+                return !data.returnDriver; // Not yet assigned a return driver
+            });
 
-             if (ridesNeedingDriver.length === 0) return;
+            if (ridesNeedingDriver.length === 0) return;
 
-             const qDrivers = query(collection(db, 'users'), where('role', '==', 'driver'), where('status', '==', 'available'));
-             const driverSnap = await getDocs(qDrivers);
-             const availableDrivers = driverSnap.docs.map(d => ({id: d.id, ...d.data()} as Driver)).filter(d => d.currentVehicleId);
-             if (availableDrivers.length === 0) return;
+            const qDrivers = query(collection(db, 'users'), where('role', '==', 'driver'), where('status', '==', 'available'));
+            const driverSnap = await getDocs(qDrivers);
+            const availableDrivers = driverSnap.docs.map(d => ({ id: d.id, ...d.data() } as Driver)).filter(d => d.currentVehicleId);
+            if (availableDrivers.length === 0) return;
 
-             ridesNeedingDriver.forEach(async (rideDoc) => {
-                 const driver = availableDrivers[Math.floor(Math.random() * availableDrivers.length)];
-                 await updateDoc(doc(db, 'rides', rideDoc.id), {
-                     returnDriver: driver
-                 });
-                 console.log(`Auto-assigned return ride ${rideDoc.id} to driver ${driver.name}`);
+            ridesNeedingDriver.forEach(async (rideDoc) => {
+                const driver = availableDrivers[Math.floor(Math.random() * availableDrivers.length)];
+                await updateDoc(doc(db, 'rides', rideDoc.id), {
+                    returnDriver: driver
+                });
+                console.log(`Auto-assigned return ride ${rideDoc.id} to driver ${driver.name}`);
             });
         });
 

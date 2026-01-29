@@ -58,7 +58,7 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       
       // Users can update their own profile
-      // Managers can update any profile (for approvals)
+      // Managers can update any user (for approval/rejection)
       allow update: if isOwner(userId) || isManager();
       
       // Only managers can delete users
@@ -83,19 +83,15 @@ service cloud.firestore {
       // List queries - authenticated users with approved status
       allow list: if isApproved();
       
-      // Students can create ride requests
+      // Students can create their own ride requests
       allow create: if isStudent() && request.resource.data.studentId == request.auth.uid;
       
-      // Students can update their own rides (e.g., mark ready to leave)
-      // Drivers can update rides assigned to them
       // Managers can update any ride
-      allow update: if isAuthenticated() && (
-        resource.data.studentId == request.auth.uid ||
-        resource.data.driver.id == request.auth.uid ||
-        resource.data.returnDriver.id == request.auth.uid ||
-        isManager() ||
-        isDriver()
-      );
+      // Drivers can update rides assigned to them
+      // Students can update their own rides (e.g., mark ready to leave)
+      allow update: if isManager() || 
+        (isDriver() && resource.data.driver.id == request.auth.uid) ||
+        (isStudent() && resource.data.studentId == request.auth.uid);
       
       // Only managers can delete rides
       allow delete: if isManager();

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { MOCK_ALL_DRIVERS } from '../../constants';
 import { FleetManagement } from './FleetManagement';
 import { RequestTable } from './RequestTable';
 import { BottomSheet } from '../shared/BottomSheet';
@@ -17,7 +16,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePendingDrivers, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide } from '../../hooks/useFirestore';
+import { usePendingDrivers, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers } from '../../hooks/useFirestore';
 import { Driver, Ride, StudentRequest } from '../../types';
 
 // Ride Assignment Card Component
@@ -111,10 +110,10 @@ const RideAssignmentCard: React.FC<{
           <span>{ride.timeSlot}</span>
         </div>
         <div className={`px-2 py-1 rounded-lg text-xs font-bold ${ride.status === 'assigned' ? 'bg-blue-50 text-blue-600' :
-            ride.status === 'driver_en_route' ? 'bg-yellow-50 text-yellow-600' :
-              ride.status === 'arriving' ? 'bg-orange-50 text-orange-600' :
-                ride.status === 'completed' ? 'bg-green-50 text-green-600' :
-                  'bg-gray-50 text-gray-600'
+          ride.status === 'driver_en_route' ? 'bg-yellow-50 text-yellow-600' :
+            ride.status === 'arriving' ? 'bg-orange-50 text-orange-600' :
+              ride.status === 'completed' ? 'bg-green-50 text-green-600' :
+                'bg-gray-50 text-gray-600'
           }`}>
           {ride.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
         </div>
@@ -146,11 +145,12 @@ export const ManagerDashboard: React.FC = () => {
   const { pendingDrivers } = usePendingDrivers();
   const { requests: pendingRequests, loading: requestsLoading } = usePendingRequests();
   const { rides: activeRides } = useAllActiveRides();
+  const { drivers: availableDrivers, loading: driversLoading } = useAvailableDrivers();
 
-  const selectedEntity = pendingRequests.find(r => r.id === selectedEntityId) || MOCK_ALL_DRIVERS.find(d => d.id === selectedEntityId);
+  const selectedEntity = pendingRequests.find(r => r.id === selectedEntityId) || availableDrivers.find(d => d.id === selectedEntityId);
 
   const handleAssignToAnyDriver = async (requestId: string) => {
-    const available = MOCK_ALL_DRIVERS.find(d => d.status === 'available');
+    const available = availableDrivers.find(d => d.status === 'available');
     if (available) {
       await assignRideToDriver(requestId, available);
       setSelectedEntityId(null);
@@ -167,7 +167,7 @@ export const ManagerDashboard: React.FC = () => {
   };
 
   const handleBulkAssign = async (ids: string[]) => {
-    const available = MOCK_ALL_DRIVERS.find(d => d.status === 'available');
+    const available = availableDrivers.find(d => d.status === 'available');
     if (!available) return alert("No available drivers.");
 
     for (const id of ids) {
@@ -335,25 +335,37 @@ export const ManagerDashboard: React.FC = () => {
       <div className="h-28 bg-white border-t border-gray-200 hidden lg:flex flex-col">
         <div className="px-4 py-1.5 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sevak Fleet Status</span>
-          <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 rounded">6/8 Online</span>
+          <span className="text-[10px] font-bold text-green-600 bg-green-50 px-1.5 rounded">
+            {availableDrivers.filter(d => d.status === 'available').length}/{availableDrivers.length} Online
+          </span>
         </div>
         <div className="flex-1 flex overflow-x-auto items-center px-4 gap-3 scrollbar-hide">
-          {MOCK_ALL_DRIVERS.map(driver => (
-            <div
-              key={driver.id}
-              onClick={() => setSelectedEntityId(driver.id)}
-              className={`clay-card min-w-[200px] flex items-center gap-3 shrink-0 cursor-pointer ${selectedEntityId === driver.id ? 'bg-orange-50 border-saffron shadow-md' : ''}`}
-            >
-              <div className="relative shrink-0">
-                <img src={driver.avatarUrl} className="w-9 h-9 rounded-full" alt="" />
-                <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${driver.status === 'available' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-              </div>
-              <div className="min-w-0">
-                <p className="font-bold text-xs text-coffee truncate">{driver.name}</p>
-                <p className="text-[10px] text-gray-400 capitalize">{driver.status}</p>
-              </div>
+          {driversLoading ? (
+            <div className="flex items-center justify-center w-full">
+              <span className="text-[10px] text-gray-400">Loading drivers...</span>
             </div>
-          ))}
+          ) : availableDrivers.length === 0 ? (
+            <div className="flex items-center justify-center w-full">
+              <span className="text-[10px] text-gray-400">No approved drivers found</span>
+            </div>
+          ) : (
+            availableDrivers.map(driver => (
+              <div
+                key={driver.id}
+                onClick={() => setSelectedEntityId(driver.id)}
+                className={`clay-card min-w-[200px] flex items-center gap-3 shrink-0 cursor-pointer ${selectedEntityId === driver.id ? 'bg-orange-50 border-saffron shadow-md' : ''}`}
+              >
+                <div className="relative shrink-0">
+                  <img src={driver.avatarUrl || `https://ui-avatars.com/api/?name=${driver.name}&background=FF6B35&color=fff`} className="w-9 h-9 rounded-full" alt="" />
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${driver.status === 'available' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-xs text-coffee truncate">{driver.name}</p>
+                  <p className="text-[10px] text-gray-400 capitalize">{driver.status}</p>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

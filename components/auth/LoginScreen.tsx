@@ -1,9 +1,8 @@
 
 import React, { useState } from 'react';
-import { ChevronRight, Loader2, AlertCircle, Database, Mail, Lock, UserPlus } from 'lucide-react';
+import { ChevronRight, Loader2, AlertCircle, Mail, Lock, UserPlus } from 'lucide-react';
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from '@firebase/auth';
 import { auth, googleProvider } from '../../firebase/config';
-import { seedDatabase } from '../../firebase/seed';
 
 interface LoginScreenProps {
   onLoginSuccess: (email: string) => void;
@@ -15,10 +14,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Seed State
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [seedMsg, setSeedMsg] = useState<string | null>(null);
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
@@ -70,22 +65,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       } else {
         setError(err.message || "Authentication failed.");
       }
-    }
-  };
-
-  const handleSeed = async () => {
-    if (isSeeding) return;
-    setIsSeeding(true);
-    setSeedMsg("Seeding DB...");
-    try {
-      await seedDatabase();
-      setSeedMsg("DB Seeded!");
-      setTimeout(() => setSeedMsg(null), 3000);
-    } catch (e) {
-      console.error(e);
-      setSeedMsg("Error Seeding");
-    } finally {
-      setIsSeeding(false);
     }
   };
 
@@ -188,17 +167,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           By continuing, you agree to our Terms of Seva and Privacy Policy.
         </p>
 
-        {/* Developer Tool: Seed Button */}
-        <div className="text-center mt-6 mb-4">
-          <button
-            onClick={handleSeed}
-            disabled={isSeeding}
-            className="text-[10px] text-gray-300 hover:text-saffron flex items-center justify-center gap-1 mx-auto transition-colors"
-          >
-            {isSeeding ? <Loader2 size={10} className="animate-spin" /> : <Database size={10} />}
-            {seedMsg || "Dev: Seed Database"}
-          </button>
-        </div>
       </div>
     </div>
   );
