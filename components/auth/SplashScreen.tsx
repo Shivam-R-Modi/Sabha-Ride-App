@@ -29,7 +29,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
       {/* Background Image */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: 'url(/assets/smruti-1768861058554.png)' }}
+        style={{ backgroundImage: 'url(/assets/splash-background.png)' }}
       />
       {/* Dark Overlay for better text visibility */}
       <div className="absolute inset-0 bg-black/50" />
