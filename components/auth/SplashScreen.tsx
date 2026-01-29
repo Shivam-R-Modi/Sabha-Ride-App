@@ -38,7 +38,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
         <OmWatermark />
       </div>
 
-      <div className="relative z-10 flex flex-col items-center animate-in zoom-in duration-1000">
+      <div className="absolute bottom-16 left-0 right-0 z-10 flex flex-col items-center animate-in zoom-in duration-1000">
         {!showButton ? (
           <div className="clay-progress-track w-64">
             <div
