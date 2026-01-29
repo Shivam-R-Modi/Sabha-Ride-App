@@ -17,46 +17,49 @@ import { useAuth } from './contexts/AuthContext';
 import { useNavigation } from './contexts/NavigationContext';
 
 export default function App() {
-  const { currentUser, userProfile, loading, logout } = useAuth();
+  const { currentUser, userProfile, loading, logout, activeRole } = useAuth();
   const { currentTab } = useNavigation();
   const [showSplash, setShowSplash] = useState(true);
-  
+
   // Local state for specific sub-views that aren't global tabs
   const [selectedAssignment, setSelectedAssignment] = useState<DriverAssignment | null>(null);
 
   // Note: Automatic splash timer removed to favor user-initiated transition
 
   if (loading || showSplash) {
-      return <SplashScreen onFinish={() => setShowSplash(false)} />;
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
   }
 
   if (!currentUser) {
-      return <LoginScreen onLoginSuccess={() => {}} />;
+    return <LoginScreen onLoginSuccess={() => { }} />;
   }
 
   if (!userProfile || !userProfile.role) {
-      return <RoleSelection onSelectRole={() => {}} />;
+    return <RoleSelection onSelectRole={() => { }} />;
   }
 
   if (!userProfile.name || !userProfile.address) {
-      const userEmail = currentUser.email || userProfile.email || "";
-      return <ProfileSetup role={userProfile.role} email={userEmail} onComplete={() => {}} />;
+    const userEmail = currentUser.email || userProfile.email || "";
+    return <ProfileSetup role={userProfile.role} email={userEmail} onComplete={() => { }} />;
   }
 
   if (userProfile.accountStatus === 'pending') {
-      return <PendingApproval role={userProfile.role} onBack={logout} />;
+    return <PendingApproval role={userProfile.role} onBack={logout} />;
   }
 
+  // Use activeRole for rendering dashboards (allows role switching)
+  const displayRole = activeRole || userProfile.role;
+
   const renderContent = () => {
-    if (userProfile.role === 'student') {
+    if (displayRole === 'student') {
       return <StudentDashboard user={userProfile} />;
     }
 
-    if (userProfile.role === 'manager') {
+    if (displayRole === 'manager') {
       return <ManagerDashboard />;
     }
 
-    if (userProfile.role === 'driver') {
+    if (displayRole === 'driver') {
       if (selectedAssignment) {
         return <AssignmentDetail assignment={selectedAssignment} onBack={() => setSelectedAssignment(null)} />;
       }
@@ -80,7 +83,7 @@ export default function App() {
     <div className="relative">
       <PWAPrompt />
       <OmWatermark />
-      <ResponsiveLayout role={userProfile.role}>
+      <ResponsiveLayout role={displayRole}>
         {renderContent()}
       </ResponsiveLayout>
     </div>

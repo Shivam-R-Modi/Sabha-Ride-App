@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
+import { RoleSwitcher } from './RoleSwitcher';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -57,9 +58,12 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName
           </div>
           <h1 className="font-header font-bold text-base text-coffee truncate">Sabha Ride Seva</h1>
         </div>
-        <button onClick={logout} className="p-2 text-gray-400 hover:text-red-500 btn-feedback">
-          <LogOut size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          <RoleSwitcher />
+          <button onClick={logout} className="p-2 text-gray-400 hover:text-red-500 btn-feedback">
+            <LogOut size={20} />
+          </button>
+        </div>
       </div>
     </header>
   );
@@ -87,6 +91,13 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
           </div>
         )}
       </div>
+
+      {/* Role Switcher */}
+      {!isSidebarCollapsed && (
+        <div className="px-6 pb-4">
+          <RoleSwitcher />
+        </div>
+      )}
 
       {/* Nav Links */}
       <nav className="flex-1 px-3 py-4 space-y-2">

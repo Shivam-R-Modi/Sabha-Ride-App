@@ -20,11 +20,13 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
 
     try {
       // Save initial role and email to Firestore
+      // registeredRole is the permanent role that determines role switching permissions
       await setDoc(doc(db, 'users', currentUser.uid), {
         id: currentUser.uid,
         email: currentUser.email || '',
         phone: currentUser.phoneNumber || '', // Optional now
         role: role,
+        registeredRole: role, // Permanent role - determines what roles user can switch to
         createdAt: new Date().toISOString()
       }, { merge: true });
 

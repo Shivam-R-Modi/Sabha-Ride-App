@@ -7,6 +7,7 @@ export interface User {
   phone?: string;
   email?: string;
   role?: UserRole;
+  registeredRole?: UserRole; // Original role from registration - determines role switching permissions
   coordinates?: { lat: number; lng: number };
   accountStatus?: 'pending' | 'approved' | 'rejected';
   currentVehicleId?: string; // Track which vehicle the user has selected
