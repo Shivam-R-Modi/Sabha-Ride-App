@@ -19,6 +19,7 @@ html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-size: 16px;
+    height: 100%;
 }
 
 body {
@@ -27,6 +28,7 @@ body {
     line-height: 1.6;
     background: linear-gradient(135deg, #FAF9F6 0%, #F5F0E8 50%, #EDE8E0 100%);
     min-height: 100dvh;
+    height: 100%;
 }
 
 /* ───────────────────────────────────────────────────────────────
