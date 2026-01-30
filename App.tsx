@@ -9,6 +9,7 @@ import { StudentDashboard } from './components/student/StudentDashboard';
 import { DriverDashboard } from './components/driver/DriverDashboard';
 import { AssignmentDetail } from './components/driver/AssignmentDetail';
 import { DriverHistory } from './components/driver/DriverHistory';
+import { VehicleSelection } from './components/driver/VehicleSelection';
 import { ManagerDashboard } from './components/manager/ManagerDashboard';
 import { ResponsiveLayout } from './components/Layout';
 import { PWAPrompt } from './components/PWAPrompt';
@@ -60,6 +61,14 @@ export default function App() {
     }
 
     if (displayRole === 'driver') {
+      // Check if driver has a vehicle assigned - if not, show vehicle selection
+      // This applies to both regular drivers AND managers switching to driver role
+      const hasVehicle = !!userProfile?.currentVehicleId;
+
+      if (!hasVehicle) {
+        return <VehicleSelection onSelectionComplete={() => { }} />;
+      }
+
       if (selectedAssignment) {
         return <AssignmentDetail assignment={selectedAssignment} onBack={() => setSelectedAssignment(null)} />;
       }

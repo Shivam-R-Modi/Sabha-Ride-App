@@ -111,9 +111,14 @@ service cloud.firestore {
       allow create: if isManager();
       
       // Managers can update any vehicle
-      // Drivers can update vehicles assigned to them
+      // Drivers can update available vehicles (to claim them) OR vehicles assigned to them
       allow update: if isManager() || (
-        isDriver() && resource.data.currentDriverId == request.auth.uid
+        isDriver() && (
+          // Driver can claim an available vehicle
+          (resource.data.status == 'available' && request.resource.data.status == 'in-use') ||
+          // Driver can update their own assigned vehicle
+          resource.data.currentDriverId == request.auth.uid
+        )
       );
       
       // Only managers can delete vehicles
