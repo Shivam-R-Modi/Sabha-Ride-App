@@ -24,13 +24,7 @@ export const LotusLoader: React.FC<{ size?: number }> = ({ size = 64 }) => (
   </div>
 );
 
-export const OmWatermark: React.FC = () => (
-  <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-center opacity-[0.03]">
-    <svg viewBox="0 0 500 500" className="w-[80vw] h-[80vw] text-coffee">
-      <text x="50%" y="50%" textAnchor="middle" fontSize="400" fontFamily="serif" dy=".3em">ॐ</text>
-    </svg>
-  </div>
-);
+export const OmWatermark: React.FC = () => null;
 
 // --- Production Configuration ---
 
