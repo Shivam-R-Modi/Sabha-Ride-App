@@ -91,10 +91,20 @@ export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onSelectAssign
     const isAvailable = userProfile?.status === 'available';
 
     const toggleAvailability = async () => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            console.log("No current user");
+            return;
+        }
         const newStatus = isAvailable ? 'offline' : 'available';
-        // Optimistic update handled by Firestore listener eventually, but we just trigger it
-        await setDriverAvailability(currentUser.uid, newStatus as any);
+        console.log(`Toggling availability to ${newStatus} for user ${currentUser.uid}`);
+        try {
+            await setDriverAvailability(currentUser.uid, newStatus as any);
+            console.log("Availability updated successfully");
+        } catch (error) {
+            console.error("Failed to toggle availability:", error);
+            alert("Failed to update availability. Please try again.");
+        }
+        // Always refresh to get latest state
         await refreshProfile();
     };
 

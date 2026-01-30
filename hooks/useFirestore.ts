@@ -225,8 +225,10 @@ export const setDriverAvailability = async (driverId: string, status: 'available
     try {
         const userRef = doc(db, 'users', driverId);
         await updateDoc(userRef, { status: status });
+        console.log(`Driver ${driverId} availability updated to ${status}`);
     } catch (error) {
         console.error("Error updating driver availability:", error);
+        throw error; // Re-throw so the UI can handle it
     }
 };
 
