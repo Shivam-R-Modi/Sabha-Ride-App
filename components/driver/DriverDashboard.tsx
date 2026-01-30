@@ -75,19 +75,20 @@ const AssignmentCard: React.FC<AssignmentCardProps> = ({ assignment, onSelect })
 };
 
 export const DriverDashboard: React.FC<DriverDashboardProps> = ({ onSelectAssignment }) => {
-    const { userProfile, currentUser, refreshProfile } = useAuth();
+    const { userProfile, currentUser, refreshProfile, activeRole } = useAuth();
     const [switchingCar, setSwitchingCar] = useState(false);
 
     // Real Assignments
     const { assignments, loading } = useDriverAssignments(currentUser?.uid || '');
 
     // Cast userProfile to Driver to safely access driver-specific properties
-    const driverProfile = userProfile?.role === 'driver' ? (userProfile as Driver) : null;
+    // Check activeRole instead of userProfile.role to support role switching (e.g., manager -> driver)
+    const driverProfile = activeRole === 'driver' ? (userProfile as Driver) : null;
 
     // Local state for toggle, ideally persisted in DB via setDriverAvailability
     // We assume 'available' in DB means online. 
-    // Fixed error: Accessing 'status' from driverProfile instead of userProfile union
-    const isAvailable = driverProfile?.status === 'available';
+    // Check status from userProfile since all users have a status field
+    const isAvailable = userProfile?.status === 'available';
 
     const toggleAvailability = async () => {
         if (!currentUser) return;
