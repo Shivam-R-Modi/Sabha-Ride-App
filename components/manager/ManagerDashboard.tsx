@@ -196,6 +196,28 @@ export const ManagerDashboard: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const handleApproveDriver = async (driverId: string) => {
+    try {
+      await updateUserStatus(driverId, 'approved');
+      alert('Driver approved successfully!');
+    } catch (error) {
+      console.error('Error approving driver:', error);
+      alert('Failed to approve driver. Please try again.');
+    }
+  };
+
+  const handleDenyDriver = async (driverId: string) => {
+    if (confirm('Are you sure you want to deny this driver?')) {
+      try {
+        await updateUserStatus(driverId, 'rejected');
+        alert('Driver denied.');
+      } catch (error) {
+        console.error('Error denying driver:', error);
+        alert('Failed to deny driver. Please try again.');
+      }
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-cream relative overflow-hidden">
       {/* Top Control Bar */}
@@ -382,11 +404,58 @@ export const ManagerDashboard: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end" onClick={() => setShowNotifications(false)}>
           <div className="w-full max-w-sm bg-white h-full shadow-2xl animate-in slide-in-from-right flex flex-col pt-safe" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-cream">
-              <h3 className="font-header font-bold text-coffee flex items-center gap-2">Notifications</h3>
+              <h3 className="font-header font-bold text-coffee flex items-center gap-2">
+                Notifications
+                {pendingDrivers.length > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">
+                    {pendingDrivers.length}
+                  </span>
+                )}
+              </h3>
               <button onClick={() => setShowNotifications(false)} className="p-2 text-gray-400"><X size={24} /></button>
             </div>
             <div className="p-4 space-y-4 overflow-y-auto flex-1">
-              <p className="text-xs text-gray-400 text-center py-10">All clear for now</p>
+              {pendingDrivers.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-10">All clear for now</p>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    Pending Rider Approvals ({pendingDrivers.length})
+                  </p>
+                  {pendingDrivers.map((driver) => (
+                    <div key={driver.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center gap-3 mb-3">
+                        <img
+                          src={driver.avatarUrl || `https://ui-avatars.com/api/?name=${driver.name}&background=FF6B35&color=fff`}
+                          className="w-12 h-12 rounded-xl"
+                          alt={driver.name}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-coffee text-sm truncate">{driver.name}</h4>
+                          <p className="text-xs text-gray-500 truncate">{driver.email}</p>
+                          <p className="text-xs text-gray-400 truncate">{driver.phone}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApproveDriver(driver.id)}
+                          className="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1"
+                        >
+                          <CheckCircle2 size={14} />
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleDenyDriver(driver.id)}
+                          className="flex-1 bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1"
+                        >
+                          <X size={14} />
+                          Deny
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
