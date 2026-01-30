@@ -78,9 +78,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Set active role with validation based on registered role hierarchy
   const setActiveRole = (role: UserRole) => {
+    console.log(`[AuthContext] Attempting to set active role to: ${role}`);
     const available = getAvailableRoles();
+    console.log(`[AuthContext] Available roles:`, available);
     if (available.includes(role)) {
+      console.log(`[AuthContext] Setting active role to: ${role}`);
       setActiveRoleState(role);
+    } else {
+      console.warn(`[AuthContext] Role ${role} not in available roles`);
     }
   };
 

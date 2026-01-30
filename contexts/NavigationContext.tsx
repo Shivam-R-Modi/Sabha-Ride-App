@@ -17,7 +17,7 @@ export const useNavigation = () => {
 };
 
 export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentTab, setCurrentTab] = useState<TabView>('home');
+  const [currentTab, setCurrentTabState] = useState<TabView>('home');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar_collapsed');
     return saved ? JSON.parse(saved) : false;
@@ -28,6 +28,12 @@ export const NavigationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [isSidebarCollapsed]);
 
   const toggleSidebar = () => setIsSidebarCollapsed((prev: boolean) => !prev);
+
+  // Wrapper to log tab changes
+  const setCurrentTab = (tab: TabView) => {
+    console.log(`[NavigationContext] Tab changing from ${currentTab} to ${tab}`);
+    setCurrentTabState(tab);
+  };
 
   return (
     <NavigationContext.Provider value={{ currentTab, setCurrentTab, isSidebarCollapsed, toggleSidebar }}>
