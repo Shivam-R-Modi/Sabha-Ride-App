@@ -2,6 +2,7 @@
 import { initializeApp, getApps, getApp } from '@firebase/app';
 import { getAuth, GoogleAuthProvider } from '@firebase/auth';
 import { getFirestore } from '@firebase/firestore';
+import { getStorage } from '@firebase/storage';
 
 // Configuration for project 'sabha-ride-app'
 const firebaseConfig = {
@@ -17,9 +18,10 @@ const firebaseConfig = {
 // Initialize Firebase (Singleton pattern to prevent re-initialization errors)
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Export Auth and Firestore instances
+// Export Auth, Firestore, and Storage instances
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 export default app;
