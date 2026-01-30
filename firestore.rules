@@ -101,8 +101,11 @@ service cloud.firestore {
     // VEHICLES COLLECTION
     // =====================================
     match /vehicles/{vehicleId} {
-      // All authenticated and approved users can read vehicles
-      allow read: if isApproved();
+      // All authenticated users can read vehicles (needed for drivers to see available vehicles)
+      allow read: if isAuthenticated();
+      
+      // List queries - allow all authenticated users to list vehicles
+      allow list: if isAuthenticated();
       
       // Only managers can create vehicles
       allow create: if isManager();
