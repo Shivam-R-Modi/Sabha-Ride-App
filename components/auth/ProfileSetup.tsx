@@ -1,10 +1,9 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { UserRole, User, Driver } from '../../types';
-import { Camera, MapPin, User as UserIcon, Save, Loader2, Phone, ChevronLeft, X } from 'lucide-react';
+import { MapPin, User as UserIcon, Save, Loader2, Phone, ChevronLeft } from 'lucide-react';
 import { doc, setDoc, updateDoc, deleteField } from '@firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from '@firebase/storage';
-import { db, storage } from '../../firebase/config';
+import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface ProfileSetupProps {
@@ -19,9 +18,6 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
     const [name, setName] = useState('');
     const [address, setAddress] = useState('');
     const [phone, setPhone] = useState('');
-    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-    const [uploadingPhoto, setUploadingPhoto] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleBack = async () => {
         if (!currentUser) return;
@@ -37,49 +33,6 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
         } catch (error) {
             console.error("Error going back:", error);
             setIsLoading(false);
-        }
-    };
-
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !currentUser) return;
-
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
-            alert('Please select an image file');
-            return;
-        }
-
-        // Validate file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            alert('Image size should be less than 5MB');
-            return;
-        }
-
-        setUploadingPhoto(true);
-        try {
-            // Create a reference to the storage location
-            const storageRef = ref(storage, `profile-photos/${currentUser.uid}/${Date.now()}_${file.name}`);
-
-            // Upload the file
-            await uploadBytes(storageRef, file);
-
-            // Get the download URL
-            const downloadURL = await getDownloadURL(storageRef);
-
-            setAvatarUrl(downloadURL);
-        } catch (error) {
-            console.error("Error uploading photo:", error);
-            alert('Failed to upload photo. Please try again.');
-        } finally {
-            setUploadingPhoto(false);
-        }
-    };
-
-    const handleRemovePhoto = () => {
-        setAvatarUrl(null);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
         }
     };
 
@@ -104,7 +57,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
             phone,
             role,
             accountStatus: initialAccountStatus,
-            avatarUrl: avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+            avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
         };
 
         try {
@@ -151,41 +104,6 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6 flex-1 overflow-y-auto pb-24">
 
-                {/* Avatar Upload */}
-                <div className="flex justify-center mb-6">
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleFileSelect}
-                    />
-                    <div
-                        onClick={() => fileInputRef.current?.click()}
-                        className={`w-28 h-28 rounded-full flex flex-col items-center justify-center cursor-pointer transition-all clay-card active:scale-95 relative overflow-hidden ${avatarUrl ? 'bg-white' : 'bg-gray-50 text-gray-400 hover:text-saffron'}`}
-                    >
-                        {avatarUrl ? (
-                            <>
-                                <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleRemovePhoto(); }}
-                                    className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full shadow-md hover:bg-red-600"
-                                >
-                                    <X size={14} />
-                                </button>
-                            </>
-                        ) : uploadingPhoto ? (
-                            <Loader2 className="animate-spin text-saffron" size={28} />
-                        ) : (
-                            <>
-                                <Camera size={28} className="mb-1" />
-                                <span className="text-[10px] font-bold">ADD PHOTO</span>
-                            </>
-                        )}
-                    </div>
-                </div>
-
                 <div className="space-y-4">
                     <div>
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Full Name</label>
@@ -218,7 +136,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
 
                     <div>
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">
-                            {role === 'driver' ? 'Home Base Address' : 'Pickup Address'}
+                            {role === 'driver' ? 'Home Address' : 'Pickup Address'}
                         </label>
                         <div className="relative">
                             <MapPin size={18} className="absolute left-3 top-3.5 text-gray-400" />
@@ -231,23 +149,27 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                             />
                         </div>
                     </div>
-
-                    {role === 'driver' && (
-                        <div className="bg-blue-50/50 p-4 rounded-3xl border border-blue-100/50 backdrop-blur-sm">
-                            <p className="text-sm text-blue-800">
-                                <strong>Note for Drivers:</strong> You will select your vehicle from the Sabha fleet when you log in to your dashboard.
-                            </p>
-                        </div>
-                    )}
                 </div>
 
-                <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full clay-button-primary clay-button-primary-lg mt-8 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                    {isLoading ? <Loader2 className="animate-spin" /> : <><Save size={18} /> Save & Continue</>}
-                </button>
+                <div className="pt-4">
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="clay-button-primary w-full flex items-center justify-center gap-2"
+                    >
+                        {isLoading ? (
+                            <>
+                                <Loader2 className="animate-spin" size={20} />
+                                Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save size={20} />
+                                Save & Continue
+                            </>
+                        )}
+                    </button>
+                </div>
             </form>
         </div>
     );
