@@ -24,7 +24,7 @@ service cloud.firestore {
     
     // Check user role
     function hasRole(role) {
-      return isAuthenticated() && getUserData().role == role;
+      return isAuthenticated() && role in getUserData().roles;
     }
     
     // Check if user is approved
@@ -47,6 +47,11 @@ service cloud.firestore {
       return hasRole('student') && isApproved();
     }
     
+    // Check if driver is assigned to a specific ride
+    function isAssignedDriver(rideId) {
+      return isDriver() && get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid;
+    }
+    
     // =====================================
     // USERS COLLECTION
     // =====================================
@@ -66,6 +71,67 @@ service cloud.firestore {
     }
     
     // =====================================
+    // STUDENTS COLLECTION
+    // =====================================
+    match /students/{studentId} {
+      // Authenticated users can read student data
+      allow read: if isAuthenticated();
+      
+      // Students can create their own record
+      allow create: if isOwner(studentId);
+      
+      // Students can update their own record
+      // Drivers can update assigned students
+      // Managers can update any student
+      allow update: if isOwner(studentId) || isManager() || 
+        (isDriver() && isAssignedDriver(resource.data.currentRideId));
+      
+      // Only managers can delete
+      allow delete: if isManager();
+    }
+    
+    // =====================================
+    // DRIVERS COLLECTION
+    // =====================================
+    match /drivers/{driverId} {
+      // Authenticated users can read driver data
+      allow read: if isAuthenticated();
+      
+      // Drivers can create their own record
+      allow create: if isOwner(driverId);
+      
+      // Drivers can update their own record
+      // Managers can update any driver
+      allow update: if isOwner(driverId) || isManager();
+      
+      // Only managers can delete
+      allow delete: if isManager();
+    }
+    
+    // =====================================
+    // CARS COLLECTION
+    // =====================================
+    match /cars/{carId} {
+      // All authenticated users can read cars
+      allow read: if isAuthenticated();
+      
+      // Only managers can create/delete cars
+      allow create: if isManager();
+      allow delete: if isManager();
+      
+      // Managers can update any car
+      // Drivers can update available cars (to claim them) OR cars assigned to them
+      allow update: if isManager() || (
+        isDriver() && (
+          // Driver can claim an available car
+          (resource.data.status == 'available' && request.resource.data.status == 'in_use') ||
+          // Driver can update their own assigned car
+          resource.data.assignedDriverId == request.auth.uid
+        )
+      );
+    }
+    
+    // =====================================
     // RIDES COLLECTION
     // =====================================
     match /rides/{rideId} {
@@ -73,60 +139,49 @@ service cloud.firestore {
       // Drivers can read rides assigned to them
       // Managers can read all rides
       allow read: if isAuthenticated() && (
-        resource.data.studentId == request.auth.uid ||
-        resource.data.driver.id == request.auth.uid ||
-        resource.data.returnDriver.id == request.auth.uid ||
-        isManager() ||
-        isDriver()
+        resource.data.students[request.auth.uid] != null ||
+        resource.data.driverId == request.auth.uid ||
+        isManager()
       );
       
       // List queries - authenticated users with approved status
       allow list: if isApproved();
       
-      // Students can create their own ride requests
-      allow create: if isStudent() && request.resource.data.studentId == request.auth.uid;
+      // Drivers and managers can create rides
+      allow create: if isDriver() || isManager();
       
       // Managers can update any ride
       // Drivers can update rides assigned to them
-      // Students can update their own rides (e.g., mark ready to leave)
       allow update: if isManager() || 
-        (isDriver() && resource.data.driver.id == request.auth.uid) ||
-        (isStudent() && resource.data.studentId == request.auth.uid);
+        (isDriver() && resource.data.driverId == request.auth.uid);
       
       // Only managers can delete rides
       allow delete: if isManager();
     }
     
     // =====================================
-    // VEHICLES COLLECTION
+    // STATISTICS COLLECTION
     // =====================================
-    match /vehicles/{vehicleId} {
-      // All authenticated users can read vehicles (needed for drivers to see available vehicles)
-      allow read: if isAuthenticated();
-      
-      // List queries - allow all authenticated users to list vehicles
-      allow list: if isAuthenticated();
-      
-      // Only managers can create vehicles
-      allow create: if isManager();
-      
-      // Managers can update any vehicle
-      // Drivers can update available vehicles (to claim them) OR vehicles assigned to them
-      allow update: if isManager() || (
-        isDriver() && (
-          // Driver can claim an available vehicle
-          (resource.data.status == 'available' && request.resource.data.status == 'in-use') ||
-          // Driver can update their own assigned vehicle
-          resource.data.currentDriverId == request.auth.uid
-        )
-      );
-      
-      // Only managers can delete vehicles
-      allow delete: if isManager();
+    match /statistics/{eventDate} {
+      // Managers can read/write statistics
+      // Others cannot access
+      allow read: if isManager();
+      allow write: if isManager();
     }
     
     // =====================================
-    // NOTIFICATIONS COLLECTION (if added later)
+    // SYSTEM COLLECTION
+    // =====================================
+    match /system/{docId} {
+      // All authenticated users can read system settings
+      allow read: if isAuthenticated();
+      
+      // Only managers can write
+      allow write: if isManager();
+    }
+    
+    // =====================================
+    // NOTIFICATIONS COLLECTION
     // =====================================
     match /notifications/{notificationId} {
       // Users can read their own notifications

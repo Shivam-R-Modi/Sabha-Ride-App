@@ -1,7 +1,7 @@
-
 import { initializeApp, getApps, getApp } from '@firebase/app';
 import { getAuth, GoogleAuthProvider } from '@firebase/auth';
-import { getFirestore } from '@firebase/firestore';
+import { getFirestore, enableIndexedDbPersistence } from '@firebase/firestore';
+import { getMessaging, isSupported } from '@firebase/messaging';
 
 // Configuration for project 'sabha-ride-app'
 const firebaseConfig = {
@@ -22,4 +22,41 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
 
+// Initialize Messaging (with support check)
+export const initializeMessaging = async () => {
+  try {
+    const supported = await isSupported();
+    if (supported) {
+      return getMessaging(app);
+    }
+    console.log('Firebase Messaging not supported in this environment');
+    return null;
+  } catch (error) {
+    console.error('Error initializing messaging:', error);
+    return null;
+  }
+};
+
+// Enable offline persistence for Firestore
+export const enableOfflinePersistence = async () => {
+  try {
+    await enableIndexedDbPersistence(db);
+    console.log('Firestore offline persistence enabled');
+  } catch (error: any) {
+    if (error.code === 'failed-precondition') {
+      console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time');
+    } else if (error.code === 'unimplemented') {
+      console.warn('Browser does not support offline persistence');
+    }
+  }
+};
+
+// Sabha Location Constants (BAPS Shri Swaminarayan Mandir, Edison)
+export const SABHA_LOCATION = {
+  lat: 40.5186,
+  lng: -74.3491,
+  address: "BAPS Shri Swaminarayan Mandir, 1120 Edison Glen Terrace, Edison, NJ 08837"
+};
+
+// Default export
 export default app;

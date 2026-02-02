@@ -1,65 +1,49 @@
-import React, { useEffect, useState } from 'react';
-import { OmWatermark } from '../../constants';
+import React, { useState, useEffect } from 'react';
 
 interface SplashScreenProps {
-  onFinish: () => void;
+  onComplete: () => void;
 }
 
-export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [showTapPrompt, setShowTapPrompt] = useState(false);
+export function SplashScreen({ onComplete }: SplashScreenProps) {
+  const [step, setStep] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setLoadingProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setShowTapPrompt(true);
-          return 100;
-        }
-        return prev + 4;
-      });
-    }, 30);
-    return () => clearInterval(interval);
-  }, []);
+    const timer1 = setTimeout(() => setStep(1), 1500);
+    const timer2 = setTimeout(() => setStep(2), 3000);
+    const timer3 = setTimeout(() => onComplete(), 4500);
 
-  const handleTap = () => {
-    if (showTapPrompt) {
-      onFinish();
-    }
-  };
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
+  }, [onComplete]);
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-8 text-center overflow-hidden cursor-pointer"
-      onClick={handleTap}
-    >
-      {/* Background Image */}
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: 'url(/assets/splash-background.png)' }}
-      />
-      {/* Dark Overlay for better text visibility */}
-      <div className="absolute inset-0 bg-black/50" />
-
-      <div className="absolute inset-0 flex items-center justify-center opacity-[0.05]">
-        <OmWatermark />
-      </div>
-
-      <div className="absolute top-16 left-0 right-0 z-10 flex flex-col items-center">
-        {!showTapPrompt ? (
-          <div className="clay-progress-track w-64">
-            <div
-              className="clay-progress-fill"
-              style={{ width: `${loadingProgress}%` }}
-            />
+    <div className="fixed inset-0 bg-gradient-to-br from-orange-500 via-orange-600 to-blue-900 flex items-center justify-center">
+      <div className="text-center">
+        {step === 0 && (
+          <div className="animate-pulse">
+            <div className="w-32 h-32 mx-auto bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+              <span className="text-6xl">🚗</span>
+            </div>
           </div>
-        ) : (
-          <p className="text-white/80 text-lg font-medium tracking-wide animate-pulse">
-            Tap anywhere to continue
-          </p>
+        )}
+
+        {step === 1 && (
+          <div className="animate-fadeIn">
+            <h1 className="text-6xl font-bold text-white mb-4">Sabha</h1>
+            <p className="text-2xl text-white/90">Ride Seva</p>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="animate-fadeIn">
+            <p className="text-xl text-white/80">Connecting Communities</p>
+            <p className="text-lg text-white/60 mt-2">One Ride at a Time</p>
+          </div>
         )}
       </div>
     </div>
   );
-};
+}

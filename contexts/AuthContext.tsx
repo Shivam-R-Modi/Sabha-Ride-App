@@ -37,9 +37,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (docSnap.exists()) {
         const profile = { id: uid, ...docSnap.data() } as User | Driver;
         setUserProfile(profile);
-        // Set activeRole to the user's role (or registeredRole if available)
-        const registeredRole = profile.registeredRole || profile.role;
-        setActiveRoleState(profile.role || null);
+
+        // Only set activeRole on initial load, not on refreshes
+        // This preserves role-switching state
+        if (!activeRole) {
+          setActiveRoleState(profile.role || null);
+        }
       } else {
         setUserProfile(null);
         setActiveRoleState(null);
@@ -78,14 +81,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Set active role with validation based on registered role hierarchy
   const setActiveRole = (role: UserRole) => {
-    console.log(`[AuthContext] Attempting to set active role to: ${role}`);
     const available = getAvailableRoles();
-    console.log(`[AuthContext] Available roles:`, available);
     if (available.includes(role)) {
-      console.log(`[AuthContext] Setting active role to: ${role}`);
       setActiveRoleState(role);
-    } else {
-      console.warn(`[AuthContext] Role ${role} not in available roles`);
     }
   };
 
