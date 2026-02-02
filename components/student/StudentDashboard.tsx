@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, TabView } from '../../types';
 import { DiyaIcon, LotusIcon } from '../../constants';
 import { PickupForm } from '../PickupForm';
@@ -7,6 +7,7 @@ import { MyRides } from '../MyRides';
 import { Car, Navigation, AlertCircle, Loader2, Sparkles, CheckCircle2 } from 'lucide-react';
 import { useActiveRide, markReadyToLeave } from '../../hooks/useFirestore';
 import { useNavigation } from '../../contexts/NavigationContext';
+import { studentReadyToLeave } from '../../src/utils/cloudFunctions';
 
 interface StudentDashboardProps {
     user: User;
@@ -16,18 +17,43 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
     const { currentTab } = useNavigation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [showReadyModal, setShowReadyModal] = useState(false);
+    const [isReadyLoading, setIsReadyLoading] = useState(false);
+    const [showAfterSabhaUI, setShowAfterSabhaUI] = useState(false);
 
     // Use Firestore Hook
     const { activeRide, loading } = useActiveRide(user.id);
+
+    // Check if it's after 10 PM on Friday for drop-off UI
+    useEffect(() => {
+        const checkTime = () => {
+            const now = new Date();
+            const isFriday = now.getDay() === 5;
+            const isAfter10PM = now.getHours() >= 22;
+            setShowAfterSabhaUI(isFriday && isAfter10PM);
+        };
+
+        checkTime();
+        const interval = setInterval(checkTime, 60000); // Check every minute
+
+        return () => clearInterval(interval);
+    }, []);
 
     const handleRequestRide = (details: any) => {
         setIsFormOpen(false);
     };
 
     const handleReadyToLeave = async () => {
+        setIsReadyLoading(true);
         setShowReadyModal(false);
-        if (activeRide) {
-            await markReadyToLeave(activeRide.id);
+
+        try {
+            // Call the Cloud Function instead of direct Firestore update
+            await studentReadyToLeave(user.id);
+        } catch (error) {
+            console.error('Error marking ready to leave:', error);
+            alert('Failed to notify driver. Please try again.');
+        } finally {
+            setIsReadyLoading(false);
         }
     };
 
@@ -93,28 +119,28 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                     )}
 
                     <div className="clay-card text-center relative overflow-hidden transition-all group">
-                        {!activeRide && (
+                        {!showAfterSabhaUI && (
                             <div className="absolute inset-0 bg-cream/40 backdrop-blur-[1px] z-10 flex items-center justify-center">
-                                <span className="clay-badge-status">Pending Assignment</span>
+                                <span className="clay-badge-status">Available After 10 PM</span>
                             </div>
                         )}
                         <h3 className="font-header font-bold text-coffee text-xl mb-1">Return Trip</h3>
                         <p className="text-xs text-mocha/60 mb-8">Ready to go home? Alert your sevak.</p>
 
-                        {activeRide?.isReadyToLeave ? (
+                        {activeRide?.dropoffRequested ? (
                             <div className="bg-green-50 border border-green-100 text-green-700 py-5 rounded-2xl font-bold flex flex-col items-center justify-center gap-2 animate-in slide-in-from-bottom-4">
                                 <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-100">
                                     <CheckCircle2 size={24} />
                                 </div>
-                                <span className="text-sm">Driver Notified</span>
+                                <span className="text-sm">In Drop-off Queue</span>
                             </div>
                         ) : (
                             <button
-                                disabled={!activeRide}
+                                disabled={!showAfterSabhaUI || isReadyLoading}
                                 onClick={() => setShowReadyModal(true)}
-                                className="clay-btn-cta-large mx-auto"
+                                className="clay-btn-cta-large mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                I'M READY TO LEAVE
+                                {isReadyLoading ? 'Processing...' : "I'M READY TO LEAVE"}
                             </button>
                         )}
                     </div>

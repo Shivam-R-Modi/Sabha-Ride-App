@@ -7,7 +7,6 @@ import { ProfileSetup } from './components/auth/ProfileSetup';
 import { PendingApproval } from './components/auth/PendingApproval';
 import { StudentDashboard } from './components/student/StudentDashboard';
 import { DriverDashboard } from './components/driver/DriverDashboard';
-import { AssignmentDetail } from './components/driver/AssignmentDetail';
 import { DriverHistory } from './components/driver/DriverHistory';
 import { VehicleSelection } from './components/driver/VehicleSelection';
 import { ManagerDashboard } from './components/manager/ManagerDashboard';
@@ -22,13 +21,10 @@ export default function App() {
   const { currentTab } = useNavigation();
   const [showSplash, setShowSplash] = useState(true);
 
-  // Local state for specific sub-views that aren't global tabs
-  const [selectedAssignment, setSelectedAssignment] = useState<DriverAssignment | null>(null);
-
   // Note: Automatic splash timer removed to favor user-initiated transition
 
   if (loading || showSplash) {
-    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+    return <SplashScreen onComplete={() => setShowSplash(false)} />;
   }
 
   if (!currentUser) {
@@ -69,11 +65,8 @@ export default function App() {
         return <VehicleSelection onSelectionComplete={() => { }} />;
       }
 
-      if (selectedAssignment) {
-        return <AssignmentDetail assignment={selectedAssignment} onBack={() => setSelectedAssignment(null)} />;
-      }
       switch (currentTab) {
-        case 'home': return <DriverDashboard onSelectAssignment={setSelectedAssignment} />;
+        case 'home': return <DriverDashboard />;
         case 'history': return <DriverHistory />;
         case 'profile': return (
           <div className="p-12 text-center animate-in fade-in duration-500">
@@ -82,7 +75,7 @@ export default function App() {
             <p className="text-gold font-bold uppercase tracking-widest mt-1">Volunteer Driver</p>
           </div>
         );
-        default: return <DriverDashboard onSelectAssignment={setSelectedAssignment} />;
+        default: return <DriverDashboard />;
       }
     }
     return null;

@@ -22,6 +22,9 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
 
+// Export app instance
+export { app };
+
 // Initialize Messaging (with support check)
 export const initializeMessaging = async () => {
   try {

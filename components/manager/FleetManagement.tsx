@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Vehicle } from '../../types';
-import { useVehicles, addVehicle, updateVehicle, deleteVehicle, releaseVehicle } from '../../hooks/useFirestore';
-import { Car, Plus, Trash2, Edit2, X, Save, ChevronUp } from 'lucide-react';
+import { Car as Vehicle } from '../../types';
+import { useVehicles, updateVehicle, releaseVehicle } from '../../hooks/useFirestore';
+import { Car, Plus, Trash2, Edit2, X, Save, ChevronUp, Loader2 } from 'lucide-react';
+import { addCarToFleet, removeCarFromFleet } from '../../src/utils/cloudFunctions';
 
 interface FleetManagementProps {
     onClose: () => void;
@@ -11,32 +12,63 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
     const { vehicles, loading } = useVehicles();
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
 
     const [formData, setFormData] = useState<Partial<Vehicle>>({
-        name: '', color: '', plateNumber: '', capacity: 7, status: 'available'
+        model: '', color: '', licensePlate: '', capacity: 7, status: 'available'
     });
 
     const resetForm = () => {
-        setFormData({ name: '', color: '', plateNumber: '', capacity: 7, status: 'available' });
+        setFormData({ model: '', color: '', licensePlate: '', capacity: 7, status: 'available' });
         setIsAdding(false);
         setEditingId(null);
     };
 
     const handleSave = async () => {
-        if (!formData.name || !formData.plateNumber) return;
+        if (!formData.model || !formData.licensePlate) return;
+
+        setIsSaving(true);
         try {
             if (editingId) {
                 await updateVehicle(editingId, formData);
             } else {
-                await addVehicle(formData as Omit<Vehicle, 'id'>);
+                // Use Cloud Function to add car
+                await addCarToFleet(
+                    formData.model,
+                    formData.color || '',
+                    formData.licensePlate,
+                    formData.capacity || 4
+                );
             }
             resetForm();
-        } catch (e) { console.error(e); }
+        } catch (e: any) {
+            console.error(e);
+            alert(e.message || 'Failed to save vehicle');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async (carId: string) => {
+        if (!confirm("Delete vehicle?")) return;
+
+        try {
+            await removeCarFromFleet(carId);
+        } catch (e: any) {
+            console.error(e);
+            alert(e.message || 'Failed to delete vehicle');
+        }
     };
 
     const handleEdit = (v: Vehicle) => {
         setEditingId(v.id);
-        setFormData({ name: v.name, color: v.color, plateNumber: v.plateNumber, capacity: v.capacity, status: v.status });
+        setFormData({
+            model: v.model,
+            color: v.color,
+            licensePlate: v.licensePlate,
+            capacity: v.capacity,
+            status: v.status
+        });
         setIsAdding(true);
     };
 
@@ -62,7 +94,7 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
                     {/* List Section */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
                         {!isAdding && (
-                            <button 
+                            <button
                                 onClick={() => setIsAdding(true)}
                                 className="w-full py-4 border-2 border-dashed border-gold/30 rounded-2xl flex items-center justify-center gap-3 text-gold hover:bg-orange-50 transition-all font-bold text-sm btn-feedback bg-white shadow-sm"
                             >
@@ -71,7 +103,7 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
                         )}
 
                         {loading ? (
-                             <div className="text-center py-20 opacity-50"><p className="text-xs font-bold animate-pulse">Scanning Garage...</p></div>
+                            <div className="text-center py-20 opacity-50"><p className="text-xs font-bold animate-pulse">Scanning Garage...</p></div>
                         ) : (
                             vehicles.map(v => (
                                 <div key={v.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between gap-4">
@@ -93,7 +125,7 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
                                         <button onClick={() => handleEdit(v)} className="p-3 text-gray-400 hover:text-coffee btn-feedback">
                                             <Edit2 size={18} />
                                         </button>
-                                        <button onClick={() => { if(confirm("Delete vehicle?")) deleteVehicle(v.id); }} className="p-3 text-gray-300 hover:text-red-500 btn-feedback">
+                                        <button onClick={() => handleDelete(v.id)} className="p-3 text-gray-300 hover:text-red-500 btn-feedback">
                                             <Trash2 size={18} />
                                         </button>
                                     </div>
@@ -115,35 +147,35 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
                                     <h3 className="font-bold text-lg text-coffee">{editingId ? 'Edit Vehicle' : 'Register Vehicle'}</h3>
                                     <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Seva Fleet Asset</p>
                                 </div>
-                                <button onClick={resetForm} className="p-2 text-gray-400 md:hidden btn-feedback"><X size={28}/></button>
+                                <button onClick={resetForm} className="p-2 text-gray-400 md:hidden btn-feedback"><X size={28} /></button>
                             </div>
-                            
+
                             <div className="space-y-4">
                                 <div>
                                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Make & Model</label>
-                                    <input 
+                                    <input
                                         value={formData.name}
-                                        onChange={e => setFormData({...formData, name: e.target.value})}
-                                        className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-gold/30 focus:bg-white outline-none transition-all text-base font-medium" 
+                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                        className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-gold/30 focus:bg-white outline-none transition-all text-base font-medium"
                                         placeholder="e.g. Toyota Sienna"
                                     />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Plate</label>
-                                        <input 
+                                        <input
                                             value={formData.plateNumber}
-                                            onChange={e => setFormData({...formData, plateNumber: e.target.value})}
-                                            className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-gold/30 focus:bg-white outline-none transition-all text-base uppercase font-mono" 
+                                            onChange={e => setFormData({ ...formData, plateNumber: e.target.value })}
+                                            className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-gold/30 focus:bg-white outline-none transition-all text-base uppercase font-mono"
                                             placeholder="ABC-123"
                                         />
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Color</label>
-                                        <input 
+                                        <input
                                             value={formData.color}
-                                            onChange={e => setFormData({...formData, color: e.target.value})}
-                                            className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-gold/30 focus:bg-white outline-none transition-all text-base font-medium" 
+                                            onChange={e => setFormData({ ...formData, color: e.target.value })}
+                                            className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-gold/30 focus:bg-white outline-none transition-all text-base font-medium"
                                             placeholder="Silver"
                                         />
                                     </div>
@@ -151,10 +183,10 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
                                 <div>
                                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Seats Available</label>
                                     <div className="grid grid-cols-5 gap-2">
-                                        {[4,5,6,7,8].map(cap => (
-                                            <button 
+                                        {[4, 5, 6, 7, 8].map(cap => (
+                                            <button
                                                 key={cap}
-                                                onClick={() => setFormData({...formData, capacity: cap})}
+                                                onClick={() => setFormData({ ...formData, capacity: cap })}
                                                 className={`py-3 rounded-xl font-bold text-sm border-2 transition-all btn-feedback ${formData.capacity === cap ? 'bg-coffee text-white border-coffee shadow-lg' : 'bg-white text-gray-400 border-gray-100 hover:border-gold/30'}`}
                                             >
                                                 {cap}
@@ -166,7 +198,7 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
 
                             <div className="mt-8 flex gap-3">
                                 <button onClick={resetForm} className="hidden md:flex flex-1 py-4 text-gray-400 font-bold hover:text-coffee transition-colors uppercase text-xs tracking-widest">Cancel</button>
-                                <button 
+                                <button
                                     onClick={handleSave}
                                     className="flex-[2] py-4 bg-saffron text-white rounded-2xl font-bold shadow-xl shadow-orange-100 flex items-center justify-center gap-2 hover:bg-saffron-dark btn-feedback transition-all uppercase text-xs tracking-widest"
                                 >

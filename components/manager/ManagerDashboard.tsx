@@ -13,11 +13,13 @@ import {
   Clock,
   User,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePendingDrivers, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers } from '../../hooks/useFirestore';
 import { Driver, Ride, StudentRequest } from '../../types';
+import { manualAssignStudent, generateEventCSV, downloadCSV } from '../../src/utils/cloudFunctions';
 
 // Ride Assignment Card Component
 const RideAssignmentCard: React.FC<{
@@ -175,25 +177,38 @@ export const ManagerDashboard: React.FC = () => {
     }
   };
 
-  const handleExport = () => {
-    const allStudents = [
-      ...pendingRequests.map(r => ({ name: r.name, address: r.address, status: 'Pending', driver: 'Unassigned', time: r.requestedTimeSlot })),
-      ...activeRides.map(r => ({ name: r.studentName || 'Student', address: r.pickupAddress, status: r.status, driver: r.driver?.name || 'Unassigned', time: r.timeSlot }))
-    ];
+  const [isExporting, setIsExporting] = useState(false);
 
-    if (allStudents.length === 0) return alert("No student data to export.");
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const result = await generateEventCSV(today);
 
-    const headers = ["Student Name", "Status", "Assigned Driver", "Pickup Address", "Time Slot"];
-    const csvContent = [headers.join(","), ...allStudents.map(s => `"${s.name}","${s.status}","${s.driver}","${s.address}","${s.time}"`)].join("\n");
+      if (result.csvContent) {
+        downloadCSV(result.csvContent, `sabha_attendance_${today}.csv`);
+        alert(`Export successful! Total students: ${result.summary.totalStudents}`);
+      } else {
+        alert("No data available for export.");
+      }
+    } catch (error: any) {
+      console.error('Error exporting CSV:', error);
+      alert(error.message || 'Failed to export data');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `sabha_attendance_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Handle manual assignment using Cloud Function
+  const handleManualAssign = async (studentId: string, driverId: string) => {
+    try {
+      const result = await manualAssignStudent(studentId, driverId);
+      alert(`Student assigned successfully! Total students in ride: ${result.updatedStats.totalStudents}`);
+      setSelectedEntityId(null);
+    } catch (error: any) {
+      console.error('Error manually assigning student:', error);
+      alert(error.message || 'Failed to assign student');
+    }
   };
 
   const handleApproveDriver = async (driverId: string) => {
@@ -242,8 +257,12 @@ export const ManagerDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <button onClick={handleExport} className="p-2.5 text-saffron hover:bg-orange-50 rounded-xl transition-colors btn-feedback sm:border border-orange-100">
-            <Download size={18} />
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            className="p-2.5 text-saffron hover:bg-orange-50 rounded-xl transition-colors btn-feedback sm:border border-orange-100 disabled:opacity-50"
+          >
+            {isExporting ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
           </button>
 
           <button
