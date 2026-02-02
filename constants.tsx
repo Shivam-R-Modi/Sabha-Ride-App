@@ -28,4 +28,4 @@ export const OmWatermark: React.FC = () => null;
 
 // --- Production Configuration ---
 
-export const VENUE_ADDRESS = "BAPS Shri Swaminarayan Mandir, Edison";
+export const VENUE_ADDRESS = "Shri Swaminarayan Mandir, Edison";

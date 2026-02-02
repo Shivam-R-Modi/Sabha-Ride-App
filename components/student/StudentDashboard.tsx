@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { User, TabView } from '../../types';
+import { User, Driver, TabView } from '../../types';
 import { DiyaIcon, LotusIcon } from '../../constants';
 import { PickupForm } from '../PickupForm';
 import { RideStatusCard } from '../RideStatus';
 import { MyRides } from '../MyRides';
-import { Car, Navigation, AlertCircle, Loader2, Sparkles, CheckCircle2 } from 'lucide-react';
-import { useActiveRide, markReadyToLeave } from '../../hooks/useFirestore';
+import { Car, Navigation, AlertCircle, Loader2, Sparkles, CheckCircle2, Phone, Edit2, Save, X } from 'lucide-react';
+import { useActiveRide, markReadyToLeave, updateUserProfile } from '../../hooks/useFirestore';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { studentReadyToLeave } from '../../src/utils/cloudFunctions';
 
 interface StudentDashboardProps {
-    user: User;
+    user: User | Driver;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
@@ -19,6 +19,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
     const [showReadyModal, setShowReadyModal] = useState(false);
     const [isReadyLoading, setIsReadyLoading] = useState(false);
     const [showAfterSabhaUI, setShowAfterSabhaUI] = useState(false);
+
+    // Profile editing state
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [editName, setEditName] = useState(user.name);
+    const [editPhone, setEditPhone] = useState(user.phone || '');
+    const [editAddress, setEditAddress] = useState(user.address || '');
+    const [isSaving, setIsSaving] = useState(false);
 
     // Use Firestore Hook
     const { activeRide, loading } = useActiveRide(user.id);
@@ -57,6 +64,34 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
         }
     };
 
+    const handleSaveProfile = async () => {
+        setIsSaving(true);
+        try {
+            await updateUserProfile(user.id, {
+                name: editName,
+                phone: editPhone,
+                address: editAddress
+            });
+            setIsEditingProfile(false);
+            // Update local user object (in real app, this would trigger a context refresh)
+            user.name = editName;
+            user.phone = editPhone;
+            user.address = editAddress;
+        } catch (error) {
+            console.error('Error saving profile:', error);
+            alert('Failed to save profile. Please try again.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditName(user.name);
+        setEditPhone(user.phone || '');
+        setEditAddress(user.address || '');
+        setIsEditingProfile(false);
+    };
+
     const renderHome = () => {
         if (isFormOpen) {
             return <PickupForm user={user} onClose={() => setIsFormOpen(false)} onSubmit={handleRequestRide} />;
@@ -79,7 +114,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                 <div className="flex items-center justify-between mb-2">
                     <div>
                         <h2 className="text-2xl font-header font-bold text-coffee">Jai Swaminarayan!</h2>
-                        <p className="text-mocha/80 text-sm">Welcome to your Sabha Seva</p>
+                        <p className="text-mocha/80 text-sm">Welcome, {user.name}</p>
                     </div>
                     <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm border border-orange-100 hidden sm:flex">
                         <DiyaIcon className="w-6 h-6 text-saffron" />
@@ -168,14 +203,86 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                     <Sparkles className="text-gold w-6 h-6" />
                 </div>
             </div>
-            <h2 className="text-2xl font-header font-bold text-coffee">{user.name}</h2>
-            <p className="text-gold font-medium text-sm tracking-wide mt-1 uppercase">Devoted Student</p>
-            <div className="clay-card mt-8 flex items-center gap-4 text-left">
-                <div className="bg-orange-50 p-2 rounded-xl text-saffron">
-                    <MapPin size={20} />
+
+            {isEditingProfile ? (
+                <div className="space-y-4 text-left">
+                    <div className="clay-card p-4">
+                        <label className="text-xs font-bold text-mocha/60 uppercase tracking-wide">Name</label>
+                        <input
+                            type="text"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="w-full mt-1 px-3 py-2 bg-cream/50 border border-orange-100 rounded-xl text-coffee focus:ring-2 focus:ring-saffron/30 focus:border-saffron outline-none"
+                        />
+                    </div>
+                    <div className="clay-card p-4">
+                        <label className="text-xs font-bold text-mocha/60 uppercase tracking-wide">Phone</label>
+                        <input
+                            type="tel"
+                            value={editPhone}
+                            onChange={(e) => setEditPhone(e.target.value)}
+                            placeholder="Enter your phone number"
+                            className="w-full mt-1 px-3 py-2 bg-cream/50 border border-orange-100 rounded-xl text-coffee focus:ring-2 focus:ring-saffron/30 focus:border-saffron outline-none"
+                        />
+                    </div>
+                    <div className="clay-card p-4">
+                        <label className="text-xs font-bold text-mocha/60 uppercase tracking-wide">Address</label>
+                        <textarea
+                            value={editAddress}
+                            onChange={(e) => setEditAddress(e.target.value)}
+                            placeholder="Enter your pickup address"
+                            rows={2}
+                            className="w-full mt-1 px-3 py-2 bg-cream/50 border border-orange-100 rounded-xl text-coffee focus:ring-2 focus:ring-saffron/30 focus:border-saffron outline-none resize-none"
+                        />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            onClick={handleCancelEdit}
+                            className="flex-1 py-3 px-4 rounded-xl border-2 border-mocha/20 text-mocha/70 font-bold flex items-center justify-center gap-2 hover:bg-mocha/5 transition-colors"
+                        >
+                            <X size={18} />
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSaveProfile}
+                            disabled={isSaving}
+                            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-saffron to-gold text-white font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50"
+                        >
+                            {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                            {isSaving ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
                 </div>
-                <p className="text-sm text-mocha/70 line-clamp-2 leading-relaxed">{user.address}</p>
-            </div>
+            ) : (
+                <>
+                    <h2 className="text-2xl font-header font-bold text-coffee">{user.name}</h2>
+                    <p className="text-gold font-medium text-sm tracking-wide mt-1 uppercase">Devoted Student</p>
+
+                    {user.phone && (
+                        <div className="clay-card mt-6 flex items-center gap-4 text-left">
+                            <div className="bg-orange-50 p-2 rounded-xl text-saffron">
+                                <Phone size={20} />
+                            </div>
+                            <p className="text-sm text-mocha/70 leading-relaxed">{user.phone}</p>
+                        </div>
+                    )}
+
+                    <div className="clay-card mt-4 flex items-center gap-4 text-left">
+                        <div className="bg-orange-50 p-2 rounded-xl text-saffron">
+                            <MapPin size={20} />
+                        </div>
+                        <p className="text-sm text-mocha/70 line-clamp-2 leading-relaxed">{user.address || 'No address set'}</p>
+                    </div>
+
+                    <button
+                        onClick={() => setIsEditingProfile(true)}
+                        className="mt-6 w-full py-3 px-4 clay-card hover:shadow-lg transition-shadow flex items-center justify-center gap-2 text-coffee font-bold"
+                    >
+                        <Edit2 size={18} className="text-saffron" />
+                        Edit Profile
+                    </button>
+                </>
+            )}
         </div>
     );
 

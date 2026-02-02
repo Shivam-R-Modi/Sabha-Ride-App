@@ -11,6 +11,7 @@ const STATUS_CONFIG: Record<RideStatus, { label: string; color: string; bg: stri
   assigned: { label: 'Driver Assigned', color: 'text-blue-600', bg: 'bg-blue-100' },
   driver_en_route: { label: 'Driver En Route', color: 'text-purple-600', bg: 'bg-purple-100' },
   arriving: { label: 'Arriving Soon', color: 'text-green-600', bg: 'bg-green-100' },
+  in_progress: { label: 'In Progress', color: 'text-teal-600', bg: 'bg-teal-100' },
   completed: { label: 'Completed', color: 'text-gray-600', bg: 'bg-gray-100' },
   cancelled: { label: 'Cancelled', color: 'text-red-600', bg: 'bg-red-100' },
 };

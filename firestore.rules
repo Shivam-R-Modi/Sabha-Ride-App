@@ -24,7 +24,11 @@ service cloud.firestore {
     
     // Check user role
     function hasRole(role) {
-      return isAuthenticated() && role in getUserData().roles;
+      let data = getUserData();
+      return isAuthenticated() && (
+        (data.roles != null && role in data.roles) || 
+        (data.role == role)
+      );
     }
     
     // Check if user is approved

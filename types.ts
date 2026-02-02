@@ -20,6 +20,14 @@ export interface User {
   lastActive?: string;
   fcmToken?: string;
   accountStatus: AccountStatus;
+  // Optional properties for when User is merged with Driver data
+  address?: string;
+  role?: UserRole;
+  registeredRole?: UserRole;
+  status?: DriverStatus | 'available' | 'offline' | 'completed';
+  currentVehicleId?: string;
+  currentVehicleName?: string;
+  currentVehiclePlate?: string;
 }
 
 // --- Location Types ---
@@ -69,16 +77,36 @@ export interface Driver {
   currentCarId: string | null;
   currentLocation: GeoLocation | null;
   homeLocation: GeoLocation | null;
-  status: DriverStatus;
+  status: DriverStatus | 'available' | 'offline' | 'completed';
   activeRideId: string | null;
   ridesCompletedToday: number;
   totalStudentsToday: number;
   totalDistanceToday: number;
+  // Additional properties used in fleet management
+  currentVehicleId?: string;
+  currentVehicleName?: string;
+  currentVehiclePlate?: string;
+  carModel?: string;
+  carColor?: string;
+  plateNumber?: string;
+  capacity?: number;
+  accountStatus?: AccountStatus;
+  avatarUrl?: string;
+  // Properties from User that may be merged
+  email?: string;
+  role?: UserRole;
+  registeredRole?: UserRole;
+  roles?: UserRole[];
+  activeRole?: UserRole;
+  address?: string;
+  createdAt?: string;
+  lastActive?: string;
+  fcmToken?: string;
 }
 
 // --- Vehicle/Car Types ---
 
-export type CarStatus = 'available' | 'in_use' | 'maintenance';
+export type CarStatus = 'available' | 'in-use' | 'in_use' | 'maintenance';
 
 export interface Car {
   id: string;
@@ -90,11 +118,23 @@ export interface Car {
   assignedDriverId: string | null;
 }
 
+// Vehicle type (used in fleet management)
+export interface Vehicle {
+  id: string;
+  name: string;
+  color: string;
+  plateNumber: string;
+  capacity: number;
+  status: 'available' | 'in-use' | 'maintenance';
+  currentDriverId?: string;
+  currentDriverName?: string;
+}
+
 // --- Ride Types ---
 
 export type RideType = 'home-to-sabha' | 'sabha-to-home';
 
-export type RideStatus = 'assigned' | 'in_progress' | 'completed' | 'cancelled';
+export type RideStatus = 'requested' | 'assigned' | 'driver_en_route' | 'arriving' | 'in_progress' | 'completed' | 'cancelled';
 
 export interface RideStudent {
   id: string;
@@ -114,22 +154,36 @@ export interface Waypoint {
 
 export interface Ride {
   id: string;
-  eventDate: string;
-  driverId: string;
-  driverName: string;
-  carId: string;
-  carModel: string;
-  carColor: string;
-  carLicensePlate: string;
-  rideType: RideType;
+  eventDate?: string;
+  date?: string;
+  driverId?: string;
+  driverName?: string;
+  carId?: string;
+  carModel?: string;
+  carColor?: string;
+  carLicensePlate?: string;
+  rideType?: RideType;
   status: RideStatus;
-  students: RideStudent[];
-  route: Waypoint[];
-  estimatedDistance: number;
-  estimatedTime: number;
-  startedAt: string | null;
-  completedAt: string | null;
-  allWaypointsVisited: boolean;
+  students?: RideStudent[];
+  route?: Waypoint[];
+  estimatedDistance?: number;
+  estimatedTime?: number;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  allWaypointsVisited?: boolean;
+  // Additional properties from legacy/firestore structure
+  studentId?: string;
+  studentName?: string;
+  timeSlot?: string;
+  pickupAddress?: string;
+  driver?: Driver;
+  returnDriver?: Driver;
+  peers?: any[];
+  etaMinutes?: number;
+  isReadyToLeave?: boolean;
+  dropoffRequested?: boolean;
+  notes?: string;
+  createdAt?: string;
 }
 
 // --- System Types ---

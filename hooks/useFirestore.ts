@@ -221,6 +221,16 @@ export const updateUserStatus = async (userId: string, status: 'approved' | 'rej
     }
 };
 
+export const updateUserProfile = async (userId: string, updates: { name?: string; phone?: string; address?: string }) => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, updates);
+    } catch (error) {
+        console.error("Error updating user profile:", error);
+        throw error;
+    }
+};
+
 export const setDriverAvailability = async (driverId: string, status: 'available' | 'offline') => {
     try {
         const userRef = doc(db, 'users', driverId);
@@ -270,11 +280,27 @@ export const useVehicles = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const q = query(collection(db, 'vehicles'));
+        // Query 'cars' collection instead of 'vehicles'
+        const q = query(collection(db, 'cars'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const vList: Vehicle[] = [];
-            snapshot.forEach((doc) => vList.push({ id: doc.id, ...doc.data() } as Vehicle));
+            snapshot.forEach((doc) => {
+                const carData = doc.data() as any;
+                // Map Car (backend) -> Vehicle (frontend)
+                vList.push({
+                    id: doc.id,
+                    name: carData.model || 'Unknown Car',
+                    color: carData.color || 'Unknown',
+                    plateNumber: carData.licensePlate || 'NO-PLATE',
+                    capacity: carData.capacity || 4,
+                    status: carData.status === 'in_use' ? 'in-use' : (carData.status || 'available'),
+                    currentDriverId: carData.assignedDriverId,
+                } as Vehicle);
+            });
             setVehicles(vList);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching vehicles:", error);
             setLoading(false);
         });
         return unsubscribe;
@@ -288,11 +314,26 @@ export const useAvailableVehicles = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const q = query(collection(db, 'vehicles'), where('status', '==', 'available'));
+        // Query 'cars' where status is 'available'
+        const q = query(collection(db, 'cars'), where('status', '==', 'available'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const vList: Vehicle[] = [];
-            snapshot.forEach((doc) => vList.push({ id: doc.id, ...doc.data() } as Vehicle));
+            snapshot.forEach((doc) => {
+                const carData = doc.data() as any;
+                vList.push({
+                    id: doc.id,
+                    name: carData.model || '',
+                    color: carData.color || '',
+                    plateNumber: carData.licensePlate || '',
+                    capacity: carData.capacity || 4,
+                    status: 'available',
+                    currentDriverId: null,
+                } as Vehicle);
+            });
             setAvailableVehicles(vList);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching available vehicles:", error);
             setLoading(false);
         });
         return unsubscribe;
@@ -303,7 +344,16 @@ export const useAvailableVehicles = () => {
 
 export const addVehicle = async (vehicleData: Omit<Vehicle, 'id'>) => {
     try {
-        await addDoc(collection(db, 'vehicles'), vehicleData);
+        // Map Vehicle -> Car
+        const carData = {
+            model: vehicleData.name,
+            color: vehicleData.color,
+            licensePlate: vehicleData.plateNumber,
+            capacity: vehicleData.capacity,
+            status: 'available',
+            assignedDriverId: null
+        };
+        await addDoc(collection(db, 'cars'), carData);
     } catch (error) {
         console.error("Error adding vehicle:", error);
         throw error;
@@ -312,8 +362,18 @@ export const addVehicle = async (vehicleData: Omit<Vehicle, 'id'>) => {
 
 export const updateVehicle = async (id: string, data: Partial<Vehicle>) => {
     try {
-        const ref = doc(db, 'vehicles', id);
-        await updateDoc(ref, data);
+        const ref = doc(db, 'cars', id);
+
+        // Map Partial<Vehicle> -> Partial<Car>
+        const updates: any = {};
+        if (data.name !== undefined) updates.model = data.name;
+        if (data.color !== undefined) updates.color = data.color;
+        if (data.plateNumber !== undefined) updates.licensePlate = data.plateNumber;
+        if (data.capacity !== undefined) updates.capacity = data.capacity;
+        if (data.status !== undefined) updates.status = data.status === 'in-use' ? 'in_use' : data.status;
+        if (data.currentDriverId !== undefined) updates.assignedDriverId = data.currentDriverId;
+
+        await updateDoc(ref, updates);
     } catch (error) {
         console.error("Error updating vehicle:", error);
         throw error;
@@ -322,7 +382,7 @@ export const updateVehicle = async (id: string, data: Partial<Vehicle>) => {
 
 export const deleteVehicle = async (id: string) => {
     try {
-        await deleteDoc(doc(db, 'vehicles', id));
+        await deleteDoc(doc(db, 'cars', id));
     } catch (error) {
         console.error("Error deleting vehicle:", error);
         throw error;
@@ -331,12 +391,13 @@ export const deleteVehicle = async (id: string) => {
 
 export const assignVehicleToDriver = async (vehicle: Vehicle, driverId: string, driverName: string) => {
     try {
-        // 1. Mark vehicle as in-use
-        const vehicleRef = doc(db, 'vehicles', vehicle.id);
+        // 1. Mark vehicle as in_use in 'cars' collection
+        const vehicleRef = doc(db, 'cars', vehicle.id);
         await updateDoc(vehicleRef, {
-            status: 'in-use',
-            currentDriverId: driverId,
-            currentDriverName: driverName
+            status: 'in_use', // Backend expects underscore
+            assignedDriverId: driverId
+            // We don't store driverName in cars collection schema usually, but could if needed. 
+            // Skipping to match schema strictness.
         });
 
         // 2. Update driver profile with current vehicle ID
@@ -357,12 +418,11 @@ export const assignVehicleToDriver = async (vehicle: Vehicle, driverId: string, 
 
 export const releaseVehicle = async (vehicleId: string, driverId: string) => {
     try {
-        // 1. Mark vehicle as available
-        const vehicleRef = doc(db, 'vehicles', vehicleId);
+        // 1. Mark vehicle as available in 'cars' collection
+        const vehicleRef = doc(db, 'cars', vehicleId);
         await updateDoc(vehicleRef, {
             status: 'available',
-            currentDriverId: null,
-            currentDriverName: null as any
+            assignedDriverId: null
         });
 
         // 2. Clear from driver profile

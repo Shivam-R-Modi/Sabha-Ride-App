@@ -39,7 +39,14 @@ export const addCarToFleet = functions.https.onCall(async (data, context) => {
         }
 
         const user = userDoc.data();
-        if (!user?.roles?.includes('manager')) {
+
+        console.log(`[addCarToFleet] User ${context.auth.uid} data:`, JSON.stringify(user));
+
+        const isManager = user?.roles?.includes('manager') || user?.role === 'manager';
+        console.log(`[addCarToFleet] isManager check: ${isManager} (roles=${user?.roles}, role=${user?.role})`);
+
+        if (!isManager) {
+            console.error('[addCarToFleet] Permission denied for user:', context.auth.uid);
             throw new functions.https.HttpsError('permission-denied', 'Only managers can add cars');
         }
 
@@ -113,7 +120,9 @@ export const removeCarFromFleet = functions.https.onCall(async (data, context) =
         }
 
         const user = userDoc.data();
-        if (!user?.roles?.includes('manager')) {
+        const isManager = user?.roles?.includes('manager') || user?.role === 'manager';
+
+        if (!isManager) {
             throw new functions.https.HttpsError('permission-denied', 'Only managers can remove cars');
         }
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Car as Vehicle } from '../../types';
+import { Vehicle } from '../../types';
 import { useVehicles, updateVehicle, releaseVehicle } from '../../hooks/useFirestore';
 import { Car, Plus, Trash2, Edit2, X, Save, ChevronUp, Loader2 } from 'lucide-react';
 import { addCarToFleet, removeCarFromFleet } from '../../src/utils/cloudFunctions';
@@ -15,17 +15,17 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
     const [isSaving, setIsSaving] = useState(false);
 
     const [formData, setFormData] = useState<Partial<Vehicle>>({
-        model: '', color: '', licensePlate: '', capacity: 7, status: 'available'
+        name: '', color: '', plateNumber: '', capacity: 7, status: 'available'
     });
 
     const resetForm = () => {
-        setFormData({ model: '', color: '', licensePlate: '', capacity: 7, status: 'available' });
+        setFormData({ name: '', color: '', plateNumber: '', capacity: 7, status: 'available' });
         setIsAdding(false);
         setEditingId(null);
     };
 
     const handleSave = async () => {
-        if (!formData.model || !formData.licensePlate) return;
+        if (!formData.name || !formData.plateNumber) return;
 
         setIsSaving(true);
         try {
@@ -34,9 +34,9 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
             } else {
                 // Use Cloud Function to add car
                 await addCarToFleet(
-                    formData.model,
+                    formData.name,
                     formData.color || '',
-                    formData.licensePlate,
+                    formData.plateNumber,
                     formData.capacity || 4
                 );
             }
@@ -63,9 +63,9 @@ export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => 
     const handleEdit = (v: Vehicle) => {
         setEditingId(v.id);
         setFormData({
-            model: v.model,
+            name: v.name,
             color: v.color,
-            licensePlate: v.licensePlate,
+            plateNumber: v.plateNumber,
             capacity: v.capacity,
             status: v.status
         });

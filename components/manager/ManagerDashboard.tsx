@@ -234,59 +234,59 @@ export const ManagerDashboard: React.FC = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-cream relative overflow-hidden">
+    <div className="h-screen flex flex-col bg-gray-50 relative overflow-hidden">
       {/* Top Control Bar */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-2 sm:py-3 flex justify-between items-center shadow-sm z-20 shrink-0 pt-safe lg:pt-3">
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex justify-between items-center shadow-sm z-20 shrink-0 pt-safe lg:pt-2">
         <div className="flex items-center gap-3">
-          <div className="bg-gray-100 p-1 rounded-xl flex shrink-0">
+          <div className="bg-gray-100 p-1 rounded-lg flex shrink-0">
             <button
               onClick={() => setActiveTab('planning')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all btn-feedback ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
-              <span className="hidden sm:inline">Request Center</span>
-              <span className="sm:hidden">Requests</span>
+              Request Center
             </button>
             <button
               onClick={() => setActiveTab('dropoff')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all btn-feedback ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
-              <span className="hidden sm:inline">Live Operations</span>
-              <span className="sm:hidden">Operations</span>
+              Live Operations
             </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleExport}
             disabled={isExporting}
-            className="p-2.5 text-saffron hover:bg-orange-50 rounded-xl transition-colors btn-feedback sm:border border-orange-100 disabled:opacity-50"
+            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200 disabled:opacity-50"
+            title="Export CSV"
           >
             {isExporting ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
           </button>
 
           <button
             onClick={() => setShowNotifications(true)}
-            className={`p-2.5 rounded-xl relative transition-colors btn-feedback ${showNotifications ? 'bg-orange-100 text-saffron' : 'text-gray-500 hover:bg-gray-100'}`}
+            className={`p-2 rounded-lg relative transition-colors ${showNotifications ? 'bg-orange-100 text-saffron' : 'text-gray-500 hover:bg-gray-100'}`}
+            title="Notifications"
           >
             <Bell size={20} />
-            {pendingDrivers.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse"></span>}
+            {pendingDrivers.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse"></span>}
           </button>
 
-          <div className="h-6 w-px bg-gray-100 mx-1 hidden sm:block"></div>
+          <div className="h-6 w-px bg-gray-200 mx-1 hidden sm:block"></div>
 
-          <button onClick={() => setIsFleetManaging(true)} className="p-2.5 text-gray-500 hover:bg-gray-100 rounded-xl btn-feedback flex items-center gap-2">
+          <button onClick={() => setIsFleetManaging(true)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg flex items-center gap-2 transition-colors">
             <Car size={18} />
-            <span className="text-xs font-bold">Fleet</span>
+            <span className="text-xs font-bold hidden sm:inline">Fleet</span>
           </button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <div className="flex-1 overflow-hidden relative">
         {activeTab === 'planning' ? (
-          /* Request Center View */
-          <div className="max-w-4xl mx-auto">
+          /* Request Center View - seamless full table */
+          <div className="h-full w-full flex flex-col">
             <RequestTable
               requests={pendingRequests}
               loading={requestsLoading}
@@ -296,120 +296,77 @@ export const ManagerDashboard: React.FC = () => {
             />
           </div>
         ) : (
-          /* Live Operations View - Ride Assignment Cards */
-          <div className="max-w-6xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="font-header font-bold text-2xl text-coffee">Active Rides</h2>
-                <p className="text-mocha/60 text-sm">Students assigned to drivers</p>
+          /* Live Operations View */
+          <div className="h-full overflow-y-auto p-4 sm:p-6">
+            <div className="max-w-7xl mx-auto">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="font-header font-bold text-2xl text-coffee">Active Rides</h2>
+                  <p className="text-gray-500 text-sm">Real-time status of assigned rides</p>
+                </div>
+                <div className="bg-white border border-green-200 text-green-700 inline-flex items-center gap-2 px-3 py-1.5 rounded-full shadow-sm">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Auto-Dispatch Active</span>
+                </div>
               </div>
-              <div className="clay-badge inline-flex items-center gap-2 px-3 py-2">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-widest">Auto-Dispatch Active</span>
-              </div>
-            </div>
 
-            {activeRides.length > 0 ? (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {activeRides.map(ride => (
-                  <RideAssignmentCard key={ride.id} ride={ride} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="All Caught Up!"
-                message="Every student has been assigned a ride for this week's sabha. Great job coordination!"
-              />
-            )}
+              {activeRides.length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {activeRides.map(ride => (
+                    <RideAssignmentCard key={ride.id} ride={ride} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="All Caught Up!"
+                  message="Every student has been assigned a ride for this week's sabha."
+                />
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Mobile Detail Sheet */}
-      <BottomSheet isOpen={!!selectedEntityId} onClose={() => setSelectedEntityId(null)}>
-        {selectedEntity && (
-          <div className="py-2">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-4">
-                <img src={selectedEntity.avatarUrl} className="w-14 h-14 rounded-2xl shadow-lg" alt="" />
-                <div>
-                  <h3 className="font-header font-bold text-coffee text-lg">{selectedEntity.name}</h3>
-                  <p className="text-xs text-gray-500 uppercase font-bold tracking-widest">{selectedEntity.role}</p>
-                </div>
-              </div>
-              <button onClick={() => setSelectedEntityId(null)} className="p-2 text-gray-400"><X size={24} /></button>
-            </div>
-
-            <div className="space-y-4 mb-8">
-              <div className="flex items-start gap-3 bg-gray-50 p-4 rounded-2xl">
-                <MapPin className="text-saffron mt-1" size={18} />
-                <p className="text-sm text-gray-600 leading-relaxed">{selectedEntity.address}</p>
-              </div>
-              <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl">
-                <Clock className="text-gray-400" size={18} />
-                <p className="text-sm text-gray-600">Requested for: 5:30 PM</p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <a
-                href={`tel:${selectedEntity.phone}`}
-                className="clay-button-secondary flex-1"
-              >
-                <Phone size={18} /> Call
-              </a>
-              <button
-                onClick={() => handleAssignToAnyDriver(selectedEntity.id)}
-                className="clay-button-primary flex-[2]"
-              >
-                <User size={18} /> Quick Assign
-              </button>
-            </div>
+      {/* Fleet Bottom Panel - Integrated Bar */}
+      <div className="bg-white border-t border-gray-200 flex-shrink-0 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Fleet Status</span>
           </div>
-        )}
-      </BottomSheet>
-
-      {/* Fleet Bottom Panel - Fixed above bottom nav on mobile, normal flow on desktop */}
-      <div className="bg-white border-t border-gray-200 flex flex-col flex-shrink-0 fixed bottom-[72px] left-0 right-0 z-50 lg:relative lg:bottom-0 shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
-        <div className="px-3 sm:px-4 py-1.5 sm:py-2 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
-          <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest">Sevak Fleet Status</span>
-          <span className="text-[10px] sm:text-xs font-bold text-green-600 bg-green-50 px-1.5 sm:px-2 py-0.5 rounded">
+          <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-100 px-2 py-0.5 rounded-md">
             {availableDrivers.filter(d => d.status === 'available').length}/{availableDrivers.length} Online
           </span>
         </div>
-        <div className="h-16 sm:h-20 lg:h-24 flex overflow-x-auto items-center px-3 sm:px-4 gap-2 sm:gap-3 scrollbar-hide">
+        <div className="h-16 flex overflow-x-auto items-center px-4 gap-3 scrollbar-hide bg-white/50">
           {driversLoading ? (
-            <div className="flex items-center justify-center w-full">
-              <span className="text-[10px] sm:text-xs text-gray-400">Loading drivers...</span>
-            </div>
+            <span className="text-xs text-gray-400 pl-2">Loading fleet...</span>
           ) : availableDrivers.length === 0 ? (
-            <div className="flex items-center justify-center w-full">
-              <span className="text-[10px] sm:text-xs text-gray-400">No approved drivers found</span>
-            </div>
+            <span className="text-xs text-gray-400 pl-2 italic">No drivers online</span>
           ) : (
             availableDrivers.map(driver => (
               <div
                 key={driver.id}
                 onClick={() => setSelectedEntityId(driver.id)}
-                className={`flex items-center gap-2 sm:gap-3 shrink-0 cursor-pointer rounded-xl border transition-all ${selectedEntityId === driver.id
-                  ? 'bg-orange-50 border-saffron shadow-md'
-                  : 'bg-white border-gray-100 shadow-sm hover:shadow-md'
-                  } px-2 sm:px-3 py-1.5 sm:py-2`}
+                className={`flex items-center gap-2 shrink-0 cursor-pointer rounded-lg border transition-all ${selectedEntityId === driver.id
+                  ? 'bg-orange-50 border-saffron shadow-sm'
+                  : 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  } px-2 py-1.5 min-w-[140px]`}
               >
                 <div className="relative shrink-0">
                   <img
                     src={driver.avatarUrl || `https://ui-avatars.com/api/?name=${driver.name}&background=FF6B35&color=fff`}
-                    className="w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-full"
+                    className="w-8 h-8 rounded-full border border-gray-100"
                     alt=""
                   />
-                  <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full border-2 border-white ${driver.status === 'available' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${driver.status === 'available' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                 </div>
                 <div className="min-w-0">
-                  <p className="font-bold text-[10px] sm:text-xs text-coffee truncate max-w-[100px] sm:max-w-[140px] lg:max-w-[160px]">{driver.name}</p>
-                  <p className="text-[9px] sm:text-[10px] text-gray-400 capitalize hidden sm:block">{driver.status}</p>
+                  <p className="font-bold text-xs text-gray-700 truncate">{driver.name}</p>
+                  <p className="text-[10px] text-gray-400 capitalize truncate">{driver.carModel || 'No Vehicle'}</p>
                 </div>
               </div>
             ))

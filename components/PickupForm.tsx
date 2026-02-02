@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User, Driver } from '../types';
 import { MapPin, ChevronLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { createRideRequest } from '../hooks/useFirestore';
 import { LotusLoader, DiyaIcon } from '../constants';
 
 interface PickupFormProps {
-  user: User;
+  user: User | Driver;
   onClose: () => void;
   onSubmit: (details: any) => void;
 }

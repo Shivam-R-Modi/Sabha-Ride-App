@@ -5,7 +5,7 @@
 
 import { getToken, onMessage } from 'firebase/messaging';
 import { doc, updateDoc } from 'firebase/firestore';
-import { auth, db, initializeMessaging } from '../firebase/config';
+import { auth, db, initializeMessaging } from '../../firebase/config';
 
 /**
  * Request notification permission and get FCM token

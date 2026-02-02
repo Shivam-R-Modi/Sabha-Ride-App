@@ -64,7 +64,15 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
             if (role === 'driver') {
                 const driverProfile: Driver = {
                     ...baseProfile,
+                    userId: currentUser.uid,
                     status: 'available',
+                    currentCarId: null,
+                    currentLocation: null,
+                    homeLocation: null,
+                    activeRideId: null,
+                    ridesCompletedToday: 0,
+                    totalStudentsToday: 0,
+                    totalDistanceToday: 0,
                     // Car details will be set when selecting a vehicle from the fleet
                     carModel: '',
                     carColor: '',
