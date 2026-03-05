@@ -1,214 +1,209 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useVehicles, deleteVehicle } from '../../hooks/useFirestore';
 import { Vehicle } from '../../types';
-import { useVehicles, updateVehicle, releaseVehicle } from '../../hooks/useFirestore';
-import { Car, Plus, Trash2, Edit2, X, Save, ChevronUp, Loader2 } from 'lucide-react';
-import { addCarToFleet, removeCarFromFleet } from '../../src/utils/cloudFunctions';
+import { VehicleForm } from './VehicleForm';
+import { VehicleList } from './VehicleList';
+import { Plus, Shield, Loader2, AlertCircle } from 'lucide-react';
 
-interface FleetManagementProps {
-    onClose: () => void;
-}
+export const FleetManagement: React.FC = () => {
+    const { vehicles, loading, error } = useVehicles();
 
-export const FleetManagement: React.FC<FleetManagementProps> = ({ onClose }) => {
-    const { vehicles, loading } = useVehicles();
-    const [isAdding, setIsAdding] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
+    const [showForm, setShowForm] = useState(false);
+    const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+    const [deleteConfirm, setDeleteConfirm] = useState<Vehicle | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-    const [formData, setFormData] = useState<Partial<Vehicle>>({
-        name: '', color: '', plateNumber: '', capacity: 7, status: 'available'
-    });
+    // Auto-hide notifications
+    useEffect(() => {
+        if (notification) {
+            const timer = setTimeout(() => setNotification(null), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [notification]);
 
-    const resetForm = () => {
-        setFormData({ name: '', color: '', plateNumber: '', capacity: 7, status: 'available' });
-        setIsAdding(false);
-        setEditingId(null);
+    const handleAddVehicle = () => {
+        setEditingVehicle(null);
+        setShowForm(true);
     };
 
-    const handleSave = async () => {
-        if (!formData.name || !formData.plateNumber) return;
+    const handleEditVehicle = (vehicle: Vehicle) => {
+        setEditingVehicle(vehicle);
+        setShowForm(true);
+    };
 
-        setIsSaving(true);
+    const handleDeleteVehicle = async () => {
+        if (!deleteConfirm) return;
+
+        setIsDeleting(true);
         try {
-            if (editingId) {
-                await updateVehicle(editingId, formData);
-            } else {
-                // Use Cloud Function to add car
-                await addCarToFleet(
-                    formData.name,
-                    formData.color || '',
-                    formData.plateNumber,
-                    formData.capacity || 4
-                );
-            }
-            resetForm();
-        } catch (e: any) {
-            console.error(e);
-            alert(e.message || 'Failed to save vehicle');
+            await deleteVehicle(deleteConfirm.id);
+            setNotification({ type: 'success', message: 'Vehicle deleted successfully' });
+            setDeleteConfirm(null);
+        } catch (error) {
+            console.error('Error deleting vehicle:', error);
+            setNotification({ type: 'error', message: 'Failed to delete vehicle. Please try again.' });
         } finally {
-            setIsSaving(false);
+            setIsDeleting(false);
         }
     };
 
-    const handleDelete = async (carId: string) => {
-        if (!confirm("Delete vehicle?")) return;
-
-        try {
-            await removeCarFromFleet(carId);
-        } catch (e: any) {
-            console.error(e);
-            alert(e.message || 'Failed to delete vehicle');
-        }
-    };
-
-    const handleEdit = (v: Vehicle) => {
-        setEditingId(v.id);
-        setFormData({
-            name: v.name,
-            color: v.color,
-            plateNumber: v.plateNumber,
-            capacity: v.capacity,
-            status: v.status
+    const handleFormSuccess = () => {
+        setShowForm(false);
+        setEditingVehicle(null);
+        setNotification({
+            type: 'success',
+            message: editingVehicle ? 'Vehicle updated successfully' : 'Vehicle added successfully'
         });
-        setIsAdding(true);
     };
+
+    const handleFormClose = () => {
+        setShowForm(false);
+        setEditingVehicle(null);
+    };
+
+    // Calculate stats
+    const totalVehicles = vehicles.length;
+    const availableVehicles = vehicles.filter(v => v.status === 'available').length;
+    const inUseVehicles = vehicles.filter(v => v.status === 'in_use').length;
+    const maintenanceVehicles = vehicles.filter(v => v.status === 'maintenance').length;
 
     return (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4">
-            <div className="bg-white rounded-none sm:rounded-3xl w-full max-w-5xl h-full sm:h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-cream shrink-0 pt-safe">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-orange-100 p-2 rounded-xl text-saffron hidden sm:flex">
-                            <Car size={24} />
-                        </div>
-                        <div>
-                            <h2 className="font-header font-bold text-lg sm:text-xl text-coffee">Fleet Management</h2>
-                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{vehicles.length} Total Vehicles</p>
-                        </div>
+        <div className="space-y-6 p-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-saffron/10 flex items-center justify-center">
+                        <Shield size={20} className="text-saffron" />
                     </div>
-                    <button onClick={onClose} className="p-3 hover:bg-gray-100 rounded-full text-gray-400 btn-feedback">
-                        <X size={28} />
-                    </button>
+                    <div>
+                        <h2 className="text-xl font-header font-bold text-coffee">Fleet Management</h2>
+                        <p className="text-sm text-mocha/60">Manage your vehicle fleet</p>
+                    </div>
                 </div>
+                <button
+                    onClick={handleAddVehicle}
+                    className="flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl font-semibold hover:bg-saffron/90 transition-colors"
+                >
+                    <Plus size={18} />
+                    Add Vehicle
+                </button>
+            </div>
 
-                <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
-                    {/* List Section */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
-                        {!isAdding && (
-                            <button
-                                onClick={() => setIsAdding(true)}
-                                className="w-full py-4 border-2 border-dashed border-gold/30 rounded-2xl flex items-center justify-center gap-3 text-gold hover:bg-orange-50 transition-all font-bold text-sm btn-feedback bg-white shadow-sm"
-                            >
-                                <Plus size={20} /> Add New Vehicle
-                            </button>
-                        )}
-
-                        {loading ? (
-                            <div className="text-center py-20 opacity-50"><p className="text-xs font-bold animate-pulse">Scanning Garage...</p></div>
-                        ) : (
-                            vehicles.map(v => (
-                                <div key={v.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex items-center justify-between gap-4">
-                                    <div className="flex items-center gap-4 min-w-0">
-                                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${v.status === 'in-use' ? 'bg-blue-50 text-blue-500' : 'bg-green-50 text-green-500'}`}>
-                                            <Car size={20} />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <h4 className="font-bold text-coffee text-sm sm:text-base truncate">{v.name}</h4>
-                                            <div className="flex items-center gap-2 text-[10px] sm:text-xs text-gray-500 font-bold uppercase tracking-tighter">
-                                                <span className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-coffee">{v.plateNumber}</span>
-                                                <span className="truncate">{v.color}</span>
-                                                <span className="shrink-0">{v.capacity} Seats</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        <button onClick={() => handleEdit(v)} className="p-3 text-gray-400 hover:text-coffee btn-feedback">
-                                            <Edit2 size={18} />
-                                        </button>
-                                        <button onClick={() => handleDelete(v.id)} className="p-3 text-gray-300 hover:text-red-500 btn-feedback">
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                        <div className="h-20 sm:hidden"></div> {/* Mobile padding */}
-                    </div>
-
-                    {/* Edit Panel - Sidebar on Desktop, Bottom Sheet on Mobile */}
-                    <div className={`
-                        fixed inset-x-0 bottom-0 z-50 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.2)] transition-transform duration-300 transform rounded-t-[2.5rem]
-                        md:relative md:inset-auto md:w-96 md:shadow-none md:border-l md:rounded-none md:translate-y-0
-                        ${isAdding ? 'translate-y-0' : 'translate-y-full md:hidden'}
-                    `}>
-                        <div className="p-6 pb-safe">
-                            <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h3 className="font-bold text-lg text-coffee">{editingId ? 'Edit Vehicle' : 'Register Vehicle'}</h3>
-                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Seva Fleet Asset</p>
-                                </div>
-                                <button onClick={resetForm} className="p-2 text-gray-400 md:hidden btn-feedback"><X size={28} /></button>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Make & Model</label>
-                                    <input
-                                        value={formData.name}
-                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-gold/30 focus:bg-white outline-none transition-all text-base font-medium"
-                                        placeholder="e.g. Toyota Sienna"
-                                    />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Plate</label>
-                                        <input
-                                            value={formData.plateNumber}
-                                            onChange={e => setFormData({ ...formData, plateNumber: e.target.value })}
-                                            className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-gold/30 focus:bg-white outline-none transition-all text-base uppercase font-mono"
-                                            placeholder="ABC-123"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">Color</label>
-                                        <input
-                                            value={formData.color}
-                                            onChange={e => setFormData({ ...formData, color: e.target.value })}
-                                            className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-gold/30 focus:bg-white outline-none transition-all text-base font-medium"
-                                            placeholder="Silver"
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Seats Available</label>
-                                    <div className="grid grid-cols-5 gap-2">
-                                        {[4, 5, 6, 7, 8].map(cap => (
-                                            <button
-                                                key={cap}
-                                                onClick={() => setFormData({ ...formData, capacity: cap })}
-                                                className={`py-3 rounded-xl font-bold text-sm border-2 transition-all btn-feedback ${formData.capacity === cap ? 'bg-coffee text-white border-coffee shadow-lg' : 'bg-white text-gray-400 border-gray-100 hover:border-gold/30'}`}
-                                            >
-                                                {cap}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="mt-8 flex gap-3">
-                                <button onClick={resetForm} className="hidden md:flex flex-1 py-4 text-gray-400 font-bold hover:text-coffee transition-colors uppercase text-xs tracking-widest">Cancel</button>
-                                <button
-                                    onClick={handleSave}
-                                    className="flex-[2] py-4 bg-saffron text-white rounded-2xl font-bold shadow-xl shadow-orange-100 flex items-center justify-center gap-2 hover:bg-saffron-dark btn-feedback transition-all uppercase text-xs tracking-widest"
-                                >
-                                    <Save size={18} /> {editingId ? 'Update' : 'Save'} Vehicle
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="clay-card p-4">
+                    <div className="text-sm text-mocha/60">Total Fleet</div>
+                    <div className="text-2xl font-bold text-coffee">{totalVehicles}</div>
+                </div>
+                <div className="clay-card p-4">
+                    <div className="text-sm text-green-600">Available</div>
+                    <div className="text-2xl font-bold text-green-600">{availableVehicles}</div>
+                </div>
+                <div className="clay-card p-4">
+                    <div className="text-sm text-blue-600">In Use</div>
+                    <div className="text-2xl font-bold text-blue-600">{inUseVehicles}</div>
+                </div>
+                <div className="clay-card p-4">
+                    <div className="text-sm text-red-600">Maintenance</div>
+                    <div className="text-2xl font-bold text-red-600">{maintenanceVehicles}</div>
                 </div>
             </div>
+
+            {/* Notification */}
+            {notification && (
+                <div className={`p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-top ${notification.type === 'success'
+                    ? 'bg-green-50 border border-green-200 text-green-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                    }`}>
+                    <AlertCircle size={20} />
+                    <span>{notification.message}</span>
+                </div>
+            )}
+
+            {/* Error State */}
+            {error && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+                    <AlertCircle size={20} className="text-red-500" />
+                    <span className="text-red-700">{error}</span>
+                </div>
+            )}
+
+            {/* Vehicle List */}
+            <VehicleList
+                vehicles={vehicles}
+                loading={loading}
+                onEdit={handleEditVehicle}
+                onDelete={(vehicle) => setDeleteConfirm(vehicle)}
+            />
+
+            {/* Add/Edit Vehicle Form Modal */}
+            {showForm && (
+                <VehicleForm
+                    vehicle={editingVehicle}
+                    onClose={handleFormClose}
+                    onSuccess={handleFormSuccess}
+                />
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirm && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="clay-card max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center gap-4 mb-4">
+                            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                                <AlertCircle size={24} className="text-red-500" />
+                            </div>
+                            <div>
+                                <h3 className="font-header font-bold text-lg text-coffee">Delete Vehicle?</h3>
+                                <p className="text-sm text-mocha/60">
+                                    This action cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="clay-card bg-cream p-4 rounded-xl mb-6">
+                            <p className="font-medium text-coffee">
+                                {deleteConfirm.name}
+                            </p>
+                            <p className="text-sm text-mocha/60 font-mono">{deleteConfirm.licensePlate}</p>
+                        </div>
+
+                        {deleteConfirm.status === 'in_use' ? (
+                            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl mb-4">
+                                <p className="text-sm text-yellow-700">
+                                    This vehicle is currently assigned to a driver.
+                                    Please release the vehicle before deleting.
+                                </p>
+                            </div>
+                        ) : null}
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeleteConfirm(null)}
+                                className="flex-1 px-4 py-2 border border-mocha/30 text-mocha rounded-xl font-semibold hover:bg-cream transition-colors"
+                                disabled={isDeleting}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDeleteVehicle}
+                                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                disabled={isDeleting || deleteConfirm.status === 'in_use'}
+                            >
+                                {isDeleting ? (
+                                    <>
+                                        <Loader2 size={18} className="animate-spin" />
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    'Delete'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -119,9 +119,9 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                     <div className="flex items-center justify-center gap-2 text-coffee font-medium text-center mb-4">
                         <span>{stats.students} students</span>
                         <span className="text-gray-300">•</span>
-                        <span>{(stats.distance / 1609.34).toFixed(1)} mi</span>
+                        <span>{(stats.distance || 0).toFixed(1)} mi</span>
                         <span className="text-gray-300">•</span>
-                        <span>{Math.round(stats.time / 60)} min</span>
+                        <span>{Math.round(stats.time || 0)} min</span>
                     </div>
 
                     {/* Today's Stats */}
@@ -146,7 +146,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                                 <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center mx-auto mb-1">
                                     <Navigation size={18} className="text-orange-600" />
                                 </div>
-                                <p className="text-xl font-bold text-coffee">{(driverStats.totalDistanceToday / 1609.34).toFixed(0)}</p>
+                                <p className="text-xl font-bold text-coffee">{(driverStats.totalDistanceToday || 0).toFixed(0)}</p>
                                 <p className="text-xs text-gray-500">Miles</p>
                             </div>
                         </div>

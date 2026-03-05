@@ -145,14 +145,14 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                             <Navigation size={16} className="text-saffron" />
                             <div>
                                 <p className="text-xs text-gray-500">Distance</p>
-                                <p className="font-bold text-coffee">{(assignment.estimatedDistance / 1609.34).toFixed(1)} mi</p>
+                                <p className="font-bold text-coffee">{assignment.estimatedDistance.toFixed(1)} mi</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <Clock size={16} className="text-saffron" />
                             <div>
                                 <p className="text-xs text-gray-500">Est. Time</p>
-                                <p className="font-bold text-coffee">{Math.round(assignment.estimatedTime / 60)} min</p>
+                                <p className="font-bold text-coffee">{assignment.estimatedTime} min</p>
                             </div>
                         </div>
                     </div>
@@ -209,8 +209,8 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                         {assignment.route.map((waypoint, idx) => (
                             <div key={`${waypoint.type}-${idx}`} className="flex items-center gap-3">
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${waypoint.type === 'start' ? 'bg-gray-200 text-gray-600' :
-                                        waypoint.type === 'end' ? 'bg-gray-200 text-gray-600' :
-                                            'bg-saffron/20 text-saffron'
+                                    waypoint.type === 'end' ? 'bg-gray-200 text-gray-600' :
+                                        'bg-saffron/20 text-saffron'
                                     }`}>
                                     {waypoint.type === 'start' ? 'S' :
                                         waypoint.type === 'end' ? 'E' :

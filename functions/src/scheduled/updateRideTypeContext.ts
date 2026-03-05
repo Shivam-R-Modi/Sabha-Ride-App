@@ -17,12 +17,23 @@ export const updateRideTypeContext = functions.pubsub
         const db = admin.firestore();
 
         try {
+            // First, check if test mode is active - if so, don't overwrite
+            const currentContextDoc = await db.collection('system').doc('rideContext').get();
+            if (currentContextDoc.exists) {
+                const currentContext = currentContextDoc.data();
+                if (currentContext?.testMode === true) {
+                    console.log('Test mode is active - skipping automatic update');
+                    return null;
+                }
+            }
+
             const now = new Date();
             const rideContext = determineRideContext(now);
 
             // Update the system ride context document
             await db.collection('system').doc('rideContext').set({
                 ...rideContext,
+                testMode: false, // Ensure testMode is explicitly false in auto mode
                 lastUpdated: now.toISOString()
             });
 
@@ -89,6 +100,7 @@ function determineRideContext(now: Date): RideContext {
 
 /**
  * HTTP function to manually trigger ride context update (for testing)
+ * Can be called with testMode: true and forceRideType: 'home-to-sabha' or 'sabha-to-home'
  */
 export const manuallyUpdateRideContext = functions.https.onCall(async (data, context) => {
     // Verify authentication
@@ -98,10 +110,27 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
 
     const db = admin.firestore();
     const now = new Date();
+
+    // Check if test mode is enabled
+    if (data?.testMode && data?.forceRideType) {
+        const testRideContext = {
+            rideType: data.forceRideType as RideType,
+            displayText: `${data.forceRideType === 'home-to-sabha' ? 'Home → Sabha' : 'Sabha → Home'} (Test Mode)`,
+            timeContext: 'Test mode - rides enabled',
+            testMode: true, // This flag prevents scheduled function from overwriting
+            lastUpdated: now.toISOString()
+        };
+
+        await db.collection('system').doc('rideContext').set(testRideContext);
+        return testRideContext;
+    }
+
+    // Normal mode - use time-based detection (disables test mode)
     const rideContext = determineRideContext(now);
 
     await db.collection('system').doc('rideContext').set({
         ...rideContext,
+        testMode: false, // Disable test mode, let scheduled function take over
         lastUpdated: now.toISOString()
     });
 

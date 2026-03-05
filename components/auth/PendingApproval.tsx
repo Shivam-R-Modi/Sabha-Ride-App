@@ -1,77 +1,57 @@
 import React from 'react';
-import { Clock, CheckCircle2, Lock, ShieldAlert } from 'lucide-react';
-import { LotusIcon } from '../../constants';
-import { UserRole } from '../../types';
 
 interface PendingApprovalProps {
-    role: UserRole;
+    role: string;
     onBack: () => void;
 }
 
 export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }) => {
-    // Dynamic Content based on Role
-    let title = "Pending Approval";
-    let description = "Your account is currently under review.";
-    let steps = [
-        { title: "Profile Submitted", desc: "We have your details.", completed: true },
-        { title: "Verification", desc: "Checking your information.", completed: false },
-        { title: "Access Granted", desc: "You'll be notified soon.", completed: false },
-    ];
-
-    if (role === 'manager') {
-        title = "Access Restricted";
-        description = "Backend needs to grant you access for the manager role.";
-        steps = [
-            { title: "Role Selected", desc: "Manager role requested.", completed: true },
-            { title: "Security Check", desc: "Waiting for admin authorization.", completed: false },
-            { title: "Dashboard Access", desc: "Access to logistics enabled.", completed: false },
-        ];
-    } else if (role === 'driver') {
-        title = "Rider Status Pending";
-        description = "Need to wait for the manager to confirm your rider status.";
-        steps = [
-            { title: "Registration", desc: "Car and contact details sent.", completed: true },
-            { title: "Safety Review", desc: "Manager reviews your profile.", completed: false },
-            { title: "Ready to Drive", desc: "You can start accepting rides.", completed: false },
-        ];
-    }
-
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
-            <div className={`w-28 h-28 rounded-full flex items-center justify-center mb-8 animate-pulse clay-card ${role === 'manager' ? 'text-purple-600' : 'text-saffron'}`}>
-                {role === 'manager' ? <Lock className="w-10 h-10" /> : <Clock className="w-10 h-10" />}
+        <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-white to-gold/10 flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-saffron to-gold text-white py-8 text-center">
+                <h1 className="text-3xl md:text-4xl font-header font-bold">Account Pending</h1>
             </div>
 
-            <h2 className="font-header font-bold text-2xl text-coffee mb-3">{title}</h2>
-            <p className="text-gray-500 mb-8 max-w-xs mx-auto">
-                {description}
-            </p>
-
-            <div className="clay-card w-full max-w-sm text-left space-y-4 mb-8">
-                {steps.map((step, idx) => (
-                    <div key={idx} className={`flex items-start gap-3 ${step.completed ? '' : 'opacity-50'}`}>
-                        {step.completed ? (
-                            <CheckCircle2 className="text-green-500 shrink-0 mt-0.5" size={20} />
-                        ) : (
-                            <div className="w-5 h-5 rounded-full border-2 border-gray-300 shrink-0 mt-0.5"></div>
-                        )}
-                        <div>
-                            <h4 className="font-bold text-sm text-coffee">{step.title}</h4>
-                            <p className="text-xs text-gray-400">{step.desc}</p>
-                        </div>
+            {/* Pending Message */}
+            <div className="flex-1 flex items-center justify-center p-6">
+                <div className="clay-card max-w-md w-full p-8 text-center space-y-6 animate-in fade-in zoom-in duration-500">
+                    {/* Icon */}
+                    <div className="inline-flex p-6 rounded-full bg-gold/20">
+                        <svg className="w-16 h-16 text-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                     </div>
-                ))}
-            </div>
 
-            <button
-                onClick={onBack}
-                className="clay-button-secondary w-full max-w-[200px]"
-            >
-                Logout & Return
-            </button>
+                    {/* Message */}
+                    <div className="space-y-3">
+                        <h2 className="text-2xl font-header font-bold text-coffee">
+                            Approval Pending
+                        </h2>
+                        <p className="text-mocha/70">
+                            Your {role} account is currently pending approval from a Sabha coordinator.
+                        </p>
+                        <p className="text-mocha/70">
+                            Please check back later or contact the Sabha coordinator for updates.
+                        </p>
+                    </div>
 
-            <div className="mt-12 opacity-50">
-                <LotusIcon className="w-8 h-8 text-coffee mx-auto" />
+                    {/* Info Box */}
+                    <div className="bg-orange-50 border-2 border-saffron/20 rounded-xl p-4">
+                        <p className="text-sm text-coffee/80">
+                            <span className="font-semibold">Note:</span> This usually takes 1-2 business days.
+                            If you have any questions, please contact the Sabha office.
+                        </p>
+                    </div>
+
+                    {/* Back Button */}
+                    <button
+                        onClick={onBack}
+                        className="w-full border-2 border-mocha/30 text-coffee py-3 rounded-xl font-semibold hover:bg-mocha/5 transition-all"
+                    >
+                        Sign Out
+                    </button>
+                </div>
             </div>
         </div>
     );

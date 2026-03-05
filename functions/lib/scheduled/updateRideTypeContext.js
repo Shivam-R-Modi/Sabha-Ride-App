@@ -49,10 +49,19 @@ exports.updateRideTypeContext = functions.pubsub
     .onRun(async (context) => {
     const db = admin.firestore();
     try {
+        // First, check if test mode is active - if so, don't overwrite
+        const currentContextDoc = await db.collection('system').doc('rideContext').get();
+        if (currentContextDoc.exists) {
+            const currentContext = currentContextDoc.data();
+            if ((currentContext === null || currentContext === void 0 ? void 0 : currentContext.testMode) === true) {
+                console.log('Test mode is active - skipping automatic update');
+                return null;
+            }
+        }
         const now = new Date();
         const rideContext = determineRideContext(now);
         // Update the system ride context document
-        await db.collection('system').doc('rideContext').set(Object.assign(Object.assign({}, rideContext), { lastUpdated: now.toISOString() }));
+        await db.collection('system').doc('rideContext').set(Object.assign(Object.assign({}, rideContext), { testMode: false, lastUpdated: now.toISOString() }));
         console.log('Ride context updated:', rideContext);
         return null;
     }
@@ -110,6 +119,7 @@ function determineRideContext(now) {
 }
 /**
  * HTTP function to manually trigger ride context update (for testing)
+ * Can be called with testMode: true and forceRideType: 'home-to-sabha' or 'sabha-to-home'
  */
 exports.manuallyUpdateRideContext = functions.https.onCall(async (data, context) => {
     // Verify authentication
@@ -118,8 +128,21 @@ exports.manuallyUpdateRideContext = functions.https.onCall(async (data, context)
     }
     const db = admin.firestore();
     const now = new Date();
+    // Check if test mode is enabled
+    if ((data === null || data === void 0 ? void 0 : data.testMode) && (data === null || data === void 0 ? void 0 : data.forceRideType)) {
+        const testRideContext = {
+            rideType: data.forceRideType,
+            displayText: `${data.forceRideType === 'home-to-sabha' ? 'Home → Sabha' : 'Sabha → Home'} (Test Mode)`,
+            timeContext: 'Test mode - rides enabled',
+            testMode: true, // This flag prevents scheduled function from overwriting
+            lastUpdated: now.toISOString()
+        };
+        await db.collection('system').doc('rideContext').set(testRideContext);
+        return testRideContext;
+    }
+    // Normal mode - use time-based detection (disables test mode)
     const rideContext = determineRideContext(now);
-    await db.collection('system').doc('rideContext').set(Object.assign(Object.assign({}, rideContext), { lastUpdated: now.toISOString() }));
+    await db.collection('system').doc('rideContext').set(Object.assign(Object.assign({}, rideContext), { testMode: false, lastUpdated: now.toISOString() }));
     return rideContext;
 });
 //# sourceMappingURL=updateRideTypeContext.js.map

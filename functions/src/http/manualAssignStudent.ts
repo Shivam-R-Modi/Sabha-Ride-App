@@ -5,7 +5,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { Student, Driver, Car, Ride, RideStudent } from '../types';
+import { Student, Driver, Vehicle, Ride, RideStudent } from '../types';
 import { optimizeRoute, calculateRouteStats } from '../utils/routing';
 import { notifyStudentDriverAssigned } from '../utils/notifications';
 
@@ -41,7 +41,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         }
 
         // Get student details
-        const studentDoc = await db.collection('students').doc(studentId).get();
+        const studentDoc = await db.collection('users').doc(studentId).get();
         if (!studentDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Student not found');
         }
@@ -57,7 +57,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         }
 
         // Get driver details
-        const driverDoc = await db.collection('drivers').doc(driverId).get();
+        const driverDoc = await db.collection('users').doc(driverId).get();
         if (!driverDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Driver not found');
         }
@@ -83,13 +83,13 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         if (!carDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Car not found');
         }
-        const car = { id: carDoc.id, ...carDoc.data() } as Car;
+        const vehicle = { id: carDoc.id, ...carDoc.data() } as Vehicle;
 
         // Check capacity
-        if (ride.students.length >= car.capacity) {
+        if (ride.students.length >= vehicle.capacity) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
-                `Car is at full capacity (${car.capacity} seats)`
+                `Vehicle is at full capacity (${vehicle.capacity} seats)`
             );
         }
 
@@ -126,7 +126,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         });
 
         // Update student
-        batch.update(db.collection('students').doc(studentId), {
+        batch.update(db.collection('users').doc(studentId), {
             status: 'assigned',
             currentRideId: ride.id
         });
@@ -135,8 +135,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
 
         // Notify student
         try {
-            const studentUserDoc = await db.collection('users').doc(student.userId).get();
-            const fcmToken = studentUserDoc.data()?.fcmToken;
+            const fcmToken = studentDoc.data()?.fcmToken;
             if (fcmToken) {
                 await notifyStudentDriverAssigned(fcmToken, driver.name, ride.carModel, ride.carColor);
             }

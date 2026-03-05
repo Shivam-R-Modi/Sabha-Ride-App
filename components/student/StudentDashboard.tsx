@@ -5,15 +5,18 @@ import { PickupForm } from '../PickupForm';
 import { RideStatusCard } from '../RideStatus';
 import { MyRides } from '../MyRides';
 import { Car, Navigation, AlertCircle, Loader2, Sparkles, CheckCircle2, Phone, Edit2, Save, X } from 'lucide-react';
-import { useActiveRide, markReadyToLeave, updateUserProfile } from '../../hooks/useFirestore';
+import { useActiveRide, markReadyToLeave, updateUserProfile, useStudentRequestStatus, useWeeklyAttendance } from '../../hooks/useFirestore';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { studentReadyToLeave } from '../../src/utils/cloudFunctions';
+import { WeeklyAttendancePopup } from './WeeklyAttendancePopup';
+import { AttendanceBlockedScreen } from './AttendanceBlockedScreen';
 
 interface StudentDashboardProps {
     user: User | Driver;
+    onLogout?: () => void;
 }
 
-export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
+export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogout }) => {
     const { currentTab } = useNavigation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [showReadyModal, setShowReadyModal] = useState(false);
@@ -30,6 +33,27 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
     // Use Firestore Hook
     const { activeRide, loading } = useActiveRide(user.id);
 
+    // Check for dismissed request
+    const { dismissedRequest, loading: dismissedLoading } = useStudentRequestStatus(user.id);
+
+    // Weekly attendance check
+    const { attendance, loading: attendanceLoading, hasResponded } = useWeeklyAttendance(user.id);
+    const [showAttendancePopup, setShowAttendancePopup] = useState(false);
+    const [attendanceResponse, setAttendanceResponse] = useState<'yes' | 'no' | null>(null);
+
+    // Determine if popup should be shown (after attendance data is loaded)
+    useEffect(() => {
+        if (!attendanceLoading) {
+            if (hasResponded && attendance) {
+                setAttendanceResponse(attendance.response);
+                setShowAttendancePopup(false);
+            } else {
+                // No response yet - show popup
+                setShowAttendancePopup(true);
+            }
+        }
+    }, [attendanceLoading, hasResponded, attendance]);
+
     // Check if it's after 10 PM on Friday for drop-off UI
     useEffect(() => {
         const checkTime = () => {
@@ -44,6 +68,34 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
 
         return () => clearInterval(interval);
     }, []);
+
+    // Handle attendance popup response
+    const handleAttendanceResponse = (response: 'yes' | 'no') => {
+        setAttendanceResponse(response);
+        setShowAttendancePopup(false);
+    };
+
+    // If user responded "no", show blocked screen
+    if (attendanceResponse === 'no') {
+        return (
+            <AttendanceBlockedScreen
+                user={user as User}
+                onUnblock={() => setAttendanceResponse('yes')}
+            />
+        );
+    }
+
+    // Show attendance popup if needed (before other loading states)
+    if (showAttendancePopup && !attendanceLoading) {
+        return (
+            <WeeklyAttendancePopup
+                user={user as User}
+                onResponse={handleAttendanceResponse}
+            />
+        );
+    }
+
+
 
     const handleRequestRide = (details: any) => {
         setIsFormOpen(false);
@@ -120,6 +172,35 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                         <DiyaIcon className="w-6 h-6 text-saffron" />
                     </div>
                 </div>
+
+                {/* Dismissed Request Notification */}
+                {dismissedRequest && !activeRide && (
+                    <div className="clay-card bg-red-50 border border-red-100">
+                        <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center text-red-500 shrink-0">
+                                <AlertCircle size={24} />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-header font-bold text-red-700 text-lg">Request Dismissed</h3>
+                                <p className="text-sm text-red-600 mt-1">
+                                    Your ride request was dismissed by {dismissedRequest.managerName}.
+                                </p>
+                                {dismissedRequest.managerContact && (
+                                    <a
+                                        href={`tel:${dismissedRequest.managerContact}`}
+                                        className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-semibold hover:bg-red-600 transition-colors"
+                                    >
+                                        <Phone size={16} />
+                                        Contact Manager
+                                    </a>
+                                )}
+                                <p className="text-xs text-red-400 mt-3">
+                                    Dismissed at {new Date(dismissedRequest.dismissedAt).toLocaleString()}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {activeRide ? (
@@ -281,6 +362,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                         <Edit2 size={18} className="text-saffron" />
                         Edit Profile
                     </button>
+                    {onLogout && (
+                        <button
+                            onClick={onLogout}
+                            className="mt-3 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-red-400 to-red-500 text-white font-bold shadow-lg hover:opacity-90 transition-opacity"
+                        >
+                            Sign Out
+                        </button>
+                    )}
                 </>
             )}
         </div>

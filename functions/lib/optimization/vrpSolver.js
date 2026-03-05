@@ -8,16 +8,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.solveCVRP = solveCVRP;
 const distance_1 = require("../utils/distance");
-// Sabha location (depot)
-const SABHA_LOCATION = {
-    lat: 42.3396,
-    lng: -71.0942
-};
+// Default depot — overridden at runtime by Firestore settings
+const DEFAULT_DEPOT = { lat: 42.339925, lng: -71.088182 };
 /**
  * Solve CVRP using Clarke-Wright Savings Algorithm + Local Search
  * This is a well-known heuristic that provides good solutions quickly
  */
-function solveCVRP(students, drivers, rideType) {
+function solveCVRP(students, drivers, rideType, sabhaLocation) {
+    const depot = sabhaLocation || DEFAULT_DEPOT;
     const startTime = Date.now();
     // Handle edge cases
     if (students.length === 0) {
@@ -43,7 +41,7 @@ function solveCVRP(students, drivers, rideType) {
         };
     }
     // Build location array: index 0 = depot, 1..N = students
-    const locations = [SABHA_LOCATION, ...students.map(s => s.location)];
+    const locations = [depot, ...students.map(s => s.location)];
     const studentIds = ['', ...students.map(s => s.id)]; // index 0 is empty (depot)
     // Build distance matrix
     const distanceMatrix = buildDistanceMatrix(locations);
@@ -90,7 +88,7 @@ function solveCVRP(students, drivers, rideType) {
             students: routeStudents,
             routeDistance: Math.round(routeDistance * 10) / 10,
             estimatedTime,
-            googleMapsUrl: buildGoogleMapsUrl(routeStudents, rideType)
+            googleMapsUrl: buildGoogleMapsUrl(routeStudents, rideType, depot)
         });
         totalDistance += routeDistance;
     }
@@ -395,13 +393,13 @@ function tryRelocate(fromRoute, toRoute, distanceMatrix) {
 /**
  * Build Google Maps URL for navigation
  */
-function buildGoogleMapsUrl(students, rideType) {
+function buildGoogleMapsUrl(students, rideType, sabhaLoc) {
     if (students.length === 0)
         return '';
     if (rideType === 'home-to-sabha') {
         // Pickup: First student -> Sabha, with waypoints
         const origin = `${students[0].location.lat},${students[0].location.lng}`;
-        const destination = `${SABHA_LOCATION.lat},${SABHA_LOCATION.lng}`;
+        const destination = `${sabhaLoc.lat},${sabhaLoc.lng}`;
         if (students.length === 1) {
             return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
         }
@@ -413,7 +411,7 @@ function buildGoogleMapsUrl(students, rideType) {
     }
     else {
         // Drop-off: Sabha -> Last student, with waypoints
-        const origin = `${SABHA_LOCATION.lat},${SABHA_LOCATION.lng}`;
+        const origin = `${sabhaLoc.lat},${sabhaLoc.lng}`;
         const destination = `${students[students.length - 1].location.lat},${students[students.length - 1].location.lng}`;
         if (students.length === 1) {
             return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;

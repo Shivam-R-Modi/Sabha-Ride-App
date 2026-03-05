@@ -12,7 +12,8 @@
     "skipLibCheck": true,
     "types": [
       "node",
-      "vite/client"
+      "vite/client",
+      "google.maps"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,
@@ -28,9 +29,6 @@
     "noEmit": true
   },
   "exclude": [
-    "node_modules",
-    "src/components",
-    "src/hooks",
-    "src/store"
+    "node_modules"
   ]
 }

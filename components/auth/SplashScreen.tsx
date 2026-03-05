@@ -1,49 +1,82 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import backgroundImage from '../Assets/smruti-1768861058554.png';
 
 interface SplashScreenProps {
-  onComplete: () => void;
+    onComplete: () => void;
 }
 
-export function SplashScreen({ onComplete }: SplashScreenProps) {
-  const [step, setStep] = useState(0);
+// Spiritual quotes to rotate through
+const SPIRITUAL_QUOTES = [
+    "બસ એક તુ રાજી થા",
+    "તમે ભગવાન તરાફ એક પગલુ ભરશો, બાકીના નવ્વાણું પગ્લા ભગવાન તમારી તરફ ભરશે",
+    "ચિંતા કરી સમય બગાડવો એના કરતા ભજન કરી સમય સુધરવો",
+];
 
-  useEffect(() => {
-    const timer1 = setTimeout(() => setStep(1), 1500);
-    const timer2 = setTimeout(() => setStep(2), 3000);
-    const timer3 = setTimeout(() => onComplete(), 4500);
+const QUOTE_INDEX_KEY = 'sabha_ride_quote_index';
 
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
-  }, [onComplete]);
+export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
+    const [currentQuote, setCurrentQuote] = useState<string>('');
 
-  return (
-    <div className="fixed inset-0 bg-gradient-to-br from-orange-500 via-orange-600 to-blue-900 flex items-center justify-center">
-      <div className="text-center">
-        {step === 0 && (
-          <div className="animate-pulse">
-            <div className="w-32 h-32 mx-auto bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-              <span className="text-6xl">🚗</span>
+    useEffect(() => {
+        // Get the last quote index from localStorage
+        const lastIndex = localStorage.getItem(QUOTE_INDEX_KEY);
+        const currentIndex = lastIndex ? parseInt(lastIndex, 10) : 0;
+
+        // Set the current quote
+        setCurrentQuote(SPIRITUAL_QUOTES[currentIndex]);
+
+        // Calculate next index (rotate through quotes)
+        const nextIndex = (currentIndex + 1) % SPIRITUAL_QUOTES.length;
+
+        // Store the next index for the next visit
+        localStorage.setItem(QUOTE_INDEX_KEY, nextIndex.toString());
+    }, []);
+
+    return (
+        <div
+            className="fixed inset-0 flex flex-col items-center justify-end cursor-pointer animate-in fade-in duration-500 pb-16"
+            onClick={onComplete}
+            style={{
+                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), url(${backgroundImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+            }}
+        >
+            {/* Rotating Spiritual Quote */}
+            <div className="text-center px-6 mb-8 animate-in fade-in slide-in-from-bottom duration-700">
+                <p
+                    className="text-2xl md:text-3xl font-medium drop-shadow-lg leading-relaxed"
+                    style={{
+                        fontFamily: "'GJDW', 'Inter', sans-serif",
+                        color: '#FF6B35'
+                    }}
+                >
+                    {currentQuote}
+                </p>
             </div>
-          </div>
-        )}
 
-        {step === 1 && (
-          <div className="animate-fadeIn">
-            <h1 className="text-6xl font-bold text-white mb-4">Sabha</h1>
-            <p className="text-2xl text-white/90">Ride Seva</p>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="animate-fadeIn">
-            <p className="text-xl text-white/80">Connecting Communities</p>
-            <p className="text-lg text-white/60 mt-2">One Ride at a Time</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+            {/* Tap to Continue */}
+            <div className="text-center animate-in fade-in slide-in-from-bottom duration-700 delay-300">
+                <p className="text-white text-lg md:text-xl font-medium drop-shadow-lg animate-pulse">
+                    Tap to continue
+                </p>
+                <div className="mt-3 flex justify-center">
+                    <svg
+                        className="w-6 h-6 text-white animate-bounce"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"
+                        />
+                    </svg>
+                </div>
+            </div>
+        </div>
+    );
+};

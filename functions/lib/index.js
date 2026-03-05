@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateEventCSV = exports.removeCarFromFleet = exports.addCarToFleet = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.completeRide = exports.startRide = exports.assignStudentsToDriver = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.geocodeAddress = exports.verifyManagerCode = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.assignStudentsToDriver = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -56,6 +56,8 @@ var startRide_1 = require("./http/startRide");
 Object.defineProperty(exports, "startRide", { enumerable: true, get: function () { return startRide_1.startRide; } });
 var completeRide_1 = require("./http/completeRide");
 Object.defineProperty(exports, "completeRide", { enumerable: true, get: function () { return completeRide_1.completeRide; } });
+var releaseAssignment_1 = require("./http/releaseAssignment");
+Object.defineProperty(exports, "releaseAssignment", { enumerable: true, get: function () { return releaseAssignment_1.releaseAssignment; } });
 var driverDoneForToday_1 = require("./http/driverDoneForToday");
 Object.defineProperty(exports, "driverDoneForToday", { enumerable: true, get: function () { return driverDoneForToday_1.driverDoneForToday; } });
 // Student Functions
@@ -64,9 +66,11 @@ Object.defineProperty(exports, "studentReadyToLeave", { enumerable: true, get: f
 // Manager Functions
 var manualAssignStudent_1 = require("./http/manualAssignStudent");
 Object.defineProperty(exports, "manualAssignStudent", { enumerable: true, get: function () { return manualAssignStudent_1.manualAssignStudent; } });
-var fleetManagement_1 = require("./http/fleetManagement");
-Object.defineProperty(exports, "addCarToFleet", { enumerable: true, get: function () { return fleetManagement_1.addCarToFleet; } });
-Object.defineProperty(exports, "removeCarFromFleet", { enumerable: true, get: function () { return fleetManagement_1.removeCarFromFleet; } });
 var generateEventCSV_1 = require("./http/generateEventCSV");
 Object.defineProperty(exports, "generateEventCSV", { enumerable: true, get: function () { return generateEventCSV_1.generateEventCSV; } });
+var verifyManagerCode_1 = require("./http/verifyManagerCode");
+Object.defineProperty(exports, "verifyManagerCode", { enumerable: true, get: function () { return verifyManagerCode_1.verifyManagerCode; } });
+// Utility Functions
+var geocodeAddress_1 = require("./http/geocodeAddress");
+Object.defineProperty(exports, "geocodeAddress", { enumerable: true, get: function () { return geocodeAddress_1.geocodeAddress; } });
 //# sourceMappingURL=index.js.map

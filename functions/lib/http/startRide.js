@@ -47,7 +47,7 @@ const notifications_1 = require("../utils/notifications");
  * Output: Success confirmation
  */
 exports.startRide = functions.https.onCall(async (data, context) => {
-    var _a, _b;
+    var _a;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -65,12 +65,7 @@ exports.startRide = functions.https.onCall(async (data, context) => {
         }
         const ride = rideDoc.data();
         // Verify the caller is the driver assigned to this ride
-        const driverDoc = await db.collection('drivers').doc(ride === null || ride === void 0 ? void 0 : ride.driverId).get();
-        if (!driverDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Driver not found');
-        }
-        const driver = driverDoc.data();
-        if ((driver === null || driver === void 0 ? void 0 : driver.userId) !== context.auth.uid) {
+        if ((ride === null || ride === void 0 ? void 0 : ride.driverId) !== context.auth.uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the assigned driver can start this ride');
         }
         // Check ride status
@@ -85,25 +80,21 @@ exports.startRide = functions.https.onCall(async (data, context) => {
             startedAt: now
         });
         // Update driver status
-        batch.update(db.collection('drivers').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), {
+        batch.update(db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), {
             status: 'active_ride'
         });
         // Update students status
         const destination = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'Sabha' : 'Home';
         for (const student of (ride === null || ride === void 0 ? void 0 : ride.students) || []) {
-            batch.update(db.collection('students').doc(student.id), {
+            batch.update(db.collection('users').doc(student.id), {
                 status: 'in_ride'
             });
             // Send notification to student
             try {
-                const studentUserDoc = await db.collection('students').doc(student.id).get();
-                const userId = (_a = studentUserDoc.data()) === null || _a === void 0 ? void 0 : _a.userId;
-                if (userId) {
-                    const userDoc = await db.collection('users').doc(userId).get();
-                    const fcmToken = (_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
-                    if (fcmToken) {
-                        await (0, notifications_1.notifyStudentRideStarting)(fcmToken, destination);
-                    }
+                const studentDoc = await db.collection('users').doc(student.id).get();
+                const fcmToken = (_a = studentDoc.data()) === null || _a === void 0 ? void 0 : _a.fcmToken;
+                if (fcmToken) {
+                    await (0, notifications_1.notifyStudentRideStarting)(fcmToken, destination);
                 }
             }
             catch (notifError) {

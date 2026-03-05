@@ -21,6 +21,13 @@ async function callFunction<T = any>(name: string, data?: any): Promise<T> {
         return result.data as T;
     } catch (error: any) {
         console.error(`Error calling ${name}:`, error);
+        // Log more details about the error
+        if (error?.message) {
+            console.error(`${name} error message:`, error.message);
+        }
+        if (error?.code) {
+            console.error(`${name} error code:`, error.code);
+        }
         throw new Error(error.message || `Failed to call ${name}`);
     }
 }
@@ -145,39 +152,6 @@ export async function manualAssignStudent(studentId: string, driverId: string): 
     return callFunction<ManualAssignResult>('manualAssignStudent', { studentId, driverId });
 }
 
-export interface AddCarResult {
-    success: boolean;
-    carId: string;
-    car: {
-        id: string;
-        model: string;
-        color: string;
-        licensePlate: string;
-        capacity: number;
-        status: string;
-        assignedDriverId: string | null;
-    };
-}
-
-export async function addCarToFleet(
-    model: string,
-    color: string,
-    licensePlate: string,
-    capacity: number
-): Promise<AddCarResult> {
-    return callFunction<AddCarResult>('addCarToFleet', { model, color, licensePlate, capacity });
-}
-
-export interface RemoveCarResult {
-    success: boolean;
-    carId: string;
-    message: string;
-}
-
-export async function removeCarFromFleet(carId: string): Promise<RemoveCarResult> {
-    return callFunction<RemoveCarResult>('removeCarFromFleet', { carId });
-}
-
 export interface GenerateCSVResult {
     success: boolean;
     eventDate: string;
@@ -195,6 +169,18 @@ export async function generateEventCSV(eventDate: string): Promise<GenerateCSVRe
 }
 
 // ============================================
+// MANAGER AUTH FUNCTIONS
+// ============================================
+
+export interface VerifyManagerCodeResult {
+    valid: boolean;
+}
+
+export async function verifyManagerCode(code: string): Promise<VerifyManagerCodeResult> {
+    return callFunction<VerifyManagerCodeResult>('verifyManagerCode', { code });
+}
+
+// ============================================
 // SYSTEM FUNCTIONS
 // ============================================
 
@@ -205,8 +191,28 @@ export interface RideContextResult {
     lastUpdated: string;
 }
 
-export async function manuallyUpdateRideContext(): Promise<RideContextResult> {
-    return callFunction<RideContextResult>('manuallyUpdateRideContext');
+export interface ManuallyUpdateRideContextParams {
+    testMode?: boolean;
+    forceRideType?: 'home-to-sabha' | 'sabha-to-home';
+}
+
+export async function manuallyUpdateRideContext(params?: ManuallyUpdateRideContextParams): Promise<RideContextResult> {
+    return callFunction<RideContextResult>('manuallyUpdateRideContext', params);
+}
+
+// ============================================
+// GEOCODING FUNCTIONS
+// ============================================
+
+export interface GeocodeResult {
+    latitude: number;
+    longitude: number;
+    formattedAddress: string;
+    placeId: string | null;
+}
+
+export async function geocodeAddressViaCloud(address: string): Promise<GeocodeResult> {
+    return callFunction<GeocodeResult>('geocodeAddress', { address });
 }
 
 // ============================================

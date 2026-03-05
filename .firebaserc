@@ -1,5 +1,7 @@
 {
-  "projects": {},
+  "projects": {
+    "default": "sabha-ride-app"
+  },
   "targets": {},
   "etags": {}
 }

@@ -58,13 +58,13 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
     const db = admin.firestore();
     try {
         // Get student details
-        const studentDoc = await db.collection('students').doc(studentId).get();
+        const studentDoc = await db.collection('users').doc(studentId).get();
         if (!studentDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Student not found');
         }
         const student = studentDoc.data();
         // Verify the caller is the student
-        if ((student === null || student === void 0 ? void 0 : student.userId) !== context.auth.uid) {
+        if (studentId !== context.auth.uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the student can mark themselves ready');
         }
         // Check if student is at Sabha (must have completed pickup)
@@ -79,7 +79,7 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'Drop-off requests only available after 10 PM on Friday');
         }
         // Update student status
-        await db.collection('students').doc(studentId).update({
+        await db.collection('users').doc(studentId).update({
             status: 'waiting_for_dropoff',
             dropoffRequested: true,
             currentRideId: null

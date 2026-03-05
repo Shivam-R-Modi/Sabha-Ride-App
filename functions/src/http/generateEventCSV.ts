@@ -1,6 +1,6 @@
 // ============================================
 // HTTP FUNCTION: generateEventCSV
-// Generates CSV export for manager
+// Generates CSV export for manager with all ride requests
 // ============================================
 
 import * as functions from 'firebase-functions';
@@ -17,11 +17,10 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
 
-    const { eventDate } = data;
+    const { eventDate } = data || {};
 
-    if (!eventDate) {
-        throw new functions.https.HttpsError('invalid-argument', 'eventDate is required (YYYY-MM-DD format)');
-    }
+    // Use today's date if no date provided
+    const targetDate = eventDate || new Date().toISOString().split('T')[0];
 
     const db = admin.firestore();
 
@@ -33,72 +32,79 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
         }
 
         const user = userDoc.data();
-        if (!user?.roles?.includes('manager')) {
+        // Check for both 'roles' array and 'role' string
+        const isManager = (user?.roles?.includes?.('manager')) || user?.role === 'manager';
+        if (!isManager) {
             throw new functions.https.HttpsError('permission-denied', 'Only managers can export data');
         }
 
-        // Get statistics for the event
-        const statsDoc = await db.collection('statistics').doc(eventDate).get();
-
-        if (!statsDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'No data found for this date');
-        }
-
-        const stats = statsDoc.data();
-
-        // Build CSV content
         const rows: string[] = [];
 
         // Header
-        rows.push('Event Date,Event Type,Student Name,Pickup Driver,Pickup Car,Drop-off Driver,Drop-off Car');
+        rows.push('Student Name,Phone,Pickup Address,Status,Request Date');
 
-        // Collect all student IDs from pickup and dropoff
-        const pickupStudents = new Map();
-        const dropoffStudents = new Map();
+        // Get all ride requests - query without filters first to avoid index issues
+        const allRides = await db.collection('rides').get();
 
-        (stats?.pickup?.students || []).forEach((s: any) => {
-            pickupStudents.set(s.id, {
-                name: s.name,
-                driverName: s.driverName || '',
-                carModel: s.carModel || ''
-            });
-        });
+        const pendingRequests: any[] = [];
+        const completedPickups = new Map();
+        const completedDropoffs = new Map();
 
-        (stats?.dropoff?.students || []).forEach((s: any) => {
-            dropoffStudents.set(s.id, {
-                name: s.name,
-                driverName: s.driverName || '',
-                carModel: s.carModel || ''
-            });
-        });
+        for (const doc of allRides.docs) {
+            const ride = doc.data();
 
-        // Get all unique student IDs
-        const allStudentIds = new Set([...pickupStudents.keys(), ...dropoffStudents.keys()]);
-
-        // Generate rows
-        for (const studentId of allStudentIds) {
-            const pickup = pickupStudents.get(studentId);
-            const dropoff = dropoffStudents.get(studentId);
-
-            let eventType: string;
-            if (pickup && dropoff) {
-                eventType = 'Both';
-            } else if (pickup) {
-                eventType = 'Pickup Only';
-            } else {
-                eventType = 'Drop-off Only';
+            // Check if this is a pending request
+            if (ride.status === 'requested') {
+                pendingRequests.push({
+                    id: doc.id,
+                    ...ride
+                });
             }
+        }
 
-            const studentName = pickup?.name || dropoff?.name || 'Unknown';
+        // Get statistics for completed rides
+        const statsDoc = await db.collection('statistics').doc(targetDate).get();
+        if (statsDoc.exists && statsDoc.data()) {
+            const stats = statsDoc.data();
+
+            (stats?.pickup?.students || []).forEach((s: any) => {
+                completedPickups.set(s.id, s);
+            });
+
+            (stats?.dropoff?.students || []).forEach((s: any) => {
+                completedDropoffs.set(s.id, s);
+            });
+        }
+
+        // Add pending requests to CSV
+        if (pendingRequests.length > 0) {
+            for (const request of pendingRequests) {
+                rows.push([
+                    escapeCsvField(request.studentName || 'Unknown'),
+                    escapeCsvField(request.studentPhone || request.phone || ''),
+                    escapeCsvField(request.pickupAddress || ''),
+                    'Pending Request',
+                    escapeCsvField(request.createdAt ? new Date(request.createdAt).toLocaleDateString() : targetDate)
+                ].join(','));
+            }
+        }
+
+        // Add completed rides from statistics
+        const allStudentIds = new Set([...completedPickups.keys(), ...completedDropoffs.keys()]);
+        for (const studentId of allStudentIds) {
+            const pickup = completedPickups.get(studentId);
+            const dropoff = completedDropoffs.get(studentId);
+
+            let eventType = 'Both';
+            if (pickup && !dropoff) eventType = 'Pickup Only';
+            else if (!pickup && dropoff) eventType = 'Drop-off Only';
 
             rows.push([
-                eventDate,
+                escapeCsvField(pickup?.name || dropoff?.name || 'Unknown'),
+                escapeCsvField(pickup?.phone || ''),
+                escapeCsvField(pickup?.address || dropoff?.address || ''),
                 eventType,
-                escapeCsvField(studentName),
-                escapeCsvField(pickup?.driverName || ''),
-                escapeCsvField(pickup?.carModel || ''),
-                escapeCsvField(dropoff?.driverName || ''),
-                escapeCsvField(dropoff?.carModel || '')
+                targetDate
             ].join(','));
         }
 
@@ -106,13 +112,12 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
 
         return {
             success: true,
-            eventDate,
+            eventDate: targetDate,
             csvContent,
             summary: {
-                totalStudents: allStudentIds.size,
-                pickupOnly: stats?.pickup?.totalStudents || 0,
-                dropoffOnly: stats?.dropoff?.totalStudents || 0,
-                both: (stats?.pickup?.totalStudents || 0) + (stats?.dropoff?.totalStudents || 0) - allStudentIds.size
+                totalStudents: rows.length - 1, // Subtract header row
+                pendingRequests: pendingRequests.length,
+                completedRides: allStudentIds.size
             }
         };
 
@@ -121,7 +126,7 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
         if (error instanceof functions.https.HttpsError) {
             throw error;
         }
-        throw new functions.https.HttpsError('internal', 'Failed to generate CSV');
+        throw new functions.https.HttpsError('internal', 'Failed to generate CSV: ' + (error as Error).message);
     }
 });
 

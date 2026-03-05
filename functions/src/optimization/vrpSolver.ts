@@ -8,11 +8,8 @@
 import { Student, Driver, GeoLocation, RideStudent } from '../types';
 import { haversineDistance } from '../utils/distance';
 
-// Sabha location (depot)
-const SABHA_LOCATION: GeoLocation = {
-    lat: 42.3396,
-    lng: -71.0942
-};
+// Default depot — overridden at runtime by Firestore settings
+const DEFAULT_DEPOT: GeoLocation = { lat: 42.339925, lng: -71.088182 };
 
 export interface VRPAssignment {
     driverId: string;
@@ -54,8 +51,10 @@ interface SavingsEntry {
 export function solveCVRP(
     students: Student[],
     drivers: Driver[],
-    rideType: 'home-to-sabha' | 'sabha-to-home'
+    rideType: 'home-to-sabha' | 'sabha-to-home',
+    sabhaLocation?: GeoLocation
 ): VRPOptimizationResult {
+    const depot: GeoLocation = sabhaLocation || DEFAULT_DEPOT;
     const startTime = Date.now();
 
     // Handle edge cases
@@ -84,7 +83,7 @@ export function solveCVRP(
     }
 
     // Build location array: index 0 = depot, 1..N = students
-    const locations: GeoLocation[] = [SABHA_LOCATION, ...students.map(s => s.location)];
+    const locations: GeoLocation[] = [depot, ...students.map(s => s.location)];
     const studentIds = ['', ...students.map(s => s.id)]; // index 0 is empty (depot)
 
     // Build distance matrix
@@ -146,7 +145,7 @@ export function solveCVRP(
             students: routeStudents,
             routeDistance: Math.round(routeDistance * 10) / 10,
             estimatedTime,
-            googleMapsUrl: buildGoogleMapsUrl(routeStudents, rideType)
+            googleMapsUrl: buildGoogleMapsUrl(routeStudents, rideType, depot)
         });
 
         totalDistance += routeDistance;
@@ -515,14 +514,15 @@ function tryRelocate(
  */
 function buildGoogleMapsUrl(
     students: RideStudent[],
-    rideType: 'home-to-sabha' | 'sabha-to-home'
+    rideType: 'home-to-sabha' | 'sabha-to-home',
+    sabhaLoc: GeoLocation
 ): string {
     if (students.length === 0) return '';
 
     if (rideType === 'home-to-sabha') {
         // Pickup: First student -> Sabha, with waypoints
         const origin = `${students[0].location.lat},${students[0].location.lng}`;
-        const destination = `${SABHA_LOCATION.lat},${SABHA_LOCATION.lng}`;
+        const destination = `${sabhaLoc.lat},${sabhaLoc.lng}`;
 
         if (students.length === 1) {
             return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
@@ -536,7 +536,7 @@ function buildGoogleMapsUrl(
         return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${encodeURIComponent(waypoints)}&travelmode=driving`;
     } else {
         // Drop-off: Sabha -> Last student, with waypoints
-        const origin = `${SABHA_LOCATION.lat},${SABHA_LOCATION.lng}`;
+        const origin = `${sabhaLoc.lat},${sabhaLoc.lng}`;
         const destination = `${students[students.length - 1].location.lat},${students[students.length - 1].location.lng}`;
 
         if (students.length === 1) {

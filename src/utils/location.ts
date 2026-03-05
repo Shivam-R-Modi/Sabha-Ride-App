@@ -156,12 +156,14 @@ export function isWithinDistance(
 }
 
 /**
- * Sabha Location (BAPS Shri Swaminarayan Mandir, Edison, NJ)
+ * Default Sabha Location — used as fallback only.
+ * The live location is stored in Firestore `settings/main`.
+ * Use the useSettings() hook to get the current value.
  */
 export const SABHA_LOCATION = {
-    lat: 40.5186,
-    lng: -74.3491,
-    address: 'BAPS Shri Swaminarayan Mandir, 1120 Edison Glen Terrace, Edison, NJ 08837',
+    lat: 42.339925,
+    lng: -71.088182,
+    address: '360 Huntington Ave, Boston, MA 02115',
 };
 
 /**

@@ -69,7 +69,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('permission-denied', 'Only managers can manually assign students');
         }
         // Get student details
-        const studentDoc = await db.collection('students').doc(studentId).get();
+        const studentDoc = await db.collection('users').doc(studentId).get();
         if (!studentDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Student not found');
         }
@@ -80,7 +80,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'Student is not waiting for assignment');
         }
         // Get driver details
-        const driverDoc = await db.collection('drivers').doc(driverId).get();
+        const driverDoc = await db.collection('users').doc(driverId).get();
         if (!driverDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Driver not found');
         }
@@ -100,10 +100,10 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         if (!carDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Car not found');
         }
-        const car = Object.assign({ id: carDoc.id }, carDoc.data());
+        const vehicle = Object.assign({ id: carDoc.id }, carDoc.data());
         // Check capacity
-        if (ride.students.length >= car.capacity) {
-            throw new functions.https.HttpsError('failed-precondition', `Car is at full capacity (${car.capacity} seats)`);
+        if (ride.students.length >= vehicle.capacity) {
+            throw new functions.https.HttpsError('failed-precondition', `Vehicle is at full capacity (${vehicle.capacity} seats)`);
         }
         // Add student to ride
         const newStudent = {
@@ -132,15 +132,14 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
             estimatedTime: time
         });
         // Update student
-        batch.update(db.collection('students').doc(studentId), {
+        batch.update(db.collection('users').doc(studentId), {
             status: 'assigned',
             currentRideId: ride.id
         });
         await batch.commit();
         // Notify student
         try {
-            const studentUserDoc = await db.collection('users').doc(student.userId).get();
-            const fcmToken = (_b = studentUserDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
+            const fcmToken = (_b = studentDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
             if (fcmToken) {
                 await (0, notifications_1.notifyStudentDriverAssigned)(fcmToken, driver.name, ride.carModel, ride.carColor);
             }

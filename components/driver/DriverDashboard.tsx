@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Driver, AssignmentType } from '../../types';
-import { MapPin, Users, ChevronRight, ToggleLeft, ToggleRight, Navigation, Car, RefreshCw, LogOut, Loader2 } from 'lucide-react';
+import { MapPin, Users, ChevronRight, ToggleLeft, ToggleRight, Navigation, Car, RefreshCw, LogOut, Loader2, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { VehicleSelection } from './VehicleSelection';
 import { AssignmentPreview } from './AssignmentPreview';
 import { ActiveRide } from './ActiveRide';
 import { CompletionScreen } from './CompletionScreen';
-import { releaseVehicle, setDriverAvailability } from '../../hooks/useFirestore';
+import { releaseVehicle, setDriverAvailability, useAvailableVehicles, assignVehicleToDriver } from '../../hooks/useFirestore';
 import {
     assignStudentsToDriver,
     driverDoneForToday,
@@ -45,16 +44,32 @@ export const DriverDashboard: React.FC = () => {
         driverStats: { ridesCompletedToday: number; totalStudentsToday: number; totalDistanceToday: number };
     } | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [showVehicleSelector, setShowVehicleSelector] = useState(false);
+    const [selectingVehicle, setSelectingVehicle] = useState(false);
+
+    // Available vehicles hook for real-time updates
+    const { vehicles: availableVehicles, loading: vehiclesLoading } = useAvailableVehicles();
 
     // Cast userProfile to Driver to safely access driver-specific properties
     const driverProfile = activeRole === 'driver' ? (userProfile as Driver) : null;
     const isAvailable = userProfile?.status === 'available';
 
-    // Fetch ride context on mount
+    // Fetch ride context on mount - enable test mode if no rides available
     useEffect(() => {
         const fetchRideContext = async () => {
             try {
-                const context = await manuallyUpdateRideContext();
+                // First, try to get the current context
+                let context = await manuallyUpdateRideContext();
+
+                // If no rides available, enable test mode automatically
+                if (!context.rideType) {
+                    console.log('No rides available - enabling test mode');
+                    context = await manuallyUpdateRideContext({
+                        testMode: true,
+                        forceRideType: 'home-to-sabha'
+                    });
+                }
+
                 setRideContext({
                     rideType: context.rideType as 'home-to-sabha' | 'sabha-to-home' | null,
                     displayText: context.displayText
@@ -74,7 +89,14 @@ export const DriverDashboard: React.FC = () => {
         const newStatus = isAvailable ? 'offline' : 'available';
         console.log(`Toggling availability to ${newStatus} for user ${currentUser.uid}`);
         try {
-            await setDriverAvailability(currentUser.uid, newStatus as any);
+            // If going offline and has a vehicle, release it first
+            if (newStatus === 'offline' && userProfile?.currentVehicleId) {
+                await releaseVehicle(userProfile.currentVehicleId, currentUser.uid);
+                console.log("Vehicle released automatically");
+            } else {
+                // Just update status (releaseVehicle already sets status to offline)
+                await setDriverAvailability(currentUser.uid, newStatus as any);
+            }
             console.log("Availability updated successfully");
         } catch (error) {
             console.error("Failed to toggle availability:", error);
@@ -84,16 +106,27 @@ export const DriverDashboard: React.FC = () => {
     };
 
     const handleReleaseVehicle = async () => {
-        if (!userProfile?.currentVehicleId || !currentUser) return;
-        setSwitchingCar(true);
+        // Show vehicle selector instead of just releasing
+        setShowVehicleSelector(true);
+    };
+
+    const handleSelectVehicle = async (vehicle: any) => {
+        if (!currentUser) return;
+        setSelectingVehicle(true);
         try {
-            await releaseVehicle(userProfile.currentVehicleId, currentUser.uid);
+            // First release current vehicle if any
+            if (userProfile?.currentVehicleId) {
+                await releaseVehicle(userProfile.currentVehicleId, currentUser.uid);
+            }
+            // Assign new vehicle
+            await assignVehicleToDriver(vehicle, currentUser.uid, userProfile?.name || 'Driver');
             await refreshProfile();
-        } catch (e) {
-            console.error(e);
-            alert("Error releasing vehicle.");
+            setShowVehicleSelector(false);
+        } catch (error) {
+            console.error('Error selecting vehicle:', error);
+            alert('Failed to select vehicle. Please try again.');
         } finally {
-            setSwitchingCar(false);
+            setSelectingVehicle(false);
         }
     };
 
@@ -255,8 +288,12 @@ export const DriverDashboard: React.FC = () => {
                                     </div>
                                     <div>
                                         <p className="text-xs font-bold text-gray-500 uppercase">Current Vehicle</p>
-                                        <p className="text-sm font-bold text-coffee">{userProfile?.currentVehicleName || "Vehicle Selected"}</p>
-                                        <p className="text-[10px] text-gray-500 font-mono">{userProfile?.currentVehiclePlate || "No Plate"}</p>
+                                        <p className="text-sm font-bold text-coffee">
+                                            {isAvailable ? (userProfile?.currentVehicleName || "No Vehicle Selected") : "No Vehicle Selected"}
+                                        </p>
+                                        {isAvailable && userProfile?.currentVehiclePlate && (
+                                            <p className="text-[10px] text-gray-500 font-mono">{userProfile.currentVehiclePlate}</p>
+                                        )}
                                     </div>
                                 </div>
                                 <button
@@ -264,7 +301,7 @@ export const DriverDashboard: React.FC = () => {
                                     disabled={switchingCar}
                                     className="clay-button-secondary text-xs"
                                 >
-                                    {switchingCar ? <RefreshCw className="animate-spin" size={14} /> : "Switch Car"}
+                                    {switchingCar ? <RefreshCw className="animate-spin" size={14} /> : (isAvailable && userProfile?.currentVehicleId ? 'Change Car' : 'Select Car')}
                                 </button>
                             </div>
                         </div>
@@ -300,8 +337,8 @@ export const DriverDashboard: React.FC = () => {
                         {isAvailable && (
                             <button
                                 onClick={handleAssignMe}
-                                disabled={isAssigning}
-                                className="w-full clay-btn-cta-large py-4 text-lg"
+                                disabled={isAssigning || !userProfile?.currentVehicleId}
+                                className={`w-full py-4 text-lg ${userProfile?.currentVehicleId ? 'clay-btn-cta-large' : 'bg-gray-200 text-gray-400 rounded-2xl cursor-not-allowed'}`}
                             >
                                 {isAssigning ? (
                                     <span className="flex items-center justify-center gap-2">
@@ -354,5 +391,81 @@ export const DriverDashboard: React.FC = () => {
         }
     };
 
-    return renderContent();
+    return (
+        <>
+            {renderContent()}
+
+            {/* Vehicle Selector Modal */}
+            {showVehicleSelector && (
+                <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
+                    <div className="bg-white sm:rounded-2xl w-full max-w-md max-h-[80vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+                        {/* Header */}
+                        <div className="sticky top-0 bg-white border-b border-cream-dark p-4 flex items-center justify-between">
+                            <h3 className="font-header font-bold text-lg text-coffee">Select Vehicle</h3>
+                            <button
+                                onClick={() => setShowVehicleSelector(false)}
+                                className="p-2 hover:bg-cream rounded-full transition-colors"
+                            >
+                                <X size={20} className="text-mocha" />
+                            </button>
+                        </div>
+
+                        {/* Vehicle List */}
+                        <div className="p-4 space-y-3">
+                            {vehiclesLoading ? (
+                                <div className="flex flex-col items-center justify-center py-8">
+                                    <Loader2 className="animate-spin w-8 h-8 text-saffron" />
+                                    <p className="text-sm text-mocha/60 mt-2">Loading vehicles...</p>
+                                </div>
+                            ) : availableVehicles.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <Car size={40} className="mx-auto text-mocha/30 mb-3" />
+                                    <p className="text-mocha/60">No vehicles available</p>
+                                    <p className="text-xs text-mocha/40 mt-1">Contact a manager to add vehicles</p>
+                                </div>
+                            ) : (
+                                availableVehicles.map((vehicle) => (
+                                    <button
+                                        key={vehicle.id}
+                                        onClick={() => handleSelectVehicle(vehicle)}
+                                        disabled={selectingVehicle}
+                                        className="w-full clay-card p-4 flex items-center gap-4 hover:shadow-md transition-all disabled:opacity-50"
+                                    >
+                                        <div
+                                            className="w-12 h-12 rounded-xl flex items-center justify-center text-white"
+                                            style={{ backgroundColor: vehicle.color || '#888' }}
+                                        >
+                                            <Car size={22} className="text-white/90" />
+                                        </div>
+                                        <div className="flex-1 text-left">
+                                            <p className="font-bold text-coffee">
+                                                {vehicle.name}
+                                            </p>
+                                            <p className="text-sm text-mocha/60 font-mono">{vehicle.licensePlate}</p>
+                                            <p className="text-xs text-mocha/40 flex items-center gap-1 mt-1">
+                                                <Users size={12} />
+                                                {vehicle.capacity} seats
+                                            </p>
+                                        </div>
+                                        {selectingVehicle ? (
+                                            <Loader2 className="animate-spin text-saffron" size={20} />
+                                        ) : (
+                                            <ChevronRight size={20} className="text-mocha/40" />
+                                        )}
+                                    </button>
+                                ))
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="sticky bottom-0 bg-white border-t border-cream-dark p-4">
+                            <p className="text-xs text-mocha/60 text-center">
+                                {availableVehicles.length} vehicle{availableVehicles.length !== 1 ? 's' : ''} available
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
 };

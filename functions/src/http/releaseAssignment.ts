@@ -35,13 +35,7 @@ export const releaseAssignment = functions.https.onCall(async (data, context) =>
         const ride = rideDoc.data();
 
         // Verify the caller is the driver assigned to this ride
-        const driverDoc = await db.collection('drivers').doc(ride?.driverId).get();
-        if (!driverDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Driver not found');
-        }
-
-        const driver = driverDoc.data();
-        if (driver?.userId !== context.auth.uid) {
+        if (ride?.driverId !== context.auth.uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the assigned driver can release this assignment');
         }
 
@@ -57,14 +51,14 @@ export const releaseAssignment = functions.https.onCall(async (data, context) =>
 
         // Return all assigned students to the unassigned pool
         for (const student of ride?.students || []) {
-            batch.update(db.collection('students').doc(student.id), {
+            batch.update(db.collection('users').doc(student.id), {
                 status: newStudentStatus,
                 currentRideId: null
             });
         }
 
         // Update driver status to ready_for_assignment and clear activeRideId
-        batch.update(db.collection('drivers').doc(ride?.driverId), {
+        batch.update(db.collection('users').doc(ride?.driverId), {
             status: 'ready_for_assignment',
             activeRideId: null
         });

@@ -1,184 +1,164 @@
-
 import React, { useState } from 'react';
-import { UserRole, User, Driver } from '../../types';
-import { MapPin, User as UserIcon, Save, Loader2, Phone, ChevronLeft } from 'lucide-react';
-import { doc, setDoc, updateDoc, deleteField } from '@firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
+import { AddressAutocomplete } from './AddressAutocomplete';
+import { PlaceDetails } from '../../hooks/useGooglePlaces';
 
 interface ProfileSetupProps {
-    role: UserRole;
+    role: string;
     email: string;
-    onComplete: (profile: User | Driver) => void;
+    onComplete: () => void;
 }
 
 export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onComplete }) => {
-    const { currentUser, refreshProfile } = useAuth();
-    const [isLoading, setIsLoading] = useState(false);
+    const { currentUser } = useAuth();
     const [name, setName] = useState('');
     const [address, setAddress] = useState('');
-    const [phone, setPhone] = useState('');
+    const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-    const handleBack = async () => {
-        if (!currentUser) return;
-        // We don't necessarily need to set isLoading here for the UI, 
-        // but it prevents double clicking.
-        setIsLoading(true);
-        try {
-            // Remove the role field to go back to Role Selection
-            await updateDoc(doc(db, 'users', currentUser.uid), {
-                role: deleteField()
-            });
-            await refreshProfile();
-        } catch (error) {
-            console.error("Error going back:", error);
-            setIsLoading(false);
-        }
+    const handlePlaceSelect = (details: PlaceDetails) => {
+        setSelectedPlace(details);
+        setAddress(details.formattedAddress);
+        setError(''); // Clear any previous errors
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!currentUser) return;
 
-        setIsLoading(true);
-
-        // Default account status logic
-        // Students are auto-approved. Drivers and Managers are pending.
-        let initialAccountStatus: 'pending' | 'approved' = 'approved';
-        if (role === 'driver' || role === 'manager') {
-            initialAccountStatus = 'pending';
+        if (!name.trim()) {
+            setError('Please enter your name');
+            return;
         }
 
-        const baseProfile = {
-            id: currentUser.uid,
-            name,
-            address,
-            email,
-            phone,
-            role,
-            accountStatus: initialAccountStatus,
-            avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
-        };
+        if (!selectedPlace) {
+            setError('Please select an address from the suggestions');
+            return;
+        }
+
+        if (!currentUser) {
+            setError('User not authenticated');
+            return;
+        }
+
+        setLoading(true);
+        setError('');
 
         try {
-            if (role === 'driver') {
-                const driverProfile: Driver = {
-                    ...baseProfile,
-                    userId: currentUser.uid,
-                    status: 'available',
-                    currentCarId: null,
-                    currentLocation: null,
-                    homeLocation: null,
-                    activeRideId: null,
-                    ridesCompletedToday: 0,
-                    totalStudentsToday: 0,
-                    totalDistanceToday: 0,
-                    // Car details will be set when selecting a vehicle from the fleet
-                    carModel: '',
-                    carColor: '',
-                    plateNumber: '',
-                    capacity: 0
-                };
-                await setDoc(doc(db, 'users', currentUser.uid), driverProfile, { merge: true });
-                await refreshProfile();
-                onComplete(driverProfile);
-            } else {
-                await setDoc(doc(db, 'users', currentUser.uid), baseProfile, { merge: true });
-                await refreshProfile();
-                onComplete(baseProfile as User);
-            }
-        } catch (error) {
-            console.error("Error saving profile:", error);
-        } finally {
-            setIsLoading(false);
+            // Save profile WITH coordinates to Firestore
+            // Coordinates come directly from Google Places — no separate geocoding needed!
+            await setDoc(doc(db, 'users', currentUser.uid), {
+                name: name.trim(),
+                address: selectedPlace.formattedAddress,
+                location: {
+                    latitude: selectedPlace.latitude,
+                    longitude: selectedPlace.longitude,
+                    formattedAddress: selectedPlace.formattedAddress,
+                    placeId: selectedPlace.placeId,
+                    geocodedAt: serverTimestamp(),
+                },
+                avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FF6B35&color=fff&size=200`,
+            }, { merge: true });
+
+            onComplete();
+        } catch (err: any) {
+            console.error('Error saving profile:', err);
+            setError('Failed to save profile. Please try again.');
+            setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex flex-col">
-            <div className="p-6 border-b border-gray-100/50 bg-cream/50 flex items-center gap-3">
-                <button
-                    onClick={handleBack}
-                    className="p-2 -ml-2 text-gray-500 hover:text-coffee transition-all rounded-full hover:bg-white hover:shadow-sm active:scale-95"
-                    type="button"
-                >
-                    <ChevronLeft size={28} />
-                </button>
-                <div>
-                    <h2 className="font-header font-bold text-2xl text-coffee">Complete Profile</h2>
-                    <p className="text-sm text-gray-500">Just a few more details</p>
-                </div>
+        <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-white to-gold/10 flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-saffron to-gold text-white py-8 text-center">
+                <h1 className="text-3xl md:text-4xl font-header font-bold">Complete Your Profile</h1>
+                <p className="text-sm md:text-base mt-2 opacity-90">
+                    {role === 'student' && 'Student Information'}
+                    {role === 'driver' && 'Driver Information'}
+                    {role === 'manager' && 'Manager Information'}
+                </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6 flex-1 overflow-y-auto pb-24">
+            {/* Profile Form */}
+            <div className="flex-1 flex items-center justify-center p-6">
+                <form onSubmit={handleSubmit} className="clay-card max-w-md w-full p-8 space-y-6 animate-in fade-in zoom-in duration-500">
+                    <div className="space-y-4">
+                        {/* Email Display */}
+                        <div>
+                            <label className="block text-sm font-medium text-coffee mb-2">
+                                Email
+                            </label>
+                            <div className="px-4 py-3 rounded-xl border-2 border-mocha/10 bg-mocha/5 text-mocha/70">
+                                {email}
+                            </div>
+                        </div>
 
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Full Name</label>
-                        <div className="relative">
-                            <UserIcon size={18} className="absolute left-3 top-3.5 text-gray-400" />
+                        {/* Name Input */}
+                        <div>
+                            <label className="block text-sm font-medium text-coffee mb-2">
+                                Full Name <span className="text-red-500">*</span>
+                            </label>
                             <input
-                                required
+                                type="text"
                                 value={name}
-                                onChange={e => setName(e.target.value)}
-                                className="clay-input w-full pl-10"
-                                placeholder="First Last"
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="Enter your full name"
+                                className="w-full px-4 py-3 rounded-xl border-2 border-mocha/20 focus:border-saffron focus:outline-none transition-colors"
+                                disabled={loading}
+                                required
                             />
                         </div>
-                    </div>
 
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Phone Number</label>
-                        <div className="relative">
-                            <Phone size={18} className="absolute left-3 top-3.5 text-gray-400" />
-                            <input
-                                required
-                                type="tel"
-                                value={phone}
-                                onChange={e => setPhone(e.target.value)}
-                                className="clay-input w-full pl-10"
-                                placeholder="(555) 000-0000"
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">
-                            {role === 'driver' ? 'Home Address' : 'Pickup Address'}
-                        </label>
-                        <div className="relative">
-                            <MapPin size={18} className="absolute left-3 top-3.5 text-gray-400" />
-                            <input
-                                required
+                        {/* Address Autocomplete */}
+                        <div>
+                            <label className="block text-sm font-medium text-coffee mb-2">
+                                Address <span className="text-red-500">*</span>
+                            </label>
+                            <AddressAutocomplete
                                 value={address}
-                                onChange={e => setAddress(e.target.value)}
-                                className="clay-input w-full pl-10"
-                                placeholder="123 Street, City, State"
+                                onChange={(val) => {
+                                    setAddress(val);
+                                    // If user edits after selecting, clear the place data
+                                    if (selectedPlace && val !== selectedPlace.formattedAddress) {
+                                        setSelectedPlace(null);
+                                    }
+                                }}
+                                onSelect={handlePlaceSelect}
+                                disabled={loading}
+                                placeholder="Start typing your address…"
                             />
+                            {/* Selection confirmation */}
+                            {selectedPlace && (
+                                <p className="text-sm text-green-600 mt-1">
+                                    ✓ Address selected
+                                </p>
+                            )}
+                            {!selectedPlace && address.length >= 3 && (
+                                <p className="text-sm text-mocha/50 mt-1">
+                                    Please select an address from the suggestions
+                                </p>
+                            )}
                         </div>
                     </div>
-                </div>
 
-                <div className="pt-4">
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                            <p className="text-red-700 text-sm">{error}</p>
+                        </div>
+                    )}
+
                     <button
                         type="submit"
-                        disabled={isLoading}
-                        className="clay-button-primary w-full flex items-center justify-center gap-2"
+                        disabled={loading || !selectedPlace}
+                        className="w-full bg-gradient-to-r from-saffron to-gold text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {isLoading ? (
-                            <>
-                                <Loader2 className="animate-spin" size={20} />
-                                Saving...
-                            </>
-                        ) : (
-                            <>
-                                <Save size={20} />
-                                Save & Continue
-                            </>
-                        )}
+                        {loading ? 'Saving…' : 'Complete Setup'}
                     </button>
-                </div>
-            </form>
+                </form>
+            </div>
         </div>
     );
 };

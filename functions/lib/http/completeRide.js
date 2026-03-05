@@ -47,7 +47,7 @@ const notifications_1 = require("../utils/notifications");
  * Output: Driver's today stats
  */
 exports.completeRide = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+    var _a, _b;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -65,12 +65,7 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         }
         const ride = rideDoc.data();
         // Verify the caller is the driver assigned to this ride
-        const driverDoc = await db.collection('drivers').doc(ride === null || ride === void 0 ? void 0 : ride.driverId).get();
-        if (!driverDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Driver not found');
-        }
-        const driver = driverDoc.data();
-        if ((driver === null || driver === void 0 ? void 0 : driver.userId) !== context.auth.uid) {
+        if ((ride === null || ride === void 0 ? void 0 : ride.driverId) !== context.auth.uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the assigned driver can complete this ride');
         }
         // Check ride status
@@ -86,10 +81,12 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
             completedAt: now
         });
         // Update driver stats
+        const driverDoc = await db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId).get();
+        const driver = driverDoc.data();
         const newRidesCompleted = ((driver === null || driver === void 0 ? void 0 : driver.ridesCompletedToday) || 0) + 1;
         const newTotalStudents = ((driver === null || driver === void 0 ? void 0 : driver.totalStudentsToday) || 0) + (((_a = ride === null || ride === void 0 ? void 0 : ride.students) === null || _a === void 0 ? void 0 : _a.length) || 0);
         const newTotalDistance = ((driver === null || driver === void 0 ? void 0 : driver.totalDistanceToday) || 0) + ((ride === null || ride === void 0 ? void 0 : ride.estimatedDistance) || 0);
-        batch.update(db.collection('drivers').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), {
+        batch.update(db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), {
             status: 'ready_for_assignment',
             activeRideId: null,
             ridesCompletedToday: newRidesCompleted,
@@ -101,102 +98,59 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         const destination = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'Sabha' : 'Home';
         // Update students status and notify
         for (const student of (ride === null || ride === void 0 ? void 0 : ride.students) || []) {
-            batch.update(db.collection('students').doc(student.id), {
+            batch.update(db.collection('users').doc(student.id), {
                 status: newStudentStatus,
                 currentRideId: null
             });
             // Send notification to student
             try {
-                const studentUserDoc = await db.collection('students').doc(student.id).get();
-                const userId = (_b = studentUserDoc.data()) === null || _b === void 0 ? void 0 : _b.userId;
-                if (userId) {
-                    const userDoc = await db.collection('users').doc(userId).get();
-                    const fcmToken = (_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.fcmToken;
-                    if (fcmToken) {
-                        await (0, notifications_1.notifyStudentRideCompleted)(fcmToken, destination);
-                    }
+                const studentDoc = await db.collection('users').doc(student.id).get();
+                const fcmToken = (_b = studentDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
+                if (fcmToken) {
+                    await (0, notifications_1.notifyStudentRideCompleted)(fcmToken, destination);
                 }
             }
             catch (notifError) {
                 console.error('Error sending notification to student:', student.id, notifError);
             }
         }
+        // Build safe student entries for statistics (no undefined values allowed in Firestore)
+        const rideStudents = ((ride === null || ride === void 0 ? void 0 : ride.students) || []).map((s) => ({
+            id: s.id || '',
+            name: s.name || '',
+            driverId: (ride === null || ride === void 0 ? void 0 : ride.driverId) || '',
+            driverName: (ride === null || ride === void 0 ? void 0 : ride.driverName) || '',
+            carModel: (ride === null || ride === void 0 ? void 0 : ride.carModel) || '',
+            carLicensePlate: (ride === null || ride === void 0 ? void 0 : ride.carLicensePlate) || ''
+        }));
+        const emptyStatsBlock = { totalStudents: 0, completedRides: 0, totalDrivers: 0, students: [] };
         // Update statistics for the event
         const statsRef = db.collection('statistics').doc(eventDate);
         const statsDoc = await statsRef.get();
+        const isPickup = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha';
         if (statsDoc.exists) {
             // Update existing stats
-            const stats = statsDoc.data();
-            const rideType = ride === null || ride === void 0 ? void 0 : ride.rideType;
-            if (rideType === 'home-to-sabha') {
-                const currentPickup = (stats === null || stats === void 0 ? void 0 : stats.pickup) || { totalStudents: 0, completedRides: 0, students: [] };
-                batch.update(statsRef, {
-                    'pickup.totalStudents': currentPickup.totalStudents + (((_d = ride === null || ride === void 0 ? void 0 : ride.students) === null || _d === void 0 ? void 0 : _d.length) || 0),
-                    'pickup.completedRides': currentPickup.completedRides + 1,
-                    'pickup.students': [
-                        ...currentPickup.students,
-                        ...(((_e = ride === null || ride === void 0 ? void 0 : ride.students) === null || _e === void 0 ? void 0 : _e.map((s) => ({
-                            id: s.id,
-                            name: s.name,
-                            driverId: ride === null || ride === void 0 ? void 0 : ride.driverId,
-                            driverName: ride === null || ride === void 0 ? void 0 : ride.driverName,
-                            carModel: ride === null || ride === void 0 ? void 0 : ride.carModel,
-                            carLicensePlate: ride === null || ride === void 0 ? void 0 : ride.carLicensePlate
-                        }))) || [])
-                    ]
-                });
-            }
-            else {
-                const currentDropoff = (stats === null || stats === void 0 ? void 0 : stats.dropoff) || { totalStudents: 0, completedRides: 0, students: [] };
-                batch.update(statsRef, {
-                    'dropoff.totalStudents': currentDropoff.totalStudents + (((_f = ride === null || ride === void 0 ? void 0 : ride.students) === null || _f === void 0 ? void 0 : _f.length) || 0),
-                    'dropoff.completedRides': currentDropoff.completedRides + 1,
-                    'dropoff.students': [
-                        ...currentDropoff.students,
-                        ...(((_g = ride === null || ride === void 0 ? void 0 : ride.students) === null || _g === void 0 ? void 0 : _g.map((s) => ({
-                            id: s.id,
-                            name: s.name,
-                            driverId: ride === null || ride === void 0 ? void 0 : ride.driverId,
-                            driverName: ride === null || ride === void 0 ? void 0 : ride.driverName,
-                            carModel: ride === null || ride === void 0 ? void 0 : ride.carModel,
-                            carLicensePlate: ride === null || ride === void 0 ? void 0 : ride.carLicensePlate
-                        }))) || [])
-                    ]
-                });
-            }
+            const stats = statsDoc.data() || {};
+            const statsKey = isPickup ? 'pickup' : 'dropoff';
+            const current = stats[statsKey] || { totalStudents: 0, completedRides: 0, students: [] };
+            batch.update(statsRef, {
+                [`${statsKey}.totalStudents`]: (current.totalStudents || 0) + rideStudents.length,
+                [`${statsKey}.completedRides`]: (current.completedRides || 0) + 1,
+                [`${statsKey}.students`]: [...(current.students || []), ...rideStudents]
+            });
         }
         else {
             // Create new stats document
-            const pickupStats = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? {
-                totalStudents: ((_h = ride === null || ride === void 0 ? void 0 : ride.students) === null || _h === void 0 ? void 0 : _h.length) || 0,
+            const activeBlock = {
+                totalStudents: rideStudents.length,
                 completedRides: 1,
                 totalDrivers: 1,
-                students: (_j = ride === null || ride === void 0 ? void 0 : ride.students) === null || _j === void 0 ? void 0 : _j.map((s) => ({
-                    id: s.id,
-                    name: s.name,
-                    driverId: ride === null || ride === void 0 ? void 0 : ride.driverId,
-                    driverName: ride === null || ride === void 0 ? void 0 : ride.driverName,
-                    carModel: ride === null || ride === void 0 ? void 0 : ride.carModel,
-                    carLicensePlate: ride === null || ride === void 0 ? void 0 : ride.carLicensePlate
-                }))
-            } : { totalStudents: 0, completedRides: 0, totalDrivers: 0, students: [] };
-            const dropoffStats = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'sabha-to-home' ? {
-                totalStudents: ((_k = ride === null || ride === void 0 ? void 0 : ride.students) === null || _k === void 0 ? void 0 : _k.length) || 0,
-                completedRides: 1,
-                totalDrivers: 1,
-                students: (_l = ride === null || ride === void 0 ? void 0 : ride.students) === null || _l === void 0 ? void 0 : _l.map((s) => ({
-                    id: s.id,
-                    name: s.name,
-                    driverId: ride === null || ride === void 0 ? void 0 : ride.driverId,
-                    driverName: ride === null || ride === void 0 ? void 0 : ride.driverName,
-                    carModel: ride === null || ride === void 0 ? void 0 : ride.carModel,
-                    carLicensePlate: ride === null || ride === void 0 ? void 0 : ride.carLicensePlate
-                }))
-            } : { totalStudents: 0, completedRides: 0, totalDrivers: 0, students: [] };
+                students: rideStudents
+            };
             batch.set(statsRef, {
                 eventDate,
-                pickup: pickupStats,
-                dropoff: dropoffStats,
+                pickup: isPickup ? activeBlock : Object.assign({}, emptyStatsBlock),
+                dropoff: isPickup ? Object.assign({}, emptyStatsBlock) : activeBlock,
                 attendance: {
                     both: 0,
                     pickupOnly: 0,

@@ -6,7 +6,7 @@ export type UserRole = 'student' | 'driver' | 'manager';
 export type AccountStatus = 'pending' | 'approved' | 'rejected';
 export type RideType = 'home-to-sabha' | 'sabha-to-home';
 export type RideStatus = 'assigned' | 'in_progress' | 'completed' | 'cancelled';
-export type CarStatus = 'available' | 'in_use' | 'maintenance';
+export type VehicleStatus = 'available' | 'in_use' | 'maintenance';
 
 export type StudentStatus =
     | 'waiting_for_pickup'
@@ -73,14 +73,14 @@ export interface Driver {
     totalDistanceToday: number;
 }
 
-export interface Car {
+export interface Vehicle {
     id: string;
-    model: string;
+    name: string;
     color: string;
     licensePlate: string;
     capacity: number;
-    status: CarStatus;
-    assignedDriverId: string | null;
+    status: VehicleStatus;
+    currentDriverId: string | null;
 }
 
 export interface RideStudent {

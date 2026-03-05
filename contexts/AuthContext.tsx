@@ -1,7 +1,7 @@
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User as FirebaseUser, onAuthStateChanged, signOut } from '@firebase/auth';
-import { doc, getDoc } from '@firebase/firestore';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { User, Driver, UserRole } from '../types';
 
@@ -29,47 +29,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userProfile, setUserProfile] = useState<User | Driver | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeRole, setActiveRoleState] = useState<UserRole | null>(null);
+  const activeRoleInitialized = useRef(false);
+  const profileUnsubscribeRef = useRef<(() => void) | null>(null);
 
-  const fetchProfile = async (uid: string) => {
-    try {
-      const docRef = doc(db, 'users', uid);
-      const docSnap = await getDoc(docRef);
+  // Subscribe to real-time profile updates via onSnapshot
+  const subscribeToProfile = (uid: string) => {
+    // Clean up any existing listener
+    if (profileUnsubscribeRef.current) {
+      profileUnsubscribeRef.current();
+    }
+
+    const docRef = doc(db, 'users', uid);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const profile = { id: uid, ...docSnap.data() } as User | Driver;
         setUserProfile(profile);
 
-        // Only set activeRole on initial load, not on refreshes
+        // Only set activeRole on initial load, not on subsequent updates
         // This preserves role-switching state
-        if (!activeRole) {
+        if (!activeRoleInitialized.current) {
           setActiveRoleState(profile.role || null);
+          activeRoleInitialized.current = true;
         }
       } else {
         setUserProfile(null);
         setActiveRoleState(null);
       }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-    }
-  };
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      if (user) {
-        await fetchProfile(user.uid);
-      } else {
-        setUserProfile(null);
-        setActiveRoleState(null);
-      }
+      setLoading(false);
+    }, (error) => {
+      console.error("Error listening to profile:", error);
       setLoading(false);
     });
 
-    return unsubscribe;
+    profileUnsubscribeRef.current = unsubscribe;
+  };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      if (user) {
+        subscribeToProfile(user.uid);
+      } else {
+        // Clean up profile listener on logout
+        if (profileUnsubscribeRef.current) {
+          profileUnsubscribeRef.current();
+          profileUnsubscribeRef.current = null;
+        }
+        setUserProfile(null);
+        setActiveRoleState(null);
+        activeRoleInitialized.current = false;
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      if (profileUnsubscribeRef.current) {
+        profileUnsubscribeRef.current();
+      }
+    };
   }, []);
 
+  // refreshProfile kept for manual refresh if needed (e.g. after writes)
   const refreshProfile = async () => {
     if (currentUser) {
-      await fetchProfile(currentUser.uid);
+      try {
+        const docRef = doc(db, 'users', currentUser.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const profile = { id: currentUser.uid, ...docSnap.data() } as User | Driver;
+          setUserProfile(profile);
+        }
+      } catch (error) {
+        console.error("Error refreshing profile:", error);
+      }
     }
   };
 

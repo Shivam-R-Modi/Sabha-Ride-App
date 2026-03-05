@@ -6,6 +6,15 @@
 /* Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap');
 
+/* Custom Gujarati Font */
+@font-face {
+    font-family: 'GJDW';
+    src: url('/fonts/GJDW0ITT.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
 /* Reset & Base Styles */
 *,
 *::before,

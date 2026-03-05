@@ -1,15 +1,42 @@
 // ============================================
 // HTTP FUNCTION: assignStudentsToDriver
 // Triggered when driver clicks "Assign Me"
-// Uses VRP Solver (Clarke-Wright Savings) for optimal assignments
+// Uses greedy nearest-neighbor clustering for single driver
+// Improved error handling and data validation
 // ============================================
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { Student, Driver, Car, Ride, RideType, RideStudent } from '../types';
-import { solveCVRP } from '../optimization/vrpSolver';
+import { Driver, Vehicle, RideType, RideStudent } from '../types';
 import { optimizeRoute } from '../utils/routing';
 import { notifyStudentDriverAssigned, notifyDriverStudentsAssigned } from '../utils/notifications';
+import { getSabhaLocation } from '../utils/settings';
+
+/**
+ * Calculate Haversine distance between two points (in miles)
+ */
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 3959; // Earth radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+/**
+ * Validate that a ride has valid location data
+ */
+function isValidRide(ride: { lat: number; lng: number; id: string }): boolean {
+    // Check that lat/lng are valid numbers and not 0,0 (null island)
+    if (typeof ride.lat !== 'number' || typeof ride.lng !== 'number') return false;
+    if (isNaN(ride.lat) || isNaN(ride.lng)) return false;
+    if (ride.lat === 0 && ride.lng === 0) return false;
+    if (!ride.id) return false;
+    return true;
+}
 
 /**
  * HTTP Callable: Assign students to a driver
@@ -23,6 +50,7 @@ export const assignStudentsToDriver = functions.https.onCall(async (data, contex
     }
 
     const { driverId, carId } = data;
+    console.log(`[assignStudentsToDriver] Starting assignment for driver=${driverId}, car=${carId}`);
 
     if (!driverId || !carId) {
         throw new functions.https.HttpsError('invalid-argument', 'driverId and carId are required');
@@ -31,113 +59,204 @@ export const assignStudentsToDriver = functions.https.onCall(async (data, contex
     const db = admin.firestore();
 
     try {
-        // Get current ride context
+        // Step 1: Get current ride context
+        console.log('[assignStudentsToDriver] Fetching ride context...');
         const rideContextDoc = await db.collection('system').doc('rideContext').get();
+
+        // Fetch the dynamic Sabha location
+        const SABHA_LOCATION = await getSabhaLocation();
         if (!rideContextDoc.exists) {
-            throw new functions.https.HttpsError('failed-precondition', 'Ride context not available');
+            throw new functions.https.HttpsError('failed-precondition', 'Ride context not available. Please contact a manager.');
         }
 
         const rideContext = rideContextDoc.data();
         if (!rideContext?.rideType) {
-            throw new functions.https.HttpsError('failed-precondition', 'No rides available at this time');
+            throw new functions.https.HttpsError('failed-precondition', 'No rides are available at this time. Please wait for the ride window to open.');
         }
 
         const rideType = rideContext.rideType as RideType;
+        console.log(`[assignStudentsToDriver] Ride type: ${rideType}`);
 
-        // Get driver details
-        const driverDoc = await db.collection('drivers').doc(driverId).get();
+        // Step 2: Get driver details from users collection
+        console.log('[assignStudentsToDriver] Fetching driver details...');
+        const driverDoc = await db.collection('users').doc(driverId).get();
         if (!driverDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Driver not found');
+            throw new functions.https.HttpsError('not-found', 'Driver profile not found. Please log out and log back in.');
         }
-        const driver = { id: driverDoc.id, ...driverDoc.data() } as Driver;
+        const driverData = driverDoc.data();
+        const driver = {
+            id: driverDoc.id,
+            name: driverData?.name || 'Driver',
+            userId: driverId,
+            currentLocation: driverData?.location,
+            homeLocation: driverData?.homeLocation,
+        } as Driver;
 
-        // Get car details
+        // Step 3: Get car details
+        console.log('[assignStudentsToDriver] Fetching car details...');
         const carDoc = await db.collection('cars').doc(carId).get();
         if (!carDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Car not found');
+            throw new functions.https.HttpsError('not-found', 'Selected vehicle not found. Please select a different vehicle.');
         }
-        const car = { id: carDoc.id, ...carDoc.data() } as Car;
+        const vehicle = { id: carDoc.id, ...carDoc.data() } as Vehicle;
 
-        // Check if car is available
-        if (car.status !== 'available') {
-            throw new functions.https.HttpsError('failed-precondition', 'Car is not available');
+        // Validate car availability
+        if (vehicle.status !== 'available' && vehicle.status !== 'in_use') {
+            throw new functions.https.HttpsError('failed-precondition', `Vehicle is currently ${vehicle.status}. Please select an available vehicle.`);
+        }
+        if (vehicle.status === 'in_use' && vehicle.currentDriverId && vehicle.currentDriverId !== driverId) {
+            throw new functions.https.HttpsError('failed-precondition', 'This vehicle is assigned to another driver. Please select a different vehicle.');
         }
 
-        // Get waiting students based on ride type
-        const waitingStatus = rideType === 'home-to-sabha' ? 'waiting_for_pickup' : 'waiting_for_dropoff';
-        const studentsSnapshot = await db.collection('students')
-            .where('status', '==', waitingStatus)
+        // Calculate available seats (capacity - 1 for driver)
+        const availableSeats = Math.max(1, (vehicle.capacity || 4) - 1);
+        console.log(`[assignStudentsToDriver] Available seats: ${availableSeats}`);
+
+        // Step 4: Get ALL waiting ride requests from rides collection
+        console.log('[assignStudentsToDriver] Fetching pending rides...');
+        const ridesSnapshot = await db.collection('rides')
+            .where('status', '==', 'requested')
             .get();
 
-        if (studentsSnapshot.empty) {
-            throw new functions.https.HttpsError('not-found', 'No students waiting for assignment');
+        if (ridesSnapshot.empty) {
+            throw new functions.https.HttpsError('not-found', 'No students are currently waiting for a ride. Please check back later.');
         }
 
-        const students = studentsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        })) as Student[];
+        console.log(`[assignStudentsToDriver] Found ${ridesSnapshot.docs.length} pending rides`);
 
-        // Use VRP Solver for optimal assignment
-        // Create a single-driver array for this specific driver
-        const singleDriver: Driver = {
-            ...driver,
-            currentCarId: carId
-        };
+        // Step 5: Map ride request docs and validate data
+        const allPendingRides: Array<{
+            id: string;
+            rideRequestId: string;
+            name: string;
+            lat: number;
+            lng: number;
+            address: string;
+        }> = [];
 
-        const vrpResult = solveCVRP(students, [singleDriver], rideType);
+        const invalidRides: string[] = [];
 
-        // Get assignment for this driver
-        const assignment = vrpResult.assignments.find(a => a.driverId === driverId);
+        for (const doc of ridesSnapshot.docs) {
+            const docData = doc.data();
+            const ride = {
+                id: docData.studentId || '',
+                rideRequestId: doc.id,
+                name: docData.studentName || 'Student',
+                lat: docData.pickupLat ?? 0,
+                lng: docData.pickupLng ?? 0,
+                address: docData.pickupAddress || 'Unknown'
+            };
 
-        if (!assignment || assignment.students.length === 0) {
-            throw new functions.https.HttpsError('not-found', 'Could not assign any students');
+            if (isValidRide(ride)) {
+                allPendingRides.push(ride);
+            } else {
+                invalidRides.push(doc.id);
+                console.warn(`[assignStudentsToDriver] Skipping invalid ride ${doc.id}: missing studentId or location`);
+            }
         }
 
-        // Prepare ride students
-        const rideStudents: RideStudent[] = assignment.students;
+        if (allPendingRides.length === 0) {
+            throw new functions.https.HttpsError('not-found', 'No students with valid pickup locations found. Students must set their pickup address first.');
+        }
 
-        // Build route from VRP assignment (already optimized)
-        const sabhaLocation = { lat: 42.3396, lng: -71.0942, address: 'Sabha Venue' };
+        console.log(`[assignStudentsToDriver] Valid rides: ${allPendingRides.length}, Invalid: ${invalidRides.length}`);
 
+        // Step 6: Cluster students using greedy nearest-neighbor
+        console.log('[assignStudentsToDriver] Starting clustering...');
+        const clusteredRides: typeof allPendingRides = [];
+        const remainingRides = [...allPendingRides];
+
+        // Seed: pick the first ride as starting point
+        if (remainingRides.length > 0) {
+            const seed = remainingRides.shift()!;
+            clusteredRides.push(seed);
+        }
+
+        // Greedily add nearest neighbor until we hit capacity
+        while (clusteredRides.length < availableSeats && remainingRides.length > 0) {
+            const lastAdded = clusteredRides[clusteredRides.length - 1];
+            let nearestIndex = 0;
+            let nearestDist = Infinity;
+
+            for (let i = 0; i < remainingRides.length; i++) {
+                const dist = haversineDistance(lastAdded.lat, lastAdded.lng, remainingRides[i].lat, remainingRides[i].lng);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestIndex = i;
+                }
+            }
+
+            clusteredRides.push(remainingRides.splice(nearestIndex, 1)[0]);
+        }
+
+        console.log(`[assignStudentsToDriver] Clustered ${clusteredRides.length} students for this driver`);
+
+        // Step 7: Convert clustered rides to RideStudent format
+        const rideStudents: RideStudent[] = clusteredRides.map(r => ({
+            id: r.id,
+            rideRequestId: r.rideRequestId,
+            name: r.name,
+            location: { lat: r.lat, lng: r.lng, address: r.address },
+            status: 'assigned' as const,
+            picked: false
+        }));
+
+        if (rideStudents.length === 0) {
+            throw new functions.https.HttpsError('not-found', 'No students available for assignment after filtering.');
+        }
+
+        // Step 8: Build optimized route
+        console.log('[assignStudentsToDriver] Building optimized route...');
         const startPoint = rideType === 'home-to-sabha'
-            ? (driver.currentLocation || rideStudents[0]?.location || sabhaLocation)
-            : sabhaLocation;
+            ? (driver.currentLocation || rideStudents[0]?.location || SABHA_LOCATION)
+            : SABHA_LOCATION;
 
         const endPoint = rideType === 'home-to-sabha'
-            ? sabhaLocation
-            : (driver.homeLocation || sabhaLocation);
+            ? SABHA_LOCATION
+            : (driver.homeLocation || SABHA_LOCATION);
 
         const route = optimizeRoute(startPoint, rideStudents, endPoint, rideType);
 
-        // Create ride document
-        const eventDate = new Date().toISOString().split('T')[0];
-        const rideRef = db.collection('rides').doc();
+        // Calculate estimated distance and time
+        const estimatedDistance = rideStudents.length * 2; // ~2 miles per student
+        const estimatedTime = rideStudents.length * 5; // ~5 mins per student
 
-        const ride: Omit<Ride, 'id'> = {
-            eventDate,
-            driverId: driver.id,
-            driverName: driver.name,
-            carId: car.id,
-            carModel: car.model,
-            carColor: car.color,
-            carLicensePlate: car.licensePlate,
-            rideType,
-            status: 'assigned',
-            students: rideStudents,
-            route,
-            estimatedDistance: assignment.routeDistance,
-            estimatedTime: assignment.estimatedTime,
-            startedAt: null,
-            completedAt: null,
-            allWaypointsVisited: false
-        };
-
-        // Batch write
+        // Step 9: Batch write all updates
+        console.log('[assignStudentsToDriver] Preparing batch write...');
         const batch = db.batch();
+        const primaryRideId = (rideStudents[0] as any).rideRequestId;
 
-        // Create ride
-        batch.set(rideRef, ride);
+        // Update each ride request with driver assignment
+        for (const student of rideStudents) {
+            const rideRequestId = (student as any).rideRequestId;
+            if (!rideRequestId) {
+                console.error(`[assignStudentsToDriver] Missing rideRequestId for student ${student.id}`);
+                continue;
+            }
+
+            const rideRequestRef = db.collection('rides').doc(rideRequestId);
+            batch.update(rideRequestRef, {
+                driverId: driver.id,
+                driverName: driver.name,
+                carId: vehicle.id,
+                carModel: vehicle.name || 'Vehicle',
+                carColor: vehicle.color || 'Unknown',
+                carLicensePlate: vehicle.licensePlate || '',
+                rideType,
+                status: 'assigned',
+                route,
+                estimatedDistance,
+                estimatedTime,
+                assignedAt: new Date().toISOString()
+            });
+
+            // Update student's user profile (only if document exists)
+            const studentRef = db.collection('users').doc(student.id);
+            batch.update(studentRef, {
+                status: 'assigned',
+                currentRideId: rideRequestId
+            });
+        }
 
         // Update car status
         batch.update(db.collection('cars').doc(carId), {
@@ -145,72 +264,86 @@ export const assignStudentsToDriver = functions.https.onCall(async (data, contex
             assignedDriverId: driverId
         });
 
-        // Update driver
-        batch.update(db.collection('drivers').doc(driverId), {
+        // Update driver profile
+        batch.update(db.collection('users').doc(driverId), {
             status: 'assigned',
-            activeRideId: rideRef.id,
-            currentCarId: carId
+            activeRideId: primaryRideId,
+            currentCarId: carId,
+            assignedStudentIds: rideStudents.map(s => s.id)
         });
 
-        // Update students
-        for (const student of rideStudents) {
-            batch.update(db.collection('students').doc(student.id), {
-                status: 'assigned',
-                currentRideId: rideRef.id
-            });
-        }
-
+        // Commit all writes
+        console.log('[assignStudentsToDriver] Committing batch...');
         await batch.commit();
+        console.log('[assignStudentsToDriver] Batch committed successfully');
 
-        // Send notifications
+        // Step 10: Send notifications (don't fail if notifications fail)
         try {
-            // Notify driver
-            const driverUserDoc = await db.collection('users').doc(driver.userId).get();
-            const driverFcmToken = driverUserDoc.data()?.fcmToken;
+            const driverFcmToken = driverData?.fcmToken;
             if (driverFcmToken) {
                 await notifyDriverStudentsAssigned(driverFcmToken, rideStudents.length);
             }
 
-            // Notify students
             for (const student of rideStudents) {
-                // Get student document to find userId
-                const studentDoc = await db.collection('students').doc(student.id).get();
-                const studentData = studentDoc.data();
-                if (studentData?.userId) {
-                    const studentUserDoc = await db.collection('users').doc(studentData.userId).get();
-                    const studentFcmToken = studentUserDoc.data()?.fcmToken;
-                    if (studentFcmToken) {
-                        await notifyStudentDriverAssigned(
-                            studentFcmToken,
-                            driver.name,
-                            car.model,
-                            car.color
-                        );
-                    }
+                const studentDoc = await db.collection('users').doc(student.id).get();
+                const studentFcmToken = studentDoc.data()?.fcmToken;
+                if (studentFcmToken) {
+                    await notifyStudentDriverAssigned(
+                        studentFcmToken,
+                        driver.name,
+                        vehicle.name || 'Vehicle',
+                        vehicle.color || ''
+                    );
                 }
             }
         } catch (notifError) {
-            console.error('Error sending notifications:', notifError);
-            // Don't fail the assignment if notifications fail
+            console.error('[assignStudentsToDriver] Error sending notifications:', notifError);
+            // Don't throw - notifications are not critical
         }
 
+        // Build Google Maps URL
+        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${SABHA_LOCATION.lat},${SABHA_LOCATION.lng}`;
+
+        console.log(`[assignStudentsToDriver] SUCCESS: Assigned ${rideStudents.length} students to driver ${driver.name}`);
+
         return {
-            rideId: rideRef.id,
+            rideId: primaryRideId,
             students: rideStudents,
             route,
-            estimatedDistance: assignment.routeDistance,
-            estimatedTime: assignment.estimatedTime,
-            googleMapsUrl: assignment.googleMapsUrl,
+            estimatedDistance,
+            estimatedTime,
+            googleMapsUrl,
             car: {
-                model: car.model,
-                color: car.color,
-                licensePlate: car.licensePlate,
-                capacity: car.capacity
+                model: vehicle.name || 'Vehicle',
+                color: vehicle.color || 'Unknown',
+                licensePlate: vehicle.licensePlate || '',
+                capacity: vehicle.capacity || 4
             }
         };
 
-    } catch (error) {
-        console.error('Error assigning students:', error);
-        throw new functions.https.HttpsError('internal', 'Failed to assign students');
+    } catch (error: any) {
+        console.error('[assignStudentsToDriver] ERROR:', error);
+        console.error('[assignStudentsToDriver] Error code:', error?.code);
+        console.error('[assignStudentsToDriver] Error message:', error?.message);
+        console.error('[assignStudentsToDriver] Error stack:', error?.stack);
+
+        // If it's already an HttpsError, re-throw it to preserve the message
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+
+        // For Firestore errors, provide more specific messages
+        if (error?.code === 'permission-denied') {
+            throw new functions.https.HttpsError('permission-denied', 'You do not have permission to perform this action.');
+        }
+        if (error?.code === 'not-found' || error?.message?.includes('NOT_FOUND')) {
+            throw new functions.https.HttpsError('not-found', 'A required document was not found. Please refresh and try again.');
+        }
+
+        // Generic error with original message
+        throw new functions.https.HttpsError(
+            'internal',
+            error?.message || 'An unexpected error occurred while assigning students. Please try again.'
+        );
     }
 });

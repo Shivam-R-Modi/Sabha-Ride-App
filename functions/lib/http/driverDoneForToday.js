@@ -58,13 +58,13 @@ exports.driverDoneForToday = functions.https.onCall(async (data, context) => {
     const db = admin.firestore();
     try {
         // Get driver details
-        const driverDoc = await db.collection('drivers').doc(driverId).get();
+        const driverDoc = await db.collection('users').doc(driverId).get();
         if (!driverDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Driver not found');
         }
         const driver = driverDoc.data();
         // Verify the caller is the driver
-        if ((driver === null || driver === void 0 ? void 0 : driver.userId) !== context.auth.uid) {
+        if (driverId !== context.auth.uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the driver can mark themselves done');
         }
         // Check if driver has an active ride
@@ -81,7 +81,7 @@ exports.driverDoneForToday = functions.https.onCall(async (data, context) => {
             });
         }
         // Update driver status
-        batch.update(db.collection('drivers').doc(driverId), {
+        batch.update(db.collection('users').doc(driverId), {
             status: 'offline',
             currentCarId: null,
             activeRideId: null

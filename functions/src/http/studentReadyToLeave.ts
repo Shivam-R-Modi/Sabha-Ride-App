@@ -28,7 +28,7 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
 
     try {
         // Get student details
-        const studentDoc = await db.collection('students').doc(studentId).get();
+        const studentDoc = await db.collection('users').doc(studentId).get();
         if (!studentDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Student not found');
         }
@@ -36,7 +36,7 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
         const student = studentDoc.data();
 
         // Verify the caller is the student
-        if (student?.userId !== context.auth.uid) {
+        if (studentId !== context.auth.uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the student can mark themselves ready');
         }
 
@@ -61,7 +61,7 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
         }
 
         // Update student status
-        await db.collection('students').doc(studentId).update({
+        await db.collection('users').doc(studentId).update({
             status: 'waiting_for_dropoff',
             dropoffRequested: true,
             currentRideId: null

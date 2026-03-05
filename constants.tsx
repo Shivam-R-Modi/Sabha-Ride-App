@@ -26,6 +26,5 @@ export const LotusLoader: React.FC<{ size?: number }> = ({ size = 64 }) => (
 
 export const OmWatermark: React.FC = () => null;
 
-// --- Production Configuration ---
-
-export const VENUE_ADDRESS = "Shri Swaminarayan Mandir, Edison";
+// Default venue address — the live value is in Firestore `settings/main`
+export const VENUE_ADDRESS = "360 Huntington Ave, Boston, MA 02115";

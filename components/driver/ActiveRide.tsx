@@ -142,11 +142,11 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                             </div>
                             <div className="flex items-center gap-1">
                                 <Navigation size={14} />
-                                <span>{(ride.estimatedDistance / 1609.34).toFixed(1)} mi</span>
+                                <span>{(ride.estimatedDistance || 0).toFixed(1)} mi</span>
                             </div>
                             <div className="flex items-center gap-1">
                                 <Clock size={14} />
-                                <span>{Math.round(ride.estimatedTime / 60)} min</span>
+                                <span>{Math.round(ride.estimatedTime || 0)} min</span>
                             </div>
                         </div>
 
@@ -191,8 +191,8 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                     onClick={handleCompleteRide}
                     disabled={isCompleting || !allVisited}
                     className={`w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all ${allVisited
-                            ? 'clay-btn-cta-large'
-                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        ? 'clay-btn-cta-large'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                         }`}
                 >
                     {isCompleting ? (
@@ -242,8 +242,8 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                         <button
                                             onClick={() => routePoint && handleToggleWaypoint(routePoint, routeIdx)}
                                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isVisited
-                                                    ? 'bg-green-500 text-white shadow-lg shadow-green-200'
-                                                    : 'bg-gray-100 text-gray-300 hover:bg-gray-200'
+                                                ? 'bg-green-500 text-white shadow-lg shadow-green-200'
+                                                : 'bg-gray-100 text-gray-300 hover:bg-gray-200'
                                                 }`}
                                         >
                                             {isVisited ? <CheckCircle2 size={20} /> : <Circle size={20} />}
@@ -270,15 +270,15 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                         <div
                             key={`${waypoint.type}-${idx}`}
                             className={`flex items-center gap-3 py-2 ${waypoint.type === 'start' || waypoint.type === 'end'
-                                    ? 'text-gray-400 text-sm'
-                                    : visitedWaypoints.has(`${waypoint.type}-${idx}`)
-                                        ? 'text-green-600'
-                                        : 'text-coffee'
+                                ? 'text-gray-400 text-sm'
+                                : visitedWaypoints.has(`${waypoint.type}-${idx}`)
+                                    ? 'text-green-600'
+                                    : 'text-coffee'
                                 }`}
                         >
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${waypoint.type === 'start' ? 'bg-gray-200' :
-                                    waypoint.type === 'end' ? 'bg-gray-200' :
-                                        visitedWaypoints.has(`${waypoint.type}-${idx}`) ? 'bg-green-500 text-white' : 'bg-saffron/20 text-saffron'
+                                waypoint.type === 'end' ? 'bg-gray-200' :
+                                    visitedWaypoints.has(`${waypoint.type}-${idx}`) ? 'bg-green-500 text-white' : 'bg-saffron/20 text-saffron'
                                 }`}>
                                 {waypoint.type === 'start' ? 'S' :
                                     waypoint.type === 'end' ? 'E' :

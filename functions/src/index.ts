@@ -29,5 +29,8 @@ export { studentReadyToLeave } from './http/studentReadyToLeave';
 
 // Manager Functions
 export { manualAssignStudent } from './http/manualAssignStudent';
-export { addCarToFleet, removeCarFromFleet } from './http/fleetManagement';
 export { generateEventCSV } from './http/generateEventCSV';
+export { verifyManagerCode } from './http/verifyManagerCode';
+
+// Utility Functions
+export { geocodeAddress } from './http/geocodeAddress';

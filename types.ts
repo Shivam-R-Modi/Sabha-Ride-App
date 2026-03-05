@@ -24,7 +24,7 @@ export interface User {
   address?: string;
   role?: UserRole;
   registeredRole?: UserRole;
-  status?: DriverStatus | 'available' | 'offline' | 'completed';
+  status?: DriverStatus;
   currentVehicleId?: string;
   currentVehicleName?: string;
   currentVehiclePlate?: string;
@@ -65,6 +65,7 @@ export interface Student {
 
 export type DriverStatus =
   | 'offline'
+  | 'available'
   | 'ready_for_assignment'
   | 'assigned'
   | 'active_ride';
@@ -77,7 +78,7 @@ export interface Driver {
   currentCarId: string | null;
   currentLocation: GeoLocation | null;
   homeLocation: GeoLocation | null;
-  status: DriverStatus | 'available' | 'offline' | 'completed';
+  status: DriverStatus;
   activeRideId: string | null;
   ridesCompletedToday: number;
   totalStudentsToday: number;
@@ -104,30 +105,30 @@ export interface Driver {
   fcmToken?: string;
 }
 
-// --- Vehicle/Car Types ---
+// --- Vehicle Types ---
 
-export type CarStatus = 'available' | 'in-use' | 'in_use' | 'maintenance';
-
-export interface Car {
-  id: string;
-  model: string;
-  color: string;
-  licensePlate: string;
-  capacity: number;
-  status: CarStatus;
-  assignedDriverId: string | null;
-}
+export type VehicleStatus = 'available' | 'in_use' | 'maintenance';
 
 // Vehicle type (used in fleet management)
 export interface Vehicle {
   id: string;
   name: string;
   color: string;
-  plateNumber: string;
+  licensePlate: string;
   capacity: number;
-  status: 'available' | 'in-use' | 'maintenance';
+  status: VehicleStatus;
   currentDriverId?: string;
   currentDriverName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Vehicle form data type
+export interface VehicleFormData {
+  name: string;
+  color: string;
+  licensePlate: string;
+  capacity: number;
 }
 
 // --- Ride Types ---
@@ -270,12 +271,7 @@ export interface ProfileFormData {
   address: string;
 }
 
-export interface CarFormData {
-  model: string;
-  color: string;
-  licensePlate: string;
-  capacity: number;
-}
+// CarFormData removed — use VehicleFormData instead
 
 // --- Navigation Types ---
 
@@ -284,81 +280,21 @@ export interface NavigationState {
   isSidebarCollapsed: boolean;
 }
 
-// --- Legacy Types (for backward compatibility) ---
+// --- Assignment Types ---
 
-export interface LegacyUser {
+export type AssignmentType = 'pickup' | 'dropoff';
+
+export interface StudentRequest {
   id: string;
   name: string;
   address: string;
-  avatarUrl?: string;
   phone?: string;
   email?: string;
+  avatarUrl?: string;
   role?: UserRole;
   registeredRole?: UserRole;
-  coordinates?: { lat: number; lng: number };
-  accountStatus?: 'pending' | 'approved' | 'rejected';
+  accountStatus?: AccountStatus;
   currentVehicleId?: string;
-}
-
-export interface LegacyVehicle {
-  id: string;
-  name: string;
-  color: string;
-  plateNumber: string;
-  capacity: number;
-  status: 'available' | 'maintenance' | 'in-use';
-  currentDriverId?: string;
-  currentDriverName?: string;
-}
-
-export type LegacyRideStatus = 'requested' | 'assigned' | 'driver_en_route' | 'arriving' | 'completed' | 'cancelled';
-
-export interface LegacyRide {
-  id: string;
-  studentId?: string;
-  studentName?: string;
-  date: string;
-  timeSlot: string;
-  status: LegacyRideStatus;
-  pickupAddress: string;
-  driver?: LegacyDriver;
-  peers: LegacyUser[];
-  etaMinutes?: number;
-  isReadyToLeave: boolean;
-  returnDriver?: LegacyDriver;
-  notes?: string;
-}
-
-export interface LegacyDriver extends LegacyUser {
-  carModel?: string;
-  carColor?: string;
-  plateNumber?: string;
-  capacity?: number;
-  status: 'available' | 'assigned' | 'active' | 'completed';
-}
-
-export type AssignmentType = 'pickup' | 'dropoff';
-export type StopStatus = 'pending' | 'completed' | 'skipped';
-
-export interface Passenger extends LegacyUser {
-  stopStatus: StopStatus;
-  sequenceOrder: number;
-  eta: string;
-  notes?: string;
-}
-
-export interface DriverAssignment {
-  id: string;
-  type: AssignmentType;
-  date: string;
-  status: 'pending' | 'active' | 'completed';
-  passengers: Passenger[];
-  totalDistance: string;
-  totalTime: string;
-  venueAddress: string;
-}
-
-export interface StudentRequest extends Omit<LegacyUser, 'coordinates'> {
   requestTime: string;
   requestedTimeSlot: string;
   status: 'pending' | 'grouped' | 'assigned';
@@ -377,4 +313,34 @@ export interface RideGroup {
   routeColor: string;
 }
 
-export type AuthState = 'SPLASH' | 'LOGIN' | 'OTP' | 'ROLE_SELECT' | 'PROFILE_SETUP' | 'PENDING_APPROVAL' | 'APP';
+export interface DriverAssignment {
+  id: string;
+  type: AssignmentType;
+  date: string;
+  status: 'pending' | 'active' | 'completed';
+  passengers: Array<{
+    id: string;
+    name: string;
+    address: string;
+    phone?: string;
+    stopStatus: 'pending' | 'completed' | 'skipped';
+    sequenceOrder: number;
+    eta: string;
+    notes?: string;
+  }>;
+  totalDistance: string;
+  totalTime: string;
+  venueAddress: string;
+}
+
+// --- Weekly Attendance Types ---
+
+export interface WeeklyAttendanceRecord {
+  response: 'yes' | 'no';
+  respondedAt: string;
+  studentName: string;
+  studentPhone: string;
+  studentAddress: string;
+  studentId: string;
+}
+
