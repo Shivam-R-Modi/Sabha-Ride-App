@@ -7,10 +7,11 @@ import { ActiveRide } from './ActiveRide';
 import { CompletionScreen } from './CompletionScreen';
 import { releaseVehicle, setDriverAvailability, useAvailableVehicles, assignVehicleToDriver } from '../../hooks/useFirestore';
 import {
-    assignStudentsToDriver,
+    globalAssignDriver,
     driverDoneForToday,
     manuallyUpdateRideContext,
     AssignStudentsResult,
+    GlobalAssignResult,
     CompleteRideResult
 } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
@@ -130,7 +131,10 @@ export const DriverDashboard: React.FC = () => {
         }
     };
 
-    // Handle "Assign Me" button click - Show preview instead of auto-assigning
+    // Handle "Assign Me" — calls global assignment with retry-on-lock
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 1500;
+
     const handleAssignMe = async () => {
         if (!currentUser || !userProfile?.currentVehicleId) {
             alert('Please select a vehicle first');
@@ -139,20 +143,58 @@ export const DriverDashboard: React.FC = () => {
 
         setIsAssigning(true);
         setError(null);
-        try {
-            const result = await assignStudentsToDriver(currentUser.uid, userProfile.currentVehicleId);
-            console.log('Assignment result:', result);
 
-            // Store the assignment and show preview
-            setPendingAssignment(result);
-            setViewState('preview');
-        } catch (error: any) {
-            console.error('Error getting assignment:', error);
-            setError(error.message || 'Failed to get assignment. Please try again.');
-            alert(error.message || 'Failed to get assignment. Please try again.');
-        } finally {
-            setIsAssigning(false);
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const result: GlobalAssignResult = await globalAssignDriver(
+                    currentUser.uid,
+                    userProfile.currentVehicleId
+                );
+                console.log(`[Assign attempt ${attempt}] result:`, result);
+
+                if (result.status === 'locked') {
+                    // Another driver is being assigned — retry
+                    if (attempt < MAX_RETRIES) {
+                        setError('Another driver is being assigned, retrying...');
+                        await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+                        continue;
+                    }
+                    setError('System is busy. Please tap Assign Me again in a few seconds.');
+                    setIsAssigning(false);
+                    return;
+                }
+
+                if (result.status === 'no_students') {
+                    setError('All students have already been assigned. Check back later.');
+                    setIsAssigning(false);
+                    return;
+                }
+
+                // status === 'success' — map to AssignStudentsResult shape
+                const assignment: AssignStudentsResult = {
+                    rideId: result.rideId!,
+                    students: result.students!,
+                    route: result.route!,
+                    estimatedDistance: result.estimatedDistance!,
+                    estimatedTime: result.estimatedTime!,
+                    googleMapsUrl: result.googleMapsUrl!,
+                    car: result.car!
+                };
+
+                setPendingAssignment(assignment);
+                setViewState('preview');
+                setIsAssigning(false);
+                return;
+
+            } catch (error: any) {
+                console.error('Error getting assignment:', error);
+                setError(error.message || 'Failed to get assignment. Please try again.');
+                setIsAssigning(false);
+                return;
+            }
         }
+
+        setIsAssigning(false);
     };
 
     // Handle Accept & Start from AssignmentPreview

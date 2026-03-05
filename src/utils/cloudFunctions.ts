@@ -67,6 +67,23 @@ export async function assignStudentsToDriver(driverId: string, carId: string): P
     return callFunction<AssignStudentsResult>('assignStudentsToDriver', { driverId, carId });
 }
 
+// Global assignment (Approach B) — driver-seeded K-means with lock
+export interface GlobalAssignResult {
+    status: 'success' | 'locked' | 'no_students';
+    rideId?: string;
+    students?: AssignStudentsResult['students'];
+    route?: AssignStudentsResult['route'];
+    estimatedDistance?: number;
+    estimatedTime?: number;
+    googleMapsUrl?: string;
+    car?: AssignStudentsResult['car'];
+    remainingUnassigned?: number;
+}
+
+export async function globalAssignDriver(driverId: string, carId: string): Promise<GlobalAssignResult> {
+    return callFunction<GlobalAssignResult>('globalAssignDriver', { driverId, carId });
+}
+
 export interface StartRideResult {
     success: boolean;
     rideId: string;

@@ -19,6 +19,7 @@ export { updateRideTypeContext, manuallyUpdateRideContext } from './scheduled/up
 
 // Driver Functions
 export { assignStudentsToDriver } from './http/assignStudentsToDriver';
+export { globalAssignDriver } from './http/globalAssignDriver';
 export { startRide } from './http/startRide';
 export { completeRide } from './http/completeRide';
 export { releaseAssignment } from './http/releaseAssignment';

@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.geocodeAddress = exports.verifyManagerCode = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.assignStudentsToDriver = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.geocodeAddress = exports.verifyManagerCode = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.assignStudentsToDriver = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -52,6 +52,8 @@ Object.defineProperty(exports, "manuallyUpdateRideContext", { enumerable: true, 
 // Driver Functions
 var assignStudentsToDriver_1 = require("./http/assignStudentsToDriver");
 Object.defineProperty(exports, "assignStudentsToDriver", { enumerable: true, get: function () { return assignStudentsToDriver_1.assignStudentsToDriver; } });
+var globalAssignDriver_1 = require("./http/globalAssignDriver");
+Object.defineProperty(exports, "globalAssignDriver", { enumerable: true, get: function () { return globalAssignDriver_1.globalAssignDriver; } });
 var startRide_1 = require("./http/startRide");
 Object.defineProperty(exports, "startRide", { enumerable: true, get: function () { return startRide_1.startRide; } });
 var completeRide_1 = require("./http/completeRide");

@@ -173,3 +173,135 @@ export function matchClustersToDrivers(
 
     return assignments;
 }
+
+// ============================================
+// DRIVER-SEEDED K-MEANS (Approach B)
+// ============================================
+
+export interface LightPoint {
+    id: string;
+    lat: number;
+    lng: number;
+}
+
+export interface DriverSeededCluster {
+    driverId: string;
+    centroid: { lat: number; lng: number };
+    students: LightPoint[];
+}
+
+/**
+ * K-Means clustering seeded by driver GPS locations.
+ *
+ * - Each driver's current location becomes an initial centroid.
+ * - Max 20 iterations; converges when every centroid moves < 0.1 miles.
+ * - Returns one cluster per driver (some may be empty).
+ *
+ * @param students  Lightweight student points (id + lat/lng)
+ * @param drivers   Lightweight driver points (id + lat/lng)
+ * @returns Array of clusters, one per driver, preserving driver order
+ */
+export function kMeansWithDriverSeeds(
+    students: LightPoint[],
+    drivers: LightPoint[]
+): DriverSeededCluster[] {
+    if (students.length === 0 || drivers.length === 0) return [];
+
+    // K = 1: skip clustering, all students → only driver
+    if (drivers.length === 1) {
+        return [{
+            driverId: drivers[0].id,
+            centroid: { lat: drivers[0].lat, lng: drivers[0].lng },
+            students: [...students]
+        }];
+    }
+
+    // Initialize centroids from driver locations
+    let centroids: Array<{ lat: number; lng: number }> = drivers.map(d => ({
+        lat: d.lat,
+        lng: d.lng
+    }));
+
+    const maxIterations = 20;
+    const convergenceThresholdMiles = 0.1;
+    let clusters: DriverSeededCluster[] = [];
+
+    for (let iter = 0; iter < maxIterations; iter++) {
+        // Assign each student to the nearest centroid
+        clusters = drivers.map((d, idx) => ({
+            driverId: d.id,
+            centroid: centroids[idx],
+            students: [] as LightPoint[]
+        }));
+
+        for (const student of students) {
+            let nearestIdx = 0;
+            let minDist = haversineDistanceMiles(
+                student.lat, student.lng,
+                centroids[0].lat, centroids[0].lng
+            );
+
+            for (let i = 1; i < centroids.length; i++) {
+                const d = haversineDistanceMiles(
+                    student.lat, student.lng,
+                    centroids[i].lat, centroids[i].lng
+                );
+                if (d < minDist) {
+                    minDist = d;
+                    nearestIdx = i;
+                }
+            }
+
+            clusters[nearestIdx].students.push(student);
+        }
+
+        // Recalculate centroids
+        const newCentroids = clusters.map(c => {
+            if (c.students.length === 0) return c.centroid; // keep old
+            const avgLat = c.students.reduce((s, p) => s + p.lat, 0) / c.students.length;
+            const avgLng = c.students.reduce((s, p) => s + p.lng, 0) / c.students.length;
+            return { lat: avgLat, lng: avgLng };
+        });
+
+        // Check convergence (all centroids moved < 0.1 miles)
+        let converged = true;
+        for (let i = 0; i < centroids.length; i++) {
+            const shift = haversineDistanceMiles(
+                centroids[i].lat, centroids[i].lng,
+                newCentroids[i].lat, newCentroids[i].lng
+            );
+            if (shift >= convergenceThresholdMiles) {
+                converged = false;
+                break;
+            }
+        }
+
+        centroids = newCentroids;
+        // Update cluster centroids for the final result
+        for (let i = 0; i < clusters.length; i++) {
+            clusters[i].centroid = centroids[i];
+        }
+
+        if (converged) break;
+    }
+
+    return clusters;
+}
+
+/**
+ * Haversine distance in miles (internal helper for the driver-seeded K-means)
+ */
+function haversineDistanceMiles(
+    lat1: number, lng1: number,
+    lat2: number, lng2: number
+): number {
+    const R = 3959; // Earth radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}

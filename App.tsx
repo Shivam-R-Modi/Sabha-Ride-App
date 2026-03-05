@@ -10,7 +10,7 @@ import { DriverDashboard } from './components/driver/DriverDashboard';
 import { DriverHistory } from './components/driver/DriverHistory';
 import { ManagerDashboard } from './components/manager/ManagerDashboard';
 import { ManagerReports } from './components/manager/ManagerReports';
-import { CleanupUtility } from './components/admin/CleanupUtility';
+// import { CleanupUtility } from './components/admin/CleanupUtility'; // removed — component does not exist
 import { ResponsiveLayout } from './components/Layout';
 import { PWAPrompt } from './components/PWAPrompt';
 import { OmWatermark } from './constants';
@@ -102,10 +102,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* Cleanup Utility - Remove after Phase 7 */}
-              <div className="mt-12 pt-8 border-t border-mocha/10">
-                <CleanupUtility />
-              </div>
+              {/* Cleanup Utility - Removed (component does not exist) */}
 
             </div>
           );
