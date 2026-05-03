@@ -42,6 +42,7 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const routing_1 = require("../utils/routing");
 const notifications_1 = require("../utils/notifications");
+const settings_1 = require("../utils/settings");
 /**
  * HTTP Callable: Manually assign student to a driver's active ride
  * Input: { studentId: string, driverId: string }
@@ -101,9 +102,10 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('not-found', 'Car not found');
         }
         const vehicle = Object.assign({ id: carDoc.id }, carDoc.data());
-        // Check capacity
-        if (ride.students.length >= vehicle.capacity) {
-            throw new functions.https.HttpsError('failed-precondition', `Vehicle is at full capacity (${vehicle.capacity} seats)`);
+        // Check capacity (capacity - 1 for driver seat)
+        const availableSeats = Math.max(1, vehicle.capacity - 1);
+        if (ride.students.length >= availableSeats) {
+            throw new functions.https.HttpsError('failed-precondition', `Vehicle is at full capacity (${availableSeats} seats available, driver takes 1)`);
         }
         // Add student to ride
         const newStudent = {
@@ -114,7 +116,8 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         };
         const updatedStudents = [...ride.students, newStudent];
         // Recalculate route with new student
-        const sabhaLocation = { lat: 28.6139, lng: 77.2090, address: 'Sabha Venue' };
+        // Use dynamic Sabha location from settings (not hard-coded)
+        const sabhaLocation = await (0, settings_1.getSabhaLocation)();
         const startPoint = ride.rideType === 'home-to-sabha'
             ? (driver.currentLocation || sabhaLocation)
             : sabhaLocation;

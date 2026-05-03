@@ -45,6 +45,7 @@ const clustering_1 = require("../utils/clustering");
 const routing_1 = require("../utils/routing");
 const notifications_1 = require("../utils/notifications");
 const settings_1 = require("../utils/settings");
+const rateLimiter_1 = require("../utils/rateLimiter");
 // ── constants ──────────────────────────────────────────────
 const LOCK_DOC = 'system/assignmentLock';
 const LOCK_TTL_MS = 10000; // 10 seconds
@@ -78,11 +79,17 @@ function isValidPendingRide(docData) {
 }
 // ── main function ──────────────────────────────────────────
 exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
-    var _a, _b;
+    var _a, _b, _c;
     // Auth check
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
+    // Rate limiting: 10 requests per minute
+    await (0, rateLimiter_1.checkRateLimit)(context.auth.uid, {
+        maxRequests: 10,
+        windowMs: 60 * 1000, // 1 minute
+        functionName: 'globalAssignDriver'
+    });
     const { driverId, carId } = data;
     console.log(`[globalAssign] START driver=${driverId}, car=${carId}`);
     if (!driverId || !carId) {
@@ -90,21 +97,22 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
     }
     const db = admin.firestore();
     // ── Step 1: Acquire lock ────────────────────────────────
+    // Define lockRef at function scope so it's accessible in error handler
     const lockRef = db.doc(LOCK_DOC);
-    const lockSnap = await lockRef.get();
-    if (lockSnap.exists) {
-        const lockData = lockSnap.data();
-        const lockAge = Date.now() - ((_a = lockData === null || lockData === void 0 ? void 0 : lockData.timestamp) !== null && _a !== void 0 ? _a : 0);
-        if (lockAge < LOCK_TTL_MS) {
-            console.log(`[globalAssign] LOCKED by ${lockData === null || lockData === void 0 ? void 0 : lockData.driverId}, age=${lockAge}ms`);
-            return { status: 'locked' };
-        }
-        console.log(`[globalAssign] Stale lock (${lockAge}ms) — overwriting`);
-    }
-    // Write lock
-    await lockRef.set({ driverId, timestamp: Date.now() });
-    console.log('[globalAssign] Lock acquired');
     try {
+        const lockSnap = await lockRef.get();
+        if (lockSnap.exists) {
+            const lockData = lockSnap.data();
+            const lockAge = Date.now() - ((_a = lockData === null || lockData === void 0 ? void 0 : lockData.timestamp) !== null && _a !== void 0 ? _a : 0);
+            if (lockAge < LOCK_TTL_MS) {
+                console.log(`[globalAssign] LOCKED by ${lockData === null || lockData === void 0 ? void 0 : lockData.driverId}, age=${lockAge}ms`);
+                return { status: 'locked' };
+            }
+            console.log(`[globalAssign] Stale lock (${lockAge}ms) — overwriting`);
+        }
+        // Write lock
+        await lockRef.set({ driverId, timestamp: Date.now() });
+        console.log('[globalAssign] Lock acquired');
         // ── Step 2: Ride context ────────────────────────────
         const rideContextDoc = await db.collection('system').doc('rideContext').get();
         const SABHA_LOCATION = await (0, settings_1.getSabhaLocation)();
@@ -325,7 +333,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
     }
     catch (error) {
         console.error('[globalAssign] ERROR:', error);
-        // Always attempt to clean up the lock
+        // Always attempt to clean up the lock (lockRef is now in scope)
         try {
             await lockRef.delete();
             console.log('[globalAssign] Lock cleaned up after error');
@@ -339,6 +347,20 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('permission-denied', 'Permission denied.');
         }
         throw new functions.https.HttpsError('internal', (error === null || error === void 0 ? void 0 : error.message) || 'Unexpected error during global assignment.');
+    }
+    finally {
+        // Additional safety: ensure lock is always cleaned up
+        // This runs after catch block, providing extra guarantee
+        try {
+            const lockStillExists = await lockRef.get();
+            if (lockStillExists.exists && ((_c = lockStillExists.data()) === null || _c === void 0 ? void 0 : _c.driverId) === driverId) {
+                await lockRef.delete();
+                console.log('[globalAssign] Lock cleaned up in finally block');
+            }
+        }
+        catch (finalCleanupErr) {
+            console.error('[globalAssign] Failed to clean lock in finally:', finalCleanupErr);
+        }
     }
 });
 //# sourceMappingURL=globalAssignDriver.js.map

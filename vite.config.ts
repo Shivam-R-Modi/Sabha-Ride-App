@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['fonts/**/*', 'assets/**/*'],
+        includeAssets: ['fonts/**/*', 'assets/**/*', 'icons/**/*'],
         manifest: {
           name: 'Sabha Ride Seva',
           short_name: 'Sabha Ride',
@@ -45,7 +45,13 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          // Precache all static assets including index.html
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          // Clean up old caches
+          cleanupOutdatedCaches: true,
+          // Skip waiting and claim clients immediately
+          skipWaiting: true,
+          clientsClaim: true,
           runtimeCaching: [
             {
               // Google Fonts stylesheets — cache first, long TTL
@@ -95,6 +101,26 @@ export default defineConfig(({ mode }) => {
                 cacheName: 'cloud-functions',
                 expiration: { maxEntries: 30, maxAgeSeconds: 60 * 5 },
                 networkTimeoutSeconds: 15,
+              },
+            },
+            {
+              // Google Maps API (tiles, geocoding, places)
+              urlPattern: /^https:\/\/maps\.googleapis\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-maps-api',
+                expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7 }, // 7 days
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              // Google Maps static tiles
+              urlPattern: /^https:\/\/maps\.gstatic\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-maps-tiles',
+                expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 }, // 30 days
+                cacheableResponse: { statuses: [0, 200] },
               },
             },
           ],

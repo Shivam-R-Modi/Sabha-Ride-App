@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDoc, getDocs, orderBy, limit, startAfter, DocumentSnapshot } from 'firebase/firestore';
 import { Ride, RideStatus, Driver } from '../types';
 
 // --- Rides ---
@@ -298,4 +298,79 @@ export const markReadyToLeave = async (rideId: string) => {
     } catch (error) {
         console.error("Error updating status:", error);
     }
+};
+
+/**
+ * Hook to fetch ride history with pagination
+ * Returns completed rides for a user, sorted by date (newest first)
+ */
+export const useRideHistory = (userId: string, pageSize: number = 10) => {
+    const [rides, setRides] = useState<Ride[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [hasMore, setHasMore] = useState(true);
+    const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
+
+    // Fetch initial page
+    useEffect(() => {
+        if (!userId) {
+            setLoading(false);
+            return;
+        }
+
+        const fetchInitialRides = async () => {
+            try {
+                setLoading(true);
+                const q = query(
+                    collection(db, 'rides'),
+                    where('studentId', '==', userId),
+                    where('status', '==', 'completed'),
+                    orderBy('date', 'desc'),
+                    limit(pageSize)
+                );
+
+                const snapshot = await getDocs(q);
+                const fetchedRides = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Ride));
+
+                setRides(fetchedRides);
+                setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+                setHasMore(snapshot.docs.length === pageSize);
+                setLoading(false);
+            } catch (error) {
+                console.error('Error fetching ride history:', error);
+                setLoading(false);
+            }
+        };
+
+        fetchInitialRides();
+    }, [userId, pageSize]);
+
+    // Load more function
+    const loadMore = async () => {
+        if (!hasMore || !lastDoc || loading) return;
+
+        try {
+            setLoading(true);
+            const q = query(
+                collection(db, 'rides'),
+                where('studentId', '==', userId),
+                where('status', '==', 'completed'),
+                orderBy('date', 'desc'),
+                startAfter(lastDoc),
+                limit(pageSize)
+            );
+
+            const snapshot = await getDocs(q);
+            const fetchedRides = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Ride));
+
+            setRides(prev => [...prev, ...fetchedRides]);
+            setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+            setHasMore(snapshot.docs.length === pageSize);
+            setLoading(false);
+        } catch (error) {
+            console.error('Error loading more rides:', error);
+            setLoading(false);
+        }
+    };
+
+    return { rides, loading, hasMore, loadMore };
 };

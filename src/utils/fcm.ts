@@ -156,3 +156,80 @@ export function handleNotification(
             console.log('Unknown notification type:', type, data);
     }
 }
+
+/**
+ * Refresh FCM token and update Firestore if changed
+ * FCM tokens expire after ~60 days, so we need to refresh periodically
+ *
+ * @param userId - Current user ID
+ * @param currentToken - Token currently stored in Firestore
+ * @param updateFirestore - Function to update token in Firestore
+ * @returns New token if refreshed, null otherwise
+ */
+export async function refreshFCMToken(
+    userId: string,
+    currentToken: string | null,
+    updateFirestore: (userId: string, token: string) => Promise<void>
+): Promise<string | null> {
+    try {
+        const newToken = await getFCMToken();
+
+        if (!newToken) {
+            console.warn('Failed to get FCM token during refresh');
+            return null;
+        }
+
+        // If token changed, update Firestore
+        if (newToken !== currentToken) {
+            console.log('FCM token refreshed, updating Firestore');
+            await updateFirestore(userId, newToken);
+            return newToken;
+        }
+
+        return newToken;
+    } catch (error) {
+        console.error('Error refreshing FCM token:', error);
+        return null;
+    }
+}
+
+/**
+ * Start periodic FCM token refresh (every 7 days)
+ * This ensures tokens don't expire (they expire after ~60 days)
+ *
+ * @param userId - Current user ID
+ * @param getCurrentToken - Function to get current token from state/Firestore
+ * @param updateFirestore - Function to update token in Firestore
+ * @returns Cleanup function to stop the interval
+ */
+export function startTokenRefreshMonitor(
+    userId: string,
+    getCurrentToken: () => string | null,
+    updateFirestore: (userId: string, token: string) => Promise<void>
+): () => void {
+    // Refresh every 7 days (in milliseconds)
+    const REFRESH_INTERVAL = 7 * 24 * 60 * 60 * 1000;
+
+    const intervalId = setInterval(async () => {
+        const currentToken = getCurrentToken();
+        await refreshFCMToken(userId, currentToken, updateFirestore);
+    }, REFRESH_INTERVAL);
+
+    // Return cleanup function
+    return () => clearInterval(intervalId);
+}
+
+/**
+ * Check and refresh token on app visibility change
+ * Call this when app becomes visible/active
+ */
+export async function refreshTokenOnVisibilityChange(
+    userId: string,
+    getCurrentToken: () => string | null,
+    updateFirestore: (userId: string, token: string) => Promise<void>
+): Promise<void> {
+    if (document.visibilityState === 'visible') {
+        const currentToken = getCurrentToken();
+        await refreshFCMToken(userId, currentToken, updateFirestore);
+    }
+}

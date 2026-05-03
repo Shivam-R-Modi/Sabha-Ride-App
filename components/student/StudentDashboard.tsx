@@ -4,12 +4,13 @@ import { DiyaIcon, LotusIcon } from '../../constants';
 import { PickupForm } from '../PickupForm';
 import { RideStatusCard } from '../RideStatus';
 import { MyRides } from '../MyRides';
-import { Car, Navigation, AlertCircle, Loader2, Sparkles, CheckCircle2, Phone, Edit2, Save, X } from 'lucide-react';
-import { useActiveRide, markReadyToLeave, updateUserProfile, useStudentRequestStatus, useWeeklyAttendance } from '../../hooks/useFirestore';
+import { Car, Navigation, AlertCircle, Loader2, Sparkles, CheckCircle2, Phone } from 'lucide-react';
+import { useActiveRide, markReadyToLeave, updateUserProfile, useStudentRequestStatus, useWeeklyAttendance, useRideHistory } from '../../hooks/useFirestore';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { studentReadyToLeave } from '../../src/utils/cloudFunctions';
 import { WeeklyAttendancePopup } from './WeeklyAttendancePopup';
 import { AttendanceBlockedScreen } from './AttendanceBlockedScreen';
+import { ProfileEditor } from '../shared/ProfileEditor';
 
 interface StudentDashboardProps {
     user: User | Driver;
@@ -23,12 +24,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
     const [isReadyLoading, setIsReadyLoading] = useState(false);
     const [showAfterSabhaUI, setShowAfterSabhaUI] = useState(false);
 
-    // Profile editing state
-    const [isEditingProfile, setIsEditingProfile] = useState(false);
-    const [editName, setEditName] = useState(user.name);
-    const [editPhone, setEditPhone] = useState(user.phone || '');
-    const [editAddress, setEditAddress] = useState(user.address || '');
-    const [isSaving, setIsSaving] = useState(false);
 
     // Use Firestore Hook
     const { activeRide, loading } = useActiveRide(user.id);
@@ -40,6 +35,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
     const { attendance, loading: attendanceLoading, hasResponded } = useWeeklyAttendance(user.id);
     const [showAttendancePopup, setShowAttendancePopup] = useState(false);
     const [attendanceResponse, setAttendanceResponse] = useState<'yes' | 'no' | null>(null);
+
+    // Ride history with pagination
+    const { rides: rideHistory, loading: historyLoading, hasMore, loadMore } = useRideHistory(user.id, 10);
 
     // Determine if popup should be shown (after attendance data is loaded)
     useEffect(() => {
@@ -116,33 +114,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
         }
     };
 
-    const handleSaveProfile = async () => {
-        setIsSaving(true);
-        try {
-            await updateUserProfile(user.id, {
-                name: editName,
-                phone: editPhone,
-                address: editAddress
-            });
-            setIsEditingProfile(false);
-            // Update local user object (in real app, this would trigger a context refresh)
-            user.name = editName;
-            user.phone = editPhone;
-            user.address = editAddress;
-        } catch (error) {
-            console.error('Error saving profile:', error);
-            alert('Failed to save profile. Please try again.');
-        } finally {
-            setIsSaving(false);
-        }
-    };
 
-    const handleCancelEdit = () => {
-        setEditName(user.name);
-        setEditPhone(user.phone || '');
-        setEditAddress(user.address || '');
-        setIsEditingProfile(false);
-    };
 
     const renderHome = () => {
         if (isFormOpen) {
@@ -275,110 +247,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
         );
     };
 
-    const renderProfile = () => (
-        <div className="p-8 text-center pt-10 animate-in fade-in duration-500 max-w-sm mx-auto">
-            <div className="relative inline-block mb-6">
-                <div className="absolute inset-0 bg-gold blur-2xl opacity-20 animate-pulse"></div>
-                <img src={user.avatarUrl} className="w-32 h-32 rounded-3xl mx-auto relative border-4 border-white shadow-2xl" alt="Profile" />
-                <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md border border-orange-50">
-                    <Sparkles className="text-gold w-6 h-6" />
-                </div>
-            </div>
-
-            {isEditingProfile ? (
-                <div className="space-y-4 text-left">
-                    <div className="clay-card p-4">
-                        <label className="text-xs font-bold text-mocha/60 uppercase tracking-wide">Name</label>
-                        <input
-                            type="text"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className="w-full mt-1 px-3 py-2 bg-cream/50 border border-orange-100 rounded-xl text-coffee focus:ring-2 focus:ring-saffron/30 focus:border-saffron outline-none"
-                        />
-                    </div>
-                    <div className="clay-card p-4">
-                        <label className="text-xs font-bold text-mocha/60 uppercase tracking-wide">Phone</label>
-                        <input
-                            type="tel"
-                            value={editPhone}
-                            onChange={(e) => setEditPhone(e.target.value)}
-                            placeholder="Enter your phone number"
-                            className="w-full mt-1 px-3 py-2 bg-cream/50 border border-orange-100 rounded-xl text-coffee focus:ring-2 focus:ring-saffron/30 focus:border-saffron outline-none"
-                        />
-                    </div>
-                    <div className="clay-card p-4">
-                        <label className="text-xs font-bold text-mocha/60 uppercase tracking-wide">Address</label>
-                        <textarea
-                            value={editAddress}
-                            onChange={(e) => setEditAddress(e.target.value)}
-                            placeholder="Enter your pickup address"
-                            rows={2}
-                            className="w-full mt-1 px-3 py-2 bg-cream/50 border border-orange-100 rounded-xl text-coffee focus:ring-2 focus:ring-saffron/30 focus:border-saffron outline-none resize-none"
-                        />
-                    </div>
-                    <div className="flex gap-3 pt-2">
-                        <button
-                            onClick={handleCancelEdit}
-                            className="flex-1 py-3 px-4 rounded-xl border-2 border-mocha/20 text-mocha/70 font-bold flex items-center justify-center gap-2 hover:bg-mocha/5 transition-colors"
-                        >
-                            <X size={18} />
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleSaveProfile}
-                            disabled={isSaving}
-                            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-saffron to-gold text-white font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50"
-                        >
-                            {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                            {isSaving ? 'Saving...' : 'Save'}
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <>
-                    <h2 className="text-2xl font-header font-bold text-coffee">{user.name}</h2>
-                    <p className="text-gold font-medium text-sm tracking-wide mt-1 uppercase">Devoted Student</p>
-
-                    {user.phone && (
-                        <div className="clay-card mt-6 flex items-center gap-4 text-left">
-                            <div className="bg-orange-50 p-2 rounded-xl text-saffron">
-                                <Phone size={20} />
-                            </div>
-                            <p className="text-sm text-mocha/70 leading-relaxed">{user.phone}</p>
-                        </div>
-                    )}
-
-                    <div className="clay-card mt-4 flex items-center gap-4 text-left">
-                        <div className="bg-orange-50 p-2 rounded-xl text-saffron">
-                            <MapPin size={20} />
-                        </div>
-                        <p className="text-sm text-mocha/70 line-clamp-2 leading-relaxed">{user.address || 'No address set'}</p>
-                    </div>
-
-                    <button
-                        onClick={() => setIsEditingProfile(true)}
-                        className="mt-6 w-full py-3 px-4 clay-card hover:shadow-lg transition-shadow flex items-center justify-center gap-2 text-coffee font-bold"
-                    >
-                        <Edit2 size={18} className="text-saffron" />
-                        Edit Profile
-                    </button>
-                    {onLogout && (
-                        <button
-                            onClick={onLogout}
-                            className="mt-3 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-red-400 to-red-500 text-white font-bold shadow-lg hover:opacity-90 transition-opacity"
-                        >
-                            Sign Out
-                        </button>
-                    )}
-                </>
-            )}
-        </div>
-    );
+    const renderProfile = () => <ProfileEditor />;
 
     const renderContent = () => {
         switch (currentTab) {
             case 'home': return renderHome();
-            case 'rides': return <MyRides history={[]} upcoming={activeRide ? [activeRide] : []} />;
+            case 'rides': return (
+                <MyRides
+                    history={rideHistory}
+                    upcoming={activeRide ? [activeRide] : []}
+                    onLoadMore={loadMore}
+                    hasMoreHistory={hasMore}
+                    loadingMore={historyLoading}
+                />
+            );
             case 'profile': return renderProfile();
             default: return renderHome();
         }

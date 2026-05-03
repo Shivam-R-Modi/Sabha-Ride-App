@@ -116,10 +116,15 @@ export const completeRide = functions.https.onCall(async (data, context) => {
             const statsKey = isPickup ? 'pickup' : 'dropoff';
             const current = stats[statsKey] || { totalStudents: 0, completedRides: 0, students: [] };
 
+            // Deduplicate students by ID (prevent duplicates from manual reassignments)
+            const existingStudentIds = new Set((current.students || []).map((s: any) => s.id));
+            const newStudents = rideStudents.filter(s => !existingStudentIds.has(s.id));
+            const deduplicatedStudents = [...(current.students || []), ...newStudents];
+
             batch.update(statsRef, {
-                [`${statsKey}.totalStudents`]: (current.totalStudents || 0) + rideStudents.length,
+                [`${statsKey}.totalStudents`]: deduplicatedStudents.length,
                 [`${statsKey}.completedRides`]: (current.completedRides || 0) + 1,
-                [`${statsKey}.students`]: [...(current.students || []), ...rideStudents]
+                [`${statsKey}.students`]: deduplicatedStudents
             });
         } else {
             // Create new stats document

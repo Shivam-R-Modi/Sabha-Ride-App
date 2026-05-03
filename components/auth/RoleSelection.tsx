@@ -94,7 +94,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
             }
 
             onSelectRole();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error saving role:', err);
             setError('Failed to save role. Please try again.');
             setLoading(false);

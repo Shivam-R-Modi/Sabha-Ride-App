@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, onSnapshot, updateDoc, doc, setDoc, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, updateDoc, doc, setDoc, getDocs, getDoc } from 'firebase/firestore';
 import { WeeklyAttendanceRecord } from '../types';
 import { getCurrentWeekId, canChangeResponseToNo } from '../src/utils/weekUtils';
 
@@ -47,6 +47,7 @@ export const useWeeklyAttendance = (userId: string) => {
 
 /**
  * Submit weekly attendance response
+ * Prevents duplicate submissions by checking if response already exists
  */
 export const submitWeeklyAttendance = async (
     userId: string,
@@ -55,6 +56,12 @@ export const submitWeeklyAttendance = async (
 ): Promise<void> => {
     const weekId = getCurrentWeekId();
     const docRef = doc(db, 'weeklyAttendance', weekId, 'responses', userId);
+
+    // Check if response already exists
+    const existingDoc = await getDoc(docRef);
+    if (existingDoc.exists()) {
+        throw new Error('You have already submitted your attendance for this week. Use the update option to change your response.');
+    }
 
     const record: WeeklyAttendanceRecord = {
         response,

@@ -179,7 +179,7 @@ export interface Ride {
   pickupAddress?: string;
   driver?: Driver;
   returnDriver?: Driver;
-  peers?: any[];
+  peers?: RideStudent[];
   etaMinutes?: number;
   isReadyToLeave?: boolean;
   dropoffRequested?: boolean;

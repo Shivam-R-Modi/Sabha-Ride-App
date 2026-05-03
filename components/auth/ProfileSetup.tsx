@@ -14,6 +14,7 @@ interface ProfileSetupProps {
 export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onComplete }) => {
     const { currentUser } = useAuth();
     const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
     const [address, setAddress] = useState('');
     const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
     const [loading, setLoading] = useState(false);
@@ -30,6 +31,11 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
 
         if (!name.trim()) {
             setError('Please enter your name');
+            return;
+        }
+
+        if (!phone.trim()) {
+            setError('Please enter your phone number');
             return;
         }
 
@@ -51,6 +57,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
             // Coordinates come directly from Google Places — no separate geocoding needed!
             await setDoc(doc(db, 'users', currentUser.uid), {
                 name: name.trim(),
+                phone: phone.trim(),
                 address: selectedPlace.formattedAddress,
                 location: {
                     latitude: selectedPlace.latitude,
@@ -63,7 +70,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
             }, { merge: true });
 
             onComplete();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error saving profile:', err);
             setError('Failed to save profile. Please try again.');
             setLoading(false);
@@ -106,6 +113,22 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="Enter your full name"
+                                className="w-full px-4 py-3 rounded-xl border-2 border-mocha/20 focus:border-saffron focus:outline-none transition-colors"
+                                disabled={loading}
+                                required
+                            />
+                        </div>
+
+                        {/* Phone Number Input */}
+                        <div>
+                            <label className="block text-sm font-medium text-coffee mb-2">
+                                Phone Number <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="tel"
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                                placeholder="(555) 123-4567"
                                 className="w-full px-4 py-3 rounded-xl border-2 border-mocha/20 focus:border-saffron focus:outline-none transition-colors"
                                 disabled={loading}
                                 required

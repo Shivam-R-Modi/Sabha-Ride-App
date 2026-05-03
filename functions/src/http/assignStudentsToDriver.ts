@@ -321,11 +321,11 @@ export const assignStudentsToDriver = functions.https.onCall(async (data, contex
             }
         };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[assignStudentsToDriver] ERROR:', error);
-        console.error('[assignStudentsToDriver] Error code:', error?.code);
-        console.error('[assignStudentsToDriver] Error message:', error?.message);
-        console.error('[assignStudentsToDriver] Error stack:', error?.stack);
+        console.error('[assignStudentsToDriver] Error code:', (error as any)?.code);
+        console.error('[assignStudentsToDriver] Error message:', (error as any)?.message);
+        console.error('[assignStudentsToDriver] Error stack:', (error as any)?.stack);
 
         // If it's already an HttpsError, re-throw it to preserve the message
         if (error instanceof functions.https.HttpsError) {
@@ -333,17 +333,17 @@ export const assignStudentsToDriver = functions.https.onCall(async (data, contex
         }
 
         // For Firestore errors, provide more specific messages
-        if (error?.code === 'permission-denied') {
+        if ((error as any)?.code === 'permission-denied') {
             throw new functions.https.HttpsError('permission-denied', 'You do not have permission to perform this action.');
         }
-        if (error?.code === 'not-found' || error?.message?.includes('NOT_FOUND')) {
+        if ((error as any)?.code === 'not-found' || (error as any)?.message?.includes('NOT_FOUND')) {
             throw new functions.https.HttpsError('not-found', 'A required document was not found. Please refresh and try again.');
         }
 
         // Generic error with original message
         throw new functions.https.HttpsError(
             'internal',
-            error?.message || 'An unexpected error occurred while assigning students. Please try again.'
+            (error as any)?.message || 'An unexpected error occurred while assigning students. Please try again.'
         );
     }
 });

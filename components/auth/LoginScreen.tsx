@@ -29,7 +29,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     try {
       await signInWithPopup(auth, googleProvider);
       // Auth listener in App.tsx handles redirect
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(timeout);
       console.error("Google Login Error:", err);
       setIsLoading(false);
@@ -58,7 +58,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         await signInWithEmailAndPassword(auth, email, password);
       }
       // Auth listener handles redirect
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setIsLoading(false);
       if (err.code === 'auth/invalid-email') {
@@ -88,7 +88,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       await sendPasswordResetEmail(auth, email);
       setResetSent(true);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err.code === 'auth/user-not-found') {
         setError('No account found with this email.');
       } else if (err.code === 'auth/invalid-email') {

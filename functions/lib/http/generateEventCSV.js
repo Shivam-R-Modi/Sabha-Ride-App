@@ -70,18 +70,20 @@ exports.generateEventCSV = functions.https.onCall(async (data, context) => {
         const rows = [];
         // Header
         rows.push('Student Name,Phone,Pickup Address,Status,Request Date');
-        // Get all ride requests - query without filters first to avoid index issues
-        const allRides = await db.collection('rides').get();
-        const pendingRequests = [];
+        // Maximum rows to prevent timeout (can be increased if needed)
+        const MAX_ROWS = 500;
+        let hitLimit = false;
+        // Get pending ride requests with limit to prevent timeout
+        const pendingQuery = db.collection('rides')
+            .where('status', '==', 'requested')
+            .limit(MAX_ROWS);
+        const pendingSnapshot = await pendingQuery.get();
+        const pendingRequests = pendingSnapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
+        if (pendingSnapshot.size >= MAX_ROWS) {
+            hitLimit = true;
+        }
         const completedPickups = new Map();
         const completedDropoffs = new Map();
-        for (const doc of allRides.docs) {
-            const ride = doc.data();
-            // Check if this is a pending request
-            if (ride.status === 'requested') {
-                pendingRequests.push(Object.assign({ id: doc.id }, ride));
-            }
-        }
         // Get statistics for completed rides
         const statsDoc = await db.collection('statistics').doc(targetDate).get();
         if (statsDoc.exists && statsDoc.data()) {
@@ -132,7 +134,8 @@ exports.generateEventCSV = functions.https.onCall(async (data, context) => {
                 totalStudents: rows.length - 1, // Subtract header row
                 pendingRequests: pendingRequests.length,
                 completedRides: allStudentIds.size
-            }
+            },
+            warning: hitLimit ? `Results limited to ${MAX_ROWS} pending requests. Some data may be excluded.` : undefined
         };
     }
     catch (error) {

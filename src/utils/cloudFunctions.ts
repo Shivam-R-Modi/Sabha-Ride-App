@@ -19,7 +19,7 @@ async function callFunction<T = any>(name: string, data?: any): Promise<T> {
         const callable = httpsCallable(functions, name);
         const result = await callable(data);
         return result.data as T;
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error(`Error calling ${name}:`, error);
         // Log more details about the error
         if (error?.message) {

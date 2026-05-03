@@ -2,6 +2,7 @@
 // ============================================
 // HTTP FUNCTION: verifyManagerCode
 // Server-side verification of manager access code
+// Now reads from Firestore settings instead of hard-coded constant
 // ============================================
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -40,14 +41,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.verifyManagerCode = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
-// Manager code stored server-side only — never exposed to client
-const MANAGER_ACCESS_CODE = 'SABHA2024';
 /**
  * HTTP Callable: Verify manager access code
  * Input: { code: string }
  * Output: { valid: boolean }
  *
  * If valid, auto-approves the calling user's account.
+ * Manager code is stored in Firestore: settings/managerCode
  */
 exports.verifyManagerCode = functions.https.onCall(async (data, context) => {
     // Verify authentication
@@ -70,8 +70,19 @@ exports.verifyManagerCode = functions.https.onCall(async (data, context) => {
         if ((userData === null || userData === void 0 ? void 0 : userData.role) !== 'manager' && (userData === null || userData === void 0 ? void 0 : userData.registeredRole) !== 'manager') {
             throw new functions.https.HttpsError('permission-denied', 'Only manager accounts can verify access codes');
         }
-        // Verify the code server-side
-        const isValid = code === MANAGER_ACCESS_CODE;
+        // Read manager code from Firestore settings (not hard-coded)
+        const managerCodeDoc = await db.collection('settings').doc('managerCode').get();
+        if (!managerCodeDoc.exists) {
+            // Fallback: If no code in Firestore, reject (managers must set code first)
+            throw new functions.https.HttpsError('failed-precondition', 'Manager access code not configured. Please contact administrator.');
+        }
+        const managerCodeData = managerCodeDoc.data();
+        const validCode = managerCodeData === null || managerCodeData === void 0 ? void 0 : managerCodeData.code;
+        if (!validCode) {
+            throw new functions.https.HttpsError('failed-precondition', 'Manager access code not configured properly.');
+        }
+        // Verify the code
+        const isValid = code === validCode;
         if (isValid) {
             // Auto-approve the manager account
             await db.collection('users').doc(userId).update({

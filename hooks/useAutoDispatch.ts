@@ -19,13 +19,50 @@ export const useAutoDispatch = () => {
     // This hook will run in the Manager Dashboard and acts as the "Server" logic
 
     useEffect(() => {
+        // Processing lock to prevent concurrent execution
+        let isProcessing = false;
+        let debounceTimer: NodeJS.Timeout | null = null;
+
         // 1. Monitor Pending Requests
         const qRequests = query(collection(db, 'rides'), where('status', '==', 'requested'));
 
         const unsubscribeRequests = onSnapshot(qRequests, async (snapshot) => {
             if (snapshot.empty) return;
 
-            // Fetch available drivers (MUST be done inside snapshot to be fresh)
+            // Debounce: Wait for snapshot to settle (500ms)
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
+
+            debounceTimer = setTimeout(async () => {
+                // Lock check: If already processing, skip
+                if (isProcessing) {
+                    console.log('[useAutoDispatch] Already processing, skipping...');
+                    return;
+                }
+
+                isProcessing = true;
+                console.log('[useAutoDispatch] Starting dispatch processing...');
+
+                try {
+                    await processAssignments();
+                } catch (error) {
+                    console.error('[useAutoDispatch] Error processing:', error);
+                } finally {
+                    isProcessing = false;
+                    console.log('[useAutoDispatch] Processing complete');
+                }
+            }, 500);
+        });
+
+        // Extracted assignment logic
+        async function processAssignments() {
+            // Re-fetch fresh data (snapshot may be stale after debounce)
+            const freshRequestsSnap = await getDocs(query(collection(db, 'rides'), where('status', '==', 'requested')));
+
+            if (freshRequestsSnap.empty) return;
+
+            // Fetch available drivers
             const qDrivers = query(
                 collection(db, 'users'),
                 where('role', '==', 'driver'),
@@ -58,8 +95,8 @@ export const useAutoDispatch = () => {
                 }
             });
 
-            // Process each pending request
-            for (const rideDoc of snapshot.docs) {
+            // Process each pending request (now using fresh data)
+            for (const rideDoc of freshRequestsSnap.docs) {
                 const ride = rideDoc.data();
                 const studentZone = getZone(ride.pickupAddress);
                 let assignedDriver: Driver | null = null;
@@ -103,7 +140,7 @@ export const useAutoDispatch = () => {
                     console.log(`Auto-assigned ride ${rideDoc.id} (${studentZone}) to ${assignedDriver.name}`);
                 }
             }
-        });
+        }
 
         // 2. Monitor Ready-To-Leave Requests (Dropoff)
         // Similar clustering logic could be applied here based on destination

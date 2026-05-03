@@ -116,12 +116,15 @@ service cloud.firestore {
     // RIDES COLLECTION
     // =====================================
     match /rides/{rideId} {
-      // Students can read their own rides (by studentId field)
+      // Students can read their own rides (check students array)
       // Drivers can read rides assigned to them
       // Managers can read all rides
       allow read: if isAuthenticated() && (
-        resource.data.studentId == request.auth.uid ||
+        // Check if studentId exists (for ride requests)
+        (resource.data.studentId != null && resource.data.studentId == request.auth.uid) ||
+        // Check if user is the assigned driver
         resource.data.driverId == request.auth.uid ||
+        // Managers can read all
         isManager()
       );
       

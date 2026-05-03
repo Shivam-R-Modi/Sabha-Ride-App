@@ -8,6 +8,7 @@ import * as admin from 'firebase-admin';
 import { Student, Driver, Vehicle, Ride, RideStudent } from '../types';
 import { optimizeRoute, calculateRouteStats } from '../utils/routing';
 import { notifyStudentDriverAssigned } from '../utils/notifications';
+import { getSabhaLocation } from '../utils/settings';
 
 /**
  * HTTP Callable: Manually assign student to a driver's active ride
@@ -85,11 +86,12 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         }
         const vehicle = { id: carDoc.id, ...carDoc.data() } as Vehicle;
 
-        // Check capacity
-        if (ride.students.length >= vehicle.capacity) {
+        // Check capacity (capacity - 1 for driver seat)
+        const availableSeats = Math.max(1, vehicle.capacity - 1);
+        if (ride.students.length >= availableSeats) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
-                `Vehicle is at full capacity (${vehicle.capacity} seats)`
+                `Vehicle is at full capacity (${availableSeats} seats available, driver takes 1)`
             );
         }
 
@@ -104,7 +106,8 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         const updatedStudents = [...ride.students, newStudent];
 
         // Recalculate route with new student
-        const sabhaLocation = { lat: 28.6139, lng: 77.2090, address: 'Sabha Venue' };
+        // Use dynamic Sabha location from settings (not hard-coded)
+        const sabhaLocation = await getSabhaLocation();
         const startPoint = ride.rideType === 'home-to-sabha'
             ? (driver.currentLocation || sabhaLocation)
             : sabhaLocation;

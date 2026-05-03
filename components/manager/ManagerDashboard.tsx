@@ -333,7 +333,7 @@ export const ManagerDashboard: React.FC = () => {
       const result = await manualAssignStudent(studentId, driverId);
       alert(`Student assigned successfully! Total students in ride: ${result.updatedStats.totalStudents}`);
       setSelectedEntityId(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error manually assigning student:', error);
       alert(error.message || 'Failed to assign student');
     }

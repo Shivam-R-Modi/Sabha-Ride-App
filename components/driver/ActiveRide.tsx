@@ -86,7 +86,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                 },
                 result.driverStats
             );
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error completing ride:', err);
             setError(err.message || 'Failed to complete ride. Please try again.');
         } finally {

@@ -56,7 +56,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
         try {
             await startRide(assignment.rideId);
             onAccept();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error starting ride:', err);
             setError(err.message || 'Failed to start ride. Please try again.');
         } finally {
@@ -74,7 +74,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
         try {
             await releaseAssignment(assignment.rideId);
             onRelease();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error releasing assignment:', err);
             setError(err.message || 'Failed to release assignment. Please try again.');
         } finally {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Driver, AssignmentType } from '../../types';
+import { Driver, AssignmentType, RideStudent, Waypoint, Vehicle } from '../../types';
 import { MapPin, Users, ChevronRight, ToggleLeft, ToggleRight, Navigation, Car, RefreshCw, LogOut, Loader2, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AssignmentPreview } from './AssignmentPreview';
@@ -33,8 +33,8 @@ export const DriverDashboard: React.FC = () => {
     const [activeRide, setActiveRide] = useState<{
         id: string;
         rideType: 'home-to-sabha' | 'sabha-to-home';
-        students: any[];
-        route: any[];
+        students: RideStudent[];
+        route: Waypoint[];
         googleMapsUrl: string;
         estimatedDistance: number;
         estimatedTime: number;
@@ -186,7 +186,7 @@ export const DriverDashboard: React.FC = () => {
                 setIsAssigning(false);
                 return;
 
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error('Error getting assignment:', error);
                 setError(error.message || 'Failed to get assignment. Please try again.');
                 setIsAssigning(false);
@@ -251,7 +251,7 @@ export const DriverDashboard: React.FC = () => {
             await refreshProfile();
             setCompletedRideStats(null);
             setViewState('dashboard');
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error marking done:', error);
             alert(error.message || 'Failed to finish. Please try again.');
         }
@@ -412,7 +412,7 @@ export const DriverDashboard: React.FC = () => {
                                     try {
                                         await driverDoneForToday(currentUser.uid);
                                         await refreshProfile();
-                                    } catch (error: any) {
+                                    } catch (error: unknown) {
                                         alert(error.message || 'Failed to finish.');
                                     }
                                 }}

@@ -10,11 +10,13 @@ interface WeeklyAttendancePopupProps {
 
 export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ user, onResponse }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const handleResponse = async (response: 'yes' | 'no') => {
         if (isSubmitting) return;
 
         setIsSubmitting(true);
+        setError(null);
         try {
             await submitWeeklyAttendance(user.id, response, {
                 name: user.name,
@@ -24,6 +26,8 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
             onResponse(response);
         } catch (error) {
             console.error('Error submitting attendance:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Failed to submit attendance. Please try again.';
+            setError(errorMessage);
             setIsSubmitting(false);
         }
     };
@@ -84,6 +88,22 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
                 }}>
                     Are you going to attend sabha this Friday?
                 </p>
+
+                {/* Error Message */}
+                {error && (
+                    <div style={{
+                        backgroundColor: '#fee',
+                        border: '1px solid #fcc',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        marginBottom: '20px',
+                        color: '#c33',
+                        fontSize: '0.9rem',
+                        textAlign: 'left'
+                    }}>
+                        {error}
+                    </div>
+                )}
 
                 {/* Buttons - Stacked */}
                 <div style={{

@@ -53,7 +53,7 @@ export const LocationSettings: React.FC = () => {
             setSavedSuccess(true);
             setSelectedPlace(null); // Reset selection state after save
             setTimeout(() => setSavedSuccess(false), 3000);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('[LocationSettings] Save error:', err);
             setErrorMsg(err.message || 'Failed to save. Are you a manager?');
         } finally {

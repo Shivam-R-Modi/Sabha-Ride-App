@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { Ride } from '../types';
-import { Calendar, Clock, ChevronRight } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, Loader2 } from 'lucide-react';
 
 interface MyRidesProps {
   history: Ride[];
   upcoming: Ride[];
+  onLoadMore?: () => void;
+  hasMoreHistory?: boolean;
+  loadingMore?: boolean;
 }
 
 const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHistory = false }) => (
@@ -47,7 +50,13 @@ const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHisto
   </div>
 );
 
-export const MyRides: React.FC<MyRidesProps> = ({ history, upcoming }) => {
+export const MyRides: React.FC<MyRidesProps> = ({
+  history,
+  upcoming,
+  onLoadMore,
+  hasMoreHistory = false,
+  loadingMore = false
+}) => {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
 
   return (
@@ -89,7 +98,39 @@ export const MyRides: React.FC<MyRidesProps> = ({ history, upcoming }) => {
             </div>
           )
         ) : (
-          history.map(ride => <RideCard key={ride.id} ride={ride} isHistory />)
+          <>
+            {history.length > 0 ? (
+              <>
+                {history.map(ride => <RideCard key={ride.id} ride={ride} isHistory />)}
+
+                {/* Load More Button */}
+                {hasMoreHistory && onLoadMore && (
+                  <button
+                    onClick={onLoadMore}
+                    disabled={loadingMore}
+                    className="w-full py-3 bg-white border border-gray-200 rounded-xl text-sm font-medium text-coffee hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {loadingMore ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load More'
+                    )}
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-200">
+                <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-300">
+                  <Calendar size={24} />
+                </div>
+                <p className="text-gray-500 font-medium">No ride history</p>
+                <p className="text-xs text-gray-400 mt-1">Your completed rides will appear here</p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -57,7 +57,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
         setError(null);
         try {
             onAssignNext();
-        } catch (err: any) {
+        } catch (err: unknown) {
             setError(err.message || 'Failed to get next assignment.');
         } finally {
             setIsAssigning(false);
@@ -69,7 +69,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
         setError(null);
         try {
             await onDoneForToday();
-        } catch (err: any) {
+        } catch (err: unknown) {
             setError(err.message || 'Failed to finish for today.');
         } finally {
             setIsFinishing(false);
