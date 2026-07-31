@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { User, Driver, UserRole } from '../types';
 
@@ -33,14 +33,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const profileUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // Subscribe to real-time profile updates via onSnapshot
-  const subscribeToProfile = (uid: string) => {
+  const subscribeToProfile = (uid: string, authUser?: import('firebase/auth').User | null) => {
     // Clean up any existing listener
     if (profileUnsubscribeRef.current) {
       profileUnsubscribeRef.current();
     }
 
     const docRef = doc(db, 'users', uid);
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+    const unsubscribe = onSnapshot(docRef, async (docSnap) => {
       if (docSnap.exists()) {
         const profile = { id: uid, ...docSnap.data() } as User | Driver;
         setUserProfile(profile);
@@ -52,10 +52,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           activeRoleInitialized.current = true;
         }
       } else {
-        setUserProfile(null);
-        setActiveRoleState(null);
+        // Profile document is missing (e.g. users collection was wiped during testing).
+        // Auto-recreate a minimal stub so the user isn't stuck in a broken state.
+        if (authUser) {
+          console.warn('[AuthContext] User doc missing — recreating stub profile for', uid);
+          const stub = {
+            email: authUser.email || '',
+            name: authUser.displayName || authUser.email?.split('@')[0] || 'User',
+            role: 'driver' as const,
+            registeredRole: 'driver' as const,
+            activeRole: 'driver' as const,
+            status: 'available',
+            createdAt: serverTimestamp(),
+          };
+          try {
+            await setDoc(docRef, stub, { merge: true });
+            // onSnapshot will fire again with the new doc
+          } catch (err) {
+            console.error('[AuthContext] Failed to recreate user stub:', err);
+            setUserProfile(null);
+            setActiveRoleState(null);
+            setLoading(false);
+          }
+        } else {
+          setUserProfile(null);
+          setActiveRoleState(null);
+          setLoading(false);
+        }
       }
-      setLoading(false);
+      if (docSnap.exists()) setLoading(false);
     }, (error) => {
       console.error("Error listening to profile:", error);
       setLoading(false);
@@ -68,7 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (user) {
-        subscribeToProfile(user.uid);
+        subscribeToProfile(user.uid, user);
       } else {
         // Clean up profile listener on logout
         if (profileUnsubscribeRef.current) {

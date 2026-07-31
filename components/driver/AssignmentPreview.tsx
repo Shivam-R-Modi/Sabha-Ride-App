@@ -3,6 +3,27 @@ import { ArrowLeft, MapPin, Users, Clock, Car, CheckCircle2, Loader2, Building2,
 import { startRide, releaseAssignment } from '../../src/utils/cloudFunctions';
 import { openGoogleMaps } from '../../src/utils/googleMaps';
 
+/** Replace/inject the origin in a Maps URL with the driver's live GPS position. */
+async function openMapsWithLiveOrigin(baseUrl: string): Promise<void> {
+    const injectOrigin = (lat: number, lng: number) => {
+        // Remove any existing origin param and replace with live coords
+        const url = new URL(baseUrl);
+        url.searchParams.set('origin', `${lat},${lng}`);
+        openGoogleMaps(url.toString());
+    };
+
+    if (!navigator.geolocation) {
+        openGoogleMaps(baseUrl);
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (pos) => injectOrigin(pos.coords.latitude, pos.coords.longitude),
+        () => openGoogleMaps(baseUrl), // permission denied or error — use stored origin
+        { enableHighAccuracy: true, timeout: 5000 }
+    );
+}
+
 interface AssignmentPreviewProps {
     assignment: {
         rideId: string;
@@ -224,7 +245,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                         ))}
                     </div>
                     <button
-                        onClick={() => openGoogleMaps(assignment.googleMapsUrl)}
+                        onClick={() => openMapsWithLiveOrigin(assignment.googleMapsUrl)}
                         className="w-full mt-4 py-2 text-saffron text-sm font-medium flex items-center justify-center gap-2 hover:bg-orange-50 rounded-lg transition-colors"
                     >
                         <Navigation size={14} />

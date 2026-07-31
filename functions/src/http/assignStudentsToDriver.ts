@@ -125,21 +125,22 @@ export const assignStudentsToDriver = functions.https.onCall(async (data, contex
         console.log(`[assignStudentsToDriver] Found ${ridesSnapshot.docs.length} pending rides`);
 
         // Step 5: Map ride request docs and validate data
-        const allPendingRides: Array<{
+        const pendingRidesMap = new Map<string, {
             id: string;
             rideRequestId: string;
             name: string;
             lat: number;
             lng: number;
             address: string;
-        }> = [];
+        }>();
 
         const invalidRides: string[] = [];
 
         for (const doc of ridesSnapshot.docs) {
             const docData = doc.data();
+            const studentId = docData.studentId || '';
             const ride = {
-                id: docData.studentId || '',
+                id: studentId,
                 rideRequestId: doc.id,
                 name: docData.studentName || 'Student',
                 lat: docData.pickupLat ?? 0,
@@ -148,12 +149,16 @@ export const assignStudentsToDriver = functions.https.onCall(async (data, contex
             };
 
             if (isValidRide(ride)) {
-                allPendingRides.push(ride);
+                if (!pendingRidesMap.has(studentId)) {
+                    pendingRidesMap.set(studentId, ride);
+                }
             } else {
                 invalidRides.push(doc.id);
                 console.warn(`[assignStudentsToDriver] Skipping invalid ride ${doc.id}: missing studentId or location`);
             }
         }
+
+        const allPendingRides = Array.from(pendingRidesMap.values());
 
         if (allPendingRides.length === 0) {
             throw new functions.https.HttpsError('not-found', 'No students with valid pickup locations found. Students must set their pickup address first.');

@@ -3,6 +3,21 @@ import { ArrowLeft, Navigation, Users, Clock, MapPin, Phone, CheckCircle2, Circl
 import { completeRide, CompleteRideResult } from '../../src/utils/cloudFunctions';
 import { openGoogleMaps } from '../../src/utils/googleMaps';
 
+/** Replace/inject the origin in a Maps URL with the driver's live GPS position. */
+async function openMapsWithLiveOrigin(baseUrl: string): Promise<void> {
+    const injectOrigin = (lat: number, lng: number) => {
+        const url = new URL(baseUrl);
+        url.searchParams.set('origin', `${lat},${lng}`);
+        openGoogleMaps(url.toString());
+    };
+    if (!navigator.geolocation) { openGoogleMaps(baseUrl); return; }
+    navigator.geolocation.getCurrentPosition(
+        (pos) => injectOrigin(pos.coords.latitude, pos.coords.longitude),
+        () => openGoogleMaps(baseUrl),
+        { enableHighAccuracy: true, timeout: 5000 }
+    );
+}
+
 interface ActiveRideProps {
     ride: {
         id: string;
@@ -63,7 +78,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
 
     const handleOpenMaps = () => {
         if (ride.googleMapsUrl) {
-            openGoogleMaps(ride.googleMapsUrl);
+            openMapsWithLiveOrigin(ride.googleMapsUrl);
         }
     };
 

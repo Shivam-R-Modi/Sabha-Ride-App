@@ -19,6 +19,34 @@ const distance_1 = require("./distance");
  * @param rideType - Type of ride (home-to-sabha or sabha-to-home)
  * @returns Optimized route with waypoints in order
  */
+/**
+ * Helper to generate all permutations of an array
+ */
+function getPermutations(arr) {
+    if (arr.length <= 1)
+        return [arr];
+    const result = [];
+    for (let i = 0; i < arr.length; i++) {
+        const current = arr[i];
+        const remaining = [...arr.slice(0, i), ...arr.slice(i + 1)];
+        const remainingPerms = getPermutations(remaining);
+        for (const perm of remainingPerms) {
+            result.push([current, ...perm]);
+        }
+    }
+    return result;
+}
+/**
+ * Route Optimization using Exact TSP Permutations (for N <= 8 students)
+ * Evaluates the TOTAL cumulative distance of every possible visiting order
+ * from Start -> Students -> End (Sabha), guaranteeing the ABSOLUTE SHORTEST total route.
+ *
+ * @param startPoint - Starting location (driver's location for pickup, Sabha for drop-off)
+ * @param students - List of students to visit
+ * @param endPoint - Ending location (Sabha for pickup, driver's home for drop-off)
+ * @param rideType - Type of ride (home-to-sabha or sabha-to-home)
+ * @returns Optimized route with waypoints in order of absolute minimum distance
+ */
 function optimizeRoute(startPoint, students, endPoint, rideType) {
     if (students.length === 0) {
         return [
@@ -26,29 +54,28 @@ function optimizeRoute(startPoint, students, endPoint, rideType) {
             Object.assign(Object.assign({}, endPoint), { name: 'End', type: 'end', visited: false })
         ];
     }
+    // Generate all permutations of student visits
+    const permutations = getPermutations(students);
+    let bestOrder = students;
+    let minTotalDistance = Infinity;
+    // Find permutation that yields min total distance from Start -> ...students... -> End
+    for (const perm of permutations) {
+        let currentDist = (0, distance_1.haversineDistance)(startPoint, perm[0].location);
+        for (let i = 0; i < perm.length - 1; i++) {
+            currentDist += (0, distance_1.haversineDistance)(perm[i].location, perm[i + 1].location);
+        }
+        currentDist += (0, distance_1.haversineDistance)(perm[perm.length - 1].location, endPoint);
+        if (currentDist < minTotalDistance) {
+            minTotalDistance = currentDist;
+            bestOrder = perm;
+        }
+    }
     const waypoints = [];
-    const unvisitedStudents = [...students];
-    let currentLocation = startPoint;
     // Add start point
     waypoints.push(Object.assign(Object.assign({}, startPoint), { name: 'Start', type: 'start', visited: false }));
-    // Visit nearest neighbor until all students are visited
-    while (unvisitedStudents.length > 0) {
-        let nearestIndex = 0;
-        let minDistance = (0, distance_1.haversineDistance)(currentLocation, unvisitedStudents[0].location);
-        // Find nearest unvisited student
-        for (let i = 1; i < unvisitedStudents.length; i++) {
-            const distance = (0, distance_1.haversineDistance)(currentLocation, unvisitedStudents[i].location);
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestIndex = i;
-            }
-        }
-        const nearestStudent = unvisitedStudents[nearestIndex];
-        // Add waypoint for this student
-        waypoints.push(Object.assign(Object.assign({}, nearestStudent.location), { name: nearestStudent.name, type: rideType === 'home-to-sabha' ? 'pickup' : 'dropoff', studentId: nearestStudent.id, visited: false }));
-        // Move to this location and remove from unvisited
-        currentLocation = nearestStudent.location;
-        unvisitedStudents.splice(nearestIndex, 1);
+    // Add student waypoints in exact minimum distance order
+    for (const student of bestOrder) {
+        waypoints.push(Object.assign(Object.assign({}, student.location), { name: student.name, type: rideType === 'home-to-sabha' ? 'pickup' : 'dropoff', studentId: student.id, visited: false }));
     }
     // Add end point
     waypoints.push(Object.assign(Object.assign({}, endPoint), { name: 'End', type: 'end', visited: false }));

@@ -92,6 +92,8 @@ export const ProfileEditor: React.FC = () => {
             if (selectedPlace) {
                 updateData.address = selectedPlace.formattedAddress;
                 updateData.location = {
+                    lat: selectedPlace.latitude,
+                    lng: selectedPlace.longitude,
                     latitude: selectedPlace.latitude,
                     longitude: selectedPlace.longitude,
                     formattedAddress: selectedPlace.formattedAddress,

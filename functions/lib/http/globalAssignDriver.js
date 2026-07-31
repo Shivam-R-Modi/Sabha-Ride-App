@@ -143,7 +143,12 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'Vehicle is assigned to another driver.');
         }
         const availableSeats = Math.max(1, (carData.capacity || 4) - 1);
-        const tappingDriverLoc = driverData.location || driverData.homeLocation;
+        // Normalize location: support both {lat, lng} and {latitude, longitude} key formats
+        const rawDriverLoc = driverData.location || driverData.homeLocation;
+        const tappingDriverLoc = rawDriverLoc ? {
+            lat: typeof rawDriverLoc.lat === 'number' ? rawDriverLoc.lat : rawDriverLoc.latitude,
+            lng: typeof rawDriverLoc.lng === 'number' ? rawDriverLoc.lng : rawDriverLoc.longitude,
+        } : null;
         if (!tappingDriverLoc || typeof tappingDriverLoc.lat !== 'number') {
             throw new functions.https.HttpsError('failed-precondition', 'Your location is not set. Please update your profile.');
         }
@@ -155,20 +160,24 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         if (ridesSnap.empty) {
             return { status: 'no_students' };
         }
-        const allStudentPoints = [];
+        const studentMap = new Map();
         for (const doc of ridesSnap.docs) {
             const d = doc.data();
             if (!isValidPendingRide(d))
                 continue;
-            allStudentPoints.push({
-                id: d.studentId,
-                rideRequestId: doc.id,
-                name: d.studentName || 'Student',
-                lat: d.pickupLat,
-                lng: d.pickupLng,
-                address: d.pickupAddress || 'Unknown'
-            });
+            // Deduplicate by studentId to prevent duplicate entries if a student has multiple pending requests
+            if (!studentMap.has(d.studentId)) {
+                studentMap.set(d.studentId, {
+                    id: d.studentId,
+                    rideRequestId: doc.id,
+                    name: d.studentName || 'Student',
+                    lat: d.pickupLat,
+                    lng: d.pickupLng,
+                    address: d.pickupAddress || 'Unknown'
+                });
+            }
         }
+        const allStudentPoints = Array.from(studentMap.values());
         if (allStudentPoints.length === 0) {
             return { status: 'no_students' };
         }
@@ -191,12 +200,15 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             if (doc.id === driverId)
                 continue; // already added
             const dd = doc.data();
-            const loc = dd.location || dd.homeLocation;
-            if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+            const rawLoc = dd.location || dd.homeLocation;
+            // Normalize: support both {lat, lng} and {latitude, longitude}
+            const locLat = rawLoc ? (typeof rawLoc.lat === 'number' ? rawLoc.lat : rawLoc.latitude) : undefined;
+            const locLng = rawLoc ? (typeof rawLoc.lng === 'number' ? rawLoc.lng : rawLoc.longitude) : undefined;
+            if (typeof locLat === 'number' && typeof locLng === 'number') {
                 driverPointsMap.set(doc.id, {
                     id: doc.id,
-                    lat: loc.lat,
-                    lng: loc.lng
+                    lat: locLat,
+                    lng: locLng
                 });
             }
         }
@@ -219,9 +231,10 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         }
         console.log(`[globalAssign] Cluster has ${myCluster.students.length} students`);
         // ── Step 7: Sort by distance + apply geo-fence ──────
+        const studentPointMap = new Map(allStudentPoints.map(sp => [sp.id, sp]));
         const sortedStudents = myCluster.students
             .map(s => {
-            const studentFull = allStudentPoints.find(sp => sp.id === s.id);
+            const studentFull = studentPointMap.get(s.id);
             const dist = haversineDistanceMiles(tappingDriverLoc.lat, tappingDriverLoc.lng, s.lat, s.lng);
             return Object.assign(Object.assign({}, studentFull), { distMi: dist });
         })
@@ -270,25 +283,25 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                 estimatedTime,
                 assignedAt: new Date().toISOString()
             });
-            // Update student user profile
+            // Upsert student user profile (set+merge is safe even if doc doesn't exist)
             const studentRef = db.collection('users').doc(s.id);
-            batch.update(studentRef, {
+            batch.set(studentRef, {
                 status: 'assigned',
                 currentRideId: s.rideRequestId
-            });
+            }, { merge: true });
         }
         // Update car
         batch.update(db.collection('cars').doc(carId), {
             status: 'in_use',
             assignedDriverId: driverId
         });
-        // Update driver profile
-        batch.update(db.collection('users').doc(driverId), {
+        // Upsert driver profile (set+merge is safe even if doc doesn't exist)
+        batch.set(db.collection('users').doc(driverId), {
             status: 'assigned',
             activeRideId: primaryRideId,
             currentCarId: carId,
             assignedStudentIds: assignedStudents.map(s => s.id)
-        });
+        }, { merge: true });
         // Delete the lock in the same batch
         batch.delete(lockRef);
         await batch.commit();
@@ -311,7 +324,20 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             console.error('[globalAssign] Notification error (non-fatal):', notifErr);
         }
         // ── Step 11: Build response ─────────────────────────
-        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${SABHA_LOCATION.lat},${SABHA_LOCATION.lng}`;
+        // Build full multi-stop Maps URL:
+        // origin = driver location, waypoints = students in route order, destination = Sabha
+        const pickupWaypoints = route
+            .filter(wp => wp.type === 'pickup' || wp.type === 'dropoff')
+            .map(wp => `${wp.lat},${wp.lng}`)
+            .join('|');
+        const waypointsParam = pickupWaypoints
+            ? `&waypoints=${encodeURIComponent(pickupWaypoints)}`
+            : '';
+        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1` +
+            `&origin=${tappingDriverLoc.lat},${tappingDriverLoc.lng}` +
+            `&destination=${SABHA_LOCATION.lat},${SABHA_LOCATION.lng}` +
+            `${waypointsParam}` +
+            `&travelmode=driving`;
         const remainingUnassigned = allStudentPoints.length - assignedStudents.length;
         console.log(`[globalAssign] SUCCESS: ${assignedStudents.length} assigned, ${remainingUnassigned} remaining`);
         return {

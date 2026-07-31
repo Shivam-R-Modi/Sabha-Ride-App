@@ -131,6 +131,21 @@ export default defineConfig(({ mode }) => {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
     },
+    build: {
+      chunkSizeWarningLimit: 600,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-leaflet': ['leaflet', 'react-leaflet'],
+            'vendor-charts': ['recharts'],
+            'vendor-firebase-auth': ['firebase/auth'],
+            'vendor-firebase-firestore': ['firebase/firestore'],
+            'vendor-firebase-functions': ['firebase/functions'],
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          }
+        }
+      }
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
