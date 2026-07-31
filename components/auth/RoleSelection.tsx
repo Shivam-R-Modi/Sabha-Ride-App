@@ -63,8 +63,8 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
         setError('');
 
         try {
-            // Students are auto-approved; drivers and managers start as pending
-            const initialStatus = selectedRole === 'student' ? 'approved' : 'pending';
+            // All roles start as pending approval from a manager
+            const initialStatus = 'pending';
 
             await setDoc(doc(db, 'users', currentUser.uid), {
                 role: selectedRole,

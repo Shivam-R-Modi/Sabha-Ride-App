@@ -19,8 +19,8 @@ import {
   LogOut
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePendingDrivers, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, useWeeklyAttendanceCount, downloadAttendanceCSV, returnStudentToPool, releaseVehicle, setDriverAvailability } from '../../hooks/useFirestore';
-import { Driver, Ride, StudentRequest } from '../../types';
+import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, useWeeklyAttendanceCount, downloadAttendanceCSV, returnStudentToPool, releaseVehicle, setDriverAvailability } from '../../hooks/useFirestore';
+import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
 import { manualAssignStudent } from '../../src/utils/cloudFunctions';
 import { VENUE_ADDRESS } from '../../constants';
 
@@ -176,6 +176,7 @@ export const ManagerDashboard: React.FC = () => {
   useAutoDispatch();
 
   const { pendingDrivers } = usePendingDrivers();
+  const { pendingRiders } = usePendingRiders();
   const { requests: pendingRequests, loading: requestsLoading } = usePendingRequests();
   const { rides: activeRides } = useAllActiveRides();
   const { drivers: availableDrivers, loading: driversLoading } = useAvailableDrivers();
@@ -361,6 +362,28 @@ export const ManagerDashboard: React.FC = () => {
     }
   };
 
+  const handleApproveRider = async (riderId: string) => {
+    try {
+      await updateUserStatus(riderId, 'approved');
+      alert('Rider approved successfully!');
+    } catch (error) {
+      console.error('Error approving rider:', error);
+      alert('Failed to approve rider. Please try again.');
+    }
+  };
+
+  const handleDenyRider = async (riderId: string) => {
+    if (confirm('Are you sure you want to deny this rider?')) {
+      try {
+        await updateUserStatus(riderId, 'rejected');
+        alert('Rider denied.');
+      } catch (error) {
+        console.error('Error denying rider:', error);
+        alert('Failed to deny rider. Please try again.');
+      }
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-gray-50 relative overflow-hidden">
       {/* Top Control Bar */}
@@ -421,9 +444,9 @@ export const ManagerDashboard: React.FC = () => {
             title="Notifications"
           >
             <Bell size={20} />
-            {(pendingDrivers.length > 0 || pendingRequests.length > 0) && (
+            {(pendingDrivers.length > 0 || pendingRiders.length > 0 || pendingRequests.length > 0) && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold animate-pulse">
-                {pendingDrivers.length + pendingRequests.length}
+                {pendingDrivers.length + pendingRiders.length + pendingRequests.length}
               </span>
             )}
           </button>
@@ -551,6 +574,47 @@ export const ManagerDashboard: React.FC = () => {
                 </>
               )}
 
+              {/* Pending Riders Section */}
+              {pendingRiders.length > 0 && (
+                <>
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    Rider Approvals ({pendingRiders.length})
+                  </h4>
+                  {pendingRiders.map((rider) => (
+                    <div key={rider.id} className="flex items-center gap-4 p-4 bg-cream rounded-xl border border-mocha/10">
+                      <img
+                        src={rider.avatarUrl || `https://ui-avatars.com/api/?name=${rider.name}&background=random`}
+                        alt={rider.name}
+                        className="w-12 h-12 rounded-xl"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-coffee">{rider.name}</h4>
+                        <p className="text-sm text-mocha/60 truncate">{rider.phone || rider.email || 'No contact info'}</p>
+                        <p className="text-xs text-mocha/40 mt-1 truncate">
+                          {rider.address || 'No address set'}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleDenyRider(rider.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
+                        >
+                          <X size={14} />
+                          Deny
+                        </button>
+                        <button
+                          onClick={() => handleApproveRider(rider.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors"
+                        >
+                          <CheckCircle2 size={14} />
+                          Approve
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
               {/* Pending Student Requests Section */}
               {pendingRequests.length > 0 && (
                 <>
@@ -594,7 +658,7 @@ export const ManagerDashboard: React.FC = () => {
               )}
 
               {/* Empty State */}
-              {pendingDrivers.length === 0 && pendingRequests.length === 0 && (
+              {pendingDrivers.length === 0 && pendingRiders.length === 0 && pendingRequests.length === 0 && (
                 <div className="text-center py-8">
                   <CheckCircle2 size={40} className="mx-auto text-green-500 mb-3" />
                   <p className="text-mocha/60">No pending approvals</p>

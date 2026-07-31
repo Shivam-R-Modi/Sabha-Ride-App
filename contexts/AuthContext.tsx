@@ -52,33 +52,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           activeRoleInitialized.current = true;
         }
       } else {
-        // Profile document is missing (e.g. users collection was wiped during testing).
-        // Auto-recreate a minimal stub so the user isn't stuck in a broken state.
-        if (authUser) {
-          console.warn('[AuthContext] User doc missing — recreating stub profile for', uid);
-          const stub = {
-            email: authUser.email || '',
-            name: authUser.displayName || authUser.email?.split('@')[0] || 'User',
-            role: 'driver' as const,
-            registeredRole: 'driver' as const,
-            activeRole: 'driver' as const,
-            status: 'available',
-            createdAt: serverTimestamp(),
-          };
-          try {
-            await setDoc(docRef, stub, { merge: true });
-            // onSnapshot will fire again with the new doc
-          } catch (err) {
-            console.error('[AuthContext] Failed to recreate user stub:', err);
-            setUserProfile(null);
-            setActiveRoleState(null);
-            setLoading(false);
-          }
-        } else {
-          setUserProfile(null);
-          setActiveRoleState(null);
-          setLoading(false);
-        }
+        // Profile document does not exist yet (brand new signup / role not yet selected).
+        // Do NOT auto-create a stub profile. Set userProfile to null so App renders RoleSelection.
+        setUserProfile(null);
+        setActiveRoleState(null);
+        setLoading(false);
       }
       if (docSnap.exists()) setLoading(false);
     }, (error) => {

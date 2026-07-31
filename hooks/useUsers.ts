@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
-import { Driver, StudentRequest } from '../types';
+import { Driver, StudentRequest, User } from '../types';
 
 // --- Users / Admin ---
 
@@ -30,6 +30,35 @@ export const usePendingDrivers = () => {
     }, []);
 
     return { pendingDrivers, loading };
+};
+
+export const usePendingRiders = () => {
+    const [pendingRiders, setPendingRiders] = useState<User[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const q = query(
+            collection(db, 'users'),
+            where('roles', 'array-contains', 'student'),
+            where('accountStatus', '==', 'pending')
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const riders: User[] = [];
+            snapshot.forEach((doc) => {
+                riders.push({ id: doc.id, ...doc.data() } as User);
+            });
+            setPendingRiders(riders);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching pending riders:", error);
+            setLoading(false);
+        });
+
+        return unsubscribe;
+    }, []);
+
+    return { pendingRiders, loading };
 };
 
 export const usePendingRequests = () => {
