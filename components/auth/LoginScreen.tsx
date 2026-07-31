@@ -129,10 +129,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/30"></div>
         {/* Text Content - centered */}
         <div className="absolute inset-0 flex flex-col items-center justify-center text-white z-10">
-          <h1 className="font-cursive text-4xl md:text-5xl font-normal drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] tracking-wide text-[#FF6B35]">
+          <h1 className="font-cursive text-4xl md:text-5xl font-bold drop-shadow-[0_1px_3px_rgba(255,255,255,0.6)] tracking-wide text-[#B84318]">
             Jai Swaminarayan!
           </h1>
-          <p className="mt-1 drop-shadow-md text-sm md:text-base font-medium opacity-95 text-white">Sign in to coordinate your seva</p>
+          <p className="mt-1 drop-shadow-md text-sm md:text-base font-semibold opacity-95 text-coffee">Sign in to coordinate your seva</p>
         </div>
       </div>
 

@@ -49,7 +49,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
                     className="text-2xl md:text-3xl font-semibold leading-relaxed tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
                     style={{
                         fontFamily: "'Noto Sans Gujarati', 'Inter', sans-serif",
-                        color: '#FF6B35'
+                        color: '#B84318'
                     }}
                 >
                     {currentQuote}
