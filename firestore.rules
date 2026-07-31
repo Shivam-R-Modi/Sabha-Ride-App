@@ -26,8 +26,9 @@ service cloud.firestore {
     function hasRole(role) {
       let data = getUserData();
       return isAuthenticated() && (
-        (data.roles != null && role in data.roles) || 
-        (data.role == role)
+        (data.role == role) ||
+        (data.registeredRole == role) ||
+        ('roles' in data && data.roles != null && role in data.roles)
       );
     }
     
@@ -38,17 +39,32 @@ service cloud.firestore {
     
     // Check if user is a manager
     function isManager() {
-      return hasRole('manager') && isApproved();
+      let data = getUserData();
+      return isAuthenticated() && (
+        (data.role == 'manager') ||
+        (data.registeredRole == 'manager') ||
+        ('roles' in data && data.roles != null && 'manager' in data.roles)
+      ) && (data.accountStatus == 'approved');
     }
     
     // Check if user is a driver
     function isDriver() {
-      return hasRole('driver') && isApproved();
+      let data = getUserData();
+      return isAuthenticated() && (
+        (data.role == 'driver') ||
+        (data.registeredRole == 'driver') ||
+        ('roles' in data && data.roles != null && 'driver' in data.roles)
+      ) && (data.accountStatus == 'approved');
     }
     
     // Check if user is a student
     function isStudent() {
-      return hasRole('student') && isApproved();
+      let data = getUserData();
+      return isAuthenticated() && (
+        (data.role == 'student') ||
+        (data.registeredRole == 'student') ||
+        ('roles' in data && data.roles != null && 'student' in data.roles)
+      ) && (data.accountStatus == 'approved');
     }
     
     // Check if driver is assigned to a specific ride
