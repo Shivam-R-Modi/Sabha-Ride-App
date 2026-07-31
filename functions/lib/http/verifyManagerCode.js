@@ -2,7 +2,7 @@
 // ============================================
 // HTTP FUNCTION: verifyManagerCode
 // Server-side verification of manager access code
-// Now reads from Firestore settings instead of hard-coded constant
+// Reads from Firestore settings — no user doc required
 // ============================================
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -46,8 +46,9 @@ const admin = __importStar(require("firebase-admin"));
  * Input: { code: string }
  * Output: { valid: boolean }
  *
- * If valid, auto-approves the calling user's account.
- * Manager code is stored in Firestore: settings/managerCode
+ * Simply checks the code against settings/managerCode in Firestore.
+ * Does NOT require the user doc to exist yet (called before doc creation).
+ * The client is responsible for writing the user doc with the correct status.
  */
 exports.verifyManagerCode = functions.https.onCall(async (data, context) => {
     // Verify authentication
@@ -59,21 +60,10 @@ exports.verifyManagerCode = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'Access code is required');
     }
     const db = admin.firestore();
-    const userId = context.auth.uid;
     try {
-        // Get user profile to verify they selected manager role
-        const userDoc = await db.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'User profile not found');
-        }
-        const userData = userDoc.data();
-        if ((userData === null || userData === void 0 ? void 0 : userData.role) !== 'manager' && (userData === null || userData === void 0 ? void 0 : userData.registeredRole) !== 'manager') {
-            throw new functions.https.HttpsError('permission-denied', 'Only manager accounts can verify access codes');
-        }
-        // Read manager code from Firestore settings (not hard-coded)
+        // Read manager code from Firestore settings
         const managerCodeDoc = await db.collection('settings').doc('managerCode').get();
         if (!managerCodeDoc.exists) {
-            // Fallback: If no code in Firestore, reject (managers must set code first)
             throw new functions.https.HttpsError('failed-precondition', 'Manager access code not configured. Please contact administrator.');
         }
         const managerCodeData = managerCodeDoc.data();
@@ -83,12 +73,6 @@ exports.verifyManagerCode = functions.https.onCall(async (data, context) => {
         }
         // Verify the code
         const isValid = code === validCode;
-        if (isValid) {
-            // Auto-approve the manager account
-            await db.collection('users').doc(userId).update({
-                accountStatus: 'approved',
-            });
-        }
         return { valid: isValid };
     }
     catch (error) {

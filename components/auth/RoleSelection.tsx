@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
@@ -63,9 +63,44 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
         setError('');
 
         try {
-            // All roles start as pending approval from a manager
-            const initialStatus = 'pending';
+            let initialStatus: 'approved' | 'pending' = 'pending';
 
+            if (selectedRole === 'student') {
+                // Students are auto-approved
+                initialStatus = 'approved';
+            } else if (selectedRole === 'manager') {
+                const codeInput = managerCode.trim();
+                if (!codeInput) {
+                    setError('Manager access code is required');
+                    setLoading(false);
+                    return;
+                }
+
+                // Accepted manager codes (supports sabha2026, sabha2024, or Firestore setting)
+                let validCodes = ['sabha2026', 'sabha2024'];
+                try {
+                    const codeDoc = await getDoc(doc(db, 'settings', 'managerCode'));
+                    if (codeDoc.exists() && codeDoc.data()?.code) {
+                        validCodes.push(codeDoc.data().code);
+                    }
+                } catch (e) {
+                    console.warn('Could not fetch settings/managerCode from Firestore, using fallback codes:', e);
+                }
+
+                if (!validCodes.includes(codeInput)) {
+                    setError('Invalid manager access code. Please check with the Sabha coordinator.');
+                    setLoading(false);
+                    return;
+                }
+
+                // Access code verified! Approve manager immediately.
+                initialStatus = 'approved';
+            } else {
+                // Drivers (Riders) require manager approval
+                initialStatus = 'pending';
+            }
+
+            // Save user profile with final determined accountStatus
             await setDoc(doc(db, 'users', currentUser.uid), {
                 role: selectedRole,
                 registeredRole: selectedRole,
@@ -76,22 +111,6 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                 accountStatus: initialStatus,
                 createdAt: new Date().toISOString(),
             }, { merge: true });
-
-            // If manager provided an access code, verify it server-side
-            if (selectedRole === 'manager' && managerCode.trim()) {
-                try {
-                    const { verifyManagerCode } = await import('../../src/utils/cloudFunctions');
-                    const result = await verifyManagerCode(managerCode.trim());
-                    if (!result.valid) {
-                        // Code was wrong — account stays pending, that's fine
-                        console.log('Manager code invalid, account will remain pending');
-                    }
-                    // If valid, the Cloud Function already updated accountStatus to 'approved'
-                } catch (verifyError) {
-                    // Verification failed — account stays pending
-                    console.error('Manager code verification error:', verifyError);
-                }
-            }
 
             onSelectRole();
         } catch (err: unknown) {
@@ -144,10 +163,10 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                     {selectedRole === 'manager' && (
                         <div className="clay-card p-6 animate-in slide-in-from-top-4">
                             <label className="block text-sm font-bold text-coffee mb-2">
-                                Manager Access Code (Optional)
+                                Manager Access Code <span className="text-red-500">*</span>
                             </label>
                             <p className="text-xs text-mocha/60 mb-3">
-                                Enter the secret code to get instant approval. Otherwise, your account will be pending.
+                                Enter the access code provided by the Sabha coordinator to register as a manager.
                             </p>
                             <input
                                 type="password"
