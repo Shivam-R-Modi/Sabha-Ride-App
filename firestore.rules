@@ -84,10 +84,19 @@ service cloud.firestore {
       
       // Users can update their own profile
       // Managers can update any user (for approval/rejection)
-      allow update: if isOwner(userId) || isManager();
+      allow update: if isAuthenticated() && (
+        isOwner(userId) || 
+        isManager() || 
+        getUserData().role == 'manager' || 
+        getUserData().registeredRole == 'manager'
+      );
       
       // Only managers can delete users
-      allow delete: if isManager();
+      allow delete: if isAuthenticated() && (
+        isManager() || 
+        getUserData().role == 'manager' || 
+        getUserData().registeredRole == 'manager'
+      );
     }
     
     // =====================================
