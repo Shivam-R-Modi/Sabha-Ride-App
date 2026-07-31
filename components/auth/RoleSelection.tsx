@@ -69,25 +69,30 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                 // Students are auto-approved
                 initialStatus = 'approved';
             } else if (selectedRole === 'manager') {
-                const codeInput = managerCode.trim();
-                if (!codeInput) {
+                const rawInput = managerCode.trim();
+                if (!rawInput) {
                     setError('Manager access code is required');
                     setLoading(false);
                     return;
                 }
 
+                // Normalize input: remove spaces & lowercase
+                const cleanInput = rawInput.toLowerCase().replace(/\s+/g, '');
+
                 // Accepted manager codes (supports sabha2026, sabha2024, or Firestore setting)
-                let validCodes = ['sabha2026', 'sabha2024'];
+                let rawValidCodes = ['sabha2026', 'sabha2024'];
                 try {
                     const codeDoc = await getDoc(doc(db, 'settings', 'managerCode'));
                     if (codeDoc.exists() && codeDoc.data()?.code) {
-                        validCodes.push(codeDoc.data().code);
+                        rawValidCodes.push(codeDoc.data().code);
                     }
                 } catch (e) {
                     console.warn('Could not fetch settings/managerCode from Firestore, using fallback codes:', e);
                 }
 
-                if (!validCodes.includes(codeInput)) {
+                const cleanValidCodes = rawValidCodes.map(c => c.toLowerCase().replace(/\s+/g, ''));
+
+                if (!cleanValidCodes.includes(cleanInput)) {
                     setError('Invalid manager access code. Please check with the Sabha coordinator.');
                     setLoading(false);
                     return;
