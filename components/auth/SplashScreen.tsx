@@ -46,9 +46,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             {/* Rotating Spiritual Quote */}
             <div className="text-center px-6 mb-8 animate-in fade-in slide-in-from-bottom duration-700">
                 <p
-                    className="text-2xl md:text-3xl font-semibold leading-relaxed tracking-wide text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+                    className="text-2xl md:text-3xl font-semibold leading-relaxed tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
                     style={{
                         fontFamily: "'Noto Sans Gujarati', 'Inter', sans-serif",
+                        color: '#FF6B35'
                     }}
                 >
                     {currentQuote}
