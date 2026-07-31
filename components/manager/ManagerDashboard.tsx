@@ -344,9 +344,9 @@ export const ManagerDashboard: React.FC = () => {
     try {
       await updateUserStatus(driverId, 'approved');
       alert('Driver approved successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving driver:', error);
-      alert('Failed to approve driver. Please try again.');
+      alert(`Failed to approve driver: ${error?.message || error}`);
     }
   };
 
@@ -355,9 +355,9 @@ export const ManagerDashboard: React.FC = () => {
       try {
         await updateUserStatus(driverId, 'rejected');
         alert('Driver denied.');
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error denying driver:', error);
-        alert('Failed to deny driver. Please try again.');
+        alert(`Failed to deny driver: ${error?.message || error}`);
       }
     }
   };
@@ -366,9 +366,9 @@ export const ManagerDashboard: React.FC = () => {
     try {
       await updateUserStatus(riderId, 'approved');
       alert('Rider approved successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving rider:', error);
-      alert('Failed to approve rider. Please try again.');
+      alert(`Failed to approve rider: ${error?.message || error}`);
     }
   };
 
@@ -377,9 +377,9 @@ export const ManagerDashboard: React.FC = () => {
       try {
         await updateUserStatus(riderId, 'rejected');
         alert('Rider denied.');
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error denying rider:', error);
-        alert('Failed to deny rider. Please try again.');
+        alert(`Failed to deny rider: ${error?.message || error}`);
       }
     }
   };
