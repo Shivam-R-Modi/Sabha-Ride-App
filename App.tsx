@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TabView, Driver } from './types';
 import { SplashScreen } from './components/auth/SplashScreen';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { EmailVerificationScreen } from './components/auth/EmailVerificationScreen';
 import { RoleSelection } from './components/auth/RoleSelection';
 import { ProfileSetup } from './components/auth/ProfileSetup';
 import { PendingApproval } from './components/auth/PendingApproval';
@@ -31,6 +32,10 @@ export default function App() {
 
   if (!currentUser) {
     return <LoginScreen onLoginSuccess={() => { }} />;
+  }
+
+  if (currentUser && !currentUser.emailVerified) {
+    return <EmailVerificationScreen onBack={logout} />;
   }
 
   if (!userProfile || !userProfile.role) {

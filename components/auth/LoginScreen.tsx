@@ -1,8 +1,10 @@
 
 import React, { useState } from 'react';
 import { ChevronRight, Loader2, AlertCircle, Mail, Lock, UserPlus } from 'lucide-react';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification } from 'firebase/auth';
 import { auth, googleProvider } from '../../firebase/config';
+
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 interface LoginScreenProps {
   onLoginSuccess: (email: string) => void;
@@ -48,21 +50,34 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const trimmedEmail = email.trim();
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      setError("Please enter a valid email address (e.g., name@example.com).");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
       if (isRegistering) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
+        // Send email verification link to newly registered user
+        try {
+          await sendEmailVerification(userCredential.user);
+        } catch (verifyError) {
+          console.error("Failed to send initial verification email:", verifyError);
+        }
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(auth, trimmedEmail, password);
       }
       // Auth listener handles redirect
     } catch (err: unknown) {
       console.error(err);
       setIsLoading(false);
       if (err.code === 'auth/invalid-email') {
-        setError("Invalid email address.");
+        setError("Invalid email address format.");
       } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError("Invalid email or password.");
       } else if (err.code === 'auth/email-already-in-use') {
