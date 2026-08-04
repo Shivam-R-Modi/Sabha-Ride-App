@@ -9,7 +9,9 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
 import { AddressAutocomplete } from '../auth/AddressAutocomplete';
+import { PhoneNumberInput } from '../auth/PhoneNumberInput';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
+import { geocodeAddressViaCloud } from '../../src/utils/cloudFunctions';
 import { Save, X, CheckCircle, AlertCircle, Pencil } from 'lucide-react';
 
 export const ProfileEditor: React.FC = () => {
@@ -21,6 +23,8 @@ export const ProfileEditor: React.FC = () => {
     // Form state — pre-fill from profile
     const [name, setName] = useState(userProfile?.name || '');
     const [phone, setPhone] = useState((userProfile as any)?.phone || '');
+    const [phoneE164, setPhoneE164] = useState('');
+    const [isPhoneValid, setIsPhoneValid] = useState(true);
     const [address, setAddress] = useState(userProfile?.address || '');
     const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
 
@@ -45,6 +49,8 @@ export const ProfileEditor: React.FC = () => {
         // Re-sync form state from profile when entering edit mode
         setName(userProfile?.name || '');
         setPhone((userProfile as any)?.phone || '');
+        setPhoneE164('');
+        setIsPhoneValid(true);
         setAddress(userProfile?.address || '');
         setSelectedPlace(null);
         setError('');
@@ -63,15 +69,8 @@ export const ProfileEditor: React.FC = () => {
             setError('Name is required');
             return;
         }
-        if (!phone.trim()) {
-            setError('Phone number is required');
-            return;
-        }
-
-        // If user changed address, they must select from autocomplete
-        const addressChanged = address !== (userProfile?.address || '');
-        if (addressChanged && !selectedPlace) {
-            setError('Please select an address from the suggestions');
+        if (!isPhoneValid) {
+            setError('Please enter a valid phone number');
             return;
         }
 
@@ -82,29 +81,55 @@ export const ProfileEditor: React.FC = () => {
         setSuccess(false);
 
         try {
+            let activePlace = selectedPlace;
+            const addressChanged = address.trim() !== (userProfile?.address || '');
+
+            // Fallback geocode if address was typed manually without picking from suggestions
+            if (addressChanged && !activePlace && address.trim()) {
+                try {
+                    const geo = await geocodeAddressViaCloud(address.trim());
+                    if (geo && typeof geo.latitude === 'number' && typeof geo.longitude === 'number' && (geo.latitude !== 0 || geo.longitude !== 0)) {
+                        activePlace = {
+                            placeId: geo.placeId || '',
+                            formattedAddress: geo.formattedAddress || address.trim(),
+                            latitude: geo.latitude,
+                            longitude: geo.longitude
+                        };
+                    }
+                } catch (gErr) {
+                    console.warn('[ProfileEditor] Geocoding fallback failed:', gErr);
+                }
+            }
+
+            if (addressChanged && !activePlace) {
+                setError('Please select an address from the suggestions');
+                setLoading(false);
+                return;
+            }
+
             const updateData: Record<string, any> = {
                 name: name.trim(),
-                phone: phone.trim(),
+                phone: phoneE164 || phone.trim(),
                 avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name.trim())}&background=FF6B35&color=fff&size=200`,
             };
 
-            // Only update location if a new place was selected
-            if (selectedPlace) {
-                updateData.address = selectedPlace.formattedAddress;
+            if (activePlace) {
+                updateData.address = activePlace.formattedAddress;
+                updateData.pickupLat = activePlace.latitude;
+                updateData.pickupLng = activePlace.longitude;
                 updateData.location = {
-                    lat: selectedPlace.latitude,
-                    lng: selectedPlace.longitude,
-                    latitude: selectedPlace.latitude,
-                    longitude: selectedPlace.longitude,
-                    formattedAddress: selectedPlace.formattedAddress,
-                    placeId: selectedPlace.placeId,
+                    lat: activePlace.latitude,
+                    lng: activePlace.longitude,
+                    latitude: activePlace.latitude,
+                    longitude: activePlace.longitude,
+                    formattedAddress: activePlace.formattedAddress,
+                    placeId: activePlace.placeId,
                     geocodedAt: serverTimestamp(),
                 };
-                // Also update homeLocation for drivers (used by assignment algorithm)
                 updateData.homeLocation = {
-                    lat: selectedPlace.latitude,
-                    lng: selectedPlace.longitude,
-                    address: selectedPlace.formattedAddress,
+                    lat: activePlace.latitude,
+                    lng: activePlace.longitude,
+                    address: activePlace.formattedAddress,
                 };
             }
 
@@ -114,7 +139,6 @@ export const ProfileEditor: React.FC = () => {
             setSuccess(true);
             setIsEditing(false);
 
-            // Clear success after 3s
             setTimeout(() => setSuccess(false), 3000);
         } catch (err) {
             console.error('Error updating profile:', err);
@@ -216,20 +240,17 @@ export const ProfileEditor: React.FC = () => {
                 </div>
 
                 {/* Phone */}
-                <div>
-                    <label className="block text-sm font-medium text-coffee mb-2">
-                        Phone Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="(555) 123-4567"
-                        className="w-full px-4 py-3 rounded-xl border-2 border-mocha/20 focus:border-saffron focus:outline-none transition-colors"
-                        disabled={loading}
-                        required
-                    />
-                </div>
+                <PhoneNumberInput
+                    value={phone}
+                    onChange={(fullFormatted, e164, isValid) => {
+                        setPhone(fullFormatted);
+                        setPhoneE164(e164);
+                        setIsPhoneValid(isValid);
+                        setError('');
+                    }}
+                    disabled={loading}
+                    required
+                />
 
                 {/* Address */}
                 <div>

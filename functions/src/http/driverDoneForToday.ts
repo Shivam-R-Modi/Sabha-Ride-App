@@ -45,22 +45,38 @@ export const driverDoneForToday = functions.https.onCall(async (data, context) =
             throw new functions.https.HttpsError('failed-precondition', 'Cannot mark done while in an active ride');
         }
 
-        const carId = driver?.currentCarId;
+        const vehicleId = driver?.currentVehicleId || driver?.currentCarId;
         const batch = db.batch();
 
-        // Release car if assigned
-        if (carId) {
-            batch.update(db.collection('cars').doc(carId), {
+        // Release vehicle if assigned (safely in both vehicles and cars)
+        if (vehicleId) {
+            batch.set(db.collection('vehicles').doc(vehicleId), {
                 status: 'available',
-                assignedDriverId: null
-            });
+                assignedDriverId: null,
+                assignedDriverName: null
+            }, { merge: true });
+
+            batch.set(db.collection('cars').doc(vehicleId), {
+                status: 'available',
+                assignedDriverId: null,
+                assignedDriverName: null
+            }, { merge: true });
         }
 
-        // Update driver status
+        // Update driver status and reset daily session counters
         batch.update(db.collection('users').doc(driverId), {
             status: 'offline',
+            currentVehicleId: null,
+            currentVehicleName: null,
+            currentVehiclePlate: null,
+            carModel: null,
+            carColor: null,
+            plateNumber: null,
             currentCarId: null,
-            activeRideId: null
+            activeRideId: null,
+            ridesCompletedToday: 0,
+            totalStudentsToday: 0,
+            totalDistanceToday: 0
         });
 
         await batch.commit();
@@ -68,7 +84,7 @@ export const driverDoneForToday = functions.https.onCall(async (data, context) =
         return {
             success: true,
             driverId,
-            carReleased: !!carId,
+            carReleased: !!vehicleId,
             message: 'You are now offline. Thank you for your service!'
         };
 

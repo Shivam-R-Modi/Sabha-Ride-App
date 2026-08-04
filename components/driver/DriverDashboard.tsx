@@ -6,6 +6,8 @@ import { AssignmentPreview } from './AssignmentPreview';
 import { ActiveRide } from './ActiveRide';
 import { CompletionScreen } from './CompletionScreen';
 import { releaseVehicle, setDriverAvailability, useAvailableVehicles, assignVehicleToDriver } from '../../hooks/useFirestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../../firebase/config';
 import {
     globalAssignDriver,
     driverDoneForToday,
@@ -55,22 +57,80 @@ export const DriverDashboard: React.FC = () => {
     const driverProfile = activeRole === 'driver' ? (userProfile as Driver) : null;
     const isAvailable = userProfile?.status === 'available';
 
-    // Fetch ride context on mount - enable test mode if no rides available
+    // Subscribe to driver's active ride in Firestore (preserves state across role switches)
+    useEffect(() => {
+        if (!currentUser) return;
+
+        const q = query(
+            collection(db, 'rides'),
+            where('driverId', '==', currentUser.uid),
+            where('status', 'in', ['assigned', 'driver_en_route', 'arriving', 'in_progress'])
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (snapshot.empty) {
+                // No active ride assigned in Firestore
+                setActiveRide(prev => {
+                    if (prev) return null;
+                    return prev;
+                });
+                setViewState(prev => (prev === 'active' || prev === 'preview' ? 'dashboard' : prev));
+                return;
+            }
+
+            const rideDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+            const primaryDoc = rideDocs[0];
+
+            // Reconstruct all assigned students across grouped ride documents
+            const students: RideStudent[] = [];
+            rideDocs.forEach(r => {
+                if (r.students && Array.isArray(r.students) && r.students.length > 0) {
+                    r.students.forEach((st: any) => {
+                        if (!students.some(s => s.id === st.id)) {
+                            students.push(st);
+                        }
+                    });
+                } else if (r.studentId) {
+                    if (!students.some(s => s.id === r.studentId)) {
+                        students.push({
+                            id: r.studentId,
+                            name: r.studentName || 'Student',
+                            phone: r.studentPhone || '',
+                            location: {
+                                lat: r.pickupLat || (r.location?.lat ?? r.location?.latitude ?? 0),
+                                lng: r.pickupLng || (r.location?.lng ?? r.location?.longitude ?? 0),
+                                address: r.pickupAddress || r.address || ''
+                            },
+                            picked: false
+                        });
+                    }
+                }
+            });
+
+            const reconstructedActiveRide = {
+                id: primaryDoc.id,
+                rideType: (primaryDoc.rideType || rideContext?.rideType || 'home-to-sabha') as 'home-to-sabha' | 'sabha-to-home',
+                students: students.length > 0 ? students : (primaryDoc.students || []),
+                route: primaryDoc.route || [],
+                googleMapsUrl: primaryDoc.googleMapsUrl || '',
+                estimatedDistance: primaryDoc.estimatedDistance || 0,
+                estimatedTime: primaryDoc.estimatedTime || 0,
+            };
+
+            setActiveRide(reconstructedActiveRide);
+            setViewState('active');
+        }, (error) => {
+            console.error('[DriverDashboard] Error listening to active driver ride:', error);
+        });
+
+        return unsubscribe;
+    }, [currentUser, rideContext?.rideType]);
+
+    // Fetch ride context on mount
     useEffect(() => {
         const fetchRideContext = async () => {
             try {
-                // First, try to get the current context
-                let context = await manuallyUpdateRideContext();
-
-                // If no rides available, enable test mode automatically
-                if (!context.rideType) {
-                    console.log('No rides available - enabling test mode');
-                    context = await manuallyUpdateRideContext({
-                        testMode: true,
-                        forceRideType: 'home-to-sabha'
-                    });
-                }
-
+                const context = await manuallyUpdateRideContext();
                 setRideContext({
                     rideType: context.rideType as 'home-to-sabha' | 'sabha-to-home' | null,
                     displayText: context.displayText
@@ -83,22 +143,22 @@ export const DriverDashboard: React.FC = () => {
     }, []);
 
     const toggleAvailability = async () => {
-        if (!currentUser) {
-            console.log("No current user");
-            return;
-        }
+        if (!currentUser) return;
+
         const newStatus = isAvailable ? 'offline' : 'available';
         console.log(`Toggling availability to ${newStatus} for user ${currentUser.uid}`);
         try {
-            // If going offline and has a vehicle, release it first
-            if (newStatus === 'offline' && userProfile?.currentVehicleId) {
-                await releaseVehicle(userProfile.currentVehicleId, currentUser.uid);
-                console.log("Vehicle released automatically");
+            if (newStatus === 'offline') {
+                if (!confirm('Going offline will release your assigned vehicle back to the fleet and reset your daily stats. Are you sure?')) {
+                    return;
+                }
+                await driverDoneForToday(currentUser.uid);
             } else {
-                // Just update status (releaseVehicle already sets status to offline)
-                await setDriverAvailability(currentUser.uid, newStatus as any);
+                await setDriverAvailability(currentUser.uid, 'available');
+                if (!userProfile?.currentVehicleId) {
+                    setShowVehicleSelector(true);
+                }
             }
-            console.log("Availability updated successfully");
         } catch (error) {
             console.error("Failed to toggle availability:", error);
             alert("Failed to update availability. Please try again.");
@@ -352,11 +412,13 @@ export const DriverDashboard: React.FC = () => {
                         <div className="flex justify-between items-center px-2">
                             <div>
                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Today's Seva</p>
-                                <p className="text-sm font-medium text-coffee">{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+                                <p className="text-sm font-medium text-coffee">
+                                    {(userProfile as any)?.totalStudentsToday || 0} Students • {((userProfile as any)?.totalDistanceToday || 0).toFixed(0)} mi
+                                </p>
                             </div>
                             <div className="text-right">
                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Assignments</p>
-                                <p className="text-sm font-medium text-coffee">0 Rounds</p>
+                                <p className="text-sm font-medium text-coffee">{(userProfile as any)?.ridesCompletedToday || 0} Rides Completed</p>
                             </div>
                         </div>
 

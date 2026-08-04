@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { ArrowLeft, Navigation, Users, Clock, MapPin, Phone, CheckCircle2, Circle, Loader2, AlertCircle } from 'lucide-react';
 import { completeRide, CompleteRideResult } from '../../src/utils/cloudFunctions';
 import { openGoogleMaps } from '../../src/utils/googleMaps';
+import { useDriverLocation } from '../../hooks/useDriverLocation';
+import { useAuth } from '../../contexts/AuthContext';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebase/config';
 
 /** Replace/inject the origin in a Maps URL with the driver's live GPS position. */
 async function openMapsWithLiveOrigin(baseUrl: string): Promise<void> {
@@ -25,6 +29,7 @@ interface ActiveRideProps {
         students: Array<{
             id: string;
             name: string;
+            phone?: string;
             location: { lat: number; lng: number; address?: string };
             picked: boolean;
         }>;
@@ -45,6 +50,15 @@ interface ActiveRideProps {
 }
 
 export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack }) => {
+    const { currentUser } = useAuth();
+
+    // Enable real-time GPS location tracking during active ride
+    useDriverLocation({
+        driverId: currentUser?.uid || '',
+        rideId: ride?.id || null,
+        isRideActive: true
+    });
+
     const [visitedWaypoints, setVisitedWaypoints] = useState<Set<string>>(() => {
         const visited = new Set<string>();
         ride.route.forEach((wp, idx) => {
@@ -65,15 +79,31 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
     const totalCount = pickupDropoffWaypoints.length;
     const allVisited = visitedCount >= totalCount;
 
-    const handleToggleWaypoint = (waypoint: typeof ride.route[0], index: number) => {
+    const handleToggleWaypoint = async (waypoint: typeof ride.route[0], index: number) => {
         const key = `${waypoint.type}-${index}`;
         const newVisited = new Set(visitedWaypoints);
-        if (newVisited.has(key)) {
-            newVisited.delete(key);
-        } else {
+        const isNowVisited = !newVisited.has(key);
+        if (isNowVisited) {
             newVisited.add(key);
+        } else {
+            newVisited.delete(key);
         }
         setVisitedWaypoints(newVisited);
+
+        try {
+            // Update route progress in Firestore in real-time
+            const updatedRoute = ride.route.map((wp, idx) => {
+                if (idx === index) {
+                    return { ...wp, visited: isNowVisited };
+                }
+                return wp;
+            });
+            await updateDoc(doc(db, 'rides', ride.id), {
+                route: updatedRoute
+            });
+        } catch (err) {
+            console.error('[ActiveRide] Failed to update waypoint status in Firestore:', err);
+        }
     };
 
     const handleOpenMaps = () => {
@@ -264,7 +294,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                             {isVisited ? <CheckCircle2 size={20} /> : <Circle size={20} />}
                                         </button>
                                         <a
-                                            href={`tel:${''}`}
+                                            href={`tel:${student.phone || (student as any).studentPhone || ''}`}
                                             className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center hover:bg-blue-100 transition-colors"
                                         >
                                             <Phone size={16} />

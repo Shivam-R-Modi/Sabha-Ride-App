@@ -57,16 +57,19 @@ service cloud.firestore {
       ) && (data.accountStatus == 'approved');
     }
     
-    // Check if user is a student
+    // Check if user is a student (or manager/driver acting as student)
     function isStudent() {
       let data = getUserData();
       return isAuthenticated() && (
         (data.role == 'student') ||
         (data.registeredRole == 'student') ||
+        (data.activeRole == 'student') ||
+        (data.registeredRole == 'manager') ||
+        (data.registeredRole == 'driver') ||
         ('roles' in data && data.roles != null && 'student' in data.roles)
       ) && (data.accountStatus == 'approved');
     }
-    
+
     // Check if driver is assigned to a specific ride
     function isAssignedDriver(rideId) {
       return isDriver() && get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid;
@@ -141,15 +144,14 @@ service cloud.firestore {
     // RIDES COLLECTION
     // =====================================
     match /rides/{rideId} {
-      // Students can read their own rides (check students array)
+      // Students can read their own rides (individual or grouped)
       // Drivers can read rides assigned to them
       // Managers can read all rides
       allow read: if isAuthenticated() && (
-        // Check if studentId exists (for ride requests)
         (resource.data.studentId != null && resource.data.studentId == request.auth.uid) ||
-        // Check if user is the assigned driver
+        (resource.data.assignedStudentIds != null && request.auth.uid in resource.data.assignedStudentIds) ||
         resource.data.driverId == request.auth.uid ||
-        // Managers can read all
+        isApproved() ||
         isManager()
       );
       
@@ -182,13 +184,25 @@ service cloud.firestore {
     }
     
     // =====================================
-    // SYSTEM COLLECTION
+    // SYSTEM & AUDIT LOGS COLLECTION
     // =====================================
     match /system/{docId} {
       // All authenticated users can read system settings
       allow read: if isAuthenticated();
       
       // Only managers can write
+      allow write: if isManager();
+    }
+
+    match /system/auditLogs/{logId} {
+      // Only managers can read and write audit logs
+      allow read: if isManager();
+      allow write: if isManager();
+    }
+
+    match /auditLogs/{logId} {
+      // Top-level audit logs for system console
+      allow read: if isManager();
       allow write: if isManager();
     }
     
@@ -210,7 +224,7 @@ service cloud.firestore {
     }
     
     // =====================================
-    // CARS COLLECTION
+    // CARS / VEHICLES COLLECTION
     // =====================================
     match /cars/{carId} {
       // Authenticated users can read car data
@@ -223,6 +237,13 @@ service cloud.firestore {
       allow update: if isManager() || isDriver();
       
       // Only managers can delete cars
+      allow delete: if isManager();
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if isAuthenticated();
+      allow create: if isManager();
+      allow update: if isManager() || isDriver();
       allow delete: if isManager();
     }
     

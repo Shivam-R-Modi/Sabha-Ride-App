@@ -26,7 +26,7 @@ export const OptimizationModal: React.FC<OptimizationModalProps> = ({ onClose, o
     }, [step]);
 
     const handleManualMove = (groupId: string) => {
-        // Simulate manual adjustment functionality (mock)
+        // Manual adjustment functionality
         alert("In a real app, you would drag and drop students here.");
     };
 

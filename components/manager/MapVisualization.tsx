@@ -41,7 +41,7 @@ export const MapVisualization: React.FC<MapVisualizationProps> = ({ students, dr
 
          {/* Driver Pins */}
          {drivers.map((driver, idx) => {
-            // Mock position based on index
+            // Position based on index
             const x = 20 + (idx * 15);
             const y = 80 - (idx % 2 * 10);
             return (

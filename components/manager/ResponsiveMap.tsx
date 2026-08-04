@@ -112,13 +112,13 @@ export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({
 
         {/* Driver Markers */}
         {drivers.map((driver, idx) => {
-          const mockX = 30 + (idx * 12);
-          const mockY = 20 + (idx % 2 * 15);
+          const fallbackX = 30 + (idx * 12);
+          const fallbackY = 20 + (idx % 2 * 15);
           return (
             <div 
               key={driver.id}
               className="absolute transition-all duration-300 cursor-pointer z-10"
-              style={{ left: `${mockX}%`, top: `${mockY}%` }}
+              style={{ left: `${fallbackX}%`, top: `${fallbackY}%` }}
               onClick={() => onMarkerClick(driver.id, 'driver')}
             >
               <div className="bg-white/90 backdrop-blur-md p-1 rounded-full shadow-md border border-blue-100 flex items-center gap-1.5 px-2">

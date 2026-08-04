@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RequestTable } from './RequestTable';
 import { FleetManagement } from './FleetManagement';
 import { LocationSettings } from './LocationSettings';
+import { ResponsiveMap } from './ResponsiveMap';
 import {
   Bell,
   Car,
@@ -91,10 +92,14 @@ const RideAssignmentCard: React.FC<{
 
               <div className="flex items-center gap-1 shrink-0">
                 {/* Call Button */}
-                {ride.studentName && (
-                  <a href={`tel:${ride.studentName /* Phone TODO */}`} className="p-1.5 text-green-600 hover:bg-green-50 rounded-md transition-colors" title="Call Student">
+                {(ride.studentPhone || (ride as any).phone || (ride as any).studentContact) ? (
+                  <a href={`tel:${ride.studentPhone || (ride as any).phone || (ride as any).studentContact}`} className="p-1.5 text-green-600 hover:bg-green-50 rounded-md transition-colors" title="Call Student">
                     <Phone size={14} />
                   </a>
+                ) : (
+                  <span className="p-1.5 text-gray-300" title="No phone number">
+                    <Phone size={14} />
+                  </span>
                 )}
                 {/* Navigation */}
                 <a
@@ -149,6 +154,8 @@ const RideAssignmentCard: React.FC<{
   );
 };
 
+import { DatabaseConsole } from './DatabaseConsole';
+
 // Empty State Component
 const EmptyState: React.FC<{ title: string; message: string }> = ({ title, message }) => (
   <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
@@ -162,7 +169,7 @@ const EmptyState: React.FC<{ title: string; message: string }> = ({ title, messa
 
 export const ManagerDashboard: React.FC = () => {
   const { currentUser, userProfile, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'planning' | 'dropoff'>('planning');
+  const [activeTab, setActiveTab] = useState<'planning' | 'dropoff' | 'database'>('planning');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showFleetManagement, setShowFleetManagement] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -181,11 +188,12 @@ export const ManagerDashboard: React.FC = () => {
   const { rides: activeRides } = useAllActiveRides();
   const { drivers: availableDrivers, loading: driversLoading } = useAvailableDrivers();
 
-  // Group active rides by driver
+  // Group active rides by driver (excluding completed rides)
   const groupedRides = React.useMemo(() => {
     const groups: Record<string, { driver: Driver, rides: Ride[] }> = {};
+    const ongoingRides = activeRides.filter(r => r.status !== 'completed' && r.status !== 'cancelled');
 
-    activeRides.forEach(ride => {
+    ongoingRides.forEach(ride => {
       // Correctly access the ID from the nested driver object or the top level
       const driverIdFromRide = ride.driver?.id || ride.driverId;
       if (!driverIdFromRide) return;
@@ -194,9 +202,8 @@ export const ManagerDashboard: React.FC = () => {
         // Use existing driver structure from ride, or construct basic info
         const driver = ride.driver || {
           id: driverIdFromRide,
-          name: ride.driverName || 'Unknown Driver',
+          name: ride.driverName || 'Driver',
           userId: driverIdFromRide,
-          // fill other required Driver fields
           status: 'assigned',
           currentLocation: null,
           homeLocation: null,
@@ -300,11 +307,14 @@ export const ManagerDashboard: React.FC = () => {
 
       // 2. Release the driver's vehicle and set them offline
       const driver = pendingReleaseDriver.driver;
-      if (driver?.currentVehicleId) {
-        await releaseVehicle(driver.currentVehicleId, driver.id);
+      const vehicleId = driver?.currentVehicleId || (driver as any)?.currentCarId || (driver as any)?.carId;
+      const driverId = driver?.id || pendingReleaseDriver.driverId;
+
+      if (vehicleId) {
+        await releaseVehicle(vehicleId, driverId);
       } else {
-        // If no vehicle, just set them offline
-        await setDriverAvailability(driver?.id || pendingReleaseDriver.driverId, 'offline');
+        // If no vehicle ID found, set driver offline
+        await setDriverAvailability(driverId, 'offline');
       }
 
       setShowReleaseModal(false);
@@ -389,7 +399,7 @@ export const ManagerDashboard: React.FC = () => {
       {/* Top Control Bar */}
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex justify-between items-center shadow-sm z-20 shrink-0 pt-safe lg:pt-2">
         <div className="flex items-center gap-3">
-          <div className="bg-gray-100 p-1 rounded-lg flex shrink-0">
+          <div className="bg-gray-100 p-1 rounded-lg flex shrink-0 gap-1">
             <button
               onClick={() => setActiveTab('planning')}
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
@@ -401,6 +411,12 @@ export const ManagerDashboard: React.FC = () => {
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
               Live Operations
+            </button>
+            <button
+              onClick={() => setActiveTab('database')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'database' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              Database Console
             </button>
           </div>
         </div>
@@ -466,14 +482,21 @@ export const ManagerDashboard: React.FC = () => {
               onBulkAssign={handleBulkAssign}
             />
           </div>
+        ) : activeTab === 'database' ? (
+          /* Database Management Console View */
+          <div className="h-full overflow-y-auto p-4 sm:p-6">
+            <div className="max-w-7xl mx-auto">
+              <DatabaseConsole />
+            </div>
+          </div>
         ) : (
           /* Live Operations View */
           <div className="h-full overflow-y-auto p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="font-header font-bold text-2xl text-coffee">Active Rides</h2>
-                  <p className="text-gray-500 text-sm">Real-time status of assigned rides</p>
+                  <h2 className="font-header font-bold text-2xl text-coffee">Active Rides & Fleet Map</h2>
+                  <p className="text-gray-500 text-sm">Real-time status of assigned rides and live fleet monitoring</p>
                 </div>
                 <div className="bg-white border border-green-200 text-green-700 inline-flex items-center gap-2 px-3 py-1.5 rounded-full shadow-sm">
                   <span className="relative flex h-2.5 w-2.5">
@@ -482,6 +505,17 @@ export const ManagerDashboard: React.FC = () => {
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-widest">Auto-Dispatch Active</span>
                 </div>
+              </div>
+
+              {/* Live Interactive Map */}
+              <div className="mb-6 h-[320px] rounded-2xl overflow-hidden shadow-sm border border-orange-100">
+                <ResponsiveMap
+                  students={pendingRequests}
+                  drivers={availableDrivers}
+                  onMarkerClick={(id, type) => {
+                    console.log('[LiveOpsMap] Marker clicked:', id, type);
+                  }}
+                />
               </div>
 
               {groupedRides.length > 0 ? (

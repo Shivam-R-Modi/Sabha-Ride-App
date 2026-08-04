@@ -4,16 +4,20 @@ import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, updateDoc, doc, getDocs } from 'firebase/firestore';
 import { Driver } from '../types';
 
-// --- Auto Dispatch System (The Brain) ---
+// --- Dynamic Spatial Auto Dispatch System ---
 
-const getZone = (address: string): string => {
-    const lower = address.toLowerCase();
-    if (lower.includes('back bay') || lower.includes('newbury') || lower.includes('boylston')) return 'back_bay';
-    if (lower.includes('north end') || lower.includes('hanover') || lower.includes('charlestown') || lower.includes('east boston') || lower.includes('washington')) return 'north';
-    if (lower.includes('allston') || lower.includes('brighton') || lower.includes('faneuil') || lower.includes('penniman') || lower.includes('academy')) return 'west';
-    if (lower.includes('dorchester') || lower.includes('roxbury') || lower.includes('south boston') || lower.includes('broadway')) return 'south';
-    return 'downtown'; // default
-};
+function haversineMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    if (!lat1 || !lng1 || !lat2 || !lng2) return 9999;
+    const R = 3959; // Earth radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
 
 export const useAutoDispatch = () => {
     // This hook will run in the Manager Dashboard and acts as the "Server" logic
@@ -75,56 +79,46 @@ export const useAutoDispatch = () => {
 
             if (availableDrivers.length === 0) return;
 
-            // Fetch current active assignments to determine driver zones/load
-            // We use 'assigned' status rides to see who is going where
-            const qActiveRides = query(collection(db, 'rides'), where('status', '==', 'assigned'));
+            // Fetch current active assignments to determine driver load
+            const qActiveRides = query(collection(db, 'rides'), where('status', 'in', ['assigned', 'in_progress']));
             const activeRidesSnap = await getDocs(qActiveRides);
 
-            // Map: DriverID -> Zone being covered
-            const driverZones = new Map<string, string>();
             // Map: DriverID -> Load count
             const driverLoad = new Map<string, number>();
 
             activeRidesSnap.forEach(doc => {
                 const ride = doc.data();
-                if (ride.driver?.id) {
-                    const dId = ride.driver.id;
-                    const z = getZone(ride.pickupAddress);
-                    driverZones.set(dId, z);
+                if (ride.driver?.id || ride.driverId) {
+                    const dId = ride.driver?.id || ride.driverId;
                     driverLoad.set(dId, (driverLoad.get(dId) || 0) + 1);
                 }
             });
 
-            // Process each pending request (now using fresh data)
+            // Process each pending request using pure spatial distance matching
             for (const rideDoc of freshRequestsSnap.docs) {
                 const ride = rideDoc.data();
-                const studentZone = getZone(ride.pickupAddress);
-                let assignedDriver: Driver | null = null;
+                const studentLat = ride.pickupLat || (ride.location?.lat ?? ride.location?.latitude ?? 0);
+                const studentLng = ride.pickupLng || (ride.location?.lng ?? ride.location?.longitude ?? 0);
 
-                // STRATEGY 1: Find a driver already in this zone with capacity
+                let assignedDriver: Driver | null = null;
+                let shortestDistance = Infinity;
+
+                // Find the nearest available driver with remaining seating capacity
                 for (const driver of availableDrivers) {
                     const currentLoad = driverLoad.get(driver.id) || 0;
-                    const maxCapacity = driver.capacity || 4;
+                    const maxCapacity = Math.max(1, (driver.capacity || 4) - 1); // 1 seat reserved for driver
 
-                    // If driver is already working this zone and has space
-                    if (driverZones.get(driver.id) === studentZone && currentLoad < maxCapacity) {
-                        assignedDriver = driver;
-                        break;
+                    if (currentLoad < maxCapacity) {
+                        const rawLoc = (driver as any).currentLocation || driver.homeLocation || (driver as any).location;
+                        const driverLat = rawLoc?.lat ?? rawLoc?.latitude ?? 0;
+                        const driverLng = rawLoc?.lng ?? rawLoc?.longitude ?? 0;
+
+                        const dist = haversineMiles(driverLat, driverLng, studentLat, studentLng);
+                        if (dist < shortestDistance) {
+                            shortestDistance = dist;
+                            assignedDriver = driver;
+                        }
                     }
-                }
-
-                // STRATEGY 2: If no zone match, find a free driver (load 0)
-                if (!assignedDriver) {
-                    const freeDriver = availableDrivers.find(d => (driverLoad.get(d.id) || 0) === 0);
-                    if (freeDriver) {
-                        assignedDriver = freeDriver;
-                    }
-                }
-
-                // STRATEGY 3: Round Robin / Random fallback (fill up anyone with space)
-                if (!assignedDriver) {
-                    const anyDriver = availableDrivers.find(d => (driverLoad.get(d.id) || 0) < (d.capacity || 4));
-                    if (anyDriver) assignedDriver = anyDriver;
                 }
 
                 if (assignedDriver) {

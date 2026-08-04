@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { User, Driver } from '../types';
 import { MapPin, ChevronLeft, CheckCircle2, AlertCircle } from 'lucide-react';
-import { createRideRequest } from '../hooks/useFirestore';
+import { createRideRequest } from '../hooks/useRides';
+import { useSettings } from '../hooks/useSettings';
 import { LotusLoader, DiyaIcon } from '../constants';
 
 interface PickupFormProps {
@@ -11,14 +12,21 @@ interface PickupFormProps {
 }
 
 export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit }) => {
+  const { settings } = useSettings();
+  const arrivalTime = (settings as any)?.timeSlot || (settings as any)?.arrivalTimeSlot || '5:30 PM';
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getNextFriday = () => {
+  const getNextFridayDate = () => {
     const d = new Date();
     d.setDate(d.getDate() + (5 + 7 - d.getDay()) % 7);
-    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    return d;
+  };
+
+  const getNextFridayFormatted = () => {
+    return getNextFridayDate().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   };
 
   const handleConfirm = async () => {
@@ -26,10 +34,11 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
     setError(null);
 
     try {
+      const nextFriday = getNextFridayDate();
       const formData = {
         address: user.address,
-        date: new Date().toISOString(), // Actual logic for next Friday handled in seed/hook
-        time: '5:30 PM', // Fixed as per requirement
+        date: nextFriday.toISOString().split('T')[0],
+        time: arrivalTime,
         studentName: user.name,
         notes: ''
       };
@@ -41,9 +50,9 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
       setTimeout(() => {
         onSubmit(formData);
       }, 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to submit request. Please try again.");
+      setError(err?.message || "Failed to submit request. Please try again.");
       setIsLoading(false);
     }
   };
@@ -89,8 +98,8 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
         <div className="text-center space-y-2">
           <DiyaIcon className="w-12 h-12 mx-auto text-saffron mb-2 animate-float" />
           <p className="text-xs font-bold text-gold uppercase tracking-[0.2em]">Next Sabha</p>
-          <h3 className="text-xl font-header font-bold text-coffee">{getNextFriday()}</h3>
-          <p className="text-sm text-mocha/60">Standard arrival at 5:30 PM</p>
+          <h3 className="text-xl font-header font-bold text-coffee">{getNextFridayFormatted()}</h3>
+          <p className="text-sm text-mocha/60">Standard arrival at {arrivalTime}</p>
         </div>
 
         <div className="bg-cream/50 rounded-2xl p-5 border border-orange-50 space-y-3">

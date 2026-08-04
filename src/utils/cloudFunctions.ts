@@ -228,6 +228,15 @@ export interface GeocodeResult {
     placeId: string | null;
 }
 
+export async function geocodeAddress(address: string): Promise<{ lat?: number; lng?: number; formattedAddress?: string }> {
+    const res = await callFunction<GeocodeResult>('geocodeAddress', { address });
+    return {
+        lat: res.latitude,
+        lng: res.longitude,
+        formattedAddress: res.formattedAddress
+    };
+}
+
 export async function geocodeAddressViaCloud(address: string): Promise<GeocodeResult> {
     return callFunction<GeocodeResult>('geocodeAddress', { address });
 }

@@ -49,7 +49,7 @@ const settings_1 = require("../utils/settings");
  * Output: Updated ride details
  */
 exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
-    var _a, _b;
+    var _a, _b, _c;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -66,7 +66,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('not-found', 'User not found');
         }
         const user = userDoc.data();
-        if (!((_a = user === null || user === void 0 ? void 0 : user.roles) === null || _a === void 0 ? void 0 : _a.includes('manager'))) {
+        if ((user === null || user === void 0 ? void 0 : user.role) !== 'manager' && (user === null || user === void 0 ? void 0 : user.activeRole) !== 'manager' && !((_a = user === null || user === void 0 ? void 0 : user.roles) === null || _a === void 0 ? void 0 : _a.includes('manager'))) {
             throw new functions.https.HttpsError('permission-denied', 'Only managers can manually assign students');
         }
         // Get student details
@@ -76,7 +76,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         }
         const student = Object.assign({ id: studentDoc.id }, studentDoc.data());
         // Check student is waiting
-        const waitingStatuses = ['waiting_for_pickup', 'waiting_for_dropoff'];
+        const waitingStatuses = ['waiting_for_pickup', 'waiting_for_dropoff', 'requested', 'assigned'];
         if (!waitingStatuses.includes(student.status)) {
             throw new functions.https.HttpsError('failed-precondition', 'Student is not waiting for assignment');
         }
@@ -86,31 +86,35 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('not-found', 'Driver not found');
         }
         const driver = Object.assign({ id: driverDoc.id }, driverDoc.data());
-        // Check driver has an active ride
-        if (!driver.activeRideId) {
+        // Get active ride for driver
+        const activeRideSnap = await db.collection('rides')
+            .where('driverId', '==', driverId)
+            .where('status', 'in', ['assigned', 'driver_en_route', 'arriving', 'in_progress'])
+            .get();
+        if (activeRideSnap.empty) {
             throw new functions.https.HttpsError('failed-precondition', 'Driver does not have an active ride');
         }
-        // Get the ride
-        const rideDoc = await db.collection('rides').doc(driver.activeRideId).get();
-        if (!rideDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Ride not found');
-        }
+        const rideDoc = activeRideSnap.docs[0];
         const ride = Object.assign({ id: rideDoc.id }, rideDoc.data());
-        // Get car details for capacity check
-        const carDoc = await db.collection('cars').doc(ride.carId).get();
-        if (!carDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Car not found');
+        // Get car/vehicle details for capacity check
+        let capacity = driver.capacity || 4;
+        if (ride.carId) {
+            const vehicleDoc = await db.collection('vehicles').doc(ride.carId).get();
+            if (vehicleDoc.exists) {
+                capacity = ((_b = vehicleDoc.data()) === null || _b === void 0 ? void 0 : _b.capacity) || capacity;
+            }
         }
-        const vehicle = Object.assign({ id: carDoc.id }, carDoc.data());
         // Check capacity (capacity - 1 for driver seat)
-        const availableSeats = Math.max(1, vehicle.capacity - 1);
-        if (ride.students.length >= availableSeats) {
+        const availableSeats = Math.max(1, capacity - 1);
+        const existingStudents = ride.students || [];
+        if (existingStudents.length >= availableSeats) {
             throw new functions.https.HttpsError('failed-precondition', `Vehicle is at full capacity (${availableSeats} seats available, driver takes 1)`);
         }
         // Add student to ride
         const newStudent = {
             id: student.id,
             name: student.name,
+            phone: student.phone || '',
             location: student.location,
             picked: false
         };
@@ -142,7 +146,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         await batch.commit();
         // Notify student
         try {
-            const fcmToken = (_b = studentDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
+            const fcmToken = (_c = studentDoc.data()) === null || _c === void 0 ? void 0 : _c.fcmToken;
             if (fcmToken) {
                 await (0, notifications_1.notifyStudentDriverAssigned)(fcmToken, driver.name, ride.carModel, ride.carColor);
             }

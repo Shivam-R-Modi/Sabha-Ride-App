@@ -1,16 +1,13 @@
 
 import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { Vehicle } from '../types';
 
 // --- Vehicle Management ---
 
 export const updateVehicle = async (id: string, data: Partial<Vehicle>) => {
     try {
-        const ref = doc(db, 'cars', id);
-
-        // Map Partial<Vehicle> -> Partial<Car>
         const updates: any = {
             updatedAt: new Date().toISOString()
         };
@@ -21,7 +18,10 @@ export const updateVehicle = async (id: string, data: Partial<Vehicle>) => {
         if (data.status !== undefined) updates.status = data.status;
         if (data.currentDriverId !== undefined) updates.assignedDriverId = data.currentDriverId;
 
-        await updateDoc(ref, updates);
+        await Promise.all([
+            setDoc(doc(db, 'vehicles', id), updates, { merge: true }),
+            setDoc(doc(db, 'cars', id), updates, { merge: true })
+        ]);
     } catch (error) {
         console.error("Error updating vehicle:", error);
         throw error;
@@ -30,7 +30,10 @@ export const updateVehicle = async (id: string, data: Partial<Vehicle>) => {
 
 export const deleteVehicle = async (id: string) => {
     try {
-        await deleteDoc(doc(db, 'cars', id));
+        await Promise.all([
+            deleteDoc(doc(db, 'vehicles', id)).catch(() => {}),
+            deleteDoc(doc(db, 'cars', id)).catch(() => {})
+        ]);
     } catch (error) {
         console.error("Error deleting vehicle:", error);
         throw error;
@@ -39,7 +42,7 @@ export const deleteVehicle = async (id: string) => {
 
 export const createVehicle = async (data: Omit<Vehicle, 'id'>): Promise<string> => {
     try {
-        const docRef = await addDoc(collection(db, 'cars'), {
+        const vehicleData = {
             name: data.name,
             color: data.color,
             licensePlate: data.licensePlate,
@@ -48,7 +51,10 @@ export const createVehicle = async (data: Omit<Vehicle, 'id'>): Promise<string> 
             assignedDriverId: null,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
-        });
+        };
+        const docRef = await addDoc(collection(db, 'vehicles'), vehicleData);
+        // Also sync to cars collection
+        await setDoc(doc(db, 'cars', docRef.id), vehicleData, { merge: true });
         return docRef.id;
     } catch (error) {
         console.error("Error creating vehicle:", error);
@@ -62,7 +68,7 @@ export const useVehicles = () => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const q = query(collection(db, 'cars'));
+        const q = query(collection(db, 'vehicles'));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const vehicleList: Vehicle[] = [];
@@ -103,7 +109,7 @@ export const useAvailableVehicles = () => {
 
     useEffect(() => {
         const q = query(
-            collection(db, 'cars'),
+            collection(db, 'vehicles'),
             where('status', '==', 'available')
         );
 
@@ -140,13 +146,16 @@ export const useAvailableVehicles = () => {
 
 export const assignVehicleToDriver = async (vehicle: Vehicle, driverId: string, driverName: string) => {
     try {
-        // 1. Mark vehicle as in_use in 'cars' collection
-        const vehicleRef = doc(db, 'cars', vehicle.id);
-        await updateDoc(vehicleRef, {
-            status: 'in_use', // Backend expects underscore
+        const vehicleUpdates = {
+            status: 'in_use',
             assignedDriverId: driverId,
+            assignedDriverName: driverName,
             updatedAt: new Date().toISOString()
-        });
+        };
+        await Promise.all([
+            setDoc(doc(db, 'vehicles', vehicle.id), vehicleUpdates, { merge: true }),
+            setDoc(doc(db, 'cars', vehicle.id), vehicleUpdates, { merge: true })
+        ]);
 
         // 2. Update driver profile with current vehicle ID
         const userRef = doc(db, 'users', driverId);
@@ -168,22 +177,32 @@ export const assignVehicleToDriver = async (vehicle: Vehicle, driverId: string, 
 
 export const releaseVehicle = async (vehicleId: string, driverId: string) => {
     try {
-        // 1. Mark vehicle as available in 'cars' collection
-        const vehicleRef = doc(db, 'cars', vehicleId);
-        await updateDoc(vehicleRef, {
+        // 1. Mark vehicle as available in both 'vehicles' and 'cars' collections safely
+        const vehicleUpdates = {
             status: 'available',
-            assignedDriverId: null
-        });
+            assignedDriverId: null,
+            assignedDriverName: null,
+            updatedAt: new Date().toISOString()
+        };
+        await Promise.all([
+            setDoc(doc(db, 'vehicles', vehicleId), vehicleUpdates, { merge: true }),
+            setDoc(doc(db, 'cars', vehicleId), vehicleUpdates, { merge: true })
+        ]);
 
-        // 2. Clear from driver profile
+        // 2. Clear from driver profile and reset daily counters
         const userRef = doc(db, 'users', driverId);
         await updateDoc(userRef, {
             currentVehicleId: null as any,
+            currentVehicleName: null as any,
+            currentVehiclePlate: null as any,
             carModel: null as any,
             carColor: null as any,
             plateNumber: null as any,
             capacity: 0,
-            status: 'offline' // Set driver offline when vehicle is released
+            status: 'offline', // Set driver offline when vehicle is released
+            ridesCompletedToday: 0,
+            totalStudentsToday: 0,
+            totalDistanceToday: 0
         });
     } catch (error) {
         console.error("Error releasing vehicle:", error);

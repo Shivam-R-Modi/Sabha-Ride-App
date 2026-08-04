@@ -3,6 +3,7 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
 import { AddressAutocomplete } from './AddressAutocomplete';
+import { PhoneNumberInput } from './PhoneNumberInput';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
 
 interface ProfileSetupProps {
@@ -15,6 +16,8 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
     const { currentUser } = useAuth();
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
+    const [phoneE164, setPhoneE164] = useState('');
+    const [isPhoneValid, setIsPhoneValid] = useState(false);
     const [address, setAddress] = useState('');
     const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
     const [loading, setLoading] = useState(false);
@@ -34,8 +37,8 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
             return;
         }
 
-        if (!phone.trim()) {
-            setError('Please enter your phone number');
+        if (!isPhoneValid) {
+            setError('Please enter a valid phone number');
             return;
         }
 
@@ -57,7 +60,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
             // Coordinates come directly from Google Places — no separate geocoding needed!
             await setDoc(doc(db, 'users', currentUser.uid), {
                 name: name.trim(),
-                phone: phone.trim(),
+                phone: phoneE164 || phone.trim(),
                 address: selectedPlace.formattedAddress,
                 location: {
                     latitude: selectedPlace.latitude,
@@ -120,20 +123,17 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                         </div>
 
                         {/* Phone Number Input */}
-                        <div>
-                            <label className="block text-sm font-medium text-coffee mb-2">
-                                Phone Number <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                                type="tel"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                placeholder="(555) 123-4567"
-                                className="w-full px-4 py-3 rounded-xl border-2 border-mocha/20 focus:border-saffron focus:outline-none transition-colors"
-                                disabled={loading}
-                                required
-                            />
-                        </div>
+                        <PhoneNumberInput
+                            value={phone}
+                            onChange={(fullFormatted, e164, isValid) => {
+                                setPhone(fullFormatted);
+                                setPhoneE164(e164);
+                                setIsPhoneValid(isValid);
+                                setError('');
+                            }}
+                            disabled={loading}
+                            required
+                        />
 
                         {/* Address Autocomplete */}
                         <div>
@@ -175,7 +175,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
 
                     <button
                         type="submit"
-                        disabled={loading || !selectedPlace}
+                        disabled={loading || !selectedPlace || !isPhoneValid}
                         className="w-full bg-gradient-to-r from-saffron to-gold text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? 'Saving…' : 'Complete Setup'}
@@ -185,3 +185,4 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
         </div>
     );
 };
+

@@ -86,6 +86,8 @@ export interface Vehicle {
 export interface RideStudent {
     id: string;
     name: string;
+    phone?: string;
+    studentPhone?: string;
     location: GeoLocation;
     picked: boolean;
 }

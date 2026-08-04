@@ -81,21 +81,34 @@ exports.releaseAssignment = functions.https.onCall(async (data, context) => {
                 currentRideId: null
             });
         }
-        // Update driver status to ready_for_assignment and clear activeRideId
+        // Update driver status to available and clear activeRideId/currentVehicleId
         batch.update(db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), {
-            status: 'ready_for_assignment',
-            activeRideId: null
+            status: 'available',
+            activeRideId: null,
+            currentVehicleId: null
         });
-        // Update car status back to available
-        const carId = ride === null || ride === void 0 ? void 0 : ride.carId;
-        if (carId) {
-            batch.update(db.collection('cars').doc(carId), {
+        // Update vehicle status back to available
+        const vehicleId = ride === null || ride === void 0 ? void 0 : ride.carId;
+        if (vehicleId) {
+            batch.update(db.collection('vehicles').doc(vehicleId), {
                 status: 'available',
-                assignedDriverId: null
+                assignedDriverId: null,
+                assignedDriverName: null
             });
         }
-        // Delete the ride document
-        batch.delete(db.collection('rides').doc(rideId));
+        // Reset ride document status to 'requested' so it returns to the unassigned queue
+        batch.update(db.collection('rides').doc(rideId), {
+            status: 'requested',
+            driverId: null,
+            driverName: null,
+            carId: null,
+            carModel: null,
+            carColor: null,
+            carLicensePlate: null,
+            route: [],
+            peers: [],
+            assignedStudentIds: []
+        });
         await batch.commit();
         return {
             success: true,

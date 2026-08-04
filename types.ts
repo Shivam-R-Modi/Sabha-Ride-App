@@ -140,6 +140,8 @@ export type RideStatus = 'requested' | 'assigned' | 'driver_en_route' | 'arrivin
 export interface RideStudent {
   id: string;
   name: string;
+  phone?: string;
+  studentPhone?: string;
   location: GeoLocation;
   picked: boolean;
 }
@@ -342,5 +344,18 @@ export interface WeeklyAttendanceRecord {
   studentPhone: string;
   studentAddress: string;
   studentId: string;
+}
+
+// --- Audit Logging Types ---
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  managerId: string;
+  managerName: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  collection: string;
+  documentId: string;
+  details: string;
 }
 

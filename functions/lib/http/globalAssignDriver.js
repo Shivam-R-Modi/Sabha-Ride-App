@@ -171,6 +171,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                     id: d.studentId,
                     rideRequestId: doc.id,
                     name: d.studentName || 'Student',
+                    phone: d.studentPhone || '',
                     lat: d.pickupLat,
                     lng: d.pickupLng,
                     address: d.pickupAddress || 'Unknown'
@@ -251,6 +252,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             id: s.id,
             rideRequestId: s.rideRequestId,
             name: s.name,
+            phone: s.phone,
             location: { lat: s.lat, lng: s.lng, address: s.address },
             status: 'assigned',
             picked: false
@@ -267,8 +269,14 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         // ── Step 9: Atomic batch write ──────────────────────
         const batch = db.batch();
         const primaryRideId = assignedStudents[0].rideRequestId;
+        const assignedStudentProfiles = assignedStudents.map(s => ({
+            id: s.id,
+            name: s.name,
+            avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=FF6B35&color=fff`
+        }));
         for (const s of assignedStudents) {
             const rideRef = db.collection('rides').doc(s.rideRequestId);
+            const otherPeers = assignedStudentProfiles.filter(p => p.id !== s.id);
             batch.update(rideRef, {
                 driverId,
                 driverName: driverData.name || 'Driver',
@@ -279,6 +287,8 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                 rideType,
                 status: 'assigned',
                 route,
+                peers: otherPeers,
+                assignedStudentIds: assignedStudents.map(st => st.id),
                 estimatedDistance,
                 estimatedTime,
                 assignedAt: new Date().toISOString()

@@ -1,8 +1,10 @@
 
 import React, { useState } from 'react';
-import { ChevronRight, Loader2, AlertCircle, Mail, Lock, UserPlus } from 'lucide-react';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification } from 'firebase/auth';
+import { ChevronRight, Loader2, AlertCircle, Mail, Lock, UserPlus, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { auth, googleProvider } from '../../firebase/config';
+import { evaluatePasswordStrength } from '../../src/utils/passwordUtils';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
@@ -14,10 +16,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resetSent, setResetSent] = useState(false);
   const [loadingTimeout, setLoadingTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  const passwordEvaluation = evaluatePasswordStrength(password);
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
@@ -31,7 +40,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     try {
       await signInWithPopup(auth, googleProvider);
       // Auth listener in App.tsx handles redirect
-    } catch (err: unknown) {
+    } catch (err: any) {
       clearTimeout(timeout);
       console.error("Google Login Error:", err);
       setIsLoading(false);
@@ -57,6 +66,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       return;
     }
 
+    if (isRegistering) {
+      if (!passwordEvaluation.isValid) {
+        setError("Password must be at least 8 characters and include a number or special character.");
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setError("Passwords do not match. Please verify both password fields.");
+        return;
+      }
+
+      if (!agreedToTerms) {
+        setError("Please accept the Terms of Seva and Privacy Policy to register.");
+        return;
+      }
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -73,7 +99,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         await signInWithEmailAndPassword(auth, trimmedEmail, password);
       }
       // Auth listener handles redirect
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error(err);
       setIsLoading(false);
       if (err.code === 'auth/invalid-email') {
@@ -83,7 +109,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       } else if (err.code === 'auth/email-already-in-use') {
         setError("Email is already registered. Please login.");
       } else if (err.code === 'auth/weak-password') {
-        setError("Password should be at least 6 characters.");
+        setError("Password should be at least 8 characters with numbers or special symbols.");
       } else if (err.code === 'auth/unauthorized-domain') {
         setError("Domain Error: Add this domain to Firebase Console > Auth > Settings > Authorized Domains.");
       } else {
@@ -92,34 +118,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      setError('Please enter your email address first.');
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      await sendPasswordResetEmail(auth, email);
-      setResetSent(true);
-      setError(null);
-    } catch (err: unknown) {
-      if (err.code === 'auth/user-not-found') {
-        setError('No account found with this email.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Invalid email address.');
-      } else {
-        setError('Failed to send reset email. Please try again.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-cream flex flex-col">
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal
+        isOpen={isForgotModalOpen}
+        onClose={() => setIsForgotModalOpen(false)}
+        initialEmail={email}
+      />
+
       {/* Header Image/Art */}
-      <div className="h-[28vh] relative overflow-hidden rounded-b-[40px] shadow-lg">
+      <div className="h-[26vh] relative overflow-hidden rounded-b-[40px] shadow-lg">
         {/* Background Image */}
         <div
           className="absolute inset-0 bg-cover bg-center"
@@ -136,38 +145,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         </div>
       </div>
 
-      <div className="flex-1 px-6 mt-6">
-        <div className="clay-card clay-card-lg min-h-[300px]">
+      <div className="flex-1 px-6 my-6">
+        <div className="clay-card clay-card-lg max-w-md mx-auto">
           {error && (
-            <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm rounded-xl flex items-start gap-2 border border-red-100 animate-in slide-in-from-top-2">
+            <div className="mb-5 p-3 bg-red-50 text-red-600 text-sm rounded-xl flex items-start gap-2 border border-red-100 animate-in slide-in-from-top-2">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>{error}</span>
-            </div>
-          )}
-
-          {resetSent && (
-            <div className="mb-6 p-3 bg-green-50 text-green-700 text-sm rounded-xl flex items-start gap-2 border border-green-100 animate-in slide-in-from-top-2">
-              <svg className="w-4 h-4 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-              <span>Password reset email sent! Check your inbox.</span>
             </div>
           )}
 
           {/* Google Login Button */}
           <button
             onClick={handleGoogleLogin}
-            className="clay-button-secondary w-full mb-6"
+            className="clay-button-secondary w-full mb-5"
           >
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
             Sign in with Google
           </button>
 
-          <div className="flex items-center gap-2 mb-6 opacity-50">
+          <div className="flex items-center gap-2 mb-5 opacity-50">
             <div className="h-px bg-gray-300 flex-1"></div>
             <span className="text-xs font-bold text-gray-500">OR WITH EMAIL</span>
             <div className="h-px bg-gray-300 flex-1"></div>
           </div>
 
           <form onSubmit={handleEmailAuth} className="space-y-4">
+            {/* Email Field */}
             <div>
               <label className="block text-xs font-bold text-coffee mb-1 ml-1 uppercase">Email Address</label>
               <div className="relative">
@@ -183,26 +186,128 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               </div>
             </div>
 
+            {/* Password Field */}
             <div>
               <label className="block text-xs font-bold text-coffee mb-1 ml-1 uppercase">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="clay-input pl-10"
+                  className="clay-input pl-10 pr-10"
                   required
-                  minLength={6}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-coffee transition-colors"
+                  title={showPassword ? 'Hide Password' : 'Show Password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
+
+              {/* Password Strength Meter (Sign Up Only) */}
+              {isRegistering && password.length > 0 && (
+                <div className="mt-2 space-y-1.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between text-[11px] font-semibold">
+                    <span className="text-mocha/60">Password Strength:</span>
+                    <span className={
+                      passwordEvaluation.score === 'strong' ? 'text-green-600' :
+                      passwordEvaluation.score === 'fair' ? 'text-amber-600' : 'text-red-500'
+                    }>
+                      {passwordEvaluation.label}
+                    </span>
+                  </div>
+
+                  <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        passwordEvaluation.score === 'strong' ? 'bg-green-500' :
+                        passwordEvaluation.score === 'fair' ? 'bg-amber-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${passwordEvaluation.percentage}%` }}
+                    ></div>
+                  </div>
+
+                  {/* Requirements checklist */}
+                  <div className="grid grid-cols-2 gap-1 pt-1 text-[10px] text-mocha/70">
+                    <span className={passwordEvaluation.criteria.hasMinLength ? 'text-green-600 font-semibold' : ''}>
+                      {passwordEvaluation.criteria.hasMinLength ? '✓' : '•'} 8+ characters
+                    </span>
+                    <span className={passwordEvaluation.criteria.hasNumber ? 'text-green-600 font-semibold' : ''}>
+                      {passwordEvaluation.criteria.hasNumber ? '✓' : '•'} At least 1 number
+                    </span>
+                    <span className={passwordEvaluation.criteria.hasSpecialChar ? 'text-green-600 font-semibold' : ''}>
+                      {passwordEvaluation.criteria.hasSpecialChar ? '✓' : '•'} 1 special character
+                    </span>
+                    <span className={passwordEvaluation.criteria.hasUppercase ? 'text-green-600 font-semibold' : ''}>
+                      {passwordEvaluation.criteria.hasUppercase ? '✓' : '•'} 1 uppercase letter
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Confirm Password Field (Sign Up Only) */}
+            {isRegistering && (
+              <div className="animate-in slide-in-from-top-2 duration-200">
+                <label className="block text-xs font-bold text-coffee mb-1 ml-1 uppercase">Confirm Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={`clay-input pl-10 pr-10 ${
+                      confirmPassword && confirmPassword !== password ? 'border-red-400 focus:border-red-500' : ''
+                    }`}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-coffee transition-colors"
+                    title={showConfirmPassword ? 'Hide Password' : 'Show Password'}
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {confirmPassword && confirmPassword !== password && (
+                  <p className="text-[11px] text-red-500 font-medium mt-1">Passwords do not match</p>
+                )}
+                {confirmPassword && confirmPassword === password && (
+                  <p className="text-[11px] text-green-600 font-medium mt-1 flex items-center gap-1">
+                    <CheckCircle2 size={12} /> Passwords match
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Terms & Privacy Consent Checkbox (Sign Up Only) */}
+            {isRegistering && (
+              <div className="flex items-start gap-2 pt-1 animate-in fade-in duration-200">
+                <input
+                  type="checkbox"
+                  id="terms"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className="mt-0.5 rounded border-mocha/30 text-saffron focus:ring-saffron cursor-pointer"
+                  required
+                />
+                <label htmlFor="terms" className="text-xs text-mocha/70 leading-tight cursor-pointer">
+                  I agree to the <span className="font-bold text-coffee">Terms of Seva</span> and <span className="font-bold text-coffee">Privacy Policy</span>.
+                </label>
+              </div>
+            )}
 
             <button
               type="submit"
-              disabled={isLoading}
-              className="clay-button-primary w-full mt-4 disabled:opacity-50"
+              disabled={isLoading || (isRegistering && (!agreedToTerms || password !== confirmPassword || !passwordEvaluation.isValid))}
+              className="clay-button-primary w-full mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? <Loader2 className="animate-spin" /> : (
                 isRegistering ? <><UserPlus size={18} /> Create Account</> : <>Login <ChevronRight size={18} /></>
@@ -212,14 +317,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
           <div className="text-center mt-6">
             <button
-              onClick={() => { setIsRegistering(!isRegistering); setError(null); }}
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setError(null);
+                setPassword('');
+                setConfirmPassword('');
+              }}
               className="text-sm text-gray-500 hover:text-saffron font-medium"
             >
               {isRegistering ? "Already have an account? Login" : "New to Sabha? Create Account"}
             </button>
             {!isRegistering && (
               <button
-                onClick={handleForgotPassword}
+                onClick={() => setIsForgotModalOpen(true)}
                 className="block mx-auto mt-2 text-sm text-saffron/70 hover:text-saffron font-medium"
                 type="button"
               >
@@ -237,3 +347,4 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     </div>
   );
 };
+

@@ -71,6 +71,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
     const handleAttendanceResponse = (response: 'yes' | 'no') => {
         setAttendanceResponse(response);
         setShowAttendancePopup(false);
+        if (response === 'yes' && !activeRide) {
+            setIsFormOpen(true);
+        }
     };
 
     // If user responded "no", show blocked screen

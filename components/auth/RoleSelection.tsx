@@ -3,6 +3,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface RoleSelectionProps {
     onSelectRole: () => void;
@@ -12,6 +13,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
     const { currentUser } = useAuth();
     const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
     const [managerCode, setManagerCode] = useState('');
+    const [showManagerCode, setShowManagerCode] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -173,13 +175,23 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                             <p className="text-xs text-mocha/60 mb-3">
                                 Enter the access code provided by the Sabha coordinator to register as a manager.
                             </p>
-                            <input
-                                type="password"
-                                value={managerCode}
-                                onChange={(e) => setManagerCode(e.target.value)}
-                                placeholder="Enter admin code..."
-                                className="w-full px-4 py-3 rounded-xl border-2 border-mocha/20 focus:border-saffron focus:outline-none transition-colors"
-                            />
+                            <div className="relative">
+                                <input
+                                    type={showManagerCode ? 'text' : 'password'}
+                                    value={managerCode}
+                                    onChange={(e) => setManagerCode(e.target.value)}
+                                    placeholder="Enter admin code..."
+                                    className="w-full px-4 py-3 pr-10 rounded-xl border-2 border-mocha/20 focus:border-saffron focus:outline-none transition-colors"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowManagerCode(!showManagerCode)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-coffee transition-colors"
+                                    title={showManagerCode ? 'Hide Code' : 'Show Code'}
+                                >
+                                    {showManagerCode ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
                         </div>
                     )}
 

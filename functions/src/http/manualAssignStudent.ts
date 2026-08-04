@@ -5,7 +5,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { Student, Driver, Vehicle, Ride, RideStudent } from '../types';
+import { Student, Driver, Ride, RideStudent } from '../types';
 import { optimizeRoute, calculateRouteStats } from '../utils/routing';
 import { notifyStudentDriverAssigned } from '../utils/notifications';
 import { getSabhaLocation } from '../utils/settings';
@@ -37,7 +37,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         }
 
         const user = userDoc.data();
-        if (!user?.roles?.includes('manager')) {
+        if (user?.role !== 'manager' && user?.activeRole !== 'manager' && !user?.roles?.includes('manager')) {
             throw new functions.https.HttpsError('permission-denied', 'Only managers can manually assign students');
         }
 
@@ -49,7 +49,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         const student = { id: studentDoc.id, ...studentDoc.data() } as Student;
 
         // Check student is waiting
-        const waitingStatuses = ['waiting_for_pickup', 'waiting_for_dropoff'];
+        const waitingStatuses = ['waiting_for_pickup', 'waiting_for_dropoff', 'requested', 'assigned'];
         if (!waitingStatuses.includes(student.status)) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
@@ -64,31 +64,34 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         }
         const driver = { id: driverDoc.id, ...driverDoc.data() } as Driver;
 
-        // Check driver has an active ride
-        if (!driver.activeRideId) {
+        // Get active ride for driver
+        const activeRideSnap = await db.collection('rides')
+            .where('driverId', '==', driverId)
+            .where('status', 'in', ['assigned', 'driver_en_route', 'arriving', 'in_progress'])
+            .get();
+
+        if (activeRideSnap.empty) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
                 'Driver does not have an active ride'
             );
         }
-
-        // Get the ride
-        const rideDoc = await db.collection('rides').doc(driver.activeRideId).get();
-        if (!rideDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Ride not found');
-        }
+        const rideDoc = activeRideSnap.docs[0];
         const ride = { id: rideDoc.id, ...rideDoc.data() } as Ride;
 
-        // Get car details for capacity check
-        const carDoc = await db.collection('cars').doc(ride.carId).get();
-        if (!carDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Car not found');
+        // Get car/vehicle details for capacity check
+        let capacity = (driver as any).capacity || 4;
+        if (ride.carId) {
+            const vehicleDoc = await db.collection('vehicles').doc(ride.carId).get();
+            if (vehicleDoc.exists) {
+                capacity = vehicleDoc.data()?.capacity || capacity;
+            }
         }
-        const vehicle = { id: carDoc.id, ...carDoc.data() } as Vehicle;
 
         // Check capacity (capacity - 1 for driver seat)
-        const availableSeats = Math.max(1, vehicle.capacity - 1);
-        if (ride.students.length >= availableSeats) {
+        const availableSeats = Math.max(1, capacity - 1);
+        const existingStudents = ride.students || [];
+        if (existingStudents.length >= availableSeats) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
                 `Vehicle is at full capacity (${availableSeats} seats available, driver takes 1)`
@@ -99,6 +102,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         const newStudent: RideStudent = {
             id: student.id,
             name: student.name,
+            phone: student.phone || '',
             location: student.location,
             picked: false
         };

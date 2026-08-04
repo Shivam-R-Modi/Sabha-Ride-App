@@ -74,11 +74,17 @@ exports.startRide = functions.https.onCall(async (data, context) => {
         }
         const batch = db.batch();
         const now = new Date().toISOString();
-        // Update ride status
-        batch.update(db.collection('rides').doc(rideId), {
-            status: 'in_progress',
-            startedAt: now
-        });
+        // Find ALL active rides for this driver to start all documents in multi-student grouped rides
+        const activeRidesSnap = await db.collection('rides')
+            .where('driverId', '==', context.auth.uid)
+            .where('status', '==', 'assigned')
+            .get();
+        for (const doc of activeRidesSnap.docs) {
+            batch.update(doc.ref, {
+                status: 'in_progress',
+                startedAt: now
+            });
+        }
         // Update driver status
         batch.update(db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), {
             status: 'active_ride'

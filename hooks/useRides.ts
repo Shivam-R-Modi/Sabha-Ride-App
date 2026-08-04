@@ -19,7 +19,7 @@ export const useActiveRide = (userId: string) => {
         const q = query(
             collection(db, 'rides'),
             where('studentId', '==', userId),
-            where('status', 'in', ['requested', 'assigned', 'driver_en_route', 'arriving', 'completed'])
+            where('status', 'in', ['requested', 'assigned', 'driver_en_route', 'arriving', 'in_progress', 'completed'])
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -57,7 +57,7 @@ export const useAllActiveRides = () => {
         // This is used for the Manager's live monitoring view
         const q = query(
             collection(db, 'rides'),
-            where('status', 'in', ['assigned', 'driver_en_route', 'arriving', 'completed'])
+            where('status', 'in', ['assigned', 'driver_en_route', 'arriving', 'in_progress', 'completed'])
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -80,7 +80,7 @@ export const createRideRequest = async (userId: string, details: any) => {
         const existingRidesQuery = query(
             collection(db, 'rides'),
             where('studentId', '==', userId),
-            where('status', 'in', ['requested', 'assigned', 'driver_en_route', 'arriving'])
+            where('status', 'in', ['requested', 'assigned', 'driver_en_route', 'arriving', 'in_progress'])
         );
         const existingSnapshot = await getDocs(existingRidesQuery);
         if (!existingSnapshot.empty) {
@@ -95,6 +95,7 @@ export const createRideRequest = async (userId: string, details: any) => {
 
         const userData = userDoc.data();
         const location = userData?.location;
+        const studentPhone = userData?.phone || details.phone || '';
 
         // Extract lat/lng — coordinates were saved by AddressAutocomplete during ProfileSetup
         const pickupLat = location?.latitude ?? 0;
@@ -106,7 +107,8 @@ export const createRideRequest = async (userId: string, details: any) => {
 
         await addDoc(collection(db, 'rides'), {
             studentId: userId,
-            studentName: details.studentName || 'Unknown',
+            studentName: details.studentName || userData?.name || 'Unknown',
+            studentPhone,
             date: details.date,
             timeSlot: details.time,
             pickupAddress: details.address,
@@ -166,16 +168,13 @@ export const unassignRide = async (rideId: string, managerInfo?: { managerId: st
             const rideData = rideSnap.data();
             const studentId = rideData.studentId;
 
-            // Update ride status to dismissed and store manager info
+            // Update ride status to dismissed and store manager info (keep studentId so query finds it)
             await updateDoc(rideRef, {
                 status: 'dismissed',
                 dismissedAt: new Date().toISOString(),
                 dismissedBy: managerInfo?.managerId || null,
                 managerName: managerInfo?.managerName || 'Manager',
                 managerContact: managerInfo?.managerPhone || '',
-                studentId: null,
-                studentName: null,
-                pickupAddress: null,
                 driverId: null,
                 driver: null
             });
