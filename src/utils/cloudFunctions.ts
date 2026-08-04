@@ -241,6 +241,13 @@ export async function geocodeAddressViaCloud(address: string): Promise<GeocodeRe
     return callFunction<GeocodeResult>('geocodeAddress', { address });
 }
 
+export async function adminDeleteUserViaCloud(targetUserId: string | string[]): Promise<{ success: boolean; deletedCount: number }> {
+    if (Array.isArray(targetUserId)) {
+        return callFunction<{ success: boolean; deletedCount: number }>('adminDeleteUser', { targetUserIds: targetUserId });
+    }
+    return callFunction<{ success: boolean; deletedCount: number }>('adminDeleteUser', { targetUserId });
+}
+
 // ============================================
 // CSV DOWNLOAD HELPER
 // ============================================

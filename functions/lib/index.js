@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.geocodeAddress = exports.verifyManagerCode = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.assignStudentsToDriver = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.geocodeAddress = exports.adminDeleteUser = exports.verifyManagerCode = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.assignStudentsToDriver = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -72,6 +72,8 @@ var generateEventCSV_1 = require("./http/generateEventCSV");
 Object.defineProperty(exports, "generateEventCSV", { enumerable: true, get: function () { return generateEventCSV_1.generateEventCSV; } });
 var verifyManagerCode_1 = require("./http/verifyManagerCode");
 Object.defineProperty(exports, "verifyManagerCode", { enumerable: true, get: function () { return verifyManagerCode_1.verifyManagerCode; } });
+var adminDeleteUser_1 = require("./http/adminDeleteUser");
+Object.defineProperty(exports, "adminDeleteUser", { enumerable: true, get: function () { return adminDeleteUser_1.adminDeleteUser; } });
 // Utility Functions
 var geocodeAddress_1 = require("./http/geocodeAddress");
 Object.defineProperty(exports, "geocodeAddress", { enumerable: true, get: function () { return geocodeAddress_1.geocodeAddress; } });

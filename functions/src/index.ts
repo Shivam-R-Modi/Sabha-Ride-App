@@ -32,6 +32,7 @@ export { studentReadyToLeave } from './http/studentReadyToLeave';
 export { manualAssignStudent } from './http/manualAssignStudent';
 export { generateEventCSV } from './http/generateEventCSV';
 export { verifyManagerCode } from './http/verifyManagerCode';
+export { adminDeleteUser } from './http/adminDeleteUser';
 
 // Utility Functions
 export { geocodeAddress } from './http/geocodeAddress';

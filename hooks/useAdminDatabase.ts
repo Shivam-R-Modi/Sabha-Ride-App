@@ -11,7 +11,7 @@ import {
   orderBy,
   limit
 } from 'firebase/firestore';
-import { geocodeAddress } from '../src/utils/cloudFunctions';
+import { geocodeAddress, adminDeleteUserViaCloud } from '../src/utils/cloudFunctions';
 
 export type SupportedCollection = 'users' | 'vehicles' | 'rides' | 'settings' | 'weeklyAttendance' | 'auditLogs';
 
@@ -180,7 +180,21 @@ export function useAdminDatabase(targetCollection: SupportedCollection) {
     try {
       if (targetCol === 'auditLogs') return;
 
+      if (targetCol === 'users') {
+        try {
+          await adminDeleteUserViaCloud(docId);
+          return;
+        } catch (cloudErr) {
+          console.warn('Cloud Function user deletion warning, falling back to direct Firestore delete:', cloudErr);
+        }
+      }
+
       await deleteDoc(doc(db, targetCol, docId));
+
+      if (targetCol === 'users') {
+        await deleteDoc(doc(db, 'students', docId)).catch(() => {});
+        await deleteDoc(doc(db, 'drivers', docId)).catch(() => {});
+      }
 
       if (targetCol === 'vehicles') {
         await deleteDoc(doc(db, 'cars', docId)).catch(() => {});
@@ -200,12 +214,57 @@ export function useAdminDatabase(targetCollection: SupportedCollection) {
     }
   };
 
+  // Delete multiple documents from any collection in parallel
+  const deleteMultipleAdminDocuments = async (
+    targetCol: SupportedCollection,
+    docIds: string[],
+    managerInfo: { id: string; name: string }
+  ) => {
+    try {
+      if (targetCol === 'auditLogs') return;
+
+      if (targetCol === 'users') {
+        try {
+          await adminDeleteUserViaCloud(docIds);
+          return;
+        } catch (cloudErr) {
+          console.warn('Cloud Function bulk user deletion warning, falling back to direct Firestore delete:', cloudErr);
+        }
+      }
+
+      await Promise.all(
+        docIds.map(async (docId) => {
+          await deleteDoc(doc(db, targetCol, docId));
+          if (targetCol === 'users') {
+            await deleteDoc(doc(db, 'students', docId)).catch(() => {});
+            await deleteDoc(doc(db, 'drivers', docId)).catch(() => {});
+          }
+          if (targetCol === 'vehicles') {
+            await deleteDoc(doc(db, 'cars', docId)).catch(() => {});
+          }
+          await logAuditAction(
+            managerInfo.id,
+            managerInfo.name,
+            'DELETE',
+            targetCol,
+            docId,
+            `Bulk deleted record from collection ${targetCol}`
+          );
+        })
+      );
+    } catch (err) {
+      console.error(`Error bulk deleting documents from ${targetCol}:`, err);
+      throw err;
+    }
+  };
+
   return {
     documents,
     loading,
     error,
     updateAdminDocument,
     createAdminDocument,
-    deleteAdminDocument
+    deleteAdminDocument,
+    deleteMultipleAdminDocuments
   };
 }

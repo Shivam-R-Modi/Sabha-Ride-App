@@ -28,9 +28,11 @@ export const DatabaseConsole: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedDocForEdit, setSelectedDocForEdit] = useState<Record<string, any> | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const { documents, loading, error, updateAdminDocument, createAdminDocument, deleteAdminDocument } =
+  const { documents, loading, error, updateAdminDocument, createAdminDocument, deleteAdminDocument, deleteMultipleAdminDocuments } =
     useAdminDatabase(activeTab);
 
   const managerInfo = useMemo(() => ({
@@ -61,6 +63,25 @@ export const DatabaseConsole: React.FC = () => {
     });
   }, [documents, searchTerm, roleFilter, statusFilter, activeTab]);
 
+  const allSelected = useMemo(() => {
+    if (filteredDocuments.length === 0) return false;
+    return filteredDocuments.every((doc) => selectedDocIds.includes(doc.id));
+  }, [filteredDocuments, selectedDocIds]);
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedDocIds([]);
+    } else {
+      setSelectedDocIds(filteredDocuments.map((doc) => doc.id));
+    }
+  };
+
+  const toggleSelectDoc = (docId: string) => {
+    setSelectedDocIds((prev) =>
+      prev.includes(docId) ? prev.filter((id) => id !== docId) : [...prev, docId]
+    );
+  };
+
   const handleDelete = async (docId: string) => {
     if (!confirm(`Are you sure you want to permanently delete record ${docId} from ${activeTab}?`)) {
       return;
@@ -68,10 +89,27 @@ export const DatabaseConsole: React.FC = () => {
     setDeletingId(docId);
     try {
       await deleteAdminDocument(activeTab, docId, managerInfo);
+      setSelectedDocIds((prev) => prev.filter((id) => id !== docId));
     } catch (err: any) {
       alert(err.message || 'Failed to delete document.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedDocIds.length === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete ${selectedDocIds.length} selected records from ${activeTab}?`)) {
+      return;
+    }
+    setIsBulkDeleting(true);
+    try {
+      await deleteMultipleAdminDocuments(activeTab, selectedDocIds, managerInfo);
+      setSelectedDocIds([]);
+    } catch (err: any) {
+      alert(err.message || 'Failed to bulk delete documents.');
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -140,6 +178,7 @@ export const DatabaseConsole: React.FC = () => {
                 setSearchTerm('');
                 setRoleFilter('all');
                 setStatusFilter('all');
+                setSelectedDocIds([]);
               }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap ${
                 isActive
@@ -158,6 +197,36 @@ export const DatabaseConsole: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Floating Bulk Action Bar */}
+      {selectedDocIds.length > 0 && activeTab !== 'auditLogs' && (
+        <div className="clay-card bg-coffee text-white p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in slide-in-from-bottom duration-200">
+          <div className="flex items-center gap-3">
+            <span className="bg-saffron text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
+              {selectedDocIds.length} Selected
+            </span>
+            <span className="text-xs text-gray-300">
+              Bulk actions ready for collection <strong className="text-white capitalize">{activeTab}</strong>
+            </span>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              onClick={() => setSelectedDocIds([])}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              Deselect All
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-4 py-1.5 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 shadow-md"
+            >
+              {isBulkDeleting ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+              <span>{isBulkDeleting ? 'Deleting...' : `Delete Selected (${selectedDocIds.length})`}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Search & Filtering Bar */}
       <div className="clay-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-3">
@@ -233,6 +302,17 @@ export const DatabaseConsole: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-orange-50/60 border-b border-orange-100 text-[11px] font-bold text-coffee uppercase tracking-wider">
+                  {activeTab !== 'auditLogs' && (
+                    <th className="py-3.5 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 text-orange-600 rounded focus:ring-orange-400 cursor-pointer accent-saffron"
+                        title="Select All"
+                      />
+                    </th>
+                  )}
                   {activeTab === 'users' && (
                     <>
                       <th className="py-3.5 px-4">Name / Contact</th>
@@ -280,7 +360,17 @@ export const DatabaseConsole: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs text-coffee">
                 {filteredDocuments.map((docItem) => (
-                  <tr key={docItem.id} className="hover:bg-orange-50/30 transition-colors">
+                  <tr key={docItem.id} className={`hover:bg-orange-50/30 transition-colors ${selectedDocIds.includes(docItem.id) ? 'bg-orange-50/60' : ''}`}>
+                    {activeTab !== 'auditLogs' && (
+                      <td className="py-3 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedDocIds.includes(docItem.id)}
+                          onChange={() => toggleSelectDoc(docItem.id)}
+                          className="w-4 h-4 text-orange-600 rounded focus:ring-orange-400 cursor-pointer accent-saffron"
+                        />
+                      </td>
+                    )}
 
                     {/* USERS FIELDS */}
                     {activeTab === 'users' && (
