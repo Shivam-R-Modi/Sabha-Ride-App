@@ -13,6 +13,16 @@
   --saffron-dark: #E55A2B;
   --saffron-light: #FF8C5A;
 
+  /* CTA fill ramp. White text on the brand accent is 2.84:1, so the accent
+     cannot back a filled button. These three are the same hue, chosen so the
+     LIGHTEST stop still clears AA against white:
+       #C24A1B 4.90:1   #B84318 5.45:1   #A83C14 6.32:1
+     #B84318 is the shade already picked by hand in 8f7a144. Use
+     --saffron-orange for icons, graphics and non-text fills. */
+  --cta-fill-light: #C24A1B;
+  --cta-fill: #B84318;
+  --cta-fill-dark: #A83C14;
+
   /* Neutrals */
   --cream: #FAF9F6;
   --cream-dark: #F5F0E8;
@@ -313,9 +323,9 @@
 .clay-button-primary,
 .clay-btn-primary {
   background: linear-gradient(145deg,
-      #FF8C5A 0%,
-      #FF6B35 50%,
-      #E55A2B 100%);
+      var(--cta-fill-light) 0%,
+      var(--cta-fill) 50%,
+      var(--cta-fill-dark) 100%);
   color: #FFFFFF;
   font-weight: var(--font-semibold);
   font-size: var(--text-base);
@@ -350,9 +360,9 @@
 .clay-button-primary:hover,
 .clay-btn-primary:hover {
   background: linear-gradient(145deg,
-      #FF9D70 0%,
-      #FF7C4A 50%,
-      #F06A3A 100%);
+      var(--cta-fill-light) 0%,
+      var(--cta-fill-light) 50%,
+      var(--cta-fill) 100%);
   transform: translateY(-2px);
   box-shadow:
     8px 8px 24px 0 rgba(255, 107, 53, 0.5),
@@ -389,9 +399,9 @@
 
 .clay-btn-cta-large {
   background: linear-gradient(145deg,
-      #FF8C5A 0%,
-      #FF6B35 40%,
-      #E55A2B 100%);
+      var(--cta-fill-light) 0%,
+      var(--cta-fill) 40%,
+      var(--cta-fill-dark) 100%);
   color: #FFFFFF;
   font-weight: var(--font-bold);
   font-size: var(--text-lg);
@@ -478,14 +488,14 @@
       #FFFFFF 0%,
       #FAF9F6 50%,
       #F5F0E8 100%);
-  color: var(--saffron-orange);
+  color: var(--cta-fill);
   font-weight: var(--font-semibold);
   font-size: var(--text-sm);
   font-family: var(--font-body);
 
   padding: 12px 24px;
   border-radius: var(--clay-radius-full);
-  border: 2px solid var(--saffron-orange);
+  border: 2px solid var(--cta-fill);
   cursor: pointer;
 
   box-shadow:

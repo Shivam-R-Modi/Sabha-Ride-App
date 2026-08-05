@@ -80,12 +80,12 @@ export const RoleSwitcher: React.FC = () => {
                                                 : 'hover:bg-cream text-coffee'
                                             }`}
                                     >
-                                        <span className={isActive ? 'text-saffron' : config.color}>
+                                        <span className={isActive ? 'text-saffron-800' : config.color}>
                                             {config.icon}
                                         </span>
                                         <span className="font-medium text-sm">{config.label}</span>
                                         {isActive && (
-                                            <span className="ml-auto text-xs bg-saffron/20 text-saffron px-2 py-0.5 rounded-full">
+                                            <span className="ml-auto text-xs bg-saffron/20 text-saffron-800 px-2 py-0.5 rounded-full">
                                                 Active
                                             </span>
                                         )}

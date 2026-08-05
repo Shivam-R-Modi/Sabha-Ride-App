@@ -43,7 +43,7 @@ const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHisto
           </>
         )}
       </div>
-      <button className="text-saffron text-xs font-medium flex items-center">
+      <button className="text-saffron-800 text-xs font-medium flex items-center">
         Details <ChevronRight size={14} />
       </button>
     </div>

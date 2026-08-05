@@ -323,7 +323,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 setPassword('');
                 setConfirmPassword('');
               }}
-              className="text-sm text-gray-500 hover:text-saffron font-medium"
+              className="text-sm text-gray-500 hover:text-saffron-800 font-medium"
             >
               {isRegistering ? "Already have an account? Login" : "New to Sabha? Create Account"}
             </button>

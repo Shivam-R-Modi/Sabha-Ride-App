@@ -74,7 +74,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
     return (
         <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-white to-gold/10 flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-saffron to-gold text-white py-8 text-center">
+            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-8 text-center">
                 <h1 className="text-3xl md:text-4xl font-header font-bold">Verify Your Email</h1>
                 <p className="text-sm md:text-base mt-2 opacity-90">One quick step to activate your Seva account</p>
             </div>
@@ -117,7 +117,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
                         <button
                             onClick={handleCheckVerification}
                             disabled={isChecking}
-                            className="w-full clay-button bg-gradient-to-r from-saffron to-gold text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:shadow-lg transition-all disabled:opacity-50"
+                            className="w-full clay-button bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:shadow-lg transition-all disabled:opacity-50"
                         >
                             {isChecking ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
                             I Have Verified
@@ -127,7 +127,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
                         <button
                             onClick={handleResend}
                             disabled={cooldown > 0 || isResending}
-                            className="w-full border-2 border-saffron/30 text-saffron hover:bg-saffron/5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full border-2 border-saffron/30 text-saffron-800 hover:bg-saffron/5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isResending ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
                             {cooldown > 0 ? `Resend Email (${cooldown}s)` : 'Resend Verification Email'}

@@ -49,7 +49,7 @@ const RideAssignmentCard: React.FC<{
         <div className="flex-1 min-w-0">
           <h3 className="font-header font-bold text-coffee text-lg truncate">{driver?.name || 'Unassigned Driver'}</h3>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs bg-saffron/10 text-saffron px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+            <span className="text-xs bg-saffron/10 text-saffron-800 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
               {driver?.carModel || driver?.currentVehicleName || 'Vehicle'}
             </span>
             <span className="text-xs text-coffee-500 bg-cream px-2 py-0.5 rounded-full font-medium">
@@ -84,7 +84,7 @@ const RideAssignmentCard: React.FC<{
             {/* Row 1: Name + Actions */}
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2 overflow-hidden">
-                <div className="w-6 h-6 rounded-full bg-saffron/20 text-saffron flex items-center justify-center text-xs font-bold shrink-0">
+                <div className="w-6 h-6 rounded-full bg-saffron/20 text-saffron-800 flex items-center justify-center text-xs font-bold shrink-0">
                   {index + 1}
                 </div>
                 <span className="font-bold text-coffee truncate">{ride.studentName || 'Student'}</span>

@@ -155,7 +155,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                         </div>
                         <div className="text-right">
                             <p className="text-xs text-gray-500 uppercase tracking-wider">Seats</p>
-                            <p className="text-2xl font-bold text-saffron">
+                            <p className="text-2xl font-bold text-saffron-800">
                                 {studentCount}<span className="text-gray-500 text-lg">/{capacity}</span>
                             </p>
                         </div>
@@ -246,7 +246,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                     </div>
                     <button
                         onClick={() => openMapsWithLiveOrigin(assignment.googleMapsUrl)}
-                        className="w-full mt-4 py-2 text-saffron text-sm font-medium flex items-center justify-center gap-2 hover:bg-orange-50 rounded-lg transition-colors"
+                        className="w-full mt-4 py-2 text-saffron-800 text-sm font-medium flex items-center justify-center gap-2 hover:bg-orange-50 rounded-lg transition-colors"
                     >
                         <Navigation size={14} />
                         Preview Route on Google Maps

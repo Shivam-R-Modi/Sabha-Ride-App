@@ -65,7 +65,7 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
     return (
         <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-white to-gold/10 flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-saffron to-gold text-white py-8 text-center">
+            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-8 text-center">
                 <h1 className="text-3xl md:text-4xl font-header font-bold">Account Pending</h1>
             </div>
 

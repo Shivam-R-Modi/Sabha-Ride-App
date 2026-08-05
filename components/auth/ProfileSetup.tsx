@@ -83,7 +83,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
     return (
         <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-white to-gold/10 flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-saffron to-gold text-white py-8 text-center">
+            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-8 text-center">
                 <h1 className="text-3xl md:text-4xl font-header font-bold">Complete Your Profile</h1>
                 <p className="text-sm md:text-base mt-2 opacity-90">
                     {role === 'student' && 'Student Information'}
@@ -176,7 +176,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                     <button
                         type="submit"
                         disabled={loading || !selectedPlace || !isPhoneValid}
-                        className="w-full bg-gradient-to-r from-saffron to-gold text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? 'Saving…' : 'Complete Setup'}
                     </button>

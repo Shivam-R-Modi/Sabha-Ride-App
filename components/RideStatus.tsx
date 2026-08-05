@@ -81,7 +81,7 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
             </div>
             <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Pickup</p>
             <p className="text-xs sm:text-sm font-medium text-coffee line-clamp-1">{ride.pickupAddress}</p>
-            <p className="text-[10px] text-saffron font-bold">{ride.timeSlot}</p>
+            <p className="text-[10px] text-saffron-800 font-bold">{ride.timeSlot}</p>
           </div>
           <div className="relative">
             <div className="absolute -left-[27px] top-0 bg-white p-1">

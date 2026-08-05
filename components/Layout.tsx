@@ -187,7 +187,7 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
             <button
               key={item.id}
               onClick={() => setCurrentTab(item.id as TabView)}
-              className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${isActive ? 'text-saffron' : 'text-gray-500'
+              className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${isActive ? 'text-saffron-800' : 'text-gray-500'
                 }`}
             >
               <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-orange-50' : ''}`}>

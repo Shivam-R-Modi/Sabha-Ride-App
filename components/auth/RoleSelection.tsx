@@ -130,7 +130,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
     return (
         <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-white to-gold/10 flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-saffron to-gold text-white py-8 text-center">
+            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-8 text-center">
                 <h1 className="text-3xl md:text-4xl font-header font-bold">Choose Your Role</h1>
                 <p className="text-sm md:text-base mt-2 opacity-90">How would you like to serve?</p>
             </div>
@@ -205,7 +205,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                         <button
                             onClick={handleSubmit}
                             disabled={loading || !selectedRole}
-                            className="clay-button bg-gradient-to-r from-saffron to-gold text-white px-12 py-4 rounded-xl font-semibold text-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="clay-button bg-gradient-to-r from-saffron-800 to-gold-700 text-white px-12 py-4 rounded-xl font-semibold text-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? 'Saving...' : 'Continue'}
                         </button>

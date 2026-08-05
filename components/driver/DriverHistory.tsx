@@ -62,7 +62,7 @@ export const DriverHistory: React.FC = () => {
             <div className="grid grid-cols-3 gap-3 mb-6">
                 <div className="clay-card p-4 border-l-4 border-l-saffron">
                     <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Total Rides</p>
-                    <p className="text-2xl font-bold text-saffron">{rides.length}</p>
+                    <p className="text-2xl font-bold text-saffron-800">{rides.length}</p>
                 </div>
                 <div className="clay-card p-4 border-l-4 border-l-blue-500">
                     <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Students Moved</p>

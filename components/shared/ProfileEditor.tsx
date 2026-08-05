@@ -201,7 +201,7 @@ export const ProfileEditor: React.FC = () => {
                 <div className="mt-8 max-w-sm mx-auto space-y-3">
                     <button
                         onClick={handleStartEdit}
-                        className="clay-button w-full py-3 text-white bg-gradient-to-r from-saffron to-gold rounded-xl font-bold shadow-lg flex items-center justify-center gap-2"
+                        className="clay-button w-full py-3 text-white bg-gradient-to-r from-saffron-800 to-gold-700 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2"
                     >
                         <Pencil size={18} />
                         Edit Profile
@@ -301,7 +301,7 @@ export const ProfileEditor: React.FC = () => {
                     <button
                         onClick={handleSave}
                         disabled={loading}
-                        className="flex-1 py-3 rounded-xl bg-gradient-to-r from-saffron to-gold text-white font-semibold hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="flex-1 py-3 rounded-xl bg-gradient-to-r from-saffron-800 to-gold-700 text-white font-semibold hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         <Save size={18} />
                         {loading ? 'Saving…' : 'Save'}
