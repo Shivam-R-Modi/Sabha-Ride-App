@@ -110,7 +110,7 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                                 disabled={loading}
                             />
                             {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-                            {successMessage && <p className="text-xs text-green-600 font-semibold">{successMessage}</p>}
+                            {successMessage && <p className="text-xs text-green-700 font-semibold">{successMessage}</p>}
                             <button
                                 type="submit"
                                 disabled={loading || !managerCode.trim()}

@@ -61,7 +61,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[50vh] p-8 text-center animate-in zoom-in duration-300">
         <div className="relative mb-6">
-          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center text-green-600">
+          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center text-green-700">
             <svg className="w-16 h-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
               <path className="success-draw" d="M5 13l4 4L19 7" />
             </svg>
@@ -90,7 +90,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
 
       <div className="p-8 space-y-6">
         {error && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm flex items-center gap-3 border border-red-100">
+          <div className="bg-red-50 text-red-700 p-4 rounded-2xl text-sm flex items-center gap-3 border border-red-100">
             <AlertCircle size={20} /> {error}
           </div>
         )}

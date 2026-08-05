@@ -170,7 +170,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                     {selectedRole === 'manager' && (
                         <div className="clay-card p-6 animate-in slide-in-from-top-4">
                             <label className="block text-sm font-bold text-coffee mb-2">
-                                Manager Access Code <span className="text-red-500">*</span>
+                                Manager Access Code <span className="text-red-600">*</span>
                             </label>
                             <p className="text-xs text-coffee-500 mb-3">
                                 Enter the access code provided by the Sabha coordinator to register as a manager.

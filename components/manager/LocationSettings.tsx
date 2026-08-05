@@ -114,7 +114,7 @@ export const LocationSettings: React.FC = () => {
                     />
                     {/* Selection confirmation */}
                     {selectedPlace && (
-                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                        <p className="text-xs text-green-700 mt-1 flex items-center gap-1">
                             <CheckCircle2 size={12} />
                             Address selected — {selectedPlace.latitude.toFixed(6)}, {selectedPlace.longitude.toFixed(6)}
                         </p>
@@ -128,13 +128,13 @@ export const LocationSettings: React.FC = () => {
 
                 {/* Status Messages */}
                 {errorMsg && (
-                    <div className="flex items-center gap-2 text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                    <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 rounded-lg">
                         <AlertCircle size={14} />
                         <span className="text-xs">{errorMsg}</span>
                     </div>
                 )}
                 {savedSuccess && (
-                    <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+                    <div className="flex items-center gap-2 text-green-800 bg-green-50 px-3 py-2 rounded-lg">
                         <CheckCircle2 size={14} />
                         <span className="text-xs">Location updated successfully!</span>
                     </div>

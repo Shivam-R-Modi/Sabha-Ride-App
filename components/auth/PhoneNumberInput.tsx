@@ -81,7 +81,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
         <div className="space-y-1.5">
             {label && (
                 <label className="block text-sm font-medium text-coffee">
-                    {label} {required && <span className="text-red-500">*</span>}
+                    {label} {required && <span className="text-red-600">*</span>}
                 </label>
             )}
 
@@ -123,7 +123,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
 
                     {/* Valid Checkmark Indicator */}
                     {validation.isValid && (
-                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-green-600">
+                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-green-700">
                             <CheckCircle2 size={18} />
                         </div>
                     )}

@@ -104,7 +104,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-red-600 text-xs">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-red-700 text-xs">
             <AlertTriangle size={16} className="shrink-0" />
             <span>{error}</span>
           </div>

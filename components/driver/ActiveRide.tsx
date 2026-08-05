@@ -161,7 +161,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                         </button>
                         <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                            <span className="text-sm font-medium text-green-600">Ride In Progress</span>
+                            <span className="text-sm font-medium text-green-700">Ride In Progress</span>
                         </div>
                     </div>
 
@@ -216,7 +216,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
             {error && (
                 <div className="px-4 mt-4">
                     <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-                        <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                        <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={18} />
                         <p className="text-red-600 text-sm">{error}</p>
                     </div>
                 </div>
@@ -287,7 +287,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                         <button
                                             onClick={() => routePoint && handleToggleWaypoint(routePoint, routeIdx)}
                                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isVisited
-                                                ? 'bg-green-500 text-white shadow-lg shadow-green-200'
+                                                ? 'bg-green-700 text-white shadow-lg shadow-green-200'
                                                 : 'bg-gray-100 text-gray-300 hover:bg-gray-200'
                                                 }`}
                                         >
@@ -317,13 +317,13 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                             className={`flex items-center gap-3 py-2 ${waypoint.type === 'start' || waypoint.type === 'end'
                                 ? 'text-gray-500 text-sm'
                                 : visitedWaypoints.has(`${waypoint.type}-${idx}`)
-                                    ? 'text-green-600'
+                                    ? 'text-green-700'
                                     : 'text-coffee'
                                 }`}
                         >
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${waypoint.type === 'start' ? 'bg-gray-200' :
                                 waypoint.type === 'end' ? 'bg-gray-200' :
-                                    visitedWaypoints.has(`${waypoint.type}-${idx}`) ? 'bg-green-500 text-white' : 'bg-saffron/20 text-saffron'
+                                    visitedWaypoints.has(`${waypoint.type}-${idx}`) ? 'bg-green-700 text-white' : 'bg-saffron/20 text-saffron'
                                 }`}>
                                 {waypoint.type === 'start' ? 'S' :
                                     waypoint.type === 'end' ? 'E' :

@@ -219,7 +219,7 @@ export const DatabaseConsole: React.FC = () => {
             <button
               onClick={handleBulkDelete}
               disabled={isBulkDeleting}
-              className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-4 py-1.5 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 shadow-md"
+              className="bg-red-600 hover:bg-red-600 text-white text-xs font-bold px-4 py-1.5 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 shadow-md"
             >
               {isBulkDeleting ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
               <span>{isBulkDeleting ? 'Deleting...' : `Delete Selected (${selectedDocIds.length})`}</span>
@@ -286,7 +286,7 @@ export const DatabaseConsole: React.FC = () => {
         </div>
       ) : error ? (
         <div className="clay-card py-12 bg-red-50/50 border-red-100 flex flex-col items-center justify-center text-center p-6 space-y-2">
-          <ShieldAlert className="text-red-500" size={32} />
+          <ShieldAlert className="text-red-600" size={32} />
           <p className="text-sm font-bold text-red-600">{error}</p>
           <p className="text-xs text-gray-500">Ensure your account has approved manager credentials in Firestore.</p>
         </div>
@@ -496,7 +496,7 @@ export const DatabaseConsole: React.FC = () => {
                           <button
                             onClick={() => handleDelete(docItem.id)}
                             disabled={deletingId === docItem.id}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            className="p-1.5 text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                             title="Delete Record"
                           >
                             {deletingId === docItem.id ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />}

@@ -51,7 +51,7 @@ export const MapVisualization: React.FC<MapVisualizationProps> = ({ students, dr
                   style={{ left: `${x}%`, top: `${y}%` }}
                >
                   <div className="bg-white p-1 rounded-full shadow-md border border-gray-200 flex items-center gap-1">
-                     <Car size={12} className={driver.status === 'available' ? 'text-green-600' : 'text-blue-600'} />
+                     <Car size={12} className={driver.status === 'available' ? 'text-green-700' : 'text-blue-600'} />
                      <span className="text-[8px] font-bold">{driver.capacity}</span>
                   </div>
                </div>

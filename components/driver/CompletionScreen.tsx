@@ -111,7 +111,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                 <h1 className="text-3xl font-bold text-coffee text-center mb-2">
                     Ride #{rideNumber} Completed
                 </h1>
-                <p className="text-green-600 font-medium mb-8">✓ Great job!</p>
+                <p className="text-green-700 font-medium mb-8">✓ Great job!</p>
 
                 {/* Ride Summary Card */}
                 <div className="w-full max-w-sm clay-card bg-gradient-to-r from-green-50 to-emerald-50 border-green-100 mb-6">
@@ -130,7 +130,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                         <div className="grid grid-cols-3 gap-4">
                             <div className="text-center">
                                 <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-1">
-                                    <Car size={18} className="text-green-600" />
+                                    <Car size={18} className="text-green-700" />
                                 </div>
                                 <p className="text-xl font-bold text-coffee">{driverStats.ridesCompletedToday}</p>
                                 <p className="text-xs text-gray-500">Rides</p>
@@ -156,7 +156,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                 {/* Error Display */}
                 {error && (
                     <div className="w-full max-w-sm bg-red-50 border border-red-200 rounded-xl p-4 mb-4 flex items-start gap-3">
-                        <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                        <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={18} />
                         <p className="text-red-600 text-sm">{error}</p>
                     </div>
                 )}

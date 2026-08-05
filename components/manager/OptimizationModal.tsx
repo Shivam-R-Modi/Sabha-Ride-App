@@ -57,7 +57,7 @@ export const OptimizationModal: React.FC<OptimizationModalProps> = ({ onClose, o
         return (
             <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
-                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600 animate-in zoom-in">
+                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-700 animate-in zoom-in">
                         <CheckCircle2 size={40} />
                     </div>
                     <h3 className="text-xl font-header font-bold text-coffee mb-2">Assignments Sent!</h3>
@@ -137,7 +137,7 @@ export const OptimizationModal: React.FC<OptimizationModalProps> = ({ onClose, o
                             <AlertCircle className="text-red-600 mb-2" size={32} />
                             <h4 className="font-bold text-red-800">12 Students Unassigned</h4>
                             <p className="text-xs text-red-600 mb-4">Not enough driver capacity for this region.</p>
-                            <button className="text-xs font-bold bg-white text-red-600 px-3 py-1.5 rounded-lg border border-red-200 hover:bg-red-50">View Unassigned</button>
+                            <button className="text-xs font-bold bg-white text-red-700 px-3 py-1.5 rounded-lg border border-red-200 hover:bg-red-50">View Unassigned</button>
                         </div>
                     </div>
                 </div>

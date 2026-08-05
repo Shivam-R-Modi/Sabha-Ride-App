@@ -148,7 +148,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       <div className="flex-1 px-6 my-6">
         <div className="clay-card clay-card-lg max-w-md mx-auto">
           {error && (
-            <div className="mb-5 p-3 bg-red-50 text-red-600 text-sm rounded-xl flex items-start gap-2 border border-red-100 animate-in slide-in-from-top-2">
+            <div className="mb-5 p-3 bg-red-50 text-red-700 text-sm rounded-xl flex items-start gap-2 border border-red-100 animate-in slide-in-from-top-2">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -215,8 +215,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   <div className="flex items-center justify-between text-[11px] font-semibold">
                     <span className="text-coffee-500">Password Strength:</span>
                     <span className={
-                      passwordEvaluation.score === 'strong' ? 'text-green-600' :
-                      passwordEvaluation.score === 'fair' ? 'text-amber-600' : 'text-red-500'
+                      passwordEvaluation.score === 'strong' ? 'text-green-700' :
+                      passwordEvaluation.score === 'fair' ? 'text-amber-600' : 'text-red-600'
                     }>
                       {passwordEvaluation.label}
                     </span>
@@ -234,16 +234,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
                   {/* Requirements checklist */}
                   <div className="grid grid-cols-2 gap-1 pt-1 text-[10px] text-coffee-700">
-                    <span className={passwordEvaluation.criteria.hasMinLength ? 'text-green-600 font-semibold' : ''}>
+                    <span className={passwordEvaluation.criteria.hasMinLength ? 'text-green-700 font-semibold' : ''}>
                       {passwordEvaluation.criteria.hasMinLength ? '✓' : '•'} 8+ characters
                     </span>
-                    <span className={passwordEvaluation.criteria.hasNumber ? 'text-green-600 font-semibold' : ''}>
+                    <span className={passwordEvaluation.criteria.hasNumber ? 'text-green-700 font-semibold' : ''}>
                       {passwordEvaluation.criteria.hasNumber ? '✓' : '•'} At least 1 number
                     </span>
-                    <span className={passwordEvaluation.criteria.hasSpecialChar ? 'text-green-600 font-semibold' : ''}>
+                    <span className={passwordEvaluation.criteria.hasSpecialChar ? 'text-green-700 font-semibold' : ''}>
                       {passwordEvaluation.criteria.hasSpecialChar ? '✓' : '•'} 1 special character
                     </span>
-                    <span className={passwordEvaluation.criteria.hasUppercase ? 'text-green-600 font-semibold' : ''}>
+                    <span className={passwordEvaluation.criteria.hasUppercase ? 'text-green-700 font-semibold' : ''}>
                       {passwordEvaluation.criteria.hasUppercase ? '✓' : '•'} 1 uppercase letter
                     </span>
                   </div>
@@ -277,10 +277,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   </button>
                 </div>
                 {confirmPassword && confirmPassword !== password && (
-                  <p className="text-[11px] text-red-500 font-medium mt-1">Passwords do not match</p>
+                  <p className="text-[11px] text-red-600 font-medium mt-1">Passwords do not match</p>
                 )}
                 {confirmPassword && confirmPassword === password && (
-                  <p className="text-[11px] text-green-600 font-medium mt-1 flex items-center gap-1">
+                  <p className="text-[11px] text-green-700 font-medium mt-1 flex items-center gap-1">
                     <CheckCircle2 size={12} /> Passwords match
                   </p>
                 )}

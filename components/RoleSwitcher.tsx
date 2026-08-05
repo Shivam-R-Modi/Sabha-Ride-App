@@ -17,7 +17,7 @@ const roleConfig: Record<UserRole, { label: string; icon: React.ReactNode; color
     student: {
         label: 'Student',
         icon: <GraduationCap size={16} />,
-        color: 'text-green-600'
+        color: 'text-green-700'
     }
 };
 

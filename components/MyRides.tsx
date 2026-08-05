@@ -14,7 +14,7 @@ const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHisto
   <div className="clay-card flex flex-col gap-3">
     <div className="flex justify-between items-start">
       <div className="flex gap-3">
-        <div className="bg-orange-50 w-12 h-12 rounded-lg flex flex-col items-center justify-center text-saffron shrink-0">
+        <div className="bg-orange-50 w-12 h-12 rounded-lg flex flex-col items-center justify-center text-saffron-800 shrink-0">
           <span className="text-xs font-bold uppercase">{new Date(ride.date).toLocaleDateString('en-US', { month: 'short' })}</span>
           <span className="text-lg font-bold leading-none">{new Date(ride.date).getDate()}</span>
         </div>
@@ -68,14 +68,14 @@ export const MyRides: React.FC<MyRidesProps> = ({
         <div className="bg-gray-100 p-1 rounded-xl flex">
           <button
             onClick={() => setActiveTab('upcoming')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'upcoming' ? 'bg-white text-coffee shadow-sm' : 'text-gray-500'
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'upcoming' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600'
               }`}
           >
             Upcoming
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'history' ? 'bg-white text-coffee shadow-sm' : 'text-gray-500'
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'history' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600'
               }`}
           >
             History

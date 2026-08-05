@@ -222,10 +222,10 @@ export const ManagerReports: React.FC = () => {
                         {/* Yes Responses */}
                         <div className="bg-green-50 rounded-2xl p-4 text-center border border-green-100">
                             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <CheckCircle2 className="w-6 h-6 text-green-600" />
+                                <CheckCircle2 className="w-6 h-6 text-green-700" />
                             </div>
                             <p className="text-2xl font-bold text-green-700">{currentWeekStats.totalYes}</p>
-                            <p className="text-xs text-green-600 font-medium mt-1">Attending</p>
+                            <p className="text-xs text-green-700 font-medium mt-1">Attending</p>
                         </div>
 
                         {/* No Responses */}
@@ -264,7 +264,7 @@ export const ManagerReports: React.FC = () => {
                         className="flex items-center gap-4 p-4 bg-cream/50 rounded-xl border border-orange-100 hover:bg-cream transition-colors text-left"
                     >
                         <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
-                            <FileSpreadsheet className="w-6 h-6 text-green-600" />
+                            <FileSpreadsheet className="w-6 h-6 text-green-700" />
                         </div>
                         <div>
                             <p className="font-bold text-coffee">Weekly Attendance CSV</p>

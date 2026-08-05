@@ -109,7 +109,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                         {/* Name Input */}
                         <div>
                             <label className="block text-sm font-medium text-coffee mb-2">
-                                Full Name <span className="text-red-500">*</span>
+                                Full Name <span className="text-red-600">*</span>
                             </label>
                             <input
                                 type="text"
@@ -138,7 +138,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                         {/* Address Autocomplete */}
                         <div>
                             <label className="block text-sm font-medium text-coffee mb-2">
-                                Address <span className="text-red-500">*</span>
+                                Address <span className="text-red-600">*</span>
                             </label>
                             <AddressAutocomplete
                                 value={address}
@@ -155,7 +155,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                             />
                             {/* Selection confirmation */}
                             {selectedPlace && (
-                                <p className="text-sm text-green-600 mt-1">
+                                <p className="text-sm text-green-700 mt-1">
                                     ✓ Address selected
                                 </p>
                             )}

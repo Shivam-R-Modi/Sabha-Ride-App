@@ -93,7 +93,7 @@ const RideAssignmentCard: React.FC<{
               <div className="flex items-center gap-1 shrink-0">
                 {/* Call Button */}
                 {(ride.studentPhone || (ride as any).phone || (ride as any).studentContact) ? (
-                  <a href={`tel:${ride.studentPhone || (ride as any).phone || (ride as any).studentContact}`} className="p-1.5 text-green-600 hover:bg-green-50 rounded-md transition-colors" title="Call Student">
+                  <a href={`tel:${ride.studentPhone || (ride as any).phone || (ride as any).studentContact}`} className="p-1.5 text-green-800 hover:bg-green-50 rounded-md transition-colors" title="Call Student">
                     <Phone size={14} />
                   </a>
                 ) : (
@@ -115,7 +115,7 @@ const RideAssignmentCard: React.FC<{
                 {onUnassign && (
                   <button
                     onClick={() => onUnassign(ride.id)}
-                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                    className="p-1.5 text-red-700 hover:bg-red-50 rounded-md transition-colors"
                     title="Unassign Student"
                   >
                     <UserMinus size={14} />
@@ -402,19 +402,19 @@ export const ManagerDashboard: React.FC = () => {
           <div className="bg-gray-100 p-1 rounded-lg flex gap-1 min-w-0 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab('planning')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-500 hover:text-gray-600'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600 hover:text-coffee'}`}
             >
               Request Center
             </button>
             <button
               onClick={() => setActiveTab('dropoff')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-500 hover:text-gray-600'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600 hover:text-coffee'}`}
             >
               Live Operations
             </button>
             <button
               onClick={() => setActiveTab('database')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'database' ? 'bg-white text-coffee shadow-sm' : 'text-gray-500 hover:text-gray-600'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'database' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600 hover:text-coffee'}`}
             >
               Database Console
             </button>
@@ -448,7 +448,7 @@ export const ManagerDashboard: React.FC = () => {
           >
             <Download size={20} className={isDownloading ? 'animate-pulse' : ''} />
             {!attendanceCountLoading && attendanceYesCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-700 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold">
                 {attendanceYesCount > 99 ? '99+' : attendanceYesCount}
               </span>
             )}
@@ -461,7 +461,7 @@ export const ManagerDashboard: React.FC = () => {
           >
             <Bell size={20} />
             {(pendingDrivers.length > 0 || pendingRiders.length > 0 || pendingRequests.length > 0) && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold animate-pulse">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold animate-pulse">
                 {pendingDrivers.length + pendingRiders.length + pendingRequests.length}
               </span>
             )}
@@ -590,7 +590,7 @@ export const ManagerDashboard: React.FC = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleDenyDriver(driver.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
                         >
                           <X size={14} />
                           Deny
@@ -631,7 +631,7 @@ export const ManagerDashboard: React.FC = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleDenyRider(rider.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
                         >
                           <X size={14} />
                           Deny
@@ -673,7 +673,7 @@ export const ManagerDashboard: React.FC = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleDismiss(request.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
                         >
                           <X size={14} />
                           Dismiss

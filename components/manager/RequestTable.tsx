@@ -165,14 +165,14 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                             onClick={() => onAssign(req.id)}
-                            className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                            className="p-2 bg-green-50 text-green-800 hover:bg-green-100 rounded-lg transition-colors"
                             title="Assign to Driver"
                         >
                           <Check size={18} />
                         </button>
                         <button 
                             onClick={() => onDismiss(req.id)}
-                            className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                            className="p-2 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg transition-colors"
                             title="Dismiss Request"
                         >
                           <Trash2 size={18} />
@@ -239,10 +239,10 @@ const SwipeableCard: React.FC<{
         <div className="relative group overflow-hidden rounded-2xl">
             {/* Background Actions */}
             <div className="absolute inset-0 flex items-center justify-between px-6">
-                <div className="flex items-center gap-2 text-green-600 font-bold">
+                <div className="flex items-center gap-2 text-green-700 font-bold">
                     <UserPlus size={24} /> <span className="text-xs">ASSIGN</span>
                 </div>
-                <div className="flex items-center gap-2 text-red-500 font-bold">
+                <div className="flex items-center gap-2 text-red-600 font-bold">
                     <span className="text-xs">DISMISS</span> <Trash2 size={24} />
                 </div>
             </div>
@@ -259,7 +259,7 @@ const SwipeableCard: React.FC<{
                 <div className="min-w-0 flex-1">
                     <div className="flex justify-between items-start">
                         <h4 className="font-bold text-coffee truncate pr-2">{request.name}</h4>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isUrgent ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isUrgent ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-800'}`}>
                             {waitMinutes}m
                         </span>
                     </div>
@@ -286,12 +286,12 @@ const SwipeableCard: React.FC<{
 const getWaitBadge = (time: string) => {
     const minutes = Math.floor((Date.now() - new Date(time).getTime()) / 60000);
     if (minutes > 30) return (
-        <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full animate-pulse">
+        <span className="flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 px-2 py-1 rounded-full animate-pulse">
             <AlertCircle size={12} /> {minutes}m wait
         </span>
     );
     return (
-        <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">
+        <span className="text-[10px] font-bold text-green-800 bg-green-50 px-2 py-1 rounded-full">
             {minutes}m wait
         </span>
     );

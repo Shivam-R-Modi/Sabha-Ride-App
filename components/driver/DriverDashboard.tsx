@@ -373,7 +373,7 @@ export const DriverDashboard: React.FC = () => {
                                     </div>
                                     <div>
                                         <h2 className="font-header font-bold text-coffee leading-tight">{userProfile?.name}</h2>
-                                        <p className={`text-xs font-medium ${isAvailable ? 'text-green-600' : 'text-gray-500'}`}>
+                                        <p className={`text-xs font-medium ${isAvailable ? 'text-green-700' : 'text-gray-500'}`}>
                                             {isAvailable ? '● Online' : '○ Offline'}
                                         </p>
                                     </div>

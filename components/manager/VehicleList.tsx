@@ -23,7 +23,7 @@ const statusColors: Record<string, { bg: string; text: string; icon: React.React
     'maintenance': {
         bg: 'bg-red-50',
         text: 'text-red-700',
-        icon: <AlertCircle size={14} className="text-red-500" />
+        icon: <AlertCircle size={14} className="text-red-600" />
     }
 };
 
@@ -126,7 +126,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, loading, onE
                                 </button>
                                 <button
                                     onClick={() => onDelete(vehicle)}
-                                    className="p-2 hover:bg-red-50 rounded-lg transition-colors text-mocha hover:text-red-500"
+                                    className="p-2 hover:bg-red-50 rounded-lg transition-colors text-mocha hover:text-red-700"
                                     title="Delete vehicle"
                                 >
                                     <Trash2 size={18} />

@@ -70,7 +70,7 @@ export const DriverHistory: React.FC = () => {
                 </div>
                 <div className="clay-card p-4 border-l-4 border-l-green-500">
                     <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Total Miles</p>
-                    <p className="text-2xl font-bold text-green-600">{totalDistance.toFixed(0)}</p>
+                    <p className="text-2xl font-bold text-green-700">{totalDistance.toFixed(0)}</p>
                 </div>
             </div>
 
@@ -99,7 +99,7 @@ export const DriverHistory: React.FC = () => {
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1 text-green-600 text-xs font-bold bg-green-50 px-2.5 py-1 rounded-full border border-green-100">
+                                <div className="flex items-center gap-1 text-green-800 text-xs font-bold bg-green-50 px-2.5 py-1 rounded-full border border-green-100">
                                     <CheckCircle2 size={12} />
                                     Completed
                                 </div>

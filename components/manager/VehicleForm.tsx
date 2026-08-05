@@ -116,7 +116,7 @@ export const VehicleForm: React.FC<VehicleFormProps> = ({ vehicle, onClose, onSu
     const commonInputClass = "w-full px-4 py-3 bg-white border border-mocha/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-saffron focus:border-transparent transition-all";
     const errorInputClass = "border-red-300 focus:ring-red-300";
     const labelClass = "block text-sm font-semibold text-coffee mb-1.5";
-    const errorClass = "text-xs text-red-500 mt-1";
+    const errorClass = "text-xs text-red-600 mt-1";
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -138,7 +138,7 @@ export const VehicleForm: React.FC<VehicleFormProps> = ({ vehicle, onClose, onSu
                 {/* Success Message */}
                 {submitSuccess && (
                     <div className="mx-6 mt-4 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3 animate-in slide-in-from-top">
-                        <CheckCircle2 size={20} className="text-green-600" />
+                        <CheckCircle2 size={20} className="text-green-700" />
                         <span className="text-green-700 font-medium">
                             {vehicle ? 'Vehicle updated successfully!' : 'Vehicle created successfully!'}
                         </span>

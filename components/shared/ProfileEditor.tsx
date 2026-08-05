@@ -226,7 +226,7 @@ export const ProfileEditor: React.FC = () => {
                 {/* Name */}
                 <div>
                     <label className="block text-sm font-medium text-coffee mb-2">
-                        Full Name <span className="text-red-500">*</span>
+                        Full Name <span className="text-red-600">*</span>
                     </label>
                     <input
                         type="text"
@@ -255,7 +255,7 @@ export const ProfileEditor: React.FC = () => {
                 {/* Address */}
                 <div>
                     <label className="block text-sm font-medium text-coffee mb-2">
-                        Address <span className="text-red-500">*</span>
+                        Address <span className="text-red-600">*</span>
                     </label>
                     <AddressAutocomplete
                         value={address}
@@ -270,7 +270,7 @@ export const ProfileEditor: React.FC = () => {
                         placeholder="Start typing your address…"
                     />
                     {selectedPlace && (
-                        <p className="text-sm text-green-600 mt-1">✓ New address selected</p>
+                        <p className="text-sm text-green-700 mt-1">✓ New address selected</p>
                     )}
                     {!selectedPlace && address !== (userProfile?.address || '') && address.length >= 3 && (
                         <p className="text-sm text-coffee-500 mt-1">Please select an address from suggestions</p>

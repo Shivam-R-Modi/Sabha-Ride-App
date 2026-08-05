@@ -7,11 +7,11 @@ interface RideStatusCardProps {
 }
 
 const STATUS_CONFIG: Record<RideStatus, { label: string; color: string; bg: string }> = {
-  requested: { label: 'Looking for Driver', color: 'text-orange-600', bg: 'bg-orange-100' },
-  assigned: { label: 'Driver Assigned', color: 'text-blue-600', bg: 'bg-blue-100' },
-  driver_en_route: { label: 'Driver En Route', color: 'text-purple-600', bg: 'bg-purple-100' },
-  arriving: { label: 'Arriving Soon', color: 'text-green-600', bg: 'bg-green-100' },
-  in_progress: { label: 'In Progress', color: 'text-teal-600', bg: 'bg-teal-100' },
+  requested: { label: 'Looking for Driver', color: 'text-orange-700', bg: 'bg-orange-100' },
+  assigned: { label: 'Driver Assigned', color: 'text-blue-800', bg: 'bg-blue-100' },
+  driver_en_route: { label: 'Driver En Route', color: 'text-purple-800', bg: 'bg-purple-100' },
+  arriving: { label: 'Arriving Soon', color: 'text-green-700', bg: 'bg-green-100' },
+  in_progress: { label: 'In Progress', color: 'text-teal-800', bg: 'bg-teal-100' },
   completed: { label: 'Completed', color: 'text-gray-600', bg: 'bg-gray-100' },
   cancelled: { label: 'Cancelled', color: 'text-red-600', bg: 'bg-red-100' },
 };
@@ -64,7 +64,7 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
-            <a href={`tel:${driver.phone}`} className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center hover:bg-green-200 transition-colors btn-feedback">
+            <a href={`tel:${driver.phone}`} className="w-10 h-10 rounded-full bg-green-100 text-green-700 flex items-center justify-center hover:bg-green-200 transition-colors btn-feedback">
               <Phone size={18} />
             </a>
             <button className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition-colors btn-feedback">

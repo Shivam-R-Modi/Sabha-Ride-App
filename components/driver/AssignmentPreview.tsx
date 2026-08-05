@@ -130,7 +130,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                 {/* Error Display */}
                 {error && (
                     <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-                        <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                        <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={18} />
                         <p className="text-red-600 text-sm">{error}</p>
                     </div>
                 )}

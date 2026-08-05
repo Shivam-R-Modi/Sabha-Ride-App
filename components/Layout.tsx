@@ -60,7 +60,7 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName
         </div>
         <div className="flex items-center gap-2">
           <RoleSwitcher />
-          <button onClick={logout} className="p-2 text-gray-500 hover:text-red-500 btn-feedback">
+          <button onClick={logout} className="p-2 text-gray-500 hover:text-red-600 btn-feedback">
             <LogOut size={20} />
           </button>
         </div>
@@ -145,7 +145,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
             </div>
             <button
               onClick={logout}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-600 rounded-xl text-xs font-bold transition-all group btn-feedback"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gray-100 hover:bg-red-50 hover:text-red-700 text-gray-600 rounded-xl text-xs font-bold transition-all group btn-feedback"
             >
               <LogOut size={16} className="group-hover:rotate-12 transition-transform" />
               Sign Out

@@ -152,7 +152,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                 {dismissedRequest && !activeRide && (
                     <div className="clay-card bg-red-50 border border-red-100">
                         <div className="flex items-start gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center text-red-500 shrink-0">
+                            <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center text-red-600 shrink-0">
                                 <AlertCircle size={24} />
                             </div>
                             <div className="flex-1">
@@ -163,7 +163,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                                 {dismissedRequest.managerContact && (
                                     <a
                                         href={`tel:${dismissedRequest.managerContact}`}
-                                        className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-semibold hover:bg-red-600 transition-colors"
+                                        className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-600 transition-colors"
                                     >
                                         <Phone size={16} />
                                         Contact Manager
@@ -220,7 +220,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
 
                         {activeRide?.dropoffRequested ? (
                             <div className="bg-green-50 border border-green-100 text-green-700 py-5 rounded-2xl font-bold flex flex-col items-center justify-center gap-2 animate-in slide-in-from-bottom-4">
-                                <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-100">
+                                <div className="w-10 h-10 bg-green-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-100">
                                     <CheckCircle2 size={24} />
                                 </div>
                                 <span className="text-sm">In Drop-off Queue</span>
