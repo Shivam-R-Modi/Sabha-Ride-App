@@ -3,8 +3,33 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(({ mode }) => {
+// firebase/config.ts calls getAuth() at module scope, so a missing API key
+// throws `auth/invalid-api-key` before React mounts and the user gets a blank
+// white page with nothing in the DOM. Vite substitutes `undefined` for an
+// absent VITE_* var, so that broken bundle builds and deploys silently.
+// Fail the build instead of shipping it.
+const REQUIRED_ENV = [
+  'VITE_FIREBASE_API_KEY',
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_APP_ID',
+];
+
+function assertFirebaseEnv(env: Record<string, string>, command: string) {
+  const missing = REQUIRED_ENV.filter((k) => !env[k]);
+  if (!missing.length) return;
+  const message =
+    `Missing Firebase environment variables: ${missing.join(', ')}\n` +
+    `  Expected in .env / .env.local at the project root (see .env.example).\n` +
+    `  Without them the app compiles fine but renders a blank page, because\n` +
+    `  getAuth() throws auth/invalid-api-key before React can mount.`;
+  if (command === 'build') throw new Error(message);
+  console.warn(`\n[vite] WARNING - ${message}\n`);
+}
+
+export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, '.', '');
+  assertFirebaseEnv(env, command);
   return {
     server: {
       port: 3000,
