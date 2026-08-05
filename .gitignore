@@ -25,3 +25,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Firebase CLI local state (deploy cache, emulator logs).
+# Machine-specific and regenerated on every deploy — tracking it made the
+# repo dirty after each `firebase deploy` and invited merge conflicts.
+.firebase/
+firebase-debug.log
+firestore-debug.log
