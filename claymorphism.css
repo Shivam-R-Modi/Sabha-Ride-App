@@ -43,6 +43,11 @@
      token, which adds env(safe-area-inset-bottom) on top. */
   --bottom-nav-h: 80px;
 
+  /* Rendered height of the shell's mobile header (.app-header in
+     Layout.tsx): 12px + 39px row + 12px, plus the top inset it already
+     pads for. Hidden from lg up, where .app-panel ignores it. */
+  --app-header-h: calc(63px + env(safe-area-inset-top));
+
   /* ═══════════════════════════════════════════════════════════════
      CLAYMORPHISM SYSTEM
      ═══════════════════════════════════════════════════════════════ */
@@ -140,6 +145,35 @@
   --clay-text-primary: var(--text-primary);
   --clay-text-secondary: var(--text-secondary);
   --clay-text-muted: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   0. APP SHELL PRIMITIVES
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Pins the shell header to the token everything else measures against,
+   so the two cannot drift. Inert today — the header already measures
+   exactly this. */
+.app-header {
+  min-height: var(--app-header-h);
+}
+
+/* A screen that manages its own internal scrolling (fixed toolbar, one
+   scrolling region) and therefore needs a definite height. That height
+   is the viewport MINUS the shell chrome — not 100vh, which is what
+   ManagerDashboard used to claim: it rendered 844px tall starting 63px
+   below the top of a 844px viewport, so its last 143px fell past the
+   fold and the bottom 80px sat permanently behind the fixed nav. */
+.app-panel {
+  height: calc(100dvh - var(--app-header-h) - var(--bottom-nav-h) - env(safe-area-inset-bottom));
+}
+
+@media (min-width: 1024px) {
+
+  /* Header and bottom nav are both display:none from lg up. */
+  .app-panel {
+    height: 100dvh;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════

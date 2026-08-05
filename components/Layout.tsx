@@ -50,7 +50,7 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName
   const { logout } = useAuth();
 
   return (
-    <header className="lg:hidden sticky top-0 z-40 bg-cream/80 backdrop-blur-md border-b border-orange-100 pt-safe">
+    <header className="app-header lg:hidden sticky top-0 z-40 bg-cream/80 backdrop-blur-md border-b border-orange-100 pt-safe">
       <div className="px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2 overflow-hidden">
           <div className="bg-saffron/10 p-2 rounded-full">

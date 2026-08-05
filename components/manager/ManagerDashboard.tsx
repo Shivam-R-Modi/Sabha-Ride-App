@@ -395,7 +395,7 @@ export const ManagerDashboard: React.FC = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 relative overflow-hidden">
+    <div className="app-panel flex flex-col bg-gray-50 relative overflow-hidden">
       {/* Top Control Bar */}
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shadow-sm z-20 shrink-0 pt-safe lg:pt-2">
         <div className="flex items-center gap-3 min-w-0">
