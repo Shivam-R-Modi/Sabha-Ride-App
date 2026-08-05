@@ -383,14 +383,14 @@ export const DriverDashboard: React.FC = () => {
                                 </button>
                             </div>
 
-                            <div className="bg-gray-50 p-3 rounded-lg flex items-center justify-between border border-gray-100">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-white p-2 rounded-md text-coffee shadow-sm">
+                            <div className="bg-gray-50 p-3 rounded-lg flex items-center justify-between gap-3 border border-gray-100">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="bg-white p-2 rounded-md text-coffee shadow-sm shrink-0">
                                         <Car size={18} />
                                     </div>
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-xs font-bold text-gray-500 uppercase">Current Vehicle</p>
-                                        <p className="text-sm font-bold text-coffee">
+                                        <p className="text-sm font-bold text-coffee truncate">
                                             {isAvailable ? (userProfile?.currentVehicleName || "No Vehicle Selected") : "No Vehicle Selected"}
                                         </p>
                                         {isAvailable && userProfile?.currentVehiclePlate && (
@@ -401,7 +401,7 @@ export const DriverDashboard: React.FC = () => {
                                 <button
                                     onClick={handleReleaseVehicle}
                                     disabled={switchingCar}
-                                    className="clay-button-secondary text-xs"
+                                    className="clay-button-secondary text-xs shrink-0 whitespace-nowrap"
                                 >
                                     {switchingCar ? <RefreshCw className="animate-spin" size={14} /> : (isAvailable && userProfile?.currentVehicleId ? 'Change Car' : 'Select Car')}
                                 </button>
