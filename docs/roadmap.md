@@ -286,8 +286,8 @@ Both are safeguarding issues, not engineering preferences.
 | 1 | ~~Deploy Stage 0~~ — **done**, both functions live. Confirm behaviour Friday evening | — |
 | 2 | ~~Merge PR #1~~ — **done** (`8bc06dd`) | — |
 | 3 | Send `docs/compliance/` for qualified review — counsel, insurer, safeguarding lead | Owner |
-| 4 | Answer Q3 and Q4 in §8 — both block Phase 1 | Owner |
-| 5 | Fix the write-on-read at `DriverDashboard.tsx:133` so test mode can hold. Small, and it unblocks rehearsing the Friday flow before Friday | Dev |
+| 4 | ~~Answer Q3 and Q4~~ — **decided**, recorded as A8 and A9 | — |
+| 5 | ~~Fix the write-on-read at `DriverDashboard.tsx:133`~~ — **done**. Test mode can now hold, so the Friday flow is rehearsable on any day | — |
 | 6 | Decide the Phase 1 start date | Owner |
 
 ---
@@ -301,55 +301,50 @@ Both are safeguarding issues, not engineering preferences.
 2. Who holds the Firebase project Owner role after handover? That's the root of
    trust (A7).
 
-**Blocking Phase 1 — raised by the city-silo model**
+**Decided — the city-silo model (was Q3, Q4)**
 
-3. **How does a member who attends two cities work?** If cities are hard silos,
-   a Boston member visiting Atlanta is a conflict. Options:
-   - **(a) One identity, city memberships — recommended.** Silo the *data*, not
-     the *identity*. One auth account. The Atlanta manager sees that person's
-     name, phone and pickup address for the ride they requested in Atlanta, and
-     nothing of their Boston history. One record to correct, one to delete.
-   - (b) Separate account per city. Duplicates a person — and duplicates a
-     child's record, giving two deletion targets and two things to keep
-     accurate. Worse for compliance, not better.
-   - (c) Visitor flow: request a ride in another city without membership there.
-     Lightest, but no attendance history and awkward for a regular visitor.
+**A8 — Silo the data, not the identity.** One auth account per person, with
+city memberships. A member who attends two cities has one record; the Atlanta
+manager sees their name, phone and pickup address for the ride they requested
+*in Atlanta*, and nothing of their Boston history.
 
-   I have written the data model assuming **(a)**. Needs confirming, because it
-   is the one place the silo is deliberately permeable.
+Rejected: a separate account per city. It duplicates a person — and for a child
+duplicates their record, giving two things to keep accurate and two deletion
+targets. Worse for compliance, not better. This is the one place the silo is
+deliberately permeable, and it is permeable at the *identity* layer only.
 
-4. **"Rider chooses which location they are providing service for"** — riders
-   receive service, drivers provide it, so which did you mean? I believe both
-   need it and have modelled both:
-   - a **rider** picks which location they are *attending* → sets the destination
-   - a **driver** picks which location they are *serving* → sets the ride pool
-     they draw from
+**A9 — Both sides select their location.** In a city with several locations:
 
-   Confirm, because if only one side selects, the other has to be inferred and
-   that inference is where cross-location mix-ups would come from.
+- a **rider** picks which location they are *attending* → sets the destination
+- a **driver** picks which location they are *serving* → sets the ride pool
+  they draw from
+
+Both lists are maintained by that city's managers. Both sides select because
+whichever side does not select has to be *inferred* — and that inference is
+exactly where cross-location mix-ups would originate.
 
 **Blocking Phase 3**
 
-5. Can a guest be a minor? If yes, whose consent covers them, and does the
+3. Can a guest be a minor? If yes, whose consent covers them, and does the
    guardian-accompaniment rule extend to them?
 
 **Blocking Phase 4**
 
-6. Is there any driver vetting today, even informal? The assignment gate needs
+4. Is there any driver vetting today, even informal? The assignment gate needs
    something to check against.
 
 **Blocking Phase 6**
 
-7. Who may appoint super-managers once the app is handed over — any
+5. Who may appoint super-managers once the app is handed over — any
    super-manager, or a named trustee group?
-8. How many cities and locations realistically, and over what period? Two in Boston next
+6. How many cities and locations realistically, and over what period? Two in Boston next
    quarter is a very different build from thirty nationwide this year — it
    decides whether Phase 4 needs a real queue or a Firestore trigger suffices.
 
 **Deferred but worth an early view**
 
-9. Do vehicles belong to a location or to a driver who may serve several?
-10. Should attendance be per-event rather than per-week, now that the day can
+7. Do vehicles belong to a location or to a driver who may serve several?
+8. Should attendance be per-event rather than per-week, now that the day can
    move? Attendance is currently keyed off the upcoming Friday's date via
    `getCurrentWeekId()`, so a variable day shifts those keys and can orphan
    already-submitted responses. Likely resolved in Phase 5, but the answer
