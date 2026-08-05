@@ -52,7 +52,7 @@ export const DriverHistory: React.FC = () => {
     }
 
     return (
-        <div className="pb-24 pt-6 px-4 space-y-4 max-w-4xl mx-auto animate-in fade-in duration-300">
+        <div className="pb-6 pt-6 px-4 space-y-4 max-w-4xl mx-auto animate-in fade-in duration-300">
             <div>
                 <h2 className="text-2xl font-header font-bold text-coffee">Drive History</h2>
                 <p className="text-mocha/60 text-sm mt-0.5">Your record of transportation seva</p>

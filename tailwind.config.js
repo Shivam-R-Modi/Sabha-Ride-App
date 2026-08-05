@@ -28,6 +28,12 @@ export default {
       '2xl': '1536px',
     },
     extend: {
+      spacing: {
+        // Clearance for the fixed bottom nav, including the home-indicator
+        // inset. --bottom-nav-h is declared in claymorphism.css next to the
+        // nav itself so the two cannot drift apart.
+        'safe-nav': 'calc(var(--bottom-nav-h) + env(safe-area-inset-bottom))',
+      },
       colors: {
         // Ramps are the existing brand hues, extended downwards so text has an
         // accessible step. Contrast measured against cream #FAF9F6.

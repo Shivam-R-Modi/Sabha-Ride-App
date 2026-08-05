@@ -34,7 +34,7 @@ export const ResponsiveLayout: React.FC<LayoutProps> = ({ children, role }) => {
         }`}>
         <MobileHeader userName={userProfile?.name || 'User'} role={role} />
 
-        <main className="flex-1 pb-20 lg:pb-0">
+        <main className="flex-1 pb-safe-nav lg:pb-0">
           <div className="max-w-7xl mx-auto w-full">
             {children}
           </div>

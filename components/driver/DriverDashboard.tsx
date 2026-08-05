@@ -363,7 +363,7 @@ export const DriverDashboard: React.FC = () => {
             case 'dashboard':
             default:
                 return (
-                    <div className="pb-24 px-4 pt-6 space-y-6">
+                    <div className="pb-6 px-4 pt-6 space-y-6">
                         {/* Driver Status Header */}
                         <div className="clay-card space-y-4">
                             <div className="flex items-center justify-between">

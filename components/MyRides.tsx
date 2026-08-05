@@ -60,7 +60,7 @@ export const MyRides: React.FC<MyRidesProps> = ({
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-6">
       <h2 className="text-xl font-header font-bold text-coffee px-4 pt-4">My Rides</h2>
 
       {/* Tabs */}
