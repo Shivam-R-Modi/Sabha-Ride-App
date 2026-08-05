@@ -6,12 +6,11 @@ import { AssignmentPreview } from './AssignmentPreview';
 import { ActiveRide } from './ActiveRide';
 import { CompletionScreen } from './CompletionScreen';
 import { releaseVehicle, setDriverAvailability, useAvailableVehicles, assignVehicleToDriver } from '../../hooks/useFirestore';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, doc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import {
     globalAssignDriver,
     driverDoneForToday,
-    manuallyUpdateRideContext,
     AssignStudentsResult,
     GlobalAssignResult,
     CompleteRideResult
@@ -126,20 +125,43 @@ export const DriverDashboard: React.FC = () => {
         return unsubscribe;
     }, [currentUser, rideContext?.rideType]);
 
-    // Fetch ride context on mount
+    // Subscribe to the ride context published by the scheduler.
+    //
+    // This used to call manuallyUpdateRideContext(), which is a WRITE: with no
+    // arguments the callable recomputes the context server-side and sets
+    // testMode back to false. So every driver opening their dashboard silently
+    // cleared a manager's test-mode override and raced the every-minute
+    // scheduler, and a read cost a Firestore write.
+    //
+    // Reading the document is also fresher — it stays subscribed rather than
+    // sampling once on mount, so a window opening mid-session arrives on its
+    // own.
     useEffect(() => {
-        const fetchRideContext = async () => {
-            try {
-                const context = await manuallyUpdateRideContext();
-                setRideContext({
-                    rideType: context.rideType as 'home-to-sabha' | 'sabha-to-home' | null,
-                    displayText: context.displayText
-                });
-            } catch (error) {
-                console.error('Error fetching ride context:', error);
-            }
-        };
-        fetchRideContext();
+        const unsubscribe = onSnapshot(
+            doc(db, 'system', 'rideContext'),
+            (snap) => {
+                if (!snap.exists()) {
+                    setRideContext(null);
+                    return;
+                }
+                const data = snap.data();
+                const next = {
+                    rideType: (data.rideType ?? null) as 'home-to-sabha' | 'sabha-to-home' | null,
+                    displayText: data.displayText ?? ''
+                };
+                // The scheduler rewrites this document every minute, changing
+                // only lastUpdated. Keep the previous object when nothing we
+                // render has changed, so drivers holding the screen open don't
+                // re-render once a minute.
+                setRideContext((prev) =>
+                    prev && prev.rideType === next.rideType && prev.displayText === next.displayText
+                        ? prev
+                        : next
+                );
+            },
+            (error) => console.error('Error subscribing to ride context:', error)
+        );
+        return unsubscribe;
     }, []);
 
     const toggleAvailability = async () => {
