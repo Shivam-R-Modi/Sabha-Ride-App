@@ -77,6 +77,11 @@ body::before {
    TYPOGRAPHY
    ─────────────────────────────────────────────────────────────── */
 
+/* No `color` here on purpose. An element-level colour beats an INHERITED
+   one, so `h1 { color: ... }` overrode the white it should have inherited
+   from a `text-white` container — every auth hero rendered its heading in
+   dark brown on a saffron gradient. body sets the default colour; headings
+   inherit it, and a utility class on the element still wins. */
 h1,
 h2,
 h3,
@@ -86,7 +91,6 @@ h6 {
     font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
     font-weight: 700;
     line-height: 1.2;
-    color: var(--text-primary, #3D2914);
 }
 
 h1 {
@@ -113,9 +117,10 @@ h6 {
     font-size: 1rem;
 }
 
+/* Same reason as the headings above: this defeated inheritance inside any
+   container that set its own colour. */
 p {
     margin-bottom: 1rem;
-    color: var(--text-secondary, #5D4930);
 }
 
 /* Accessible Text Colors */
