@@ -121,7 +121,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
                 </span>
               )}
               {isActive && (
-                <div className="absolute left-0 w-1 h-6 bg-saffron rounded-r-full shadow-lg" />
+                <div className="absolute left-0 w-1 h-6 bg-saffron-800 rounded-r-full shadow-lg" />
               )}
             </button>
           );
@@ -197,7 +197,7 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
                 {item.label}
               </span>
               {isActive && (
-                <div className="absolute top-0 w-1/2 max-w-[40px] h-1 bg-saffron rounded-b-md shadow-[0_2px_10px_rgba(255,107,53,0.4)] animate-in slide-in-from-top-1" />
+                <div className="absolute top-0 w-1/2 max-w-[40px] h-1 bg-saffron-800 rounded-b-md shadow-[0_2px_10px_rgba(184,67,24,0.4)] animate-in slide-in-from-top-1" />
               )}
             </button>
           );
