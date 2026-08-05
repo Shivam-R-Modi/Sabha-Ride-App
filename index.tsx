@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import './claymorphism.css';
+// Must stay the last CSS import — see the header comment in tailwind.css.
+import './tailwind.css';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { NavigationProvider } from './contexts/NavigationContext';

@@ -10,51 +10,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Sabha Ride" />
   <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
     href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Noto+Sans+Gujarati:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700&display=swap"
     rel="stylesheet">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            saffron: {
-              DEFAULT: '#FF6B35',
-              dark: '#F4722B',
-              light: '#FF8C5A'
-            },
-            cream: {
-              DEFAULT: '#FAF9F6',
-              dark: '#F2EFE9'
-            },
-            gold: '#D4AF37',
-            coffee: '#3D2914',
-            mocha: '#5C4033',
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            header: ['Poppins', 'sans-serif'],
-            cursive: ['"Great Vibes"', 'cursive'],
-            gujarati: ['"Noto Sans Gujarati"', 'sans-serif'],
-          },
-          animation: {
-            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-            'float': 'float 3s ease-in-out infinite',
-            'spin-slow': 'spin 8s linear infinite',
-          },
-          keyframes: {
-            float: {
-              '0%, 100%': { transform: 'translateY(0)' },
-              '50%': { transform: 'translateY(-5px)' },
-            }
-          }
-        }
-      }
-    }
-  </script>
+  <!-- Tailwind theme now lives in tailwind.config.js and is compiled at build time. -->
   <style>
     :root {
       --sat: env(safe-area-inset-top);
@@ -162,7 +123,7 @@
   }
 }
 </script>
-  <link rel="stylesheet" href="/index.css">
+  <!-- index.css is imported from index.tsx; a second <link> here loaded it twice. -->
 </head>
 
 <body>

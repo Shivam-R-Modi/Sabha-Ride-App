@@ -1,0 +1,19 @@
+/* ═══════════════════════════════════════════════════════════════
+   TAILWIND LAYERS - Sabha Ride Seva
+
+   IMPORTANT: this file must stay the LAST CSS import in index.tsx.
+
+   It replaces the former <script src="cdn.tailwindcss.com"> in index.html,
+   which injected its stylesheet at runtime and therefore landed in a
+   different cascade position in `npm run dev` than in the built app —
+   so radii, grid tracks and responsive display utilities resolved to
+   different values in dev than in production.
+
+   Import order (index.tsx):  index.css → claymorphism.css → tailwind.css
+   Utilities last = utilities win, which is what the production build
+   has always done. Do not reorder.
+   ═══════════════════════════════════════════════════════════════ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
