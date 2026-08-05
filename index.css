@@ -249,6 +249,26 @@ p {
 }
 
 /* ───────────────────────────────────────────────────────────────
+   SCROLL STRIPS
+
+   For short horizontal strips (tab bars, chip rows) where the global
+   10px saffron scrollbar would be taller than the content it belongs to.
+   The clipped last item is the scroll affordance.
+
+   DatabaseConsole.tsx has applied this class since before it existed.
+   ─────────────────────────────────────────────────────────────── */
+
+.no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+/* ───────────────────────────────────────────────────────────────
    BUTTON FEEDBACK (Haptic-like)
    ─────────────────────────────────────────────────────────────── */
 

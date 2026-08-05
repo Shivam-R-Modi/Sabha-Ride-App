@@ -397,24 +397,24 @@ export const ManagerDashboard: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-gray-50 relative overflow-hidden">
       {/* Top Control Bar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex justify-between items-center shadow-sm z-20 shrink-0 pt-safe lg:pt-2">
-        <div className="flex items-center gap-3">
-          <div className="bg-gray-100 p-1 rounded-lg flex shrink-0 gap-1">
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shadow-sm z-20 shrink-0 pt-safe lg:pt-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="bg-gray-100 p-1 rounded-lg flex gap-1 min-w-0 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab('planning')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
               Request Center
             </button>
             <button
               onClick={() => setActiveTab('dropoff')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
               Live Operations
             </button>
             <button
               onClick={() => setActiveTab('database')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'database' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'database' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
               Database Console
             </button>
