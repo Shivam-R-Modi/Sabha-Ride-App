@@ -17,15 +17,20 @@ The app works and serves **one** location. Everything about it assumes that.
 | UI / design system pass | Tokens, accessible colour ramps, 44px targets, layout primitives. Contrast failures 111 → 1. Live on `main`. |
 | Tailwind compiled at build time | Was the runtime CDN, which broke offline and shifted the cascade between dev and prod. |
 | Env guard | A build with missing Firebase vars now fails instead of silently shipping a blank page. |
-| **Stage 0 — schedule timezone** | Server read local rules off a UTC clock, so drop-off rides could never run. Fixed and tested. **Committed, not deployed.** |
+| **Stage 0 — schedule timezone** | Server read local rules off a UTC clock, so drop-off rides could never run. Fixed, tested, **merged and deployed to production**. First behavioural confirmation is Friday. |
 
 **Target state**
 
-Many locations, several per city, across US states and timezones. Each location
-has its own managers, schedule, venue and vehicle pool. Super-managers create
-and administer locations nationwide. Sabha events carry their own date, time,
-venue and agenda. Passengers include account holders, guardian-added dependents
-and vouched guests. Members may belong to more than one location.
+**Cities are silos.** Within a city, several locations, each with its own
+managers, schedule, venue and vehicle pool. Nothing crosses a city boundary
+except a superManager. Across US states and timezones.
+
+Super-managers create cities and appoint city managers; city managers create
+locations and appoint location managers; inside a location the app runs as it
+does today. Sabha events carry their own date, time, venue and agenda.
+Passengers include account holders, guardian-added dependents and vouched
+guests. Members select which location they are attending or serving, from a
+list their managers maintain.
 
 ---
 
@@ -35,12 +40,12 @@ Findings from reading the code, not speculation. Each is a hard blocker.
 
 | # | Blocker | Evidence | Consequence |
 |---|---|---|---|
-| B1 | Profiles are world-readable to any signed-in account | `firestore.rules` — `match /users/{userId} { allow read: if isAuthenticated() }` | Any account reads every name, phone and home address nationwide. With dependents, that includes children. **The single most serious item here.** |
+| B1 | Profiles are world-readable to any signed-in account | `firestore.rules` — `match /users/{userId} { allow read: if isAuthenticated() }` | Any account reads every name, phone and home address nationwide. With dependents, that includes children. **The single most serious item here** — and the reason the city silo is a compliance control, not a convenience. |
 | B2 | `system/rideContext` is one document platform-wide | `updateRideTypeContext.ts`, `globalAssignDriver.ts` | One city's ride window overwrites another's |
 | B3 | `system/assignmentLock` is one global mutex, 10s TTL | `globalAssignDriver.ts:17` | Every driver nationwide serialises through it. Atlanta blocks Boston at 10 PM Friday |
 | B4 | `settings/main` holds exactly one venue | `functions/src/utils/settings.ts` | `getSabhaLocation()` returns *the* destination for clustering and routing |
 | B5 | `settings/managerCode` is one static platform-wide code | `verifyManagerCode.ts` | Anyone who learns it becomes a manager anywhere |
-| B6 | Queries have no location filter | `useUsers.ts:68` — `query(collection(db,'rides'), where('status','==','requested'))` | Every manager streams every ride request in the country |
+| B6 | Queries have no location filter | `useUsers.ts:68` — `query(collection(db,'rides'), where('status','==','requested'))` | Every manager streams every ride request in the country, and dispatch can pull a rider from another city |
 | B7 | Dispatch runs in the manager's browser | `useAutoDispatch.ts:23` — *"runs in the Manager Dashboard and acts as the Server logic"* | N managers = N brains competing to dispatch the same rides |
 | B8 | Every request is exactly one seat | `vrpSolver.ts` — `totalDemand + 1` | A group of three gets placed in one free seat. Breaks the moment guests exist |
 | B9 | No tenancy or super-manager in the model | `types.ts` — `UserRole = 'student' \| 'driver' \| 'manager'` | No scoping, no platform administration |
@@ -49,18 +54,41 @@ Findings from reading the code, not speculation. Each is a hard blocker.
 
 ## 3. Architecture decisions
 
-**A1 — The tenant is the Location, not the city.**
-City and region are grouping metadata for navigation and reporting. Managers
-are appointed per location, rides belong to a location, schedules and venues are
-per location. Making City the tenant immediately requires sub-tenancy for the
-two-locations-in-one-city case, which is the actual situation.
+**A1 — The City is the isolation boundary. The Location is the operational unit.**
+
+*Revised. An earlier version of this document made the Location the tenant and
+treated City as grouping metadata. That was wrong: it conflated the isolation
+boundary with the dispatch boundary and produced a weaker security model.*
+
+Two levels, each doing one job:
 
 ```
-Region (northeast) → City (boston) → Location (huntington)  ← tenant boundary
-                                   → Location (lowell)
+Platform  ── superManager only
+ └── City (boston)                 ← SILO. Isolation boundary. No data or access
+      │                              crosses it except via a superManager.
+      ├── Location (huntington)    ← Operational unit. Dispatch, events, vehicles.
+      └── Location (lowell)          The app as it works today runs here.
 ```
 
-**A2 — `rides` and `users` stay top-level with a `locationId` field**, rather
+Why the split matters:
+
+- **Manager read scope becomes city-bounded**, so no city-level account can
+  ever reach a national dataset of families. This is the compliance control, and
+  it is structural rather than a filter someone can forget to apply.
+- **`superManager` is the only cross-city role** — a small set, MFA-protected,
+  fully audited.
+- **Cross-city assignment becomes impossible by construction.** A rider in one
+  city cannot be pulled into another city's dispatch, because the query cannot
+  see them.
+- **Rules get simpler and cheaper.** Most checks collapse from "does this
+  manager manage this specific location?" to "same city?".
+
+"City" means *an administrative area a superManager defines*, not necessarily a
+municipality. A metro area spanning several towns should be one city if one
+group of managers runs it. Keeping the label concrete while letting the boundary
+be operational avoids boxing anyone in later.
+
+**A2 — `rides` and `users` stay top-level, carrying both `cityId` and `locationId`**, rather
 than nested under `locations/`. Collection-group queries get awkward, and a
 person moving city shouldn't be re-keyed.
 
@@ -87,6 +115,18 @@ permanently.
 `nextWindow` also gives the driver dashboard *"Rides open Friday 3:00 PM"*
 instead of today's red error box.
 
+**A4b — Four roles, each scoped to one level of the hierarchy.**
+
+| Role | Scope | Can |
+|---|---|---|
+| `superManager` | Platform | Create/archive cities, appoint city managers, cross-city reporting. **Not** routine operations |
+| `cityManager` | One or more cities | Create/archive locations in their city, appoint location managers, city-wide reporting |
+| `locationManager` | One or more locations in one city | Day-to-day operations — exactly what "manager" does today |
+| `driver` / `student` | One or more cities; selects a location per event | Request or serve rides |
+
+Today's single `manager` role migrates to `locationManager` of the founding
+location. Existing behaviour is preserved; the levels above are new.
+
 **A5 — Events, not a weekly recurrence rule.** Since the day varies and each
 sabha has an agenda, model a list of events with "Friday" as a default rather
 than a rule. Makes the varying-day case natural instead of an exception.
@@ -105,10 +145,20 @@ mandatory MFA. Detail in [`compliance/ownership-and-handover.md`](compliance/own
 ## 4. Data model
 
 ```jsonc
-// locations/{locationId}                       ← the tenant root
+// cities/{cityId}                              ← the SILO. Isolation boundary.
 {
-  "name": "Boston — Huntington Ave",
-  "cityId": "boston", "regionId": "northeast",
+  "name": "Boston",
+  "regionId": "northeast",
+  "timeZone": "America/New_York",               // default for its locations
+  "status": "active",                            // active | paused | archived
+  "cityManagerIds": ["…"],
+  "createdBy": "<superManagerUid>"
+}
+
+// locations/{locationId}                       ← operational unit inside a city
+{
+  "name": "Huntington Ave",
+  "cityId": "boston",                            // silo key — on every record
   "timeZone": "America/New_York",               // Stage 0 already reads a zone
   "venue": { "lat": 0, "lng": 0, "address": "…", "placeId": "…" },
   "status": "active",                            // active | paused | archived
@@ -135,8 +185,9 @@ mandatory MFA. Detail in [`compliance/ownership-and-handover.md`](compliance/own
 {
   "ageBand": "adult",                            // 'under13'|'13-17'|'adult'  (D2)
   "guardianUid": null,
-  "memberships": { "boston-huntington": "student", "atlanta-north": "student" },
-  "primaryLocationId": "boston-huntington",
+  "cityMemberships": { "boston": "student", "atlanta": "student" },   // see Q3
+  "locationIds": ["boston-huntington", "boston-lowell"],              // selectable, see Q4
+  "primaryCityId": "boston",
   "dependents": [ { "id": "d1", "name": "…", "ageBand": "under13" } ],
   "consents": [ { "type": "privacyNotice", "version": "…", "at": "…" } ],
   "vetting": { "status": "approved", "checks": [ … ] }   // drivers (D6)
@@ -144,6 +195,7 @@ mandatory MFA. Detail in [`compliance/ownership-and-handover.md`](compliance/own
 
 // rides/{rideId}
 {
+  "cityId": "boston",                             // silo key, checked in rules
   "locationId": "boston-huntington", "eventId": "…",
   "requestedBy": "<uid>",
   "passengers": [
@@ -167,14 +219,14 @@ Sizes are relative (S/M/L/XL), not estimates.
 | Phase | What | Fixes | Size | User-visible? |
 |---|---|---|---|---|
 | **0** ✅ | Schedule timezone | — | S | No (fixes Friday) |
-| **1** | **Security & tenancy groundwork.** Scope `/users` reads; move to custom claims; add `locationId` to `users`/`rides` with a backfill; audit-log skeleton; remove the shared manager code | B1, B5, B9 | M | No |
-| **2** | **Introduce the tenant, one location live.** `locations` collection; per-location rideContext, lock, settings; scope every query | B2, B3, B4, B6 | L | No |
+| **1** | **Security & silo groundwork.** Scope `/users` reads **by city**; custom claims (`city`, `mgr`, `sm`); add `cityId` + `locationId` to `users`/`rides` with a backfill; audit-log skeleton; remove the shared manager code | B1, B5, B9 | M | No |
+| **2** | **Introduce cities + locations, one of each live.** `cities` and `locations` collections; per-location rideContext, lock, settings; scope every query by `cityId` | B2, B3, B4, B6 | L | No |
 | **3** | **Passenger model.** Dependents, guests, manifests, seat-aware VRP | B8 | M | **Yes** |
 | **4** | **Server-side dispatch.** Auto-dispatch out of the browser into a Cloud Function, per location | B7 | XL | No |
 | **5** | **Events model + manager schedule UI.** Date, start/end, agenda, venue, cancellations | — | L | **Yes** |
-| **6** | **Super-manager console.** Create/archive locations, appoint managers, invites, governance, cross-location reporting | B9 | L | **Yes** |
-| **7** | **Second location, same city.** Concurrent venues — the first real multi-tenant test | — | M | **Yes** |
-| **8** | **Multi-city, multi-timezone.** Retention jobs, DSAR tooling | — | L | **Yes** |
+| **6** | **Super-manager + city-manager consoles.** Create/archive cities and locations, appoint managers at both levels, invites, governance, reporting | B9 | L | **Yes** |
+| **7** | **Second location, same city.** Concurrent venues, location selection — first real test of the operational unit | — | M | **Yes** |
+| **8** | **Second city.** First real test of the silo. Retention jobs, DSAR tooling, multi-timezone | — | L | **Yes** |
 
 ### Dependencies
 
@@ -202,10 +254,17 @@ drivers in the wrong city. It must land before a second location exists.
 
 ## 6. Recommendation
 
-**Build phases 1–4 against Boston only, with no second location live.** Every
-one is cheaper and safer with one tenant's data, and each ships independently.
-Then add the second location as a *test of work already done*, rather than
-discovering the gaps in production with families waiting for rides.
+**Build phases 1–4 inside one city, one location, with nothing else live.**
+Every one is cheaper and safer with a single silo's data, and each ships
+independently. Then add the second location (phase 7) and the second city
+(phase 8) as *tests of work already done*, rather than discovering the gaps in
+production with families waiting for rides.
+
+Note the ordering: **second location before second city.** The location is the
+operational unit, so a second location exercises dispatch, venue selection and
+concurrent events while everything still sits in one silo. Only once that is
+sound does the silo boundary itself get tested. Doing it the other way round
+means debugging both at once.
 
 **Two things I would not launch a second location without:**
 
@@ -224,11 +283,12 @@ Both are safeguarding issues, not engineering preferences.
 
 | | Action | Owner |
 |---|---|---|
-| 1 | **Deploy Stage 0** — `firebase deploy --only functions:updateRideTypeContext,functions:studentReadyToLeave`. Until this runs, drop-off rides fail every Friday | Owner |
-| 2 | Merge [PR #1](https://github.com/Shivam-R-Modi/Sabha-Ride-App/pull/1) | Owner |
+| 1 | ~~Deploy Stage 0~~ — **done**, both functions live. Confirm behaviour Friday evening | — |
+| 2 | ~~Merge PR #1~~ — **done** (`8bc06dd`) | — |
 | 3 | Send `docs/compliance/` for qualified review — counsel, insurer, safeguarding lead | Owner |
-| 4 | Decide the Phase 1 start date | Owner |
-| 5 | Answer the open questions in §8 | Owner |
+| 4 | Answer Q3 and Q4 in §8 — both block Phase 1 | Owner |
+| 5 | Fix the write-on-read at `DriverDashboard.tsx:133` so test mode can hold. Small, and it unblocks rehearsing the Friday flow before Friday | Dev |
+| 6 | Decide the Phase 1 start date | Owner |
 
 ---
 
@@ -241,28 +301,55 @@ Both are safeguarding issues, not engineering preferences.
 2. Who holds the Firebase project Owner role after handover? That's the root of
    trust (A7).
 
+**Blocking Phase 1 — raised by the city-silo model**
+
+3. **How does a member who attends two cities work?** If cities are hard silos,
+   a Boston member visiting Atlanta is a conflict. Options:
+   - **(a) One identity, city memberships — recommended.** Silo the *data*, not
+     the *identity*. One auth account. The Atlanta manager sees that person's
+     name, phone and pickup address for the ride they requested in Atlanta, and
+     nothing of their Boston history. One record to correct, one to delete.
+   - (b) Separate account per city. Duplicates a person — and duplicates a
+     child's record, giving two deletion targets and two things to keep
+     accurate. Worse for compliance, not better.
+   - (c) Visitor flow: request a ride in another city without membership there.
+     Lightest, but no attendance history and awkward for a regular visitor.
+
+   I have written the data model assuming **(a)**. Needs confirming, because it
+   is the one place the silo is deliberately permeable.
+
+4. **"Rider chooses which location they are providing service for"** — riders
+   receive service, drivers provide it, so which did you mean? I believe both
+   need it and have modelled both:
+   - a **rider** picks which location they are *attending* → sets the destination
+   - a **driver** picks which location they are *serving* → sets the ride pool
+     they draw from
+
+   Confirm, because if only one side selects, the other has to be inferred and
+   that inference is where cross-location mix-ups would come from.
+
 **Blocking Phase 3**
 
-3. Can a guest be a minor? If yes, whose consent covers them, and does the
+5. Can a guest be a minor? If yes, whose consent covers them, and does the
    guardian-accompaniment rule extend to them?
 
 **Blocking Phase 4**
 
-4. Is there any driver vetting today, even informal? The assignment gate needs
+6. Is there any driver vetting today, even informal? The assignment gate needs
    something to check against.
 
 **Blocking Phase 6**
 
-5. Who may appoint super-managers once the app is handed over — any
+7. Who may appoint super-managers once the app is handed over — any
    super-manager, or a named trustee group?
-6. How many locations realistically, and over what period? Two in Boston next
+8. How many cities and locations realistically, and over what period? Two in Boston next
    quarter is a very different build from thirty nationwide this year — it
    decides whether Phase 4 needs a real queue or a Firestore trigger suffices.
 
 **Deferred but worth an early view**
 
-7. Do vehicles belong to a location or to a driver who may serve several?
-8. Should attendance be per-event rather than per-week, now that the day can
+9. Do vehicles belong to a location or to a driver who may serve several?
+10. Should attendance be per-event rather than per-week, now that the day can
    move? Attendance is currently keyed off the upcoming Friday's date via
    `getCurrentWeekId()`, so a variable day shifts those keys and can orphan
    already-submitted responses. Likely resolved in Phase 5, but the answer
