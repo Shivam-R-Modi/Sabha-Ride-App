@@ -424,7 +424,7 @@ export const ManagerDashboard: React.FC = () => {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setShowFleetManagement(true)}
-            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
+            className="tap-target p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
             title="Fleet Management"
           >
             <Car size={20} />
@@ -433,7 +433,7 @@ export const ManagerDashboard: React.FC = () => {
           {/* Settings Button */}
           <button
             onClick={() => setShowSettings(true)}
-            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
+            className="tap-target p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
             title="Settings"
           >
             <MapPin size={20} />
@@ -443,7 +443,7 @@ export const ManagerDashboard: React.FC = () => {
           <button
             onClick={handleDownloadAttendance}
             disabled={isDownloading}
-            className={`p-2 rounded-lg relative transition-colors ${isDownloading ? 'bg-gray-100 cursor-wait' : 'text-gray-500 hover:bg-gray-100'} border border-transparent hover:border-gray-200`}
+            className={`tap-target p-2 rounded-lg relative transition-colors ${isDownloading ? 'bg-gray-100 cursor-wait' : 'text-gray-500 hover:bg-gray-100'} border border-transparent hover:border-gray-200`}
             title="Download Weekly Attendance CSV"
           >
             <Download size={20} className={isDownloading ? 'animate-pulse' : ''} />
@@ -456,7 +456,7 @@ export const ManagerDashboard: React.FC = () => {
 
           <button
             onClick={() => setShowNotifications(true)}
-            className={`p-2 rounded-lg relative transition-colors ${showNotifications ? 'bg-orange-100 text-saffron' : 'text-gray-500 hover:bg-gray-100'}`}
+            className={`tap-target p-2 rounded-lg relative transition-colors ${showNotifications ? 'bg-orange-100 text-saffron' : 'text-gray-500 hover:bg-gray-100'}`}
             title="Notifications"
           >
             <Bell size={20} />

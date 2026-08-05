@@ -274,6 +274,33 @@ p {
 }
 
 /* ───────────────────────────────────────────────────────────────
+   TAP TARGETS
+
+   Expands a control's HIT area to 44x44 without changing its visual
+   box, so icon buttons stay 20px icons in a tidy toolbar while still
+   being reachable with a thumb. Growing the buttons themselves would
+   reflow every toolbar they sit in.
+
+   Only for controls with clear space around them — on a tight row of
+   icons the enlarged areas would overlap and steal each other's taps.
+   There, the fix is spacing, not size.
+   ─────────────────────────────────────────────────────────────── */
+
+.tap-target {
+    position: relative;
+}
+
+.tap-target::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+}
+
+/* ───────────────────────────────────────────────────────────────
    BUTTON FEEDBACK (Haptic-like)
    ─────────────────────────────────────────────────────────────── */
 

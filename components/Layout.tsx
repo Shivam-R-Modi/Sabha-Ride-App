@@ -60,7 +60,7 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName
         </div>
         <div className="flex items-center gap-2">
           <RoleSwitcher />
-          <button onClick={logout} className="p-2 text-gray-500 hover:text-red-600 btn-feedback">
+          <button onClick={logout} className="tap-target p-2 text-gray-500 hover:text-red-600 btn-feedback">
             <LogOut size={20} />
           </button>
         </div>

@@ -138,7 +138,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
                     <div className="pt-4 border-t border-mocha/10">
                         <button
                             onClick={onBack}
-                            className="w-full flex items-center justify-center gap-2 text-coffee-500 hover:text-red-600 text-xs font-bold transition-colors"
+                            className="w-full min-h-11 flex items-center justify-center gap-2 text-coffee-500 hover:text-red-600 text-xs font-bold transition-colors"
                         >
                             <LogOut size={14} />
                             Sign Out / Use Different Email

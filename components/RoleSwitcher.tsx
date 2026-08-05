@@ -42,7 +42,7 @@ export const RoleSwitcher: React.FC = () => {
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 hover:bg-white shadow-sm border border-gold/20 transition-all duration-200"
+                className="flex items-center gap-2 px-3 py-2 min-h-11 rounded-xl bg-white/80 hover:bg-white shadow-sm border border-gold/20 transition-all duration-200"
             >
                 {currentConfig && (
                     <>

@@ -68,14 +68,14 @@ export const MyRides: React.FC<MyRidesProps> = ({
         <div className="bg-gray-100 p-1 rounded-xl flex">
           <button
             onClick={() => setActiveTab('upcoming')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'upcoming' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600'
+            className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all ${activeTab === 'upcoming' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600'
               }`}
           >
             Upcoming
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'history' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600'
+            className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all ${activeTab === 'history' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600'
               }`}
           >
             History

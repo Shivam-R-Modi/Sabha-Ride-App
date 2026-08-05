@@ -83,7 +83,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
             )}
             <button 
                 onClick={handleRefresh}
-                className={`p-2 text-gray-500 hover:text-coffee rounded-xl border border-gray-100 transition-all ${isRefreshing ? 'animate-spin text-saffron' : ''}`}
+                className={`tap-target p-2 text-gray-500 hover:text-coffee rounded-xl border border-gray-100 transition-all ${isRefreshing ? 'animate-spin text-saffron' : ''}`}
             >
                 <RefreshCw size={18} />
             </button>
