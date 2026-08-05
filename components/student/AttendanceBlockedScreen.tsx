@@ -142,7 +142,6 @@ export const AttendanceBlockedScreen: React.FC<AttendanceBlockedScreenProps> = (
                 marginTop: '32px',
                 fontSize: '0.8rem',
                 color: 'var(--clay-text-muted)',
-                opacity: 0.6
             }}>
                 Sabha Ride Seva
             </p>

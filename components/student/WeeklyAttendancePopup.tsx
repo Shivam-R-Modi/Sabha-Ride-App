@@ -152,7 +152,6 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
                     fontSize: '0.75rem',
                     color: 'var(--clay-text-muted)',
                     marginTop: '20px',
-                    opacity: 0.7
                 }}>
                     This helps us plan rides for everyone 🚗
                 </p>

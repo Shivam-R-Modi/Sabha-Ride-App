@@ -242,7 +242,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                         </div>
                         <div>
                             <h4 className="text-sm font-bold text-amber-900 leading-tight">Weekly Notice</h4>
-                            <p className="text-xs text-amber-800/80 mt-2 leading-relaxed">Please request your ride by Thursday evening to ensure we can coordinate a driver for your location.</p>
+                            <p className="text-xs text-amber-800 mt-2 leading-relaxed">Please request your ride by Thursday evening to ensure we can coordinate a driver for your location.</p>
                         </div>
                     </div>
                 </div>

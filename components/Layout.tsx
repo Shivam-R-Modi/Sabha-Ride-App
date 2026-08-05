@@ -193,7 +193,7 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
               <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-orange-50' : ''}`}>
                 <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
               </div>
-              <span className={`text-[10px] mt-1 font-bold uppercase tracking-tighter ${isActive ? 'opacity-100' : 'opacity-70'}`}>
+              <span className="text-[10px] mt-1 font-bold uppercase tracking-tighter">
                 {item.label}
               </span>
               {isActive && (
