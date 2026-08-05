@@ -85,7 +85,7 @@ export const AttendanceBlockedScreen: React.FC<AttendanceBlockedScreenProps> = (
                 <div style={{
                     width: '60px',
                     height: '3px',
-                    background: 'linear-gradient(90deg, var(--clay-primary), var(--clay-accent))',
+                    background: 'linear-gradient(90deg, var(--clay-fill-primary), var(--clay-accent))',
                     borderRadius: '2px',
                     margin: '0 auto 32px'
                 }} />

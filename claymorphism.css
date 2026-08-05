@@ -101,6 +101,39 @@
   --font-medium: 500;
   --font-semibold: 600;
   --font-bold: 700;
+
+  /* ═══════════════════════════════════════════════════════════════
+     --clay-* ALIASES
+
+     WeeklyAttendancePopup and AttendanceBlockedScreen reference these
+     from inline styles, but they were never declared. An undeclared
+     var() in an inline style is invalid at computed-value time, so
+     those declarations were dropped entirely: the accent divider never
+     painted, the page gradient never applied, and text that was meant
+     to be saffron inherited near-black — including the "Changed your
+     mind?" link, which was indistinguishable from body copy.
+
+     Text-bearing aliases point at the accessible steps of the same
+     hues (see the ramp in tailwind.config.js), not at the raw accent,
+     which is 2.84:1 on cream.
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* Text roles get the accessible step; decorative fills get the brand
+     accent. One variable cannot serve both — the accent is 2.84:1. */
+  --clay-primary: #B84318;
+  /* saffron-800, 5.18:1 on cream — link and accent TEXT */
+  --clay-primary-dark: #A83C14;
+  --clay-fill-primary: var(--saffron-orange);
+  /* #FF6B35 — decorative FILLS only, never text */
+  --clay-fill-primary-dark: var(--saffron-dark);
+  --clay-accent: var(--gold);
+  --clay-background: var(--cream);
+  --clay-surface: var(--cream-dark);
+  --clay-border: rgba(61, 47, 20, 0.15);
+  --clay-font-family: var(--font-heading);
+  --clay-text-primary: var(--text-primary);
+  --clay-text-secondary: var(--text-secondary);
+  --clay-text-muted: var(--text-muted);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -146,6 +179,17 @@
 .clay-card-lg {
   padding: var(--space-8);
   border-radius: var(--clay-radius-xl);
+}
+
+/* Pressed-in counterpart of .clay-card — the inverse of the raised surface.
+   Applied by ManagerDashboard's empty state, which had no definition to
+   resolve against and rendered as an invisible 96px hole. */
+.clay-card-inset {
+  background: linear-gradient(145deg, #F5F0E8 0%, #FAF9F6 100%);
+  box-shadow:
+    inset 6px 6px 12px 0 rgba(61, 47, 20, 0.1),
+    inset -4px -4px 10px 0 rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -203,6 +247,27 @@
 /* ═══════════════════════════════════════════════════════════════
    2. CLAY BUTTONS
    ═══════════════════════════════════════════════════════════════ */
+
+/* Colourless button base. App.tsx and EmailVerificationScreen apply
+   `clay-button` alongside their own Tailwind colours; the name had no
+   definition, so those two buttons opted out of the shared geometry
+   (notably the 44px minimum touch target) without anyone noticing.
+   Deliberately sets no colour — the utilities on the element own that. */
+.clay-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: var(--clay-transition);
+}
+
+.clay-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* Primary Button */
 .clay-button-primary,
@@ -750,7 +815,9 @@
    9. CLAY MODAL
    ═══════════════════════════════════════════════════════════════ */
 
-.clay-modal-backdrop {
+/* .clay-modal-overlay is the name WeeklyAttendancePopup applies. */
+.clay-modal-backdrop,
+.clay-modal-overlay {
   background: rgba(61, 41, 20, 0.4);
   backdrop-filter: blur(8px);
   position: fixed;

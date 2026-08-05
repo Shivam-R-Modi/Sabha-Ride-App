@@ -58,7 +58,7 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
                     width: '64px',
                     height: '64px',
                     borderRadius: '50%',
-                    background: 'linear-gradient(145deg, var(--clay-primary), var(--clay-primary-dark))',
+                    background: 'linear-gradient(145deg, var(--clay-fill-primary), var(--clay-fill-primary-dark))',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
