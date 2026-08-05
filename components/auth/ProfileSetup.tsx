@@ -101,7 +101,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                             <label className="block text-sm font-medium text-coffee mb-2">
                                 Email
                             </label>
-                            <div className="px-4 py-3 rounded-xl border-2 border-mocha/10 bg-mocha/5 text-mocha/70">
+                            <div className="px-4 py-3 rounded-xl border-2 border-mocha/10 bg-mocha/5 text-coffee-700">
                                 {email}
                             </div>
                         </div>
@@ -160,7 +160,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                                 </p>
                             )}
                             {!selectedPlace && address.length >= 3 && (
-                                <p className="text-sm text-mocha/50 mt-1">
+                                <p className="text-sm text-coffee-500 mt-1">
                                     Please select an address from the suggestions
                                 </p>
                             )}

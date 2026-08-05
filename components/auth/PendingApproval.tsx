@@ -84,10 +84,10 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                         <h2 className="text-2xl font-header font-bold text-coffee">
                             Approval Pending
                         </h2>
-                        <p className="text-mocha/70">
+                        <p className="text-coffee-700">
                             Your {role} account is currently pending approval from a Sabha coordinator.
                         </p>
-                        <p className="text-mocha/70">
+                        <p className="text-coffee-700">
                             Please check back later or contact the Sabha coordinator for updates.
                         </p>
                     </div>
@@ -98,7 +98,7 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                             <label className="block text-sm font-bold text-coffee">
                                 Have a Manager Access Code?
                             </label>
-                            <p className="text-xs text-mocha/70">
+                            <p className="text-xs text-coffee-700">
                                 Enter your code below to instantly approve your account.
                             </p>
                             <input

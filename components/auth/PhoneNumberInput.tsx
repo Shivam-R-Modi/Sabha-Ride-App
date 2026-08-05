@@ -101,7 +101,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
                             </option>
                         ))}
                     </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-mocha/50 text-xs">
+                    <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-coffee-500 text-xs">
                         ▼
                     </div>
                 </div>
@@ -134,7 +134,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
             {error ? (
                 <p className="text-xs text-red-600 font-medium">{error}</p>
             ) : !validation.isValid && rawDigits.length > 0 ? (
-                <p className="text-xs text-mocha/60">{validation.error}</p>
+                <p className="text-xs text-coffee-500">{validation.error}</p>
             ) : validation.isValid ? (
                 <p className="text-xs text-green-700 font-medium flex items-center gap-1">
                     ✓ Valid phone number ({selectedCountry.dialCode} {validation.e164})
@@ -142,7 +142,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
             ) : null}
 
             {/* SMS & Privacy Legal Consent Notice */}
-            <div className="pt-1 flex items-start gap-1.5 text-[11px] text-mocha/60 leading-tight">
+            <div className="pt-1 flex items-start gap-1.5 text-[11px] text-coffee-500 leading-tight">
                 <ShieldCheck size={14} className="text-saffron shrink-0 mt-0.5" />
                 <span>
                     Phone numbers are kept private and used exclusively for ride updates and volunteer driver/student pickup coordination.

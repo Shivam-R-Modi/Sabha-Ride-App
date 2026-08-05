@@ -81,7 +81,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                 {/* Close Button */}
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-mocha/50 hover:text-coffee transition-colors p-1 rounded-full hover:bg-mocha/10"
+                    className="absolute top-4 right-4 text-coffee-500 hover:text-coffee transition-colors p-1 rounded-full hover:bg-mocha/10"
                     title="Close"
                 >
                     <X size={20} />
@@ -93,7 +93,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                         <Mail size={32} />
                     </div>
                     <h3 className="text-2xl font-header font-bold text-coffee">Reset Your Password</h3>
-                    <p className="text-xs text-mocha/70 max-w-xs mx-auto">
+                    <p className="text-xs text-coffee-700 max-w-xs mx-auto">
                         Enter your registered email address and we will send you a secure link to reset your password.
                     </p>
                 </div>

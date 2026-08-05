@@ -158,7 +158,7 @@ export const ProfileEditor: React.FC = () => {
                     alt="Profile"
                 />
                 <h2 className="text-3xl font-header font-bold text-coffee">{userProfile?.name}</h2>
-                <p className="text-gold font-bold uppercase tracking-widest mt-1">{roleLabel}</p>
+                <p className="text-gold-700 font-bold uppercase tracking-widest mt-1">{roleLabel}</p>
 
                 {success && (
                     <div className="mt-4 mx-auto max-w-sm flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl p-3 animate-in fade-in">
@@ -174,7 +174,7 @@ export const ProfileEditor: React.FC = () => {
                             <div className="bg-orange-50 p-2 rounded-xl text-saffron">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
                             </div>
-                            <p className="text-sm text-mocha/70">{userProfile.email}</p>
+                            <p className="text-sm text-coffee-700">{userProfile.email}</p>
                         </div>
                     )}
 
@@ -183,7 +183,7 @@ export const ProfileEditor: React.FC = () => {
                             <div className="bg-orange-50 p-2 rounded-xl text-saffron">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
                             </div>
-                            <p className="text-sm text-mocha/70">{(userProfile as any).phone}</p>
+                            <p className="text-sm text-coffee-700">{(userProfile as any).phone}</p>
                         </div>
                     )}
 
@@ -192,7 +192,7 @@ export const ProfileEditor: React.FC = () => {
                             <div className="bg-orange-50 p-2 rounded-xl text-saffron">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
                             </div>
-                            <p className="text-sm text-mocha/70 line-clamp-2">{userProfile.address}</p>
+                            <p className="text-sm text-coffee-700 line-clamp-2">{userProfile.address}</p>
                         </div>
                     )}
                 </div>
@@ -273,10 +273,10 @@ export const ProfileEditor: React.FC = () => {
                         <p className="text-sm text-green-600 mt-1">✓ New address selected</p>
                     )}
                     {!selectedPlace && address !== (userProfile?.address || '') && address.length >= 3 && (
-                        <p className="text-sm text-mocha/50 mt-1">Please select an address from suggestions</p>
+                        <p className="text-sm text-coffee-500 mt-1">Please select an address from suggestions</p>
                     )}
                     {!selectedPlace && address === (userProfile?.address || '') && (
-                        <p className="text-xs text-mocha/40 mt-1">Address unchanged — leave as is or type a new one</p>
+                        <p className="text-xs text-coffee-500 mt-1">Address unchanged — leave as is or type a new one</p>
                     )}
                 </div>
 

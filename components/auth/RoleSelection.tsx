@@ -160,7 +160,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                                 </div>
                                 <div>
                                     <h3 className="text-xl font-header font-bold text-coffee">{role.title}</h3>
-                                    <p className="text-sm text-mocha/70 mt-2">{role.description}</p>
+                                    <p className="text-sm text-coffee-700 mt-2">{role.description}</p>
                                 </div>
                             </button>
                         ))}
@@ -172,7 +172,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                             <label className="block text-sm font-bold text-coffee mb-2">
                                 Manager Access Code <span className="text-red-500">*</span>
                             </label>
-                            <p className="text-xs text-mocha/60 mb-3">
+                            <p className="text-xs text-coffee-500 mb-3">
                                 Enter the access code provided by the Sabha coordinator to register as a manager.
                             </p>
                             <div className="relative">
@@ -186,7 +186,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                                 <button
                                     type="button"
                                     onClick={() => setShowManagerCode(!showManagerCode)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-coffee transition-colors"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-coffee transition-colors"
                                     title={showManagerCode ? 'Hide Code' : 'Show Code'}
                                 >
                                     {showManagerCode ? <EyeOff size={18} /> : <Eye size={18} />}

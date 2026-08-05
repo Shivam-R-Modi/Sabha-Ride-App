@@ -60,7 +60,7 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName
         </div>
         <div className="flex items-center gap-2">
           <RoleSwitcher />
-          <button onClick={logout} className="p-2 text-gray-400 hover:text-red-500 btn-feedback">
+          <button onClick={logout} className="p-2 text-gray-500 hover:text-red-500 btn-feedback">
             <LogOut size={20} />
           </button>
         </div>
@@ -87,7 +87,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
         {!isSidebarCollapsed && (
           <div className="animate-in fade-in slide-in-from-left-2">
             <h1 className="font-header font-bold text-coffee leading-none">Sabha Ride</h1>
-            <p className="text-[10px] text-gold font-bold uppercase tracking-widest mt-1">Seva Portal</p>
+            <p className="text-[10px] text-gold-700 font-bold uppercase tracking-widest mt-1">Seva Portal</p>
           </div>
         )}
       </div>
@@ -111,7 +111,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
               title={isSidebarCollapsed ? item.label : undefined}
               className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all group relative btn-feedback ${isActive
                 ? 'bg-orange-50 text-saffron shadow-sm border border-orange-100'
-                : 'text-gray-400 hover:bg-gray-50 hover:text-coffee'
+                : 'text-gray-500 hover:bg-gray-50 hover:text-coffee'
                 }`}
             >
               <Icon size={22} className={`${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
@@ -140,7 +140,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
               />
               <div className="min-w-0">
                 <p className="text-sm font-bold text-coffee truncate">{userProfile?.name}</p>
-                <p className="text-[10px] text-gray-400 font-bold uppercase truncate">{role}</p>
+                <p className="text-[10px] text-gray-500 font-bold uppercase truncate">{role}</p>
               </div>
             </div>
             <button
@@ -155,7 +155,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
           <button
             onClick={logout}
             title="Logout"
-            className="w-full flex justify-center p-3 text-gray-400 hover:text-red-600 transition-colors btn-feedback"
+            className="w-full flex justify-center p-3 text-gray-500 hover:text-red-600 transition-colors btn-feedback"
           >
             <LogOut size={22} />
           </button>
@@ -164,7 +164,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
         {/* Collapse Toggle */}
         <button
           onClick={toggleSidebar}
-          className="absolute -right-3 top-20 bg-white border border-orange-100 rounded-full p-1 shadow-md hover:shadow-lg transition-all text-gray-400 hover:text-saffron z-50"
+          className="absolute -right-3 top-20 bg-white border border-orange-100 rounded-full p-1 shadow-md hover:shadow-lg transition-all text-gray-500 hover:text-saffron z-50"
         >
           {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
@@ -187,7 +187,7 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
             <button
               key={item.id}
               onClick={() => setCurrentTab(item.id as TabView)}
-              className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${isActive ? 'text-saffron' : 'text-gray-400'
+              className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${isActive ? 'text-saffron' : 'text-gray-500'
                 }`}
             >
               <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-orange-50' : ''}`}>

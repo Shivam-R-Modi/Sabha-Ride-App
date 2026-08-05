@@ -46,7 +46,7 @@ export const DriverHistory: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center h-64">
                 <Loader2 className="animate-spin w-10 h-10 text-saffron" />
-                <p className="text-xs font-bold text-gold mt-4 tracking-widest uppercase">Loading Seva History...</p>
+                <p className="text-xs font-bold text-gold-700 mt-4 tracking-widest uppercase">Loading Seva History...</p>
             </div>
         );
     }
@@ -55,7 +55,7 @@ export const DriverHistory: React.FC = () => {
         <div className="pb-6 pt-6 px-4 space-y-4 max-w-4xl mx-auto animate-in fade-in duration-300">
             <div>
                 <h2 className="text-2xl font-header font-bold text-coffee">Drive History</h2>
-                <p className="text-mocha/60 text-sm mt-0.5">Your record of transportation seva</p>
+                <p className="text-coffee-500 text-sm mt-0.5">Your record of transportation seva</p>
             </div>
 
             {/* Stats Overview Grid */}
@@ -93,7 +93,7 @@ export const DriverHistory: React.FC = () => {
                                         <h4 className="font-bold text-coffee text-base">
                                             {ride.rideType === 'home-to-sabha' ? 'Home → Sabha' : 'Sabha → Home'}
                                         </h4>
-                                        <p className="text-xs text-mocha/60 flex items-center gap-1 mt-0.5">
+                                        <p className="text-xs text-coffee-500 flex items-center gap-1 mt-0.5">
                                             <Calendar size={12} />
                                             {rideDate}
                                         </p>
@@ -117,7 +117,7 @@ export const DriverHistory: React.FC = () => {
                                     </div>
                                 )}
                                 {ride.carModel && (
-                                    <div className="flex items-center gap-1 ml-auto text-gray-400 font-mono">
+                                    <div className="flex items-center gap-1 ml-auto text-gray-500 font-mono">
                                         <span>{ride.carColor} {ride.carModel}</span>
                                     </div>
                                 )}
@@ -127,10 +127,10 @@ export const DriverHistory: React.FC = () => {
                 })}
 
                 {rides.length === 0 && (
-                    <div className="clay-card p-8 text-center text-mocha/50">
+                    <div className="clay-card p-8 text-center text-coffee-500">
                         <Calendar size={36} className="mx-auto mb-3 text-saffron/40" />
                         <p className="font-bold text-coffee">No Completed Rides Yet</p>
-                        <p className="text-xs text-mocha/60 mt-1">Completed seva rides will be archived here.</p>
+                        <p className="text-xs text-coffee-500 mt-1">Completed seva rides will be archived here.</p>
                     </div>
                 )}
             </div>

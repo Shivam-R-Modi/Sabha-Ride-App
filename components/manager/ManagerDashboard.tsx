@@ -52,7 +52,7 @@ const RideAssignmentCard: React.FC<{
             <span className="text-xs bg-saffron/10 text-saffron px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
               {driver?.carModel || driver?.currentVehicleName || 'Vehicle'}
             </span>
-            <span className="text-xs text-mocha/60 bg-cream px-2 py-0.5 rounded-full font-medium">
+            <span className="text-xs text-coffee-500 bg-cream px-2 py-0.5 rounded-full font-medium">
               {driver?.plateNumber || driver?.currentVehiclePlate || 'No Plate'}
             </span>
           </div>
@@ -125,7 +125,7 @@ const RideAssignmentCard: React.FC<{
             </div>
 
             {/* Row 2: Address */}
-            <div className="pl-8 text-xs text-mocha/70 truncate flex items-center gap-1">
+            <div className="pl-8 text-xs text-coffee-700 truncate flex items-center gap-1">
               <MapPin size={10} className="shrink-0" />
               {ride.pickupAddress || 'No address provided'}
             </div>
@@ -133,14 +133,14 @@ const RideAssignmentCard: React.FC<{
         ))}
 
         {rides.length === 0 && (
-          <div className="p-6 text-center text-mocha/40 text-sm italic">
+          <div className="p-6 text-center text-coffee-500 text-sm italic">
             No students assigned yet.
           </div>
         )}
       </div>
 
       {/* Footer Stats */}
-      <div className="bg-cream/50 p-2 border-t border-cream-dark flex justify-between items-center text-xs text-mocha/60">
+      <div className="bg-cream/50 p-2 border-t border-cream-dark flex justify-between items-center text-xs text-coffee-500">
         <div className="flex items-center gap-1">
           <Users size={12} />
           <span>{rides.length} Passengers</span>
@@ -163,7 +163,7 @@ const EmptyState: React.FC<{ title: string; message: string }> = ({ title, messa
       <CheckCircle2 size={40} className="text-saffron/60" />
     </div>
     <h3 className="font-header font-bold text-2xl text-coffee mb-2">{title}</h3>
-    <p className="text-mocha/60 max-w-sm">{message}</p>
+    <p className="text-coffee-500 max-w-sm">{message}</p>
   </div>
 );
 
@@ -402,19 +402,19 @@ export const ManagerDashboard: React.FC = () => {
           <div className="bg-gray-100 p-1 rounded-lg flex gap-1 min-w-0 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab('planning')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-500 hover:text-gray-600'}`}
             >
               Request Center
             </button>
             <button
               onClick={() => setActiveTab('dropoff')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-500 hover:text-gray-600'}`}
             >
               Live Operations
             </button>
             <button
               onClick={() => setActiveTab('database')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'database' ? 'bg-white text-coffee shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'database' ? 'bg-white text-coffee shadow-sm' : 'text-gray-500 hover:text-gray-600'}`}
             >
               Database Console
             </button>
@@ -582,8 +582,8 @@ export const ManagerDashboard: React.FC = () => {
                       />
                       <div className="flex-1 min-w-0">
                         <h4 className="font-semibold text-coffee">{driver.name}</h4>
-                        <p className="text-sm text-mocha/60 truncate">{driver.phone || 'No phone'}</p>
-                        <p className="text-xs text-mocha/40 mt-1">
+                        <p className="text-sm text-coffee-500 truncate">{driver.phone || 'No phone'}</p>
+                        <p className="text-xs text-coffee-500 mt-1">
                           {driver.carModel || 'No vehicle'}
                         </p>
                       </div>
@@ -623,8 +623,8 @@ export const ManagerDashboard: React.FC = () => {
                       />
                       <div className="flex-1 min-w-0">
                         <h4 className="font-semibold text-coffee">{rider.name}</h4>
-                        <p className="text-sm text-mocha/60 truncate">{rider.phone || rider.email || 'No contact info'}</p>
-                        <p className="text-xs text-mocha/40 mt-1 truncate">
+                        <p className="text-sm text-coffee-500 truncate">{rider.phone || rider.email || 'No contact info'}</p>
+                        <p className="text-xs text-coffee-500 mt-1 truncate">
                           {rider.address || 'No address set'}
                         </p>
                       </div>
@@ -664,8 +664,8 @@ export const ManagerDashboard: React.FC = () => {
                       />
                       <div className="flex-1 min-w-0">
                         <h4 className="font-semibold text-coffee">{request.name}</h4>
-                        <p className="text-sm text-mocha/60 truncate">{request.address || 'Loading...'}</p>
-                        <p className="text-xs text-mocha/40 mt-1 flex items-center gap-1">
+                        <p className="text-sm text-coffee-500 truncate">{request.address || 'Loading...'}</p>
+                        <p className="text-xs text-coffee-500 mt-1 flex items-center gap-1">
                           <Clock size={12} />
                           {request.requestedTimeSlot || 'Time TBD'}
                         </p>
@@ -695,7 +695,7 @@ export const ManagerDashboard: React.FC = () => {
               {pendingDrivers.length === 0 && pendingRiders.length === 0 && pendingRequests.length === 0 && (
                 <div className="text-center py-8">
                   <CheckCircle2 size={40} className="mx-auto text-green-500 mb-3" />
-                  <p className="text-mocha/60">No pending approvals</p>
+                  <p className="text-coffee-500">No pending approvals</p>
                 </div>
               )}
             </div>
@@ -762,7 +762,7 @@ export const ManagerDashboard: React.FC = () => {
                 </button>
               </div>
 
-              <p className="text-mocha/70 mb-6">
+              <p className="text-coffee-700 mb-6">
                 Choose how to release <span className="font-bold text-coffee">{pendingReleaseDriver.driver?.name || 'this driver'}</span>:
               </p>
 
@@ -803,7 +803,7 @@ export const ManagerDashboard: React.FC = () => {
               </div>
 
               {releaseLoading && (
-                <div className="flex items-center justify-center gap-2 mt-4 text-mocha/60">
+                <div className="flex items-center justify-center gap-2 mt-4 text-coffee-500">
                   <div className="animate-spin w-4 h-4 border-2 border-saffron border-t-transparent rounded-full"></div>
                   <span className="text-sm">Processing...</span>
                 </div>

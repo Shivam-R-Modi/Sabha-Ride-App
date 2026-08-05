@@ -59,7 +59,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
       <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-gray-100 p-4">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative w-full sm:max-w-xs">
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+            <Search className="absolute left-3 top-2.5 text-gray-500" size={18} />
             <input 
               type="text" 
               placeholder="Search students or locations..." 
@@ -83,7 +83,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
             )}
             <button 
                 onClick={handleRefresh}
-                className={`p-2 text-gray-400 hover:text-coffee rounded-xl border border-gray-100 transition-all ${isRefreshing ? 'animate-spin text-saffron' : ''}`}
+                className={`p-2 text-gray-500 hover:text-coffee rounded-xl border border-gray-100 transition-all ${isRefreshing ? 'animate-spin text-saffron' : ''}`}
             >
                 <RefreshCw size={18} />
             </button>
@@ -116,17 +116,17 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                     className="w-4 h-4 rounded border-gray-300 text-saffron focus:ring-saffron cursor-pointer" 
                   />
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-400 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => setSortField('name')}>
+                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => setSortField('name')}>
                   <div className="flex items-center gap-1">Student <ArrowUpDown size={12} /></div>
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Pickup Address</th>
-                <th className="p-4 text-xs font-bold text-gray-400 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => setSortField('time')}>
+                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest hidden lg:table-cell">Pickup Address</th>
+                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => setSortField('time')}>
                   <div className="flex items-center gap-1">Time <ArrowUpDown size={12} /></div>
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-400 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => setSortField('wait')}>
+                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => setSortField('wait')}>
                   <div className="flex items-center gap-1">Status <ArrowUpDown size={12} /></div>
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
+                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -172,7 +172,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                         </button>
                         <button 
                             onClick={() => onDismiss(req.id)}
-                            className="p-2 bg-red-50 text-red-400 hover:bg-red-100 rounded-lg transition-colors"
+                            className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
                             title="Dismiss Request"
                         >
                           <Trash2 size={18} />
@@ -265,7 +265,7 @@ const SwipeableCard: React.FC<{
                     </div>
                     <p className="text-xs text-gray-500 truncate mb-1">{request.address}</p>
                     <div className="flex items-center gap-3">
-                         <div className="flex items-center gap-1 text-[10px] text-gray-400 font-bold uppercase">
+                         <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold uppercase">
                             <Clock size={12} /> {request.requestedTimeSlot}
                          </div>
                     </div>

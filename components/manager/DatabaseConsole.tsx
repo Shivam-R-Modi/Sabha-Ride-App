@@ -186,7 +186,7 @@ export const DatabaseConsole: React.FC = () => {
                   : 'bg-white text-gray-500 hover:bg-orange-50 border border-gray-100'
               }`}
             >
-              <Icon size={16} className={isActive ? 'text-saffron' : 'text-gray-400'} />
+              <Icon size={16} className={isActive ? 'text-saffron' : 'text-gray-500'} />
               <span>{tab.label}</span>
               {tab.count !== null && (
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
@@ -231,7 +231,7 @@ export const DatabaseConsole: React.FC = () => {
       {/* Search & Filtering Bar */}
       <div className="clay-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-3">
         <div className="relative w-full md:w-80">
-          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             type="text"
             value={searchTerm}
@@ -244,8 +244,8 @@ export const DatabaseConsole: React.FC = () => {
         <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto">
           {activeTab === 'users' && (
             <div className="flex items-center gap-1.5 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
-              <Filter size={14} className="text-gray-400 ml-1" />
-              <span className="text-[10px] font-bold text-gray-400 uppercase">Role:</span>
+              <Filter size={14} className="text-gray-500 ml-1" />
+              <span className="text-[10px] font-bold text-gray-500 uppercase">Role:</span>
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
@@ -260,8 +260,8 @@ export const DatabaseConsole: React.FC = () => {
           )}
 
           <div className="flex items-center gap-1.5 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
-            <Filter size={14} className="text-gray-400 ml-1" />
-            <span className="text-[10px] font-bold text-gray-400 uppercase">Status:</span>
+            <Filter size={14} className="text-gray-500 ml-1" />
+            <span className="text-[10px] font-bold text-gray-500 uppercase">Status:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -282,7 +282,7 @@ export const DatabaseConsole: React.FC = () => {
       {loading ? (
         <div className="clay-card py-16 flex flex-col items-center justify-center space-y-3">
           <Loader2 className="animate-spin text-saffron" size={32} />
-          <p className="text-xs font-bold text-gray-400">Loading collection {activeTab}...</p>
+          <p className="text-xs font-bold text-gray-500">Loading collection {activeTab}...</p>
         </div>
       ) : error ? (
         <div className="clay-card py-12 bg-red-50/50 border-red-100 flex flex-col items-center justify-center text-center p-6 space-y-2">
@@ -294,7 +294,7 @@ export const DatabaseConsole: React.FC = () => {
         <div className="clay-card py-16 text-center space-y-2">
           <Database className="mx-auto text-gray-300" size={36} />
           <p className="text-sm font-bold text-coffee">No records found in {activeTab}</p>
-          <p className="text-xs text-gray-400">Try clearing filters or search keywords.</p>
+          <p className="text-xs text-gray-500">Try clearing filters or search keywords.</p>
         </div>
       ) : (
         <div className="clay-card overflow-hidden p-0 rounded-3xl border border-orange-100 shadow-sm">
@@ -377,7 +377,7 @@ export const DatabaseConsole: React.FC = () => {
                       <>
                         <td className="py-3 px-4">
                           <p className="font-bold">{docItem.name || 'Unnamed'}</p>
-                          <p className="text-[10px] text-gray-400">{docItem.email || docItem.phone || 'No contact'}</p>
+                          <p className="text-[10px] text-gray-500">{docItem.email || docItem.phone || 'No contact'}</p>
                         </td>
                         <td className="py-3 px-4 capitalize font-medium">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
@@ -423,7 +423,7 @@ export const DatabaseConsole: React.FC = () => {
                       <>
                         <td className="py-3 px-4">
                           <p className="font-bold">{docItem.rideType || 'home-to-sabha'}</p>
-                          <p className="text-[10px] text-gray-400">{docItem.timeSlot || '6:00 PM'}</p>
+                          <p className="text-[10px] text-gray-500">{docItem.timeSlot || '6:00 PM'}</p>
                         </td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -448,7 +448,7 @@ export const DatabaseConsole: React.FC = () => {
                         <td className="py-3 px-4 font-mono text-[11px] text-gray-600 max-w-sm truncate">
                           {docItem.code ? `Manager Code: ${docItem.code}` : docItem.address ? `Venue: ${docItem.address}` : docItem.rideType ? `Ride Type: ${docItem.rideType}` : JSON.stringify(docItem).slice(0, 80)}
                         </td>
-                        <td className="py-3 px-4 text-[11px] text-gray-400">
+                        <td className="py-3 px-4 text-[11px] text-gray-500">
                           {docItem.updatedAt ? new Date(docItem.updatedAt).toLocaleString() : 'N/A'}
                         </td>
                       </>
@@ -469,7 +469,7 @@ export const DatabaseConsole: React.FC = () => {
                         <td className="py-3 px-4 font-mono text-[11px] text-gray-500">
                           {docItem.collection} / {docItem.documentId?.slice(0, 10)}
                         </td>
-                        <td className="py-3 px-4 text-[11px] text-gray-400">
+                        <td className="py-3 px-4 text-[11px] text-gray-500">
                           {docItem.timestamp ? new Date(docItem.timestamp).toLocaleString() : 'N/A'}
                         </td>
                       </>

@@ -79,7 +79,7 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
             <div className="absolute -left-[27px] top-0 bg-white p-1">
               <div className="w-3 h-3 rounded-full bg-saffron border-2 border-white shadow-sm ring-1 ring-gray-100"></div>
             </div>
-            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Pickup</p>
+            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Pickup</p>
             <p className="text-xs sm:text-sm font-medium text-coffee line-clamp-1">{ride.pickupAddress}</p>
             <p className="text-[10px] text-saffron font-bold">{ride.timeSlot}</p>
           </div>
@@ -87,7 +87,7 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
             <div className="absolute -left-[27px] top-0 bg-white p-1">
               <div className="w-3 h-3 rounded-full bg-coffee border-2 border-white shadow-sm ring-1 ring-gray-100"></div>
             </div>
-            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Drop-off</p>
+            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Drop-off</p>
             <p className="text-xs sm:text-sm font-medium text-coffee">BAPS Mandir</p>
           </div>
         </div>
@@ -95,7 +95,7 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
         {/* Peers */}
         {ride.peers && ride.peers.length > 0 && (
           <div className="border-t border-gray-100 pt-4">
-            <p className="text-[10px] text-gray-400 font-bold uppercase mb-2 tracking-wider">Riding with</p>
+            <p className="text-[10px] text-gray-500 font-bold uppercase mb-2 tracking-wider">Riding with</p>
             <div className="flex items-center -space-x-2">
               {ride.peers.map(peer => (
                 <img

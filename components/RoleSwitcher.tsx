@@ -64,7 +64,7 @@ export const RoleSwitcher: React.FC = () => {
                     {/* Dropdown */}
                     <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gold/20 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                         <div className="p-2 border-b border-cream-dark">
-                            <p className="text-xs text-mocha/60 font-medium uppercase tracking-wide px-2">Switch Role</p>
+                            <p className="text-xs text-coffee-500 font-medium uppercase tracking-wide px-2">Switch Role</p>
                         </div>
                         <div className="p-1">
                             {availableRoles.map((role) => {

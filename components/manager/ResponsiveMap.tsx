@@ -100,7 +100,7 @@ export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({
                   <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden lg:block animate-in fade-in slide-in-from-bottom-2 duration-200">
                     <div className="bg-white p-2 rounded-xl shadow-2xl border border-orange-50 min-w-[120px]">
                       <p className="text-[10px] font-bold text-coffee truncate">{student.name}</p>
-                      <p className="text-[8px] text-gray-400 truncate">{student.address}</p>
+                      <p className="text-[8px] text-gray-500 truncate">{student.address}</p>
                     </div>
                     <div className="w-2 h-2 bg-white rotate-45 mx-auto -mt-1 border-r border-b border-orange-50" />
                   </div>

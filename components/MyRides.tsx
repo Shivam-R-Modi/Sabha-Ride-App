@@ -94,7 +94,7 @@ export const MyRides: React.FC<MyRidesProps> = ({
                 <Calendar size={24} />
               </div>
               <p className="text-gray-500 font-medium">No upcoming rides</p>
-              <p className="text-xs text-gray-400 mt-1">Request a pickup from the home screen</p>
+              <p className="text-xs text-gray-500 mt-1">Request a pickup from the home screen</p>
             </div>
           )
         ) : (
@@ -127,7 +127,7 @@ export const MyRides: React.FC<MyRidesProps> = ({
                   <Calendar size={24} />
                 </div>
                 <p className="text-gray-500 font-medium">No ride history</p>
-                <p className="text-xs text-gray-400 mt-1">Your completed rides will appear here</p>
+                <p className="text-xs text-gray-500 mt-1">Your completed rides will appear here</p>
               </div>
             )}
           </>

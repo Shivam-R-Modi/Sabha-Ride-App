@@ -97,7 +97,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-coffee rounded-full hover:bg-orange-50 transition-colors"
+            className="p-2 text-gray-500 hover:text-coffee rounded-full hover:bg-orange-50 transition-colors"
           >
             <X size={20} />
           </button>
@@ -221,7 +221,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                   disabled={isReadonlyKey}
                   onChange={(e) => handleFieldChange(key, e.target.value)}
                   className={`w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 ${
-                    isReadonlyKey ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''
+                    isReadonlyKey ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
                   }`}
                 />
               </div>

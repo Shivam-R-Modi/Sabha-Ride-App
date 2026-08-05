@@ -86,7 +86,7 @@ export const LocationSettings: React.FC = () => {
             <div className="px-4 py-3 border-b border-gray-100 bg-amber-50/50">
                 <p className="text-xs text-gray-500 mb-1">Current Location</p>
                 <p className="text-sm font-medium text-gray-800">{sabhaLocation.address}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-gray-500 mt-0.5">
                     {sabhaLocation.lat.toFixed(6)}, {sabhaLocation.lng.toFixed(6)}
                 </p>
             </div>
@@ -120,7 +120,7 @@ export const LocationSettings: React.FC = () => {
                         </p>
                     )}
                     {!selectedPlace && address.length >= 3 && address !== sabhaLocation.address && (
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="text-xs text-gray-500 mt-1">
                             Please select an address from the suggestions
                         </p>
                     )}

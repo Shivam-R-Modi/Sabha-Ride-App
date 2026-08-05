@@ -237,7 +237,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                     disabled={isCompleting || !allVisited}
                     className={`w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all ${allVisited
                         ? 'clay-btn-cta-large'
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                         }`}
                 >
                     {isCompleting ? (
@@ -248,7 +248,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                 </button>
 
                 {!allVisited && (
-                    <p className="text-center text-xs text-gray-400">
+                    <p className="text-center text-xs text-gray-500">
                         Complete all stops to enable ride completion
                     </p>
                 )}
@@ -273,7 +273,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                         {student.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <h4 className={`font-bold text-coffee ${isVisited ? 'line-through text-gray-400' : ''}`}>
+                                        <h4 className={`font-bold text-coffee ${isVisited ? 'line-through text-gray-500' : ''}`}>
                                             {student.name}
                                         </h4>
                                         {student.location?.address && (
@@ -315,7 +315,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                         <div
                             key={`${waypoint.type}-${idx}`}
                             className={`flex items-center gap-3 py-2 ${waypoint.type === 'start' || waypoint.type === 'end'
-                                ? 'text-gray-400 text-sm'
+                                ? 'text-gray-500 text-sm'
                                 : visitedWaypoints.has(`${waypoint.type}-${idx}`)
                                     ? 'text-green-600'
                                     : 'text-coffee'

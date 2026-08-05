@@ -78,7 +78,7 @@ export const FleetManagement: React.FC = () => {
                     </div>
                     <div>
                         <h2 className="text-xl font-header font-bold text-coffee">Fleet Management</h2>
-                        <p className="text-sm text-mocha/60">Manage your vehicle fleet</p>
+                        <p className="text-sm text-coffee-500">Manage your vehicle fleet</p>
                     </div>
                 </div>
                 <button
@@ -93,7 +93,7 @@ export const FleetManagement: React.FC = () => {
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="clay-card p-4">
-                    <div className="text-sm text-mocha/60">Total Fleet</div>
+                    <div className="text-sm text-coffee-500">Total Fleet</div>
                     <div className="text-2xl font-bold text-coffee">{totalVehicles}</div>
                 </div>
                 <div className="clay-card p-4">
@@ -156,7 +156,7 @@ export const FleetManagement: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="font-header font-bold text-lg text-coffee">Delete Vehicle?</h3>
-                                <p className="text-sm text-mocha/60">
+                                <p className="text-sm text-coffee-500">
                                     This action cannot be undone.
                                 </p>
                             </div>
@@ -166,7 +166,7 @@ export const FleetManagement: React.FC = () => {
                             <p className="font-medium text-coffee">
                                 {deleteConfirm.name}
                             </p>
-                            <p className="text-sm text-mocha/60 font-mono">{deleteConfirm.licensePlate}</p>
+                            <p className="text-sm text-coffee-500 font-mono">{deleteConfirm.licensePlate}</p>
                         </div>
 
                         {deleteConfirm.status === 'in_use' ? (

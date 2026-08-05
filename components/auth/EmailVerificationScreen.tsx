@@ -92,13 +92,13 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
                         <h2 className="text-2xl font-header font-bold text-coffee">
                             Check Your Inbox
                         </h2>
-                        <p className="text-mocha/70 text-sm">
+                        <p className="text-coffee-700 text-sm">
                             We sent a verification email to:
                         </p>
                         <div className="bg-orange-50 border border-saffron/20 py-2 px-4 rounded-xl font-bold text-coffee text-sm break-all">
                             {userEmail}
                         </div>
-                        <p className="text-mocha/70 text-xs">
+                        <p className="text-coffee-700 text-xs">
                             Click the verification link inside the email to complete your registration.
                         </p>
                     </div>
@@ -138,7 +138,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
                     <div className="pt-4 border-t border-mocha/10">
                         <button
                             onClick={onBack}
-                            className="w-full flex items-center justify-center gap-2 text-mocha/60 hover:text-red-600 text-xs font-bold transition-colors"
+                            className="w-full flex items-center justify-center gap-2 text-coffee-500 hover:text-red-600 text-xs font-bold transition-colors"
                         >
                             <LogOut size={14} />
                             Sign Out / Use Different Email

@@ -48,7 +48,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, loading, onE
                     <Loader2 className="animate-spin w-10 h-10 text-saffron" />
                     <Car className="absolute inset-0 m-auto w-5 h-5 text-gold opacity-50" />
                 </div>
-                <p className="text-xs font-bold text-gold mt-4 tracking-widest">LOADING FLEET...</p>
+                <p className="text-xs font-bold text-gold-700 mt-4 tracking-widest">LOADING FLEET...</p>
             </div>
         );
     }
@@ -57,10 +57,10 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, loading, onE
         return (
             <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
                 <div className="w-20 h-20 rounded-full bg-cream flex items-center justify-center mb-4">
-                    <Car size={32} className="text-mocha/40" />
+                    <Car size={32} className="text-coffee-500" />
                 </div>
                 <h3 className="font-header font-bold text-lg text-coffee mb-2">No Vehicles</h3>
-                <p className="text-sm text-mocha/60">Add your first vehicle to the fleet</p>
+                <p className="text-sm text-coffee-500">Add your first vehicle to the fleet</p>
             </div>
         );
     }
@@ -97,7 +97,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, loading, onE
                                         </span>
                                     </div>
 
-                                    <div className="flex items-center gap-4 mt-1 text-sm text-mocha/60">
+                                    <div className="flex items-center gap-4 mt-1 text-sm text-coffee-500">
                                         <span className="font-mono bg-cream px-2 py-0.5 rounded">
                                             {vehicle.licensePlate}
                                         </span>

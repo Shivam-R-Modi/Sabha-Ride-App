@@ -373,7 +373,7 @@ export const DriverDashboard: React.FC = () => {
                                     </div>
                                     <div>
                                         <h2 className="font-header font-bold text-coffee leading-tight">{userProfile?.name}</h2>
-                                        <p className={`text-xs font-medium ${isAvailable ? 'text-green-600' : 'text-gray-400'}`}>
+                                        <p className={`text-xs font-medium ${isAvailable ? 'text-green-600' : 'text-gray-500'}`}>
                                             {isAvailable ? '● Online' : '○ Offline'}
                                         </p>
                                     </div>
@@ -411,13 +411,13 @@ export const DriverDashboard: React.FC = () => {
                         {/* Stats Summary */}
                         <div className="flex justify-between items-center px-2">
                             <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Today's Seva</p>
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Today's Seva</p>
                                 <p className="text-sm font-medium text-coffee">
                                     {(userProfile as any)?.totalStudentsToday || 0} Students • {((userProfile as any)?.totalDistanceToday || 0).toFixed(0)} mi
                                 </p>
                             </div>
                             <div className="text-right">
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Assignments</p>
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Assignments</p>
                                 <p className="text-sm font-medium text-coffee">{(userProfile as any)?.ridesCompletedToday || 0} Rides Completed</p>
                             </div>
                         </div>
@@ -442,7 +442,7 @@ export const DriverDashboard: React.FC = () => {
                             <button
                                 onClick={handleAssignMe}
                                 disabled={isAssigning || !userProfile?.currentVehicleId}
-                                className={`w-full py-4 text-lg ${userProfile?.currentVehicleId ? 'clay-btn-cta-large' : 'bg-gray-200 text-gray-400 rounded-2xl cursor-not-allowed'}`}
+                                className={`w-full py-4 text-lg ${userProfile?.currentVehicleId ? 'clay-btn-cta-large' : 'bg-gray-200 text-gray-500 rounded-2xl cursor-not-allowed'}`}
                             >
                                 {isAssigning ? (
                                     <span className="flex items-center justify-center gap-2">
@@ -519,13 +519,13 @@ export const DriverDashboard: React.FC = () => {
                             {vehiclesLoading ? (
                                 <div className="flex flex-col items-center justify-center py-8">
                                     <Loader2 className="animate-spin w-8 h-8 text-saffron" />
-                                    <p className="text-sm text-mocha/60 mt-2">Loading vehicles...</p>
+                                    <p className="text-sm text-coffee-500 mt-2">Loading vehicles...</p>
                                 </div>
                             ) : availableVehicles.length === 0 ? (
                                 <div className="text-center py-8">
-                                    <Car size={40} className="mx-auto text-mocha/30 mb-3" />
-                                    <p className="text-mocha/60">No vehicles available</p>
-                                    <p className="text-xs text-mocha/40 mt-1">Contact a manager to add vehicles</p>
+                                    <Car size={40} className="mx-auto text-coffee-500 mb-3" />
+                                    <p className="text-coffee-500">No vehicles available</p>
+                                    <p className="text-xs text-coffee-500 mt-1">Contact a manager to add vehicles</p>
                                 </div>
                             ) : (
                                 availableVehicles.map((vehicle) => (
@@ -545,8 +545,8 @@ export const DriverDashboard: React.FC = () => {
                                             <p className="font-bold text-coffee">
                                                 {vehicle.name}
                                             </p>
-                                            <p className="text-sm text-mocha/60 font-mono">{vehicle.licensePlate}</p>
-                                            <p className="text-xs text-mocha/40 flex items-center gap-1 mt-1">
+                                            <p className="text-sm text-coffee-500 font-mono">{vehicle.licensePlate}</p>
+                                            <p className="text-xs text-coffee-500 flex items-center gap-1 mt-1">
                                                 <Users size={12} />
                                                 {vehicle.capacity} seats
                                             </p>
@@ -554,7 +554,7 @@ export const DriverDashboard: React.FC = () => {
                                         {selectingVehicle ? (
                                             <Loader2 className="animate-spin text-saffron" size={20} />
                                         ) : (
-                                            <ChevronRight size={20} className="text-mocha/40" />
+                                            <ChevronRight size={20} className="text-coffee-500" />
                                         )}
                                     </button>
                                 ))
@@ -563,7 +563,7 @@ export const DriverDashboard: React.FC = () => {
 
                         {/* Footer */}
                         <div className="sticky bottom-0 bg-white border-t border-cream-dark p-4">
-                            <p className="text-xs text-mocha/60 text-center">
+                            <p className="text-xs text-coffee-500 text-center">
                                 {availableVehicles.length} vehicle{availableVehicles.length !== 1 ? 's' : ''} available
                             </p>
                         </div>

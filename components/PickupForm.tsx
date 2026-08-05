@@ -97,9 +97,9 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
 
         <div className="text-center space-y-2">
           <DiyaIcon className="w-12 h-12 mx-auto text-saffron mb-2 animate-float" />
-          <p className="text-xs font-bold text-gold uppercase tracking-[0.2em]">Next Sabha</p>
+          <p className="text-xs font-bold text-gold-700 uppercase tracking-[0.2em]">Next Sabha</p>
           <h3 className="text-xl font-header font-bold text-coffee">{getNextFridayFormatted()}</h3>
-          <p className="text-sm text-mocha/60">Standard arrival at {arrivalTime}</p>
+          <p className="text-sm text-coffee-500">Standard arrival at {arrivalTime}</p>
         </div>
 
         <div className="bg-cream/50 rounded-2xl p-5 border border-orange-50 space-y-3">
@@ -108,7 +108,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
               <MapPin size={18} className="text-saffron" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pickup From</p>
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Pickup From</p>
               <p className="text-sm font-medium text-coffee leading-tight">{user.address}</p>
             </div>
           </div>
@@ -126,7 +126,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
               <>I want a ride this Friday</>
             )}
           </button>
-          <p className="text-center text-[10px] text-gray-400 mt-4 px-4 italic">
+          <p className="text-center text-[10px] text-gray-500 mt-4 px-4 italic">
             By confirming, you agree to be ready at your pickup location 5 minutes before the ETA.
           </p>
         </div>

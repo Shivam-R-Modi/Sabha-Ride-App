@@ -131,7 +131,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                         <Loader2 className="animate-spin w-10 h-10 text-saffron" />
                         <LotusIcon className="absolute inset-0 m-auto w-5 h-5 text-gold opacity-50" />
                     </div>
-                    <p className="text-xs font-bold text-gold mt-4 tracking-widest">CONNECTING...</p>
+                    <p className="text-xs font-bold text-gold-700 mt-4 tracking-widest">CONNECTING...</p>
                 </div>
             );
         }
@@ -141,7 +141,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                 <div className="flex items-center justify-between mb-2">
                     <div>
                         <h2 className="text-2xl font-header font-bold text-coffee">Jai Swaminarayan!</h2>
-                        <p className="text-mocha/80 text-sm">Welcome, {user.name}</p>
+                        <p className="text-coffee-700 text-sm">Welcome, {user.name}</p>
                     </div>
                     <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm border border-orange-100 hidden sm:flex">
                         <DiyaIcon className="w-6 h-6 text-saffron" />
@@ -169,7 +169,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                                         Contact Manager
                                     </a>
                                 )}
-                                <p className="text-xs text-red-400 mt-3">
+                                <p className="text-xs text-red-600 mt-3">
                                     Dismissed at {new Date(dismissedRequest.dismissedAt).toLocaleString()}
                                 </p>
                             </div>
@@ -197,7 +197,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                                 </div>
                                 <div>
                                     <h3 className="font-header font-bold text-coffee text-xl leading-tight">Request Pickup</h3>
-                                    <p className="text-xs text-mocha/60 mt-1 flex items-center gap-1">
+                                    <p className="text-xs text-coffee-500 mt-1 flex items-center gap-1">
                                         <Sparkles size={10} className="text-gold" />
                                         Click to join this Friday's ride
                                     </p>
@@ -216,7 +216,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                             </div>
                         )}
                         <h3 className="font-header font-bold text-coffee text-xl mb-1">Return Trip</h3>
-                        <p className="text-xs text-mocha/60 mb-8">Ready to go home? Alert your sevak.</p>
+                        <p className="text-xs text-coffee-500 mb-8">Ready to go home? Alert your sevak.</p>
 
                         {activeRide?.dropoffRequested ? (
                             <div className="bg-green-50 border border-green-100 text-green-700 py-5 rounded-2xl font-bold flex flex-col items-center justify-center gap-2 animate-in slide-in-from-bottom-4">
@@ -280,7 +280,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                             <Navigation size={32} />
                         </div>
                         <h3 className="font-header font-bold text-2xl text-coffee mb-2 text-center">Ready for Pickup?</h3>
-                        <p className="text-mocha/60 text-sm mb-8 text-center leading-relaxed">Your driver will be notified to head towards the designated pickup point.</p>
+                        <p className="text-coffee-500 text-sm mb-8 text-center leading-relaxed">Your driver will be notified to head towards the designated pickup point.</p>
                         <div className="flex gap-4">
                             <button
                                 onClick={() => setShowReadyModal(false)}

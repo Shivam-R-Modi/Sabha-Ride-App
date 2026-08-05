@@ -118,14 +118,14 @@ export const OptimizationModal: React.FC<OptimizationModalProps> = ({ onClose, o
                                                 </div>
                                                 <span className="text-sm text-gray-700">Student {sid.split('_')[1]}</span>
                                             </div>
-                                            <button onClick={() => handleManualMove(group.id)} className="opacity-0 group-hover/item:opacity-100 text-gray-400 hover:text-blue-500 transition-opacity">
+                                            <button onClick={() => handleManualMove(group.id)} className="opacity-0 group-hover/item:opacity-100 text-gray-500 hover:text-blue-500 transition-opacity">
                                                 <MoveRight size={14} />
                                             </button>
                                         </div>
                                     ))}
                                     {group.studentIds.length < group.driverCapacity && (
                                         <div className="p-2 text-center border-t border-dashed border-gray-200 mt-2">
-                                            <span className="text-xs text-gray-400 italic">Space for {group.driverCapacity - group.studentIds.length} more</span>
+                                            <span className="text-xs text-gray-500 italic">Space for {group.driverCapacity - group.studentIds.length} more</span>
                                         </div>
                                     )}
                                 </div>
@@ -134,7 +134,7 @@ export const OptimizationModal: React.FC<OptimizationModalProps> = ({ onClose, o
 
                         {/* Unassigned Pool Warning */}
                         <div className="bg-red-50 rounded-2xl border border-red-100 p-4 flex flex-col items-center justify-center text-center">
-                            <AlertCircle className="text-red-400 mb-2" size={32} />
+                            <AlertCircle className="text-red-600 mb-2" size={32} />
                             <h4 className="font-bold text-red-800">12 Students Unassigned</h4>
                             <p className="text-xs text-red-600 mb-4">Not enough driver capacity for this region.</p>
                             <button className="text-xs font-bold bg-white text-red-600 px-3 py-1.5 rounded-lg border border-red-200 hover:bg-red-50">View Unassigned</button>

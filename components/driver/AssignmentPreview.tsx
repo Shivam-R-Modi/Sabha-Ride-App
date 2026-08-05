@@ -156,7 +156,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                         <div className="text-right">
                             <p className="text-xs text-gray-500 uppercase tracking-wider">Seats</p>
                             <p className="text-2xl font-bold text-saffron">
-                                {studentCount}<span className="text-gray-400 text-lg">/{capacity}</span>
+                                {studentCount}<span className="text-gray-500 text-lg">/{capacity}</span>
                             </p>
                         </div>
                     </div>
@@ -237,7 +237,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                                         waypoint.type === 'end' ? 'E' :
                                             idx}
                                 </div>
-                                <span className={`flex-1 text-sm truncate ${waypoint.type === 'start' || waypoint.type === 'end' ? 'text-gray-400' : 'text-coffee'
+                                <span className={`flex-1 text-sm truncate ${waypoint.type === 'start' || waypoint.type === 'end' ? 'text-gray-500' : 'text-coffee'
                                     }`}>
                                     {waypoint.name}
                                 </span>

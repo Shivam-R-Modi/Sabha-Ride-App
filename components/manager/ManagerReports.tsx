@@ -122,7 +122,7 @@ export const ManagerReports: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center h-64">
                 <Loader2 className="animate-spin w-10 h-10 text-saffron" />
-                <p className="text-xs font-bold text-gold mt-4 tracking-widest">LOADING REPORTS...</p>
+                <p className="text-xs font-bold text-gold-700 mt-4 tracking-widest">LOADING REPORTS...</p>
             </div>
         );
     }
@@ -135,7 +135,7 @@ export const ManagerReports: React.FC = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-header font-bold text-coffee">Reports & Analytics</h1>
-                    <p className="text-mocha/60 text-sm mt-1">Overview of seva operations</p>
+                    <p className="text-coffee-500 text-sm mt-1">Overview of seva operations</p>
                 </div>
                 <button
                     onClick={fetchStats}
@@ -153,10 +153,10 @@ export const ManagerReports: React.FC = () => {
                         <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
                             <Car className="w-5 h-5 text-blue-500" />
                         </div>
-                        <span className="text-xs font-bold text-mocha/50 uppercase tracking-wider">Total Rides</span>
+                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Total Rides</span>
                     </div>
                     <p className="text-3xl font-header font-bold text-coffee">{rideStats.totalRides}</p>
-                    <p className="text-xs text-mocha/50 mt-1">{rideStats.completedRides} completed</p>
+                    <p className="text-xs text-coffee-500 mt-1">{rideStats.completedRides} completed</p>
                 </div>
 
                 {/* Students Served */}
@@ -165,10 +165,10 @@ export const ManagerReports: React.FC = () => {
                         <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
                             <Users className="w-5 h-5 text-green-500" />
                         </div>
-                        <span className="text-xs font-bold text-mocha/50 uppercase tracking-wider">Students Served</span>
+                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Students Served</span>
                     </div>
                     <p className="text-3xl font-header font-bold text-coffee">{rideStats.totalStudentsServed}</p>
-                    <p className="text-xs text-mocha/50 mt-1">across all rides</p>
+                    <p className="text-xs text-coffee-500 mt-1">across all rides</p>
                 </div>
 
                 {/* Active Drivers */}
@@ -177,10 +177,10 @@ export const ManagerReports: React.FC = () => {
                         <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center">
                             <TrendingUp className="w-5 h-5 text-purple-500" />
                         </div>
-                        <span className="text-xs font-bold text-mocha/50 uppercase tracking-wider">Active Drivers</span>
+                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Active Drivers</span>
                     </div>
                     <p className="text-3xl font-header font-bold text-coffee">{rideStats.activeDrivers}</p>
-                    <p className="text-xs text-mocha/50 mt-1">approved volunteers</p>
+                    <p className="text-xs text-coffee-500 mt-1">approved volunteers</p>
                 </div>
 
                 {/* This Week Attendance */}
@@ -189,10 +189,10 @@ export const ManagerReports: React.FC = () => {
                         <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center">
                             <Calendar className="w-5 h-5 text-saffron" />
                         </div>
-                        <span className="text-xs font-bold text-mocha/50 uppercase tracking-wider">This Week</span>
+                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">This Week</span>
                     </div>
                     <p className="text-3xl font-header font-bold text-coffee">{currentWeekStats?.totalResponses || 0}</p>
-                    <p className="text-xs text-mocha/50 mt-1">attendance responses</p>
+                    <p className="text-xs text-coffee-500 mt-1">attendance responses</p>
                 </div>
             </div>
 
@@ -201,7 +201,7 @@ export const ManagerReports: React.FC = () => {
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h2 className="text-lg font-header font-bold text-coffee">Weekly Attendance</h2>
-                        <p className="text-sm text-mocha/60">Week ending {currentWeekStats?.weekId || 'N/A'}</p>
+                        <p className="text-sm text-coffee-500">Week ending {currentWeekStats?.weekId || 'N/A'}</p>
                     </div>
                     <button
                         onClick={handleDownloadAttendance}
@@ -247,7 +247,7 @@ export const ManagerReports: React.FC = () => {
                         </div>
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-mocha/50">
+                    <div className="text-center py-8 text-coffee-500">
                         <Calendar size={40} className="mx-auto mb-3 opacity-50" />
                         <p>No attendance data for this week yet</p>
                     </div>
@@ -268,17 +268,17 @@ export const ManagerReports: React.FC = () => {
                         </div>
                         <div>
                             <p className="font-bold text-coffee">Weekly Attendance CSV</p>
-                            <p className="text-xs text-mocha/60 mt-0.5">Download list of confirmed attendees</p>
+                            <p className="text-xs text-coffee-500 mt-0.5">Download list of confirmed attendees</p>
                         </div>
                     </button>
 
                     <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200 opacity-50 cursor-not-allowed">
                         <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
-                            <FileSpreadsheet className="w-6 h-6 text-gray-400" />
+                            <FileSpreadsheet className="w-6 h-6 text-gray-500" />
                         </div>
                         <div>
                             <p className="font-bold text-gray-500">Ride History CSV</p>
-                            <p className="text-xs text-gray-400 mt-0.5">Coming soon</p>
+                            <p className="text-xs text-gray-500 mt-0.5">Coming soon</p>
                         </div>
                     </div>
                 </div>
