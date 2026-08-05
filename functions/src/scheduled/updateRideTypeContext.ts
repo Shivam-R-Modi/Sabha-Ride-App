@@ -6,6 +6,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { RideContext, RideType } from '../types';
+import { getZonedParts, DEFAULT_TIME_ZONE } from '../utils/time';
 
 /**
  * Scheduled function that runs every minute
@@ -53,9 +54,11 @@ export const updateRideTypeContext = functions.pubsub
  * - If Friday AND after 10 PM (hour >= 22) → Drop-off rides (Sabha → Home)
  * - If Friday AND between 7 PM - 10 PM → During Sabha (no rides)
  */
-function determineRideContext(now: Date): RideContext {
-    const dayOfWeek = now.getDay(); // 0 = Sunday, 5 = Friday
-    const hour = now.getHours();
+function determineRideContext(now: Date, timeZone: string = DEFAULT_TIME_ZONE): RideContext {
+    // Sabha LOCAL time. Reading now.getDay()/getHours() here gave the UTC
+    // server clock, which shifted the whole window 4-5 hours and rolled the
+    // day over at 8 PM Boston — closing drop-off rides every Friday night.
+    const { dayOfWeek, hour } = getZonedParts(now, timeZone);
 
     // Check if it's Friday
     const isFriday = dayOfWeek === 5;

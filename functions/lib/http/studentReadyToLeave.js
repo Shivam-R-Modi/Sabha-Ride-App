@@ -40,6 +40,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.studentReadyToLeave = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const time_1 = require("../utils/time");
 /**
  * HTTP Callable: Student ready to leave Sabha
  * Updates student status for drop-off assignment
@@ -71,10 +72,11 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
         if ((student === null || student === void 0 ? void 0 : student.status) !== 'at_sabha') {
             throw new functions.https.HttpsError('failed-precondition', 'You must be at Sabha to request drop-off');
         }
-        // Check if it's after 10 PM on Friday
+        // Check if it's after 10 PM on Friday, in Sabha LOCAL time.
+        // The Date getters read the UTC server clock, so at 10:30 PM Boston
+        // this saw Saturday 02:30 and rejected every drop-off request.
         const now = new Date();
-        const dayOfWeek = now.getDay();
-        const hour = now.getHours();
+        const { dayOfWeek, hour } = (0, time_1.getZonedParts)(now);
         if (dayOfWeek !== 5 || hour < 22) {
             throw new functions.https.HttpsError('failed-precondition', 'Drop-off requests only available after 10 PM on Friday');
         }
