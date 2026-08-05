@@ -5,6 +5,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { getZonedParts } from '../utils/time';
 
 /**
  * HTTP Callable: Student ready to leave Sabha
@@ -48,10 +49,11 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
             );
         }
 
-        // Check if it's after 10 PM on Friday
+        // Check if it's after 10 PM on Friday, in Sabha LOCAL time.
+        // The Date getters read the UTC server clock, so at 10:30 PM Boston
+        // this saw Saturday 02:30 and rejected every drop-off request.
         const now = new Date();
-        const dayOfWeek = now.getDay();
-        const hour = now.getHours();
+        const { dayOfWeek, hour } = getZonedParts(now);
 
         if (dayOfWeek !== 5 || hour < 22) {
             throw new functions.https.HttpsError(

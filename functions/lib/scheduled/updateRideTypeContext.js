@@ -40,6 +40,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const time_1 = require("../utils/time");
 /**
  * Scheduled function that runs every minute
  * Automatically detects if it's pickup time or drop-off time
@@ -78,9 +79,11 @@ exports.updateRideTypeContext = functions.pubsub
  * - If Friday AND after 10 PM (hour >= 22) → Drop-off rides (Sabha → Home)
  * - If Friday AND between 7 PM - 10 PM → During Sabha (no rides)
  */
-function determineRideContext(now) {
-    const dayOfWeek = now.getDay(); // 0 = Sunday, 5 = Friday
-    const hour = now.getHours();
+function determineRideContext(now, timeZone = time_1.DEFAULT_TIME_ZONE) {
+    // Sabha LOCAL time. Reading now.getDay()/getHours() here gave the UTC
+    // server clock, which shifted the whole window 4-5 hours and rolled the
+    // day over at 8 PM Boston — closing drop-off rides every Friday night.
+    const { dayOfWeek, hour } = (0, time_1.getZonedParts)(now, timeZone);
     // Check if it's Friday
     const isFriday = dayOfWeek === 5;
     if (!isFriday) {
