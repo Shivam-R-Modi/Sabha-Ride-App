@@ -19,19 +19,31 @@ export const useActiveRide = (userId: string) => {
         const q = query(
             collection(db, 'rides'),
             where('studentId', '==', userId),
-            where('status', 'in', ['requested', 'assigned', 'driver_en_route', 'arriving', 'in_progress', 'completed'])
+            // 'completed' is deliberately excluded.
+            //
+            // It used to be in this list "so the return trip stays visible".
+            // But this hook sorts by date and takes the newest match, so once a
+            // student had any completed ride, activeRide was non-null forever.
+            // StudentDashboard renders the ride card instead of the Request
+            // Pickup tile whenever activeRide is set, and there is no other
+            // route to the request form — so a single completed ride locked the
+            // student out of ever requesting another one.
+            //
+            // Nothing is lost: the Return Trip tile is rendered separately and
+            // gated only on the time window, not on activeRide, and completed
+            // rides belong to the history view (useRideHistory).
+            where('status', 'in', ['requested', 'assigned', 'driver_en_route', 'arriving', 'in_progress'])
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            // Filter locally for today/future relevant rides if needed, 
-            // but for now just take the most recent active one
+            // Most recent in-flight ride. Once the return leg is created by
+            // studentReadyToLeave it is 'requested', so it becomes the active
+            // ride here and drives the drop-off confirmation state.
             const active = snapshot.docs
                 .map(d => ({ id: d.id, ...d.data() } as Ride))
                 .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
             if (active) {
-                // If it's completed but ready to leave is true, we still want to show it for the return trip
-                // Or if it's 'requested'
                 setActiveRide(active);
             } else {
                 setActiveRide(null);

@@ -131,7 +131,12 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
                 rideType: 'sabha-to-home',
                 createdAt: nowIso,
                 peers: [],
-                isReadyToLeave: true
+                isReadyToLeave: true,
+                // StudentDashboard renders its "In Drop-off Queue" confirmation
+                // from activeRide.dropoffRequested. Without this the student
+                // taps the button, the ride is created, and the UI still shows
+                // an un-pressed button — no feedback that it worked.
+                dropoffRequested: true
             });
 
             console.log(`[studentReadyToLeave] Created return ride ${rideId} for ${studentId}`);

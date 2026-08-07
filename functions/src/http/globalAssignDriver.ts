@@ -298,6 +298,22 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
             batch.update(rideRef, {
                 driverId,
                 driverName: driverData.name || 'Driver',
+                // The student's ride card reads the nested `driver` object and
+                // does `if (!driver) return null` (RideStatus.tsx:35). Writing
+                // only driverId meant that once a student was assigned, their
+                // card rendered NOTHING — no driver name, no car, no plate.
+                // driverId stays because the driver dashboard queries on it;
+                // both shapes are needed until the model is unified.
+                driver: {
+                    id: driverId,
+                    name: driverData.name || 'Driver',
+                    phone: driverData.phone || '',
+                    avatarUrl: driverData.avatarUrl
+                        || `https://ui-avatars.com/api/?name=${encodeURIComponent(driverData.name || 'Driver')}&background=FF6B35&color=fff`,
+                    carModel: carData.name || 'Vehicle',
+                    carColor: carData.color || 'Unknown',
+                    plateNumber: carData.licensePlate || '',
+                },
                 carId,
                 carModel: carData.name || 'Vehicle',
                 carColor: carData.color || 'Unknown',
