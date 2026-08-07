@@ -17,7 +17,7 @@ import {
     assertSucceeds,
     type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, deleteDoc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 
 let testEnv: RulesTestEnvironment;
 
@@ -402,7 +402,9 @@ describe('the sabha calendar', () => {
         }));
     });
 
-    it('a manager CAN schedule, move and cancel', async () => {
+    it('a manager CAN still schedule and move a sabha', async () => {
+        // Regression guard: splitting the old blanket `allow write` into create
+        // and update must not break the calendar.
         await assertSucceeds(setDoc(doc(asManager(), 'events', '2026-08-21'), {
             date: '2026-08-21', startTime: '18:00', endTime: '20:00',
             status: 'scheduled', venue: null, agenda: 'Youth sabha',
@@ -410,12 +412,73 @@ describe('the sabha calendar', () => {
         await assertSucceeds(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
             startTime: '16:30',
         }));
-        await assertSucceeds(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
-            status: 'cancelled',
-        }));
+    });
+
+    it('a manager CANNOT delete a sabha directly — only the callable may', async () => {
+        // The new invariant, and the test that would have caught the old
+        // `allow write: if isManager()`, since `write` silently includes delete.
+        //
+        // Deleting the event document does not delete
+        // weeklyAttendance/{date}/responses/* — Firestore leaves subcollections
+        // behind — and every read path for those derives the id from
+        // system/rideContext, so they become unreachable. Outstanding ride
+        // requests also have to be cancelled or the next sabha inherits them.
+        // deleteSabhaEvent does all of that; a raw delete does none of it.
+        await assertFails(deleteDoc(doc(asManager(), 'events', '2026-08-14')));
+    });
+
+    it('nobody else can delete a sabha either', async () => {
+        await assertFails(deleteDoc(doc(asStudent(), 'events', '2026-08-14')));
+        await assertFails(deleteDoc(doc(asDriver(), 'events', '2026-08-14')));
+        await assertFails(deleteDoc(doc(asAnon(), 'events', '2026-08-14')));
     });
 
     it('an anonymous visitor cannot read the calendar', async () => {
         await assertFails(getDoc(doc(asAnon(), 'events', '2026-08-14')));
+    });
+});
+
+describe('attendance records are server-owned', () => {
+    beforeEach(async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            const db = ctx.firestore();
+            await setDoc(doc(db, 'weeklyAttendance', '2026-08-07'), {
+                eventId: '2026-08-07', startsAt: '2026-08-07T23:00:00.000Z',
+            });
+            await setDoc(doc(db, 'weeklyAttendance', '2026-08-07', 'responses', STUDENT), {
+                response: 'yes', studentId: STUDENT, studentName: 'Alice',
+            });
+        });
+    });
+
+    it('a manager CAN read the attendance header', async () => {
+        await assertSucceeds(getDoc(doc(asManager(), 'weeklyAttendance', '2026-08-07')));
+    });
+
+    it('nobody can write or delete the attendance header, manager included', async () => {
+        // Derived state, written only by the scheduler with the Admin SDK. The
+        // Database Console renders a delete button for this collection, and
+        // deleting the parent would leave every responses/* document behind,
+        // invisible to a console that only lists parents. Previously this was
+        // denied only by the ABSENCE of a write rule — an accident.
+        await assertFails(setDoc(doc(asManager(), 'weeklyAttendance', '2026-08-07'), { eventId: 'x' }));
+        await assertFails(deleteDoc(doc(asManager(), 'weeklyAttendance', '2026-08-07')));
+        await assertFails(deleteDoc(doc(asStudent(), 'weeklyAttendance', '2026-08-07')));
+    });
+
+    it('a student CAN still read and write their own response', async () => {
+        await assertSucceeds(getDoc(doc(asStudent(), 'weeklyAttendance', '2026-08-07', 'responses', STUDENT)));
+        await assertSucceeds(setDoc(doc(asStudent(), 'weeklyAttendance', '2026-08-07', 'responses', STUDENT), {
+            response: 'no', studentId: STUDENT, studentName: 'Alice',
+        }));
+    });
+
+    it('a student cannot read another student\'s response', async () => {
+        await assertFails(getDoc(doc(asStudent(), 'weeklyAttendance', '2026-08-07', 'responses', OTHER_STUDENT)));
+    });
+
+    it('the event generator marker is not client-writable', async () => {
+        await assertFails(setDoc(doc(asManager(), 'system', 'eventGenerator'), { seededAt: 'now' }));
+        await assertFails(setDoc(doc(asStudent(), 'system', 'eventGenerator'), { seededAt: 'now' }));
     });
 });

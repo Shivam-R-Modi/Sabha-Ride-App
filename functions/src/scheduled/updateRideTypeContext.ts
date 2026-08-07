@@ -11,8 +11,10 @@ import {
     resolveScheduleWindow, buildCurrentEvent, ScheduleWindow, CurrentEvent,
     DEFAULT_SABHA_START, DEFAULT_SABHA_END,
 } from '../utils/schedule';
-import { findCurrentEvent, ensureUpcomingScheduled } from '../utils/events';
+import { findCurrentEvent, seedFirstEventIfNeeded } from '../utils/events';
 import { notifyEveryone } from '../utils/notifications';
+import { drainAttendanceDelete } from '../http/deleteSabhaEvent';
+import { SEED_MARKER_DOC } from '../utils/events';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -101,13 +103,12 @@ async function announceIfWindowJustOpened(
 }
 
 /**
- * Keep the sabha calendar populated.
+ * Seed the calendar on a brand-new project — once, ever.
  *
- * With a list of real events instead of a hardcoded Friday, an empty calendar
- * means no rides at all. Nobody would get an error — the app would simply say
- * "no sabha is scheduled" to a congregation expecting a ride. This tops the list
- * up daily from the weekly slot, and only ever creates what is missing, so an
- * edited time, a moved venue or a cancellation is never overwritten.
+ * A daily job rather than a one-off script so a fresh staging or production
+ * project cannot sit with an empty calendar. It does nothing at all once the
+ * marker is set, which is what lets a manager delete a gathering and have it stay
+ * deleted. How many sabhas exist after the first is the manager's decision.
  */
 export const ensureSabhaEvents = functions.pubsub
     .schedule('every day 03:00')
@@ -119,20 +120,42 @@ export const ensureSabhaEvents = functions.pubsub
         try {
             const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
 
-            const created = await ensureUpcomingScheduled(db, now, timeZone, {
+            const created = await seedFirstEventIfNeeded(db, now, timeZone, {
                 startTime: typeof sabhaStart === 'string' ? sabhaStart : DEFAULT_SABHA_START,
                 endTime: typeof sabhaEnd === 'string' ? sabhaEnd : DEFAULT_SABHA_END,
             });
 
             console.log(created.length > 0
-                ? `[events] Created ${created.join(', ')}`
-                : '[events] A scheduled sabha already exists ahead — nothing to do');
+                ? `[events] Seeded ${created.join(', ')}`
+                : '[events] Already seeded — the calendar is the manager\'s');
             return null;
         } catch (error) {
             console.error('[events] Could not top up the calendar:', error);
             return null;
         }
     });
+
+/**
+ * Drain dates whose attendance cascade did not finish.
+ *
+ * Bounded to a few per tick: this is a repair path, not a queue, and a runaway
+ * loop here would delay the ride window for everyone.
+ */
+async function sweepPendingAttendanceDeletes(db: admin.firestore.Firestore): Promise<void> {
+    try {
+        const marker = await db.doc(SEED_MARKER_DOC).get();
+        const pending: unknown = marker.data()?.pendingAttendanceDeletes;
+        if (!Array.isArray(pending) || pending.length === 0) return;
+
+        for (const date of pending.slice(0, 3)) {
+            if (typeof date !== 'string') continue;
+            console.log(`[events] Draining pending attendance delete for ${date}`);
+            await drainAttendanceDelete(db, date);
+        }
+    } catch (error) {
+        console.error('[events] Could not sweep pending attendance deletes:', error);
+    }
+}
 
 export const updateRideTypeContext = functions.pubsub
     .schedule('every 1 minutes')
@@ -153,22 +176,29 @@ export const updateRideTypeContext = functions.pubsub
                 return null;
             }
 
+            // Finish any attendance cascade a deletion did not complete.
+            // recursiveDelete cannot be part of the deleting batch, so a crash
+            // between the two leaves exactly the invisible orphan the cascade
+            // exists to prevent. The date is parked; this drains it.
+            await sweepPendingAttendanceDeletes(db);
+
             const { sabhaStart, sabhaEnd, timeZone, venue } = await readSabhaTimes(db);
 
             // The gathering now comes from the events collection. No event means
             // nothing is scheduled — closed, and said plainly.
             let scheduled = await findCurrentEvent(db, now, timeZone);
 
-            // Self-heal a calendar with nothing scheduled ahead. Without this the
-            // first deploy would close the service until the daily job ran, and
-            // any later gap would do the same.
+            // Seed on the very first run, so a fresh deploy does not sit with the
+            // service closed until 03:00. Once the marker is set this does
+            // nothing — an empty calendar from then on is the manager's choice,
+            // and `calendarStatus` below publishes it so the UI can say so rather
+            // than leaving "No rides available" looking like a fault.
             //
-            // It only ever CREATES a missing slot, so a gathering a manager
-            // deliberately cancelled stays cancelled — and in that case nothing
-            // is created, `calendarStatus` below says so, and the manager UI shows
-            // it rather than leaving "No rides available" looking like a fault.
+            // This is also what makes deletion stick. The previous version treated
+            // a missing document as "needs creating", so a deleted date reappeared
+            // on the very next tick — within 60 seconds.
             if (!scheduled) {
-                const created = await ensureUpcomingScheduled(db, now, timeZone, {
+                const created = await seedFirstEventIfNeeded(db, now, timeZone, {
                     startTime: typeof sabhaStart === 'string' ? sabhaStart : DEFAULT_SABHA_START,
                     endTime: typeof sabhaEnd === 'string' ? sabhaEnd : DEFAULT_SABHA_END,
                 });

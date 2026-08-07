@@ -27,8 +27,14 @@ export interface SabhaEvent {
 }
 
 /**
- * Upcoming gatherings, soonest first. Includes cancelled ones so they can be
- * restored.
+ * Upcoming gatherings, soonest first.
+ *
+ * Cancelled documents are filtered out, matching `findCurrentEvent` on the server,
+ * which has always skipped them. Cancelling was replaced by deleting, so nothing
+ * creates them any more — but production still holds a couple from before the
+ * change, and showing them as ordinary rows would be worse than hiding them: the
+ * server would refuse to run rides for a gathering the calendar presented as
+ * scheduled.
  *
  * Bounded by `documentId()`, matching `findCurrentEvent` on the server, and
  * anchored on the server-published `eventId` rather than the device clock. Both
@@ -60,19 +66,22 @@ export function useUpcomingEvents(limitTo = 12) {
         );
 
         const unsub = onSnapshot(q, (snapshot) => {
-            setEvents(snapshot.docs.slice(0, limitTo).map((d) => {
-                const data = d.data();
-                return {
-                    id: d.id,
-                    date: data.date || d.id,
-                    startTime: data.startTime || '19:00',
-                    endTime: data.endTime || '22:00',
-                    venue: data.venue ?? null,
-                    status: data.status === 'cancelled' ? 'cancelled' : 'scheduled',
-                    agenda: data.agenda || '',
-                    autoCreated: data.autoCreated === true,
-                };
-            }));
+            setEvents(snapshot.docs
+                .filter(d => d.data()?.status !== 'cancelled')
+                .slice(0, limitTo)
+                .map((d) => {
+                    const data = d.data();
+                    return {
+                        id: d.id,
+                        date: data.date || d.id,
+                        startTime: data.startTime || '19:00',
+                        endTime: data.endTime || '22:00',
+                        venue: data.venue ?? null,
+                        status: 'scheduled' as const,
+                        agenda: data.agenda || '',
+                        autoCreated: data.autoCreated === true,
+                    };
+                }));
             setLoading(false);
         }, (err) => {
             console.error('[useUpcomingEvents] Listener error:', err);
@@ -102,19 +111,8 @@ export async function updateEvent(
     });
 }
 
-/** Cancel a gathering, or put a cancelled one back. */
-export async function setEventStatus(
-    eventId: string,
-    status: 'scheduled' | 'cancelled',
-    updatedByUid: string,
-): Promise<void> {
-    await updateDoc(doc(db, 'events', eventId), {
-        status,
-        autoCreated: false,
-        updatedBy: updatedByUid,
-        updatedAt: new Date().toISOString(),
-    });
-}
+// setEventStatus was here. Cancelling is now deleting — see deleteSabhaEvent in
+// src/utils/cloudFunctions.ts. A gathering is either on the calendar or it is not.
 
 /**
  * Add a one-off gathering on a date the weekly template would not generate.

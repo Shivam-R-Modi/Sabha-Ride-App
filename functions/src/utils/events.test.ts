@@ -7,9 +7,7 @@ vi.mock('firebase-admin', () => ({
     }),
 }));
 
-import {
-    findCurrentEvent, ensureUpcomingScheduled, weeklySlotDate, CALENDAR_HORIZON_DAYS,
-} from './events';
+import { findCurrentEvent, seedFirstEventIfNeeded, weeklySlotDate } from './events';
 
 const ZONE = 'America/New_York';
 const boston = (day: string, hhmm: string) => new Date(`2026-08-${day}T${hhmm}:00-04:00`);
@@ -18,21 +16,37 @@ const boston = (day: string, hhmm: string) => new Date(`2026-08-${day}T${hhmm}:0
 const MON = '03', WED = '05', FRI = '07', SAT = '08';
 
 /**
- * Minimal fake of the query chain the events module uses:
- *   collection().where().where().orderBy().get()
+ * Fake Firestore covering everything the events module touches:
+ *   collection(name).where().where().orderBy().get()
+ *   db.doc('a/b').get() / .set()
+ *   db.batch() with .create() / .set() / .commit()
  *
- * It must honour BOTH bounds. An earlier version kept a single `lowerBound` that
- * each `where` overwrote, which would have made the horizon tests pass for the
- * wrong reason — the upper bound would simply have been ignored.
+ * Deliberately NAME-AWARE. An earlier version had `collection()` take no argument
+ * and close over a single map, so a read of `system/eventGenerator` would have
+ * silently returned an events document and every seed test would have passed for
+ * the wrong reason. It also honours BOTH range bounds, for the same reason.
  */
-function fakeDb(events: Record<string, any>) {
-    const created: Record<string, any> = {};
+function fakeDb(
+    events: Record<string, any>,
+    other: Record<string, Record<string, any>> = {},
+) {
+    const store: Record<string, Record<string, any>> = { events, ...other };
+    const col = (name: string) => (store[name] ??= {});
 
-    const makeChain = () => {
+    const created: Record<string, any> = {};
+    const marked: Record<string, any> = {};
+
+    const alreadyExists = () => {
+        const err: any = new Error('ALREADY_EXISTS');
+        err.code = 6;
+        return err;
+    };
+
+    const makeQuery = (name: string) => {
         let lower = '';
         let upper = '\uffff';
         const chain: any = {
-            where: (_field: any, op: string, value: string) => {
+            where: (_f: any, op: string, value: string) => {
                 if (op === '>=' || op === '>') lower = value;
                 else if (op === '<=' || op === '<') upper = value;
                 return chain;
@@ -40,41 +54,75 @@ function fakeDb(events: Record<string, any>) {
             orderBy: () => chain,
             limit: () => chain,
             get: async () => ({
-                docs: Object.keys(events)
+                docs: Object.keys(col(name))
                     .filter(id => id >= lower && id <= upper)
                     .sort()
-                    .map(id => ({ id, data: () => events[id] })),
+                    .map(id => ({ id, data: () => col(name)[id] })),
             }),
         };
         return chain;
     };
 
-    return {
-        db: {
-            collection: () => {
-                const chain = makeChain();
-                return {
-                    where: chain.where,
-                    orderBy: chain.orderBy,
-                    limit: chain.limit,
-                    get: chain.get,
-                    doc: (id: string) => ({
-                        get: async () => ({ exists: id in events }),
-                        create: async (data: any) => {
-                            if (id in events) {
-                                const err: any = new Error('ALREADY_EXISTS');
-                                err.code = 6;
-                                throw err;
-                            }
-                            created[id] = data;
-                            events[id] = data;
-                        },
-                    }),
-                };
-            },
-        } as any,
-        created,
+    const docRef = (name: string, id: string) => ({
+        __col: name,
+        __id: id,
+        get: async () => ({
+            exists: id in col(name),
+            data: () => col(name)[id],
+        }),
+        set: async (data: any) => { col(name)[id] = { ...col(name)[id], ...data }; },
+        create: async (data: any) => {
+            if (id in col(name)) throw alreadyExists();
+            col(name)[id] = data;
+            created[id] = data;
+        },
+    });
+
+    const db: any = {
+        collection: (name: string) => {
+            const q = makeQuery(name);
+            return {
+                where: q.where, orderBy: q.orderBy, limit: q.limit, get: q.get,
+                doc: (id: string) => docRef(name, id),
+            };
+        },
+        // db.doc('system/eventGenerator')
+        doc: (path: string) => {
+            const [name, id] = path.split('/');
+            return docRef(name, id);
+        },
+        batch: () => {
+            const ops: Array<() => void> = [];
+            let conflict = false;
+            return {
+                create: (ref: any, data: any) => {
+                    if (ref.__id in col(ref.__col)) conflict = true;
+                    ops.push(() => {
+                        col(ref.__col)[ref.__id] = data;
+                        created[ref.__id] = data;
+                    });
+                },
+                set: (ref: any, data: any) => {
+                    ops.push(() => {
+                        col(ref.__col)[ref.__id] = { ...col(ref.__col)[ref.__id], ...data };
+                        if (ref.__col === 'system') marked[ref.__id] = col(ref.__col)[ref.__id];
+                    });
+                },
+                delete: (ref: any) => {
+                    ops.push(() => { delete col(ref.__col)[ref.__id]; });
+                },
+                commit: async () => {
+                    // A create precondition failure rejects the WHOLE commit, so
+                    // nothing lands — which is what makes the event and the marker
+                    // atomic.
+                    if (conflict) throw alreadyExists();
+                    ops.forEach(op => op());
+                },
+            };
+        },
     };
+
+    return { db, created, marked, store };
 }
 
 const scheduled = (date: string, extra: Record<string, any> = {}) => ({
@@ -182,114 +230,106 @@ describe('weeklySlotDate', () => {
     });
 });
 
-describe('ensureUpcomingScheduled', () => {
+describe('seedFirstEventIfNeeded', () => {
     const defaults = { startTime: '19:00', endTime: '22:00' };
-    const run = (day: string, events: Record<string, any>, dow = 5) => {
-        const { db, created } = fakeDb(events);
-        return ensureUpcomingScheduled(db, boston(day, '03:00'), ZONE, defaults, dow)
-            .then(dates => ({ dates, created }));
+    const run = (
+        day: string,
+        events: Record<string, any>,
+        other: Record<string, Record<string, any>> = {},
+        dow = 5,
+    ) => {
+        const f = fakeDb(events, other);
+        return seedFirstEventIfNeeded(f.db, boston(day, '03:00'), ZONE, defaults, dow)
+            .then(dates => ({ dates, ...f }));
     };
 
-    it('creates exactly ONE event for an empty calendar', async () => {
-        // The whole point of the change: how many sabhas exist is the manager's
-        // decision. Previously this created eight.
-        const { dates, created } = await run(WED, {});
+    it('seeds exactly one gathering on a fresh project', async () => {
+        const { dates, created, store } = await run(WED, {});
 
         expect(dates).toEqual(['2026-08-07']);
         expect(Object.keys(created)).toEqual(['2026-08-07']);
         expect(created['2026-08-07'].autoCreated).toBe(true);
         expect(created['2026-08-07'].status).toBe('scheduled');
+        // And the marker landed in the same commit.
+        expect(store.system['eventGenerator'].seededAt).toBeTruthy();
+        expect(store.system['eventGenerator'].seededDate).toBe('2026-08-07');
     });
 
-    it('does nothing when a scheduled event already exists ahead', async () => {
-        const { dates, created } = await run(WED, { '2026-08-07': scheduled('2026-08-07') });
-
-        expect(dates).toEqual([]);
-        expect(created).toEqual({});
-    });
-
-    it('creates the NEXT slot when the only one ahead is cancelled', async () => {
-        // The outage this function exists to prevent. Naively "create slot 0 if
-        // missing" does nothing here, findCurrentEvent returns null, and rides
-        // close for days.
-        const { dates, created } = await run(WED, {
-            '2026-08-07': scheduled('2026-08-07', { status: 'cancelled' }),
-        });
-
-        expect(dates).toEqual(['2026-08-14']);
-        expect(created['2026-08-14'].status).toBe('scheduled');
-        // And it must not have resurrected the cancelled one.
-        expect(created['2026-08-07']).toBeUndefined();
-    });
-
-    it('never overwrites or un-cancels an existing event', async () => {
-        const { created } = await run(WED, {
-            '2026-08-07': scheduled('2026-08-07', { startTime: '16:30', status: 'cancelled' }),
-            '2026-08-14': scheduled('2026-08-14', { startTime: '16:30' }),
-        });
-
-        expect(created).toEqual({});
-    });
-
-    it('stops when the manager has decided every slot in the horizon', async () => {
-        // Cancelling everything inside the horizon is a deliberate shutdown. The
-        // generator must respect it, not fight it.
-        const { dates, created } = await run(WED, {
-            '2026-08-07': scheduled('2026-08-07', { status: 'cancelled' }),
-            '2026-08-14': scheduled('2026-08-14', { status: 'cancelled' }),
+    it('never seeds again once the marker is set — even with an empty calendar', async () => {
+        // The whole point. This is what makes deletion stick: previously an empty
+        // slot was recreated within 60 seconds by the per-minute self-heal.
+        const { dates, created } = await run(WED, {}, {
+            system: { eventGenerator: { seededAt: '2026-08-01T00:00:00.000Z' } },
         });
 
         expect(dates).toEqual([]);
         expect(created).toEqual({});
     });
 
-    it('is satisfied by a manager-added one-off, without adding a Friday', async () => {
-        const { dates, created } = await run(WED, {
-            '2026-08-11': scheduled('2026-08-11'), // a Tuesday, hand-added
+    it('does not seed when the manager has already filled the calendar', async () => {
+        const { dates, created, store } = await run(WED, {
+            '2026-08-14': scheduled('2026-08-14'),
         });
 
         expect(dates).toEqual([]);
         expect(created).toEqual({});
+        // But it records the marker, so a later deletion cannot make it seed.
+        expect(store.system['eventGenerator'].seededAt).toBeTruthy();
     });
 
-    it('does NOT count a scheduled event beyond the horizon', async () => {
-        // Deliberate: pins the choice rather than leaving it to be discovered.
-        // 2026-09-25 is well past today+14, so a nearer sabha is still created.
-        const { dates } = await run(WED, { '2026-09-25': scheduled('2026-09-25') });
-
+    it('treats a missing marker as not-yet-seeded rather than closing the service', async () => {
+        const { dates } = await run(WED, {}, { system: {} });
         expect(dates).toEqual(['2026-08-07']);
     });
 
-    it('ignores past events entirely', async () => {
-        const { dates } = await run(WED, { '2026-07-31': scheduled('2026-07-31') });
+    it('treats a malformed marker as not-yet-seeded, and does not throw', async () => {
+        // Biased towards seeding. This runs in a job whose failure mode is "no
+        // rides at all", so a corrupt marker must not strand anyone.
+        for (const bad of [{ seededAt: null }, { seededAt: 42 }, { seededAt: '' }, {}]) {
+            const { dates } = await run(WED, {}, { system: { eventGenerator: bad } });
+            expect(dates).toEqual(['2026-08-07']);
+        }
+    });
+
+    it('seeds today when today is the sabha day', async () => {
+        // weeklySlotDate(..., 0) returns today on the slot day. Skipping it would
+        // mean a fresh deploy on a Friday morning closes rides for a sabha that
+        // evening.
+        const { dates } = await run(FRI, {});
         expect(dates).toEqual(['2026-08-07']);
+    });
+
+    it('leaves the marker unset when the commit loses a race', async () => {
+        // The event already exists, so batch.create's precondition rejects the
+        // whole commit — neither the event nor the marker is written, and the next
+        // run sees a populated calendar and records the marker properly.
+        const { dates, created, store } = await run(WED, {
+            '2026-08-07': scheduled('2026-08-07'),
+        });
+
+        expect(dates).toEqual([]);
+        expect(created).toEqual({});
+        // findCurrentEvent found it first, so this took the already-populated path.
+        expect(store.system['eventGenerator'].seededAt).toBeTruthy();
     });
 
     it('uses the default times it is given', async () => {
-        const { created } = await run(WED, {}, 5);
+        const { created } = await run(WED, {}, {}, 5);
         expect(created['2026-08-07'].startTime).toBe('19:00');
         expect(created['2026-08-07'].endTime).toBe('22:00');
     });
 
-    it('can generate a slot other than Friday', async () => {
-        const { dates } = await run(MON, {}, 2); // Tuesday
+    it('can seed a slot other than Friday', async () => {
+        const { dates } = await run(MON, {}, {}, 2); // Tuesday
         expect(dates).toEqual(['2026-08-04']);
     });
 
-    it('tolerates losing a create race', async () => {
-        // The fake throws code 6 when the doc already exists. Two concurrent runs
-        // picking the same slot must not produce an error.
-        const events: Record<string, any> = {};
-        const { db } = fakeDb(events);
-        const [a, b] = await Promise.all([
-            ensureUpcomingScheduled(db, boston(WED, '03:00'), ZONE, defaults),
-            ensureUpcomingScheduled(db, boston(WED, '03:00'), ZONE, defaults),
-        ]);
-        // At most one of them created it; neither threw.
-        expect([a.length, b.length].sort()).toEqual([0, 1]);
-    });
-
-    it('spans at least two weekly slots, or cancelling would still close rides', () => {
-        expect(CALENDAR_HORIZON_DAYS).toBeGreaterThanOrEqual(14);
+    it('ignores a cancelled event when deciding whether to seed', async () => {
+        // A legacy cancelled document must not be mistaken for a populated
+        // calendar, or a fresh project with only cancelled events never seeds.
+        const { dates } = await run(WED, {
+            '2026-08-07': scheduled('2026-08-07', { status: 'cancelled' }),
+        });
+        expect(dates).toEqual(['2026-08-14']);
     });
 });

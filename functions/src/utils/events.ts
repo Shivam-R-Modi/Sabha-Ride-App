@@ -27,33 +27,26 @@ import {
 export const EVENTS_COLLECTION = 'events';
 
 /**
- * How far ahead the generator looks, and therefore the longest shutdown a
- * manager can declare: cancel every weekly slot inside this window and
- * generation stops, because each slot has a document saying they decided.
+ * Where the seed marker lives.
  *
- * Must span at least TWO weekly slots. With a 7-day horizon there is exactly one
- * candidate, so cancelling it leaves nothing to create and rides close until the
- * slot pointer walks past — the outage this constant exists to prevent.
+ * `system/*` is denied to every client in firestore.rules, so only a Cloud
+ * Function can write this. That matters: if a manager could clear it, they could
+ * make the seeder run again and resurrect a date they had just deleted.
  */
-export const CALENDAR_HORIZON_DAYS = 14;
-
-/**
- * How many SCHEDULED events must exist inside the horizon.
- *
- * One. How many sabhas there are is a manager's decision; the generator only
- * guarantees the service is never silently closed.
- */
-export const UPCOMING_SCHEDULED_TARGET = 1;
+export const SEED_MARKER_DOC = 'system/eventGenerator';
 
 /**
  * How far ahead `findCurrentEvent` will look for the next gathering.
  *
  * A DATE bound, not a document-count bound. `.limit(20)` meant a long run of
- * cancelled tombstones ahead of a scheduled event returned null while a
- * scheduled event existed — closing the service on the 21st document rather than
- * on anything meaningful.
+ * skipped documents ahead of a scheduled event returned null while a scheduled
+ * event existed — closing the service on the 21st document rather than on
+ * anything meaningful.
  */
 const LOOKAHEAD_DAYS = 90;
+
+/** How far the one-off seed will look for a free weekly slot. Bounds the loop. */
+const SEED_SEARCH_DAYS = 56;
 
 export type EventStatus = 'scheduled' | 'cancelled';
 
@@ -165,106 +158,125 @@ export function weeklySlotDate(
 }
 
 /**
- * Keep at least one SCHEDULED gathering inside the horizon.
+ * Seed the very first gathering — once, ever.
  *
- * The invariant is deliberately about scheduled events, not about document
- * count. "Create the next slot if it is missing" is not equivalent: a manager who
- * cancels the only upcoming sabha leaves a document on that date, so nothing gets
- * created, `findCurrentEvent` returns null, and rides close until the weekly slot
- * pointer walks past the cancelled date — days later, recovering only by
- * accident. Asking "is there a scheduled event ahead?" instead makes cancelling
- * roll forward.
+ * A brand-new project has an empty calendar, and an empty calendar means no rides
+ * at all with no error shown to anyone. So one gathering is created so the service
+ * is never closed on day one. After that the calendar belongs to the manager: how
+ * many sabhas exist is their decision, not a cron job's.
  *
- * Only ever CREATES. It never updates and never un-cancels, so an edited time, a
- * moved venue or a cancellation is never overwritten. That is the most important
- * property of this function.
+ * `seededAt` in system/eventGenerator is what makes "once, ever" true, and it is
+ * what makes DELETION possible. The previous version worked out whether a slot had
+ * been "decided" by whether a document existed on that date — so deleting a date
+ * removed the evidence and the date was recreated as freshly scheduled within 60
+ * seconds by the per-minute self-heal. A marker outside the events collection
+ * cannot be erased by deleting an event.
  *
- * A corollary worth knowing: a cancelled future event inside the horizon is a
- * load-bearing tombstone. DELETING one makes this function recreate it as
- * scheduled. Cancel, never delete.
+ * Failure is biased towards seeding, never towards closing: a missing or malformed
+ * marker is treated as "not yet seeded". This runs inside a scheduled job whose
+ * failure mode is "no rides at all", and stranding a congregation is worse than
+ * creating one gathering a manager then deletes.
  *
- * Returns the dates it created — at most one.
+ * Returns the dates it created — at most one, and only on the very first run.
  */
-export async function ensureUpcomingScheduled(
+export async function seedFirstEventIfNeeded(
     db: admin.firestore.Firestore,
     now: Date,
     timeZone: string,
     defaults: { startTime: string; endTime: string },
     dayOfWeek: number = SABHA_DAY,
 ): Promise<string[]> {
-    const today = zonedDateKey(now, timeZone);
-    const horizonEnd = addDaysToDateKey(today, CALENDAR_HORIZON_DAYS);
-
     try {
-        // ONE query answers both questions below: is the invariant satisfied, and
-        // which slots already have a document. The previous version re-read each
-        // slot individually, which is what made it eight reads per call.
-        const snapshot = await db.collection(EVENTS_COLLECTION)
-            .where(admin.firestore.FieldPath.documentId(), '>=', today)
-            .where(admin.firestore.FieldPath.documentId(), '<=', horizonEnd)
-            .orderBy(admin.firestore.FieldPath.documentId())
-            .get();
+        const markerRef = db.doc(SEED_MARKER_DOC);
+        const marker = await markerRef.get();
+        const seededAt = marker.exists ? marker.data()?.seededAt : undefined;
 
-        const existing = new Set<string>();
-        let scheduledAhead = 0;
+        // Already seeded. Never create again, whatever the calendar looks like —
+        // an empty calendar from here on is the manager's choice and is surfaced
+        // as `calendarStatus: 'no-scheduled-event'` rather than papered over.
+        if (typeof seededAt === 'string' && seededAt.length > 0) return [];
 
-        for (const doc of snapshot.docs) {
-            existing.add(doc.id);
-            const event = toEvent(doc.id, doc.data());
-            if (event && event.status === 'scheduled') scheduledAhead++;
+        // A calendar the manager has already filled needs no seed. Still record
+        // the marker, so a later deletion cannot make this run again.
+        const alreadyScheduled = await findCurrentEvent(db, now, timeZone);
+        if (alreadyScheduled) {
+            await markerRef.set({
+                seededAt: new Date().toISOString(),
+                seededDate: null,
+                note: 'Calendar was already populated; marker recorded without seeding.',
+            }, { merge: true });
+            return [];
         }
 
-        if (scheduledAhead >= UPCOMING_SCHEDULED_TARGET) return [];
+        // Seed the first weekly slot that has no document at all.
+        //
+        // Slot 0 is usually free, but not always: a legacy CANCELLED document
+        // sitting on it is skipped by findCurrentEvent above, so we get here — and
+        // then batch.create would hit its ALREADY_EXISTS precondition, reject the
+        // whole commit, and leave a project whose only events are cancelled with
+        // no sabha and no marker, retrying forever.
+        const today = zonedDateKey(now, timeZone);
+        const occupied = new Set<string>();
+        const scan = await db.collection(EVENTS_COLLECTION)
+            .where(admin.firestore.FieldPath.documentId(), '>=', today)
+            .where(admin.firestore.FieldPath.documentId(), '<=',
+                addDaysToDateKey(today, SEED_SEARCH_DAYS))
+            .orderBy(admin.firestore.FieldPath.documentId())
+            .get();
+        scan.docs.forEach(doc => occupied.add(doc.id));
 
-        for (let week = 0; ; week++) {
-            const date = weeklySlotDate(now, timeZone, dayOfWeek, week);
-            if (date > horizonEnd) break;
-
-            // A document here means a manager already decided this slot, whether
-            // that decision was "moved" or "cancelled". Leave it alone.
-            if (existing.has(date)) continue;
-
-            try {
-                await db.collection(EVENTS_COLLECTION).doc(date).create({
-                    date,
-                    startTime: defaults.startTime,
-                    endTime: defaults.endTime,
-                    venue: null,
-                    status: 'scheduled',
-                    agenda: '',
-                    autoCreated: true,
-                    createdAt: new Date().toISOString(),
-                });
-                return [date];
-            } catch (error: any) {
-                // ALREADY_EXISTS (6): a concurrent run won the race, so the
-                // invariant now holds either way.
-                if (error?.code === 6) return [];
-                console.error(`[events] Could not create ${date}:`, error);
-                return [];
+        let date: string | null = null;
+        for (let week = 0; week * 7 <= SEED_SEARCH_DAYS; week++) {
+            const candidate = weeklySlotDate(now, timeZone, dayOfWeek, week);
+            if (!occupied.has(candidate)) {
+                date = candidate;
+                break;
             }
         }
 
-        // Every slot in the horizon has a document and none of them is scheduled.
-        // The manager has closed the service deliberately. Callers surface this
-        // rather than retrying, so it is visible instead of looking like a bug.
-        return [];
+        if (!date) {
+            // Every slot in the search window is taken by a document, none of them
+            // scheduled. Nothing sensible to seed; leave it to the manager and let
+            // calendarStatus say so.
+            console.warn('[events] No free weekly slot to seed — leaving it to a manager');
+            return [];
+        }
+
+        // One batch, so the event and the marker land together or not at all.
+        // Split across two writes, a crash in between would leave the event
+        // created and the marker unset — and then deleting that event would seed
+        // it straight back, which is the exact loop this marker removes.
+        //
+        // batch.create keeps the ALREADY_EXISTS precondition, so if a concurrent
+        // run won the race this whole commit rejects and neither write lands.
+        const batch = db.batch();
+        batch.create(db.collection(EVENTS_COLLECTION).doc(date), {
+            date,
+            startTime: defaults.startTime,
+            endTime: defaults.endTime,
+            venue: null,
+            status: 'scheduled',
+            agenda: '',
+            autoCreated: true,
+            createdAt: new Date().toISOString(),
+        });
+        batch.set(markerRef, {
+            seededAt: new Date().toISOString(),
+            seededDate: date,
+        }, { merge: true });
+
+        try {
+            await batch.commit();
+            return [date];
+        } catch (error: any) {
+            // ALREADY_EXISTS (6): a concurrent run created it first, so a
+            // gathering exists either way and its marker was written with it.
+            if (error?.code === 6) return [];
+            console.error(`[events] Could not seed ${date}:`, error);
+            return [];
+        }
     } catch (error) {
-        console.error('[events] Could not top up the calendar:', error);
+        console.error('[events] Could not seed the calendar:', error);
         return [];
     }
-}
-
-/**
- * Is there a scheduled gathering inside the horizon?
- *
- * Used to tell "the manager closed the service" apart from "something is broken",
- * which are indistinguishable to a rider otherwise.
- */
-export async function hasScheduledEventAhead(
-    db: admin.firestore.Firestore,
-    now: Date,
-    timeZone: string,
-): Promise<boolean> {
-    return (await findCurrentEvent(db, now, timeZone)) !== null;
 }

@@ -36,6 +36,7 @@ export { studentReadyToLeave } from './http/studentReadyToLeave';
 // Manager Functions
 export { manualAssignStudent } from './http/manualAssignStudent';
 export { generateEventCSV } from './http/generateEventCSV';
+export { deleteSabhaEvent } from './http/deleteSabhaEvent';
 export { verifyManagerCode } from './http/verifyManagerCode';
 export { adminDeleteUser } from './http/adminDeleteUser';
 

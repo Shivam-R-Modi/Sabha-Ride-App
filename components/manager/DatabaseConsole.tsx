@@ -174,7 +174,9 @@ export const DatabaseConsole: React.FC = () => {
           { id: 'users', label: 'Users', icon: Users, count: activeTab === 'users' ? documents.length : null },
           { id: 'vehicles', label: 'Vehicles', icon: Car, count: activeTab === 'vehicles' ? documents.length : null },
           { id: 'rides', label: 'Rides', icon: Navigation, count: activeTab === 'rides' ? documents.length : null },
-          { id: 'weeklyAttendance', label: 'Attendance', icon: CheckCircle2, count: activeTab === 'weeklyAttendance' ? documents.length : null },
+          // The Attendance tab was here. Removed with 'weeklyAttendance' from
+          // SupportedCollection: responses live in a subcollection this console
+          // cannot see, so its delete button would have orphaned them.
           { id: 'settings', label: 'Settings', icon: FileText, count: activeTab === 'settings' ? documents.length : null },
           { id: 'auditLogs', label: 'Audit Logs', icon: Clock, count: activeTab === 'auditLogs' ? documents.length : null }
         ].map((tab) => {

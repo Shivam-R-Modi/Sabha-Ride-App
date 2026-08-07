@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { CalendarDays, Loader2, AlertCircle, Plus, RotateCcw, Ban, Check } from 'lucide-react';
+import { CalendarDays, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useUpcomingEvents, updateEvent, setEventStatus, createEvent, SabhaEvent } from '../../hooks/useEvents';
+import { useUpcomingEvents, updateEvent, createEvent, SabhaEvent } from '../../hooks/useEvents';
+import { previewDeleteSabhaEvent, deleteSabhaEvent } from '../../src/utils/cloudFunctions';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { useSettings } from '../../hooks/useSettings';
 import { AddressAutocomplete } from '../auth/AddressAutocomplete';
@@ -16,15 +17,17 @@ import { formatTime } from '../../hooks/useSettings';
  * that was that. Each gathering now has its own date and times, and a manager can
  * move one, cancel one, or add a one-off.
  *
- * Exactly ONE upcoming Friday is kept populated — how many sabhas there are is a
- * manager's decision, and generating eight meant one bad default time was copied
- * eight times. The guarantee is only that the service is never silently closed:
- * if nothing scheduled remains ahead, one gets created. Editing or cancelling
- * marks a gathering as manager-owned and the generator leaves it alone from then
- * on.
+ * The app seeds ONE sabha on a brand-new project so the service is not closed on
+ * day one, and never creates another. How many gatherings exist is the manager's
+ * decision — generating eight meant one bad default time was copied eight times.
  *
- * Cancel rather than delete. A cancelled future gathering is the record that the
- * manager decided; deleting it lets the generator recreate it as scheduled.
+ * Deleting really deletes — the row goes and so does the record. That is only safe
+ * because the app no longer generates events past the first one: it used to treat a
+ * missing document as "needs creating", so a deleted date reappeared within 60
+ * seconds. The work itself goes through the deleteSabhaEvent callable, because
+ * removing a gathering also means removing its attendance responses (a subcollection
+ * Firestore leaves behind), cancelling outstanding ride requests, and rewriting the
+ * published ride window.
  */
 
 /**
@@ -92,8 +95,7 @@ function windowSummary(event: SabhaEvent): string {
 const EventRow: React.FC<{
     event: SabhaEvent;
     isNext: boolean;
-    isOnlyScheduled: boolean;
-}> = ({ event, isNext, isOnlyScheduled }) => {
+}> = ({ event, isNext }) => {
     const { currentUser } = useAuth();
     const [editing, setEditing] = useState(false);
     const [start, setStart] = useState(event.startTime);
@@ -106,7 +108,6 @@ const EventRow: React.FC<{
     const { sabhaLocation } = useSettings();
     const { ask, confirmDialog } = useConfirm();
 
-    const cancelled = event.status === 'cancelled';
     const valid = isUsableDuration(start, end);
 
     const save = async () => {
@@ -142,51 +143,60 @@ const EventRow: React.FC<{
         }
     };
 
-    const toggleCancelled = async () => {
+    const remove = async () => {
         if (!currentUser) return;
-        const next = cancelled ? 'scheduled' : 'cancelled';
-        if (next === 'cancelled') {
-            // Cancelling the last one closes the service. The generator will add
-            // a replacement, but say so rather than let it be a surprise.
-            const ok = await ask({
-                title: `Cancel ${formatDate(event.date)}?`,
-                message: isOnlyScheduled
-                    ? 'Rides will not open for it.\n\nThis is the only scheduled sabha, so rides will be closed until another is added — one will be created automatically, or you can add one yourself.'
-                    : 'Rides will not open for it.',
-                confirmLabel: 'Cancel sabha',
-                cancelLabel: 'Keep it',
-                destructive: true,
-            });
-            if (!ok) return;
-        }
 
         setBusy(true);
         setError(null);
         try {
-            await setEventStatus(event.id, next, currentUser.uid);
+            // Ask the server what this would affect BEFORE showing the dialog, so
+            // the manager sees real numbers rather than a generic warning.
+            const preview = await previewDeleteSabhaEvent(event.id);
+
+            const affected: string[] = [];
+            if (preview.responseCount > 0) {
+                affected.push(`${preview.responseCount} ${preview.responseCount === 1 ? 'person has' : 'people have'} responded`);
+            }
+            if (preview.requestedRideCount > 0) {
+                affected.push(`${preview.requestedRideCount} ride ${preview.requestedRideCount === 1 ? 'request' : 'requests'} will be cancelled`);
+            }
+
+            const ok = await ask({
+                title: `Delete ${formatDate(event.date)}?`,
+                message: affected.length > 0
+                    ? `${affected.join(' and ')}. They will be notified.\n\nThis cannot be undone.`
+                    : 'Nobody has responded or requested a ride yet.\n\nThis cannot be undone.',
+                confirmLabel: 'Delete sabha',
+                cancelLabel: 'Keep it',
+                destructive: true,
+            });
+            if (!ok) {
+                setBusy(false);
+                return;
+            }
+
+            await deleteSabhaEvent(event.id, true);
+            // The row disappears on its own — useUpcomingEvents is a live listener.
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Could not update.');
+            // Surfaced, not swallowed. The server refuses for good reasons (today's
+            // sabha, a driver already on the road) and the manager needs the reason.
+            setError(err instanceof Error ? err.message : 'Could not delete this sabha.');
         } finally {
             setBusy(false);
         }
     };
 
     return (
-        <div className={`px-3 py-2.5 border-b border-gray-100 last:border-0 ${cancelled ? 'bg-gray-50' : ''}`}>
+        <div className="px-3 py-2.5 border-b border-gray-100 last:border-0">
             <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                        <span className={`text-sm font-bold ${cancelled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                        <span className="text-sm font-bold text-gray-800">
                             {formatDate(event.date)}
                         </span>
-                        {isNext && !cancelled && (
+                        {isNext && (
                             <span className="text-[10px] font-bold uppercase tracking-wider bg-saffron/15 text-saffron-800 px-1.5 py-0.5 rounded">
                                 Next
-                            </span>
-                        )}
-                        {cancelled && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
-                                Cancelled
                             </span>
                         )}
                     </div>
@@ -201,17 +211,15 @@ const EventRow: React.FC<{
                                     at {event.venue.address}
                                 </p>
                             )}
-                            {!cancelled && (
-                                <p className="text-[10px] text-gray-400 mt-0.5">
-                                    {windowSummary(event)}
-                                </p>
-                            )}
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                                {windowSummary(event)}
+                            </p>
                         </>
                     )}
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0">
-                    {!editing && !cancelled && (
+                    {!editing && (
                         <button
                             onClick={() => setEditing(true)}
                             disabled={busy}
@@ -221,15 +229,12 @@ const EventRow: React.FC<{
                         </button>
                     )}
                     <button
-                        onClick={toggleCancelled}
+                        onClick={remove}
                         disabled={busy}
-                        title={cancelled ? 'Restore this sabha' : 'Cancel this sabha'}
-                        className={`p-1.5 rounded transition-colors disabled:opacity-50 ${cancelled
-                            ? 'text-green-700 hover:bg-green-50'
-                            : 'text-red-600 hover:bg-red-50'}`}
+                        title="Delete this sabha"
+                        className="p-1.5 rounded transition-colors disabled:opacity-50 text-red-600 hover:bg-red-50"
                     >
-                        {busy ? <Loader2 size={14} className="animate-spin" />
-                            : cancelled ? <RotateCcw size={14} /> : <Ban size={14} />}
+                        {busy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                     </button>
                 </div>
             </div>
@@ -324,8 +329,8 @@ export const SabhaCalendar: React.FC = () => {
     const [addError, setAddError] = useState<string | null>(null);
     const { sabhaLocation } = useSettings();
 
-    const nextScheduled = events.find(e => e.status === 'scheduled');
-    const scheduledCount = events.filter(e => e.status === 'scheduled').length;
+    // Cancelled documents are filtered out upstream, so every row here is live.
+    const nextScheduled = events[0];
 
     const add = async () => {
         if (!currentUser) return;
@@ -363,8 +368,8 @@ export const SabhaCalendar: React.FC = () => {
                     <h3 className="text-sm font-bold text-gray-800">Sabha Calendar</h3>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                    One upcoming Friday is kept for you. Add more yourself, change a time or
-                    venue, or cancel one.
+                    The calendar is yours. Add each sabha, change its time or venue, or
+                    delete one.
                 </p>
             </div>
 
@@ -385,17 +390,15 @@ export const SabhaCalendar: React.FC = () => {
                 <div className="flex items-start gap-2 text-red-800 bg-red-50 border border-red-200 px-3 py-2 m-3 rounded-lg">
                     <AlertCircle size={14} className="mt-0.5 shrink-0" />
                     <span className="text-xs">
-                        <span className="font-bold">Rides are closed.</span> Every upcoming
-                        sabha is cancelled, so nobody can request a ride. Restore one below,
-                        or add a new date.
+                        <span className="font-bold">Rides are closed.</span> There is no sabha
+                        on the calendar, so nobody can request a ride. Add a date below.
                     </span>
                 </div>
             )}
 
             {!loading && !error && events.length === 0 && (
                 <p className="px-4 py-6 text-center text-xs text-gray-500">
-                    No sabhas scheduled yet. One will be added automatically within a minute,
-                    or add one below.
+                    No sabhas scheduled. Add one below — rides cannot open without it.
                 </p>
             )}
 
@@ -404,7 +407,6 @@ export const SabhaCalendar: React.FC = () => {
                     key={event.id}
                     event={event}
                     isNext={event.id === nextScheduled?.id}
-                    isOnlyScheduled={scheduledCount === 1 && event.status === 'scheduled'}
                 />
             ))}
 

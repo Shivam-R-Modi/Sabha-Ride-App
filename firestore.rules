@@ -353,7 +353,18 @@ service cloud.firestore {
     // =====================================
     match /weeklyAttendance/{weekId} {
       allow read: if isAuthenticated();
-      
+
+      // The parent document is derived state, written only by the scheduler with
+      // the Admin SDK. No client may create, change or DELETE it.
+      //
+      // This was previously silent — there was no write rule at all, so writes
+      // failed by default. That accident was load-bearing: the Database Console
+      // lists `weeklyAttendance` and renders delete and bulk-delete buttons for
+      // it, and deleting the parent would leave every `responses/*` document
+      // behind, invisible to a console that only lists parents. Stating the deny
+      // turns the accident into the intention.
+      allow write: if false;
+
       match /responses/{userId} {
         // Users can read and write their own response
         allow read: if isOwner(userId) || isManager();
@@ -368,10 +379,29 @@ service cloud.firestore {
       // the next sabha is, and the driver dashboard gates "Assign Me" on it.
       allow read: if isAuthenticated();
 
-      // Only managers schedule, move or cancel a gathering. Writing here changes
-      // when rides open for the whole congregation, so it is the same authority
-      // as changing the venue.
-      allow write: if isManager();
+      // Managers schedule and move a gathering. Writing here changes when rides
+      // open for the whole congregation, so it is the same authority as changing
+      // the venue.
+      allow create: if isManager();
+      allow update: if isManager();
+
+      // Deletion goes through the deleteSabhaEvent callable, NEVER directly —
+      // including for managers.
+      //
+      // This was `allow write: if isManager()`, and `write` covers delete, so any
+      // manager could already hard-delete a gathering with no cleanup at all.
+      // Removing the event document does not remove what hangs off its date:
+      // Firestore leaves `weeklyAttendance/{date}/responses/*` behind entirely,
+      // and every read path for that data derives the id from
+      // system/rideContext, so it becomes unreachable rather than merely untidy —
+      // names, phone numbers and home addresses with no screen that can ever show
+      // them again. Outstanding ride requests for the date also have to be
+      // cancelled, or globalAssignDriver picks them up at the NEXT sabha.
+      //
+      // None of that can be expressed here: rules cannot enumerate a
+      // subcollection, and cannot format a date in the venue's timezone to check
+      // that the gathering is still in the future.
+      allow delete: if false;
     }
 
     // =====================================

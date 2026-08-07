@@ -228,6 +228,37 @@ export async function manuallyUpdateRideContext(params?: ManuallyUpdateRideConte
     return callFunction<RideContextResult>('manuallyUpdateRideContext', params);
 }
 
+/**
+ * What deleting a sabha would affect. Shown to the manager before they confirm.
+ */
+export interface DeleteSabhaEventPreview {
+    date: string;
+    responseCount: number;
+    requestedRideCount: number;
+    isCurrentEvent: boolean;
+}
+
+/**
+ * Removing a gathering cannot be a client-side delete, and firestore.rules denies
+ * it to everyone including managers.
+ *
+ * Firestore leaves `weeklyAttendance/{date}/responses/*` behind when the parent
+ * goes, outstanding ride requests have to be cancelled or the next sabha inherits
+ * them, and `system/rideContext` has to be rewritten so it never names a deleted
+ * document. Only the Admin SDK can do all of that, in one commit.
+ */
+export async function previewDeleteSabhaEvent(date: string): Promise<DeleteSabhaEventPreview> {
+    return callFunction<DeleteSabhaEventPreview>('deleteSabhaEvent', { date, dryRun: true });
+}
+
+export async function deleteSabhaEvent(
+    date: string,
+    acknowledge: boolean,
+): Promise<DeleteSabhaEventPreview & { deleted: boolean }> {
+    return callFunction<DeleteSabhaEventPreview & { deleted: boolean }>(
+        'deleteSabhaEvent', { date, acknowledge });
+}
+
 // ============================================
 // GEOCODING FUNCTIONS
 // ============================================

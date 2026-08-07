@@ -13,7 +13,21 @@ import {
 } from 'firebase/firestore';
 import { geocodeAddress, adminDeleteUserViaCloud } from '../src/utils/cloudFunctions';
 
-export type SupportedCollection = 'users' | 'vehicles' | 'rides' | 'settings' | 'weeklyAttendance' | 'auditLogs';
+/**
+ * Collections the admin console may browse and edit.
+ *
+ * `weeklyAttendance` was here and has been removed deliberately. The console
+ * lists parent documents only and offers delete and bulk-delete, but attendance
+ * responses live in a `responses/*` SUBCOLLECTION — which Firestore does not
+ * delete with its parent. Deleting from here would have left every response
+ * behind, invisible to the very screen that deleted them. firestore.rules now
+ * states the deny explicitly (it was previously an accident of omission), so this
+ * would fail rather than half-succeed; removing the tab means a manager is not
+ * offered a button that cannot work.
+ *
+ * Deleting a gathering's attendance is what `deleteSabhaEvent` is for.
+ */
+export type SupportedCollection = 'users' | 'vehicles' | 'rides' | 'settings' | 'auditLogs';
 
 export function useAdminDatabase(targetCollection: SupportedCollection) {
   const [documents, setDocuments] = useState<any[]>([]);
