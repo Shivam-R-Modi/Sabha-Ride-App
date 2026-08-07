@@ -300,14 +300,9 @@ export interface StudentRequest {
   requestTime: string;
   requestedTimeSlot: string;
   status: 'pending' | 'grouped' | 'assigned';
-  /**
-   * The real pickup point, as written by createRideRequest. The dashboard map
-   * projects these onto its box. It used to expect a `coordinates: {x, y}`
-   * percentage pair that nothing ever wrote, and defaulted every marker to the
-   * exact centre — which is where the venue pin already is.
-   */
-  pickupLat?: number;
-  pickupLng?: number;
+  // pickupLat/pickupLng were here for the dashboard map. Nothing renders a
+  // request's coordinates now that it is gone. The same field names stay live on
+  // the ride document, which is what the driver's route is built from.
 }
 
 export interface RideGroup {

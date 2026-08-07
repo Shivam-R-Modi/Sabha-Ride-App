@@ -92,12 +92,11 @@ export const usePendingRequests = () => {
                     requestTime: data.createdAt,
                     requestedTimeSlot: data.timeSlot,
                     status: 'pending',
-                    // The real pickup point. The map projects it; it used to
-                    // read a `coordinates` field nothing writes and fall back
-                    // to the exact centre of the box, stacking every student
-                    // marker on the venue pin.
-                    pickupLat: data.pickupLat,
-                    pickupLng: data.pickupLng,
+                    // pickupLat/pickupLng were carried here for the dashboard
+                    // map to plot. The map is gone and RequestTable never read
+                    // them, so they were being copied onto every request row for
+                    // nobody. The coordinates still live on the ride document,
+                    // which is where the driver's route reads them.
                 } as StudentRequest);
             });
             setRequests(list);

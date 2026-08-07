@@ -4,7 +4,6 @@ import { FleetManagement } from './FleetManagement';
 import { LocationSettings } from './LocationSettings';
 import { RideWindowControl } from './RideWindowControl';
 import { SabhaCalendar } from './SabhaCalendar';
-import { ResponsiveMap } from './ResponsiveMap';
 import {
   Bell,
   Car,
@@ -24,7 +23,6 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, useWeeklyAttendanceCount, downloadAttendanceCSV, returnStudentToPool, releaseVehicle, setDriverAvailability } from '../../hooks/useFirestore';
 import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
-import { useSettings } from '../../hooks/useSettings';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { useConfirm } from '../shared/useConfirm';
 
@@ -176,8 +174,6 @@ export const ManagerDashboard: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showFleetManagement, setShowFleetManagement] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  const [mapFullscreen, setMapFullscreen] = useState(false);
 
   // Release modal state
   const [showReleaseModal, setShowReleaseModal] = useState(false);
@@ -187,13 +183,14 @@ export const ManagerDashboard: React.FC = () => {
 
   useAutoDispatch();
 
-  // The map plots everything relative to the venue, so it needs the venue.
-  const { sabhaLocation } = useSettings();
-  // Attendance is per gathering, keyed by the server-published eventId. The
-  // gathering may also override the venue, in which case the map should plot
-  // relative to where people are actually going.
-  const { eventId, event } = useCurrentEvent();
-  const mapVenue = event?.venue ?? sabhaLocation;
+  // Attendance is per gathering, keyed by the server-published eventId.
+  //
+  // The venue used to be read here too (settings/main, overridden by the
+  // gathering) purely so the map had something to plot relative to. With the map
+  // gone this screen has no use for it: every venue-dependent surface —
+  // LocationSettings, the sabha calendar, the rider's pickup form, the driver's
+  // route — reads it where it is used.
+  const { eventId } = useCurrentEvent();
 
   const { pendingDrivers } = usePendingDrivers();
   const { pendingRiders } = usePendingRiders();
@@ -258,13 +255,10 @@ export const ManagerDashboard: React.FC = () => {
     }
   };
 
-  const selectedEntity = pendingRequests.find(r => r.id === selectedEntityId) || availableDrivers.find(d => d.id === selectedEntityId);
-
   const handleAssignToAnyDriver = async (requestId: string) => {
     const available = availableDrivers.find(d => d.status === 'available');
     if (available) {
       await assignRideToDriver(requestId, available);
-      setSelectedEntityId(null);
     } else {
       alert("No available drivers found to assign manually.");
     }
@@ -523,8 +517,8 @@ export const ManagerDashboard: React.FC = () => {
             <div className="max-w-7xl mx-auto">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="font-header font-bold text-2xl text-coffee">Active Rides & Fleet Map</h2>
-                  <p className="text-gray-500 text-sm">Real-time status of assigned rides and live fleet monitoring</p>
+                  <h2 className="font-header font-bold text-2xl text-coffee">Active Rides</h2>
+                  <p className="text-gray-500 text-sm">Who is driving whom, and where each ride has got to</p>
                 </div>
                 {/* Said "Auto-Dispatch Active", with a pulsing green dot, while
                     the browser dispatcher it referred to has been disabled
@@ -540,25 +534,16 @@ export const ManagerDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Live Interactive Map */}
-              <div className="mb-6 h-[320px] rounded-2xl overflow-hidden shadow-sm border border-orange-100">
-                <ResponsiveMap
-                  students={pendingRequests}
-                  drivers={availableDrivers}
-                  venue={mapVenue}
-                  selectedStudentId={selectedEntityId}
-                  onMarkerClick={(id) => {
-                    // Was a console.log. Selecting the marker at least drives the
-                    // highlight the map already implements.
-                    setSelectedEntityId(prev => (prev === id ? null : id));
-                  }}
-                  // ResponsiveMap has always rendered a fullscreen button and
-                  // taken an onToggleFullscreen prop. Nobody passed one, so the
-                  // button did nothing.
-                  isFullscreen={mapFullscreen}
-                  onToggleFullscreen={() => setMapFullscreen(prev => !prev)}
-                />
-              </div>
+              {/* A "Live Interactive Map" sat here. It was a schematic box that
+                  placed pins by scaling latitude and longitude into percentages
+                  of a plain div — no map tiles, no streets, nothing to
+                  recognise. Even plotting real positions, which it did only
+                  after f4bc5cd, it could not answer the question a manager
+                  actually has: where is this driver now, and how far off is
+                  their next pickup. Live driver positions were never on it.
+                  Removed at the manager's request rather than kept as decoration.
+                  Real mapping is a Phase 4 concern, alongside server-side
+                  dispatch, and would start from a tile provider. */}
 
               {groupedRides.length > 0 ? (
                 <div className="flex flex-col gap-4">

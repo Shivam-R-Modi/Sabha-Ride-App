@@ -161,7 +161,10 @@ export default defineConfig(({ mode, command }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            'vendor-leaflet': ['leaflet', 'react-leaflet'],
+            // 'vendor-leaflet' was here. leaflet and react-leaflet were declared
+            // dependencies that no file ever imported — the dashboard map was
+            // hand-rolled divs, not leaflet — so this named a chunk that never
+            // had anything in it. Removed with the map.
             'vendor-charts': ['recharts'],
             'vendor-firebase-auth': ['firebase/auth'],
             'vendor-firebase-firestore': ['firebase/firestore'],
