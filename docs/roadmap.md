@@ -18,6 +18,8 @@ The app works and serves **one** location. Everything about it assumes that.
 | Tailwind compiled at build time | Was the runtime CDN, which broke offline and shifted the cascade between dev and prod. |
 | Env guard | A build with missing Firebase vars now fails instead of silently shipping a blank page. |
 | **Stage 0 — schedule timezone** | Server read local rules off a UTC clock, so drop-off rides could never run. Fixed, tested, **merged and deployed to production**. First behavioural confirmation is Friday. |
+| **Silent-failure remediation** | The class of bug where UI and data paths look functional, fail silently and log nothing. Persisted navigation URLs, the manager access code out of the bundle, create-time privilege escalation closed, two-drivers-one-car, the dashboard map plotting real positions, dead controls swept, dead code deleted. **Deployed to production.** |
+| **Phase 5 — events model + schedule UI** | Each sabha is now a record with its own date, times, venue override, agenda and status. Managers get a Sabha Calendar: move a sabha, cancel one, add a one-off. Ride windows and attendance derive from the gathering, not from a hardcoded Friday. Calendar self-populates so it cannot go empty. **Built; see the limitation below.** |
 
 **Target state**
 
@@ -223,7 +225,7 @@ Sizes are relative (S/M/L/XL), not estimates.
 | **2** | **Introduce cities + locations, one of each live.** `cities` and `locations` collections; per-location rideContext, lock, settings; scope every query by `cityId` | B2, B3, B4, B6 | L | No |
 | **3** | **Passenger model.** Dependents, guests, manifests, seat-aware VRP | B8 | M | **Yes** |
 | **4** | **Server-side dispatch.** Auto-dispatch out of the browser into a Cloud Function, per location | B7 | XL | No |
-| **5** | **Events model + manager schedule UI.** Date, start/end, agenda, venue, cancellations | — | L | **Yes** |
+| **5** ✅ | **Events model + manager schedule UI.** Date, start/end, agenda, venue, cancellations | — | L | **Yes** |
 | **6** | **Super-manager + city-manager consoles.** Create/archive cities and locations, appoint managers at both levels, invites, governance, reporting | B9 | L | **Yes** |
 | **7** | **Second location, same city.** Concurrent venues, location selection — first real test of the operational unit | — | M | **Yes** |
 | **8** | **Second city.** First real test of the silo. Retention jobs, DSAR tooling, multi-timezone | — | L | **Yes** |
@@ -344,8 +346,40 @@ exactly where cross-location mix-ups would originate.
 **Deferred but worth an early view**
 
 7. Do vehicles belong to a location or to a driver who may serve several?
-8. Should attendance be per-event rather than per-week, now that the day can
-   move? Attendance is currently keyed off the upcoming Friday's date via
-   `getCurrentWeekId()`, so a variable day shifts those keys and can orphan
-   already-submitted responses. Likely resolved in Phase 5, but the answer
-   changes the migration.
+8. ~~Should attendance be per-event rather than per-week?~~ **Resolved.**
+   Attendance is keyed by `eventId`, which is the gathering's own date, published
+   by the server rather than computed from the browser clock. `getCurrentWeekId()`
+   is gone. Because eventId equals the date the old code produced whenever the
+   device agreed with the server, no historical record was orphaned and no
+   migration was needed.
+
+---
+
+## 9. Known limitation: one gathering per date
+
+`events/{YYYY-MM-DD}` uses the date as the document id. Adding the same date
+twice edits the existing sabha rather than creating a second one, so **a morning
+and an evening sabha on the same day is not supported today.**
+
+Deliberate, not an oversight. Date-as-id buys free chronological ordering, the
+"from today onward" query with no extra index, and idempotent auto-creation —
+and it means events and attendance share a key, which is why this whole change
+needed no migration.
+
+**If it becomes necessary,** the document id is the easy part: keep
+`YYYY-MM-DD` for the primary sabha and suffix additional sessions
+(`2026-08-07__evening`). That sorts correctly, keeps the range query, and leaves
+every existing record untouched. Random ids with a `date` field is the more
+normalised model but disconnects attendance history without a backfill.
+
+**The id is not the real work.** The app assumes one gathering at a time in
+several places: a rider requesting a ride never chooses which sabha, attendance
+is a single yes/no rather than one per session, and the ride window is a single
+open/closed state that two same-day sabhas would each need. Making the rider
+choose — and having attendance, requests and the driver window follow that
+choice — is the actual cost.
+
+**Why it is deferred:** nothing breaks today, and Phase 2 re-keys events into
+`locations/{id}/events/{eventId}` anyway. Doing the key work now means doing it
+twice. Revisit if two sabhas on one day becomes a real plan rather than a
+hypothetical.
