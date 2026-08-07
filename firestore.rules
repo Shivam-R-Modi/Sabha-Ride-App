@@ -74,32 +74,77 @@ service cloud.firestore {
     function isAssignedDriver(rideId) {
       return isDriver() && get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid;
     }
-    
+
+    // =====================================
+    // FIELD-LEVEL GUARDS
+    //
+    // isManager() derives authority from role/accountStatus inside the
+    // caller's OWN document. Without these guards that is circular: a user
+    // who can write those fields defines their own privileges, and a student
+    // could become an approved manager in a single browser-console write.
+    // =====================================
+
+    // Fields on a user document that only the server (Admin SDK, which bypasses
+    // rules) or a manager may change. A user may never set these on themselves.
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function touchesPrivilegeFields() {
+      return changedKeys().hasAny([
+        'role', 'registeredRole', 'roles', 'activeRole',
+        'accountStatus', 'platformRole'
+      ]);
+    }
+
+    // Fields on a ride that the assignment pipeline owns. A student must not be
+    // able to forge an assignment or shortcut completion — completeRide also
+    // releases the vehicle, updates driver counters and sets student status, so
+    // a client-side status write corrupts all three.
+    function touchesRideServerFields() {
+      return changedKeys().hasAny([
+        'driverId', 'driver', 'driverName', 'carId', 'carModel', 'carColor',
+        'carLicensePlate', 'route', 'peers', 'students', 'assignedStudentIds',
+        'estimatedDistance', 'estimatedTime', 'assignedAt', 'startedAt',
+        'completedAt', 'rideType'
+      ]);
+    }
+
+    // Statuses a student may set on their own ride. Everything else is the
+    // server's to write.
+    function isStudentSettableStatus() {
+      return !('status' in changedKeys())
+             || request.resource.data.status in ['requested', 'cancelled'];
+    }
+
     // =====================================
     // USERS COLLECTION
     // =====================================
     match /users/{userId} {
-      // Anyone authenticated can read user profiles (for display purposes)
-      allow read: if isAuthenticated();
-      
-      // Users can create their own profile during registration
+      // Profiles hold name, phone, email, home address and coordinates —
+      // for minors as well as adults. Previously this was `isAuthenticated()`,
+      // so any account that could sign up could read every family in the
+      // database. Read is now self, or a manager.
+      allow read: if isOwner(userId) || isManager();
+
+      // Users create their own profile during registration. accountStatus and
+      // role are set here, so this is the one legitimate moment they are
+      // written by a client — the signup flow depends on it.
       allow create: if isOwner(userId);
-      
-      // Users can update their own profile
-      // Managers can update any user (for approval/rejection)
-      allow update: if isAuthenticated() && (
-        isOwner(userId) || 
-        isManager() || 
-        getUserData().role == 'manager' || 
-        getUserData().registeredRole == 'manager'
-      );
-      
-      // Only managers can delete users
-      allow delete: if isAuthenticated() && (
-        isManager() || 
-        getUserData().role == 'manager' || 
-        getUserData().registeredRole == 'manager'
-      );
+
+      // A user may edit their own PROFILE fields only. Privilege fields
+      // (role, roles, accountStatus, platformRole) are excluded, otherwise
+      // isManager() is circular and a student self-promotes in one write.
+      //
+      // The two `getUserData().role == 'manager'` clauses that used to be here
+      // were removed deliberately: they bypassed the accountStatus == 'approved'
+      // conjunct that isManager() applies, so an UNAPPROVED self-declared
+      // manager had write access to every user document.
+      allow update: if (isOwner(userId) && !touchesPrivilegeFields())
+                    || isManager();
+
+      // Only approved managers can delete users.
+      allow delete: if isManager();
     }
     
     // =====================================
@@ -147,28 +192,41 @@ service cloud.firestore {
       // Students can read their own rides (individual or grouped)
       // Drivers can read rides assigned to them
       // Managers can read all rides
-      allow read: if isAuthenticated() && (
-        (resource.data.studentId != null && resource.data.studentId == request.auth.uid) ||
-        (resource.data.assignedStudentIds != null && request.auth.uid in resource.data.assignedStudentIds) ||
-        resource.data.driverId == request.auth.uid ||
-        isApproved() ||
-        isManager()
-      );
-      
-      // List queries - authenticated users with approved status
-      allow list: if isApproved();
-      
-      // Students can create ride requests
-      // Drivers and managers can also create rides
-      allow create: if isStudent() || isDriver() || isManager();
-      
-      // Managers can update any ride
-      // Drivers can update rides assigned to them
-      // Students can update their own ride requests (e.g., cancel)
-      allow update: if isManager() || 
-        (isDriver() && resource.data.driverId == request.auth.uid) ||
-        (isStudent() && resource.data.studentId == request.auth.uid);
-      
+      // Ride documents carry studentName, studentPhone, pickupAddress and
+      // coordinates. The `isApproved()` clause that used to be here subsumed
+      // every ownership check above it, so any approved account could read
+      // every ride in the database — a list of names, phone numbers and home
+      // addresses. Read is now genuinely scoped.
+      allow read: if isManager()
+                  || (resource.data.studentId != null && resource.data.studentId == request.auth.uid)
+                  || (resource.data.assignedStudentIds != null && request.auth.uid in resource.data.assignedStudentIds)
+                  || resource.data.driverId == request.auth.uid;
+
+      // Managers and drivers list rides to run dispatch. Students read their
+      // own by direct query, which `allow read` above covers per-document.
+      allow list: if isManager() || isDriver()
+                  || (request.auth != null && resource.data.studentId == request.auth.uid);
+
+      // A student may only create a ride for THEMSELVES, and only as a new
+      // request — previously any student could forge a ride for another user,
+      // or create one already marked 'assigned'.
+      allow create: if isManager()
+                    || isDriver()
+                    || (isStudent()
+                        && request.resource.data.studentId == request.auth.uid
+                        && request.resource.data.status == 'requested');
+
+      // Students may cancel their own ride, but must not touch the fields the
+      // assignment pipeline owns, nor set a status the server is responsible
+      // for. Marking a ride 'completed' from the client would skip vehicle
+      // release, driver counters and student status all at once.
+      allow update: if isManager()
+                    || (isDriver() && resource.data.driverId == request.auth.uid)
+                    || (isStudent()
+                        && resource.data.studentId == request.auth.uid
+                        && !touchesRideServerFields()
+                        && isStudentSettableStatus());
+
       // Only managers can delete rides
       allow delete: if isManager();
     }
@@ -187,11 +245,26 @@ service cloud.firestore {
     // SYSTEM & AUDIT LOGS COLLECTION
     // =====================================
     match /system/{docId} {
-      // All authenticated users can read system settings
+      // Drivers and students both render the current ride window from
+      // system/rideContext, so read stays open to signed-in users.
       allow read: if isAuthenticated();
-      
-      // Only managers can write
-      allow write: if isManager();
+
+      // Write is DENIED to every client, including managers.
+      //
+      // These documents are derived state owned by Cloud Functions, which use
+      // the Admin SDK and bypass rules entirely — so denying clients costs
+      // nothing and closes two real holes:
+      //
+      //  - system/assignmentLock: globalAssignDriver computes
+      //    lockAge = now - timestamp and only checks lockAge < TTL. Writing a
+      //    far-future timestamp makes lockAge negative, which is always under
+      //    the TTL, permanently blocking assignment for every driver on the
+      //    platform. One document, one write.
+      //  - system/rideContext: overwriting rideType flips every driver's route
+      //    direction, or closes the service.
+      //
+      // Managers change the schedule through the callable, not by hand.
+      allow write: if false;
     }
 
     match /system/auditLogs/{logId} {
@@ -263,9 +336,15 @@ service cloud.firestore {
     // SETTINGS COLLECTION (Sabha location, etc.)
     // =====================================
     match /settings/{settingId} {
-      // All authenticated users can read settings
-      allow read: if isAuthenticated();
-      
+      // settings/main (the venue) must stay readable — it drives the map and
+      // the pickup destination for every user.
+      //
+      // settings/managerCode must NOT. Reading it is equivalent to becoming a
+      // manager: the signup flow accepts the code and self-approves. It was
+      // world-readable to any signed-in account, and rendered as plain text in
+      // the Database Console.
+      allow read: if isManager() || (isAuthenticated() && settingId != 'managerCode');
+
       // Only managers can update settings
       allow write: if isManager();
     }

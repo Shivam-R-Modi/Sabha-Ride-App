@@ -1,0 +1,307 @@
+/**
+ * Security rules tests, run against the Firestore emulator.
+ *
+ *   npm run test:rules
+ *
+ * These are assertions about who may do what. They are the only safe way to
+ * change firestore.rules: the two failure modes are opposite and both bad —
+ * too tight locks real users out mid-Friday, too loose leaves the hole open —
+ * and neither is visible by looking at the running site.
+ */
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
+import {
+    initializeTestEnvironment,
+    assertFails,
+    assertSucceeds,
+    type RulesTestEnvironment,
+} from '@firebase/rules-unit-testing';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
+
+let testEnv: RulesTestEnvironment;
+
+const STUDENT = 'student_alice';
+const OTHER_STUDENT = 'student_bob';
+const DRIVER = 'driver_dave';
+const MANAGER = 'manager_mira';
+
+beforeAll(async () => {
+    testEnv = await initializeTestEnvironment({
+        projectId: 'sabha-rules-test',
+        firestore: {
+            rules: readFileSync(resolve(__dirname, '../../firestore.rules'), 'utf8'),
+            host: '127.0.0.1',
+            port: 8080,
+        },
+    });
+});
+
+afterAll(async () => { await testEnv?.cleanup(); });
+
+beforeEach(async () => {
+    await testEnv.clearFirestore();
+    // Seed with rules disabled so the fixtures themselves aren't under test.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        const db = ctx.firestore();
+        await setDoc(doc(db, 'users', STUDENT), {
+            name: 'Alice', email: 'a@x.com', phone: '555', address: '1 Main St',
+            role: 'student', registeredRole: 'student', roles: ['student'],
+            accountStatus: 'approved',
+        });
+        await setDoc(doc(db, 'users', OTHER_STUDENT), {
+            name: 'Bob', phone: '556', address: '2 Main St',
+            role: 'student', roles: ['student'], accountStatus: 'approved',
+        });
+        await setDoc(doc(db, 'users', DRIVER), {
+            name: 'Dave', role: 'driver', roles: ['driver'], accountStatus: 'approved',
+        });
+        await setDoc(doc(db, 'users', MANAGER), {
+            name: 'Mira', role: 'manager', registeredRole: 'manager', roles: ['manager'],
+            accountStatus: 'approved',
+        });
+        await setDoc(doc(db, 'settings', 'managerCode'), { code: 'top-secret-code' });
+        await setDoc(doc(db, 'settings', 'main'), { sabhaLocation: { lat: 42, lng: -71 } });
+        await setDoc(doc(db, 'rides', 'ride_alice'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+        });
+        await setDoc(doc(db, 'system', 'rideContext'), { rideType: 'home-to-sabha' });
+        await setDoc(doc(db, 'system', 'assignmentLock'), { driverId: 'x', timestamp: 1 });
+    });
+});
+
+const asStudent = () => testEnv.authenticatedContext(STUDENT).firestore();
+const asDriver = () => testEnv.authenticatedContext(DRIVER).firestore();
+const asManager = () => testEnv.authenticatedContext(MANAGER).firestore();
+const asAnon = () => testEnv.unauthenticatedContext().firestore();
+
+describe('privilege escalation', () => {
+    it('a student cannot make themselves a manager', async () => {
+        // The whole authorisation model rests on this. isManager() reads
+        // role/accountStatus off the caller's own document, so if a user can
+        // write those fields they define their own privileges.
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            role: 'manager', registeredRole: 'manager', roles: ['manager'],
+        }));
+    });
+
+    it('a pending user cannot approve their own account', async () => {
+        // Must be tested with a genuinely pending user. Writing 'approved' onto
+        // a doc that already says 'approved' produces an empty diff, so
+        // affectedKeys() is empty and the guard correctly sees nothing changed.
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'users', 'pending_self'), {
+                name: 'Pat', role: 'driver', roles: ['driver'], accountStatus: 'pending',
+            });
+        });
+        const asPending = testEnv.authenticatedContext('pending_self').firestore();
+        await assertFails(updateDoc(doc(asPending, 'users', 'pending_self'), {
+            accountStatus: 'approved',
+        }));
+    });
+
+    it('a pending user CAN still complete their own profile', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'users', 'pending_self2'), {
+                name: 'Pat', role: 'driver', roles: ['driver'], accountStatus: 'pending',
+            });
+        });
+        const asPending = testEnv.authenticatedContext('pending_self2').firestore();
+        await assertSucceeds(updateDoc(doc(asPending, 'users', 'pending_self2'), {
+            address: '9 Elm St', phone: '555-0199',
+        }));
+    });
+
+    it('a student cannot grant themselves the platform role', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            platformRole: 'superManager',
+        }));
+    });
+
+    it('a student cannot write another user document', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', OTHER_STUDENT), { name: 'Hacked' }));
+    });
+
+    it('a student CAN still edit their own profile fields', async () => {
+        // The rules must not be so tight that normal use breaks.
+        await assertSucceeds(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            name: 'Alice Patel', phone: '555-0100', address: '3 New St',
+        }));
+    });
+});
+
+describe('signup must still work', () => {
+    it('a brand-new user CAN create their profile with a role', async () => {
+        // RoleSelection.tsx:111 writes role, roles, activeRole and
+        // accountStatus in one setDoc. For a new user this is a create, which
+        // is the one legitimate moment a client sets those fields — if this
+        // breaks, nobody can register at all.
+        const asNew = testEnv.authenticatedContext('brand_new_user').firestore();
+        await assertSucceeds(setDoc(doc(asNew, 'users', 'brand_new_user'), {
+            role: 'student', registeredRole: 'student', roles: ['student'],
+            activeRole: 'student', accountStatus: 'approved',
+            email: 'new@x.com', createdAt: '2026-08-07',
+        }));
+    });
+
+    it('a new DRIVER can create their profile as pending', async () => {
+        const asNew = testEnv.authenticatedContext('brand_new_driver').firestore();
+        await assertSucceeds(setDoc(doc(asNew, 'users', 'brand_new_driver'), {
+            role: 'driver', registeredRole: 'driver', roles: ['driver'],
+            activeRole: 'driver', accountStatus: 'pending',
+        }));
+    });
+
+    it('a user CAN complete ProfileSetup on their own new profile', async () => {
+        // ProfileSetup.tsx:61 setDoc with merge — name, address, location.
+        await assertSucceeds(setDoc(doc(asStudent(), 'users', STUDENT), {
+            name: 'Alice', address: '5 Oak St',
+            location: { latitude: 42.1, longitude: -71.1 },
+        }, { merge: true }));
+    });
+
+    it('a driver CAN set their own availability and vehicle', async () => {
+        // setDriverAvailability / assignVehicleToDriver write status and
+        // currentVehicleId on the driver's own doc. Neither is a privilege
+        // field, so both must still be allowed.
+        await assertSucceeds(updateDoc(doc(asDriver(), 'users', DRIVER), {
+            status: 'available', currentVehicleId: 'veh_1',
+        }));
+    });
+});
+
+describe('PII exposure', () => {
+    it('a student cannot read another user profile', async () => {
+        // users docs hold name, phone, email, home address and coordinates.
+        await assertFails(getDoc(doc(asStudent(), 'users', OTHER_STUDENT)));
+    });
+
+    it('a student cannot list all users', async () => {
+        await assertFails(getDocs(collection(asStudent(), 'users')));
+    });
+
+    it('a student CAN read their own profile', async () => {
+        await assertSucceeds(getDoc(doc(asStudent(), 'users', STUDENT)));
+    });
+
+    it('a manager CAN read a user profile', async () => {
+        await assertSucceeds(getDoc(doc(asManager(), 'users', STUDENT)));
+    });
+
+    it('an anonymous visitor cannot read anything', async () => {
+        await assertFails(getDoc(doc(asAnon(), 'users', STUDENT)));
+        await assertFails(getDoc(doc(asAnon(), 'rides', 'ride_alice')));
+    });
+});
+
+describe('the manager access code', () => {
+    it('a student cannot read settings/managerCode', async () => {
+        // Reading it is equivalent to becoming a manager: the signup flow
+        // accepts the code and self-approves.
+        await assertFails(getDoc(doc(asStudent(), 'settings', 'managerCode')));
+    });
+
+    it('a student CAN still read the venue settings', async () => {
+        // settings/main drives the map and pickup destination for everyone.
+        await assertSucceeds(getDoc(doc(asStudent(), 'settings', 'main')));
+    });
+
+    it('a student cannot write settings', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'settings', 'main'), { sabhaLocation: { lat: 0, lng: 0 } }));
+    });
+});
+
+describe('ride integrity', () => {
+    it('a student cannot self-assign a driver', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            status: 'assigned', driverId: DRIVER,
+        }));
+    });
+
+    it('a student cannot mark their own ride completed', async () => {
+        // completeRide does vehicle release, driver counters and student status.
+        // Letting a client shortcut it corrupts all three.
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), { status: 'completed' }));
+    });
+
+    it('a student cannot create a ride for someone else', async () => {
+        await assertFails(setDoc(doc(asStudent(), 'rides', 'forged'), {
+            studentId: OTHER_STUDENT, status: 'requested', pickupLat: 1, pickupLng: 1,
+        }));
+    });
+
+    it('a student CAN create their own ride request', async () => {
+        await assertSucceeds(setDoc(doc(asStudent(), 'rides', 'mine'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+        }));
+    });
+
+    it('a student CAN cancel their own ride', async () => {
+        await assertSucceeds(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), { status: 'cancelled' }));
+    });
+
+    it('a student cannot read another student ride', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'rides', 'ride_bob'), {
+                studentId: OTHER_STUDENT, status: 'requested', pickupAddress: '2 Main St',
+            });
+        });
+        await assertFails(getDoc(doc(asStudent(), 'rides', 'ride_bob')));
+    });
+
+    it('the assigned driver CAN read the ride', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await updateDoc(doc(ctx.firestore(), 'rides', 'ride_alice'), { driverId: DRIVER, status: 'assigned' });
+        });
+        await assertSucceeds(getDoc(doc(asDriver(), 'rides', 'ride_alice')));
+    });
+});
+
+describe('server-owned documents', () => {
+    it('nobody can write the assignment lock', async () => {
+        // globalAssignDriver computes lockAge = now - timestamp and only checks
+        // lockAge < TTL. A far-future timestamp makes lockAge negative, which is
+        // always under the TTL — one write disables assignment platform-wide.
+        await assertFails(setDoc(doc(asStudent(), 'system', 'assignmentLock'), {
+            driverId: 'x', timestamp: 9999999999999,
+        }));
+        await assertFails(setDoc(doc(asManager(), 'system', 'assignmentLock'), {
+            driverId: 'x', timestamp: 9999999999999,
+        }));
+    });
+
+    it('nobody can write the ride context', async () => {
+        await assertFails(setDoc(doc(asStudent(), 'system', 'rideContext'), { rideType: 'sabha-to-home' }));
+    });
+
+    it('everyone CAN read the ride context', async () => {
+        // Drivers and students both render the current window from it.
+        await assertSucceeds(getDoc(doc(asStudent(), 'system', 'rideContext')));
+        await assertSucceeds(getDoc(doc(asDriver(), 'system', 'rideContext')));
+    });
+
+    it('a driver cannot rewrite the audit log', async () => {
+        await assertFails(setDoc(doc(asDriver(), 'auditLogs', 'forged'), { action: 'nothing to see' }));
+    });
+});
+
+describe('manager approval flow still works', () => {
+    it('a manager CAN approve a pending driver', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'users', 'pending_pat'), {
+                name: 'Pat', role: 'driver', roles: ['driver'], accountStatus: 'pending',
+            });
+        });
+        await assertSucceeds(updateDoc(doc(asManager(), 'users', 'pending_pat'), {
+            accountStatus: 'approved',
+        }));
+    });
+
+    it('a manager CAN query the pending queue', async () => {
+        await assertSucceeds(getDocs(query(
+            collection(asManager(), 'users'),
+            where('roles', 'array-contains', 'driver'),
+            where('accountStatus', '==', 'pending'),
+        )));
+    });
+});
