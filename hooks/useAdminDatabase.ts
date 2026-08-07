@@ -12,6 +12,7 @@ import {
   limit
 } from 'firebase/firestore';
 import { geocodeAddress, adminDeleteUserViaCloud } from '../src/utils/cloudFunctions';
+import { writeAuditLog } from '../src/utils/audit';
 
 /**
  * Collections the admin console may browse and edit.
@@ -65,7 +66,14 @@ export function useAdminDatabase(targetCollection: SupportedCollection) {
     return unsubscribe;
   }, [targetCollection]);
 
-  // Log admin action to /auditLogs
+  /**
+   * Log an admin action to /auditLogs.
+   *
+   * Was its own inline shape — `{ managerId, managerName, action: 'CREATE' |
+   * 'UPDATE' | 'DELETE', collection, documentId, details: string }` — which
+   * disagreed with what deleteSabhaEvent wrote. One schema now, in
+   * src/utils/audit.ts, so every row appears in the same query.
+   */
   const logAuditAction = async (
     managerId: string,
     managerName: string,
@@ -74,19 +82,18 @@ export function useAdminDatabase(targetCollection: SupportedCollection) {
     documentId: string,
     details: string
   ) => {
-    try {
-      await addDoc(collection(db, 'auditLogs'), {
-        timestamp: new Date().toISOString(),
-        managerId,
-        managerName,
-        action,
-        collection: collectionName,
-        documentId,
-        details
-      });
-    } catch (err) {
-      console.error('Error recording audit log:', err);
-    }
+    const auditAction = action === 'CREATE' ? 'doc.create'
+      : action === 'UPDATE' ? 'doc.update'
+      : 'doc.delete';
+
+    await writeAuditLog({
+      action: auditAction,
+      actorUid: managerId,
+      actorName: managerName,
+      targetCollection: collectionName,
+      targetDocumentId: documentId,
+      summary: details,
+    });
   };
 
   // Update a document in any collection

@@ -347,7 +347,23 @@ describe('deleteSabhaEvent — what actually gets written', () => {
 
         const auditWrites = rec.sets.filter(s => s.path.startsWith('auditLogs/'));
         expect(auditWrites.length).toBeGreaterThanOrEqual(2);
-        expect(auditWrites[0].data.state).toBe('pending');
-        expect(auditWrites[auditWrites.length - 1].data.state).toBe('done');
+        // Was `state: 'pending'` / `'done'`, in a schema unique to this function.
+        expect(auditWrites[0].data.outcome).toBe('pending');
+        expect(auditWrites[auditWrites.length - 1].data.outcome).toBe('ok');
+    });
+
+    it('writes `timestamp`, so the row is visible to the console query', async () => {
+        // The regression that made this whole change necessary. This function wrote
+        // `performedAt`, and useAdminDatabase orders by `timestamp` — Firestore
+        // excludes documents missing the orderBy field, so all five sabha deletions
+        // in production were absent from the Audit Logs tab. Logged, and unreadable.
+        const rec = makeDb({ responses: ['stu-a'] });
+
+        await call({ date: '2026-08-14', acknowledge: true });
+
+        const first = rec.sets.filter(s => s.path.startsWith('auditLogs/'))[0];
+        expect(typeof first.data.timestamp).toBe('string');
+        expect(first.data.action).toBe('event.delete');
+        expect(first.data.summary).toMatch(/Deleted the sabha on 2026-08-14/);
     });
 });

@@ -28,6 +28,7 @@ import { buildCurrentEvent, resolveScheduleWindow } from '../utils/schedule';
 import { sendMulticastNotification } from '../utils/notifications';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { assertApprovedManager } from '../utils/authz';
+import { writeAuditLog } from '../utils/audit';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -52,7 +53,7 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     const db = admin.firestore();
     const uid = context.auth.uid;
 
-    await assertApprovedManager(db, uid, 'delete a sabha');
+    const caller = await assertApprovedManager(db, uid, 'delete a sabha');
 
     const date: unknown = data?.date;
     if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -145,19 +146,27 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
         if (typeof studentId === 'string') affectedUids.add(studentId);
     });
 
-    const auditRef = db.collection('auditLogs').doc();
-    await auditRef.set({
-        action: 'deleteSabhaEvent',
-        collectionName: EVENTS_COLLECTION,
-        documentId: date,
-        performedBy: uid,
-        performedAt: new Date().toISOString(),
-        state: 'pending',
+    // Written BEFORE the destructive batch and closed after, so a crash leaves a
+    // row saying an attempt was made. It used to use its own field names —
+    // `performedAt` where every other writer said `timestamp` — and the console
+    // orders by `timestamp`, so Firestore excluded these rows entirely: deleting
+    // a sabha was the one action the audit screen could never show.
+    const auditRef = await writeAuditLog(db, {
+        action: 'event.delete',
+        actorUid: uid,
+        actorName: String(caller.name || 'Manager'),
+        targetCollection: EVENTS_COLLECTION,
+        targetDocumentId: date,
+        summary: `Deleted the sabha on ${date}`
+            + (preview.responseCount || preview.requestedRideCount
+                ? ` — ${preview.responseCount} attending, ${preview.requestedRideCount} ride request(s) cancelled`
+                : ' — nobody had responded'),
         details: {
             responseCount: preview.responseCount,
             requestedRideIds: requestedRides.map(d => d.id),
             wasCurrentEvent: preview.isCurrentEvent,
         },
+        outcome: 'pending',
     });
 
     // ── One batch: everything that must be all-or-nothing ───────────────
@@ -212,7 +221,11 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
         await notifyAffected(db, Array.from(affectedUids), date);
     }
 
-    await auditRef.set({ state: 'done', completedAt: new Date().toISOString() }, { merge: true });
+    // writeAuditLog swallows its own failures and returns null, so the close is
+    // conditional. An unclosed row reads as 'pending', which is the honest answer.
+    if (auditRef) {
+        await auditRef.set({ outcome: 'ok', completedAt: new Date().toISOString() }, { merge: true });
+    }
 
     return { ...preview, deleted: true };
 });

@@ -389,6 +389,85 @@ describe('server-owned documents', () => {
     });
 });
 
+describe('the audit log is append-only', () => {
+    // `allow write: if isManager()` covered update and delete, so a manager could
+    // edit or erase any row — including the record of their own deletion. An audit
+    // trail its own subject can rewrite is not one, and the console presents it as
+    // though it were.
+
+    const row = (extra: Record<string, unknown> = {}) => ({
+        timestamp: '2026-08-07T18:00:00.000Z',
+        actorUid: MANAGER,
+        actorName: 'Mira',
+        action: 'doc.update',
+        targetCollection: 'users',
+        targetDocumentId: STUDENT,
+        summary: 'Updated fields: phone',
+        ...extra,
+    });
+
+    const seedRow = async (id: string, data: Record<string, unknown>) => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'auditLogs', id), data);
+        });
+    };
+
+    it('a manager CAN append a row', async () => {
+        await assertSucceeds(setDoc(doc(asManager(), 'auditLogs', 'fresh'), row()));
+    });
+
+    it('a manager CANNOT edit an existing row', async () => {
+        await seedRow('existing', row());
+        await assertFails(updateDoc(doc(asManager(), 'auditLogs', 'existing'), {
+            summary: 'Actually I did nothing',
+        }));
+    });
+
+    it('a manager CANNOT delete a row', async () => {
+        // The case that matters: erasing the evidence of a sabha deletion.
+        await seedRow('the_deletion', row({ action: 'event.delete' }));
+        await assertFails(deleteDoc(doc(asManager(), 'auditLogs', 'the_deletion')));
+    });
+
+    it('a manager cannot file a row under someone else\'s name', async () => {
+        await assertFails(setDoc(doc(asManager(), 'auditLogs', 'framed'),
+            row({ actorUid: OTHER_STUDENT })));
+    });
+
+    it('rejects a row with no timestamp', async () => {
+        // A row without one is excluded from orderBy('timestamp') and so is
+        // invisible in the console — written, and unreadable. That is how sabha
+        // deletions went unrecorded on screen while appearing to be logged.
+        const { timestamp, ...noTimestamp } = row();
+        await assertFails(setDoc(doc(asManager(), 'auditLogs', 'invisible'), noTimestamp));
+    });
+
+    it('still accepts the previous bundle\'s managerId shape', async () => {
+        // Deploy order is rules → functions → hosting, and a manager can be
+        // mid-session on the old bundle. logAuditAction swallows its own failures,
+        // so an over-tight rule would let their edit succeed silently unlogged —
+        // the exact outcome this block exists to prevent. Remove this arm once no
+        // old bundle can still be live.
+        await assertSucceeds(setDoc(doc(asManager(), 'auditLogs', 'legacy_shape'), {
+            timestamp: '2026-08-07T18:00:00.000Z',
+            managerId: MANAGER,
+            managerName: 'Mira',
+            action: 'UPDATE',
+            collection: 'users',
+            documentId: STUDENT,
+            details: 'Updated fields: phone',
+        }));
+    });
+
+    it('a student can neither read nor append', async () => {
+        await seedRow('private', row());
+        await assertFails(getDoc(doc(asStudent(), 'auditLogs', 'private')));
+        await assertFails(setDoc(doc(asStudent(), 'auditLogs', 'student_forged'), row({
+            actorUid: STUDENT,
+        })));
+    });
+});
+
 describe('manager approval flow still works', () => {
     it('a manager CAN approve a pending driver', async () => {
         await testEnv.withSecurityRulesDisabled(async (ctx) => {

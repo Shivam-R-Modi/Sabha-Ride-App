@@ -32,3 +32,13 @@ dist-ssr
 .firebase/
 firebase-debug.log
 firestore-debug.log
+
+# Admin SDK private keys. The maintenance scripts under scripts/ need one, and
+# backfill-audit-shape.cjs tells you to save it in the repo root — so this ignore
+# has to exist BEFORE anyone follows that instruction. A committed key is a
+# permanent grant of full read and write over every user's data, and revoking it
+# means rotating it everywhere it is used; it is not a mistake that can be quietly
+# undone by deleting the file in a later commit.
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+**/serviceAccountKey.json

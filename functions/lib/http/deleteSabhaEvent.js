@@ -64,6 +64,7 @@ const schedule_1 = require("../utils/schedule");
 const notifications_1 = require("../utils/notifications");
 const rateLimiter_1 = require("../utils/rateLimiter");
 const authz_1 = require("../utils/authz");
+const audit_1 = require("../utils/audit");
 const CONTEXT_DOC = 'system/rideContext';
 /** Ride states that mean a driver is already on the road for this gathering. */
 const IN_FLIGHT_STATUSES = ['assigned', 'driver_en_route', 'arriving', 'in_progress'];
@@ -74,7 +75,7 @@ exports.deleteSabhaEvent = functions.https.onCall(async (data, context) => {
     }
     const db = admin.firestore();
     const uid = context.auth.uid;
-    await (0, authz_1.assertApprovedManager)(db, uid, 'delete a sabha');
+    const caller = await (0, authz_1.assertApprovedManager)(db, uid, 'delete a sabha');
     const date = data === null || data === void 0 ? void 0 : data.date;
     if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         throw new functions.https.HttpsError('invalid-argument', 'A sabha date is required.');
@@ -144,19 +145,27 @@ exports.deleteSabhaEvent = functions.https.onCall(async (data, context) => {
         if (typeof studentId === 'string')
             affectedUids.add(studentId);
     });
-    const auditRef = db.collection('auditLogs').doc();
-    await auditRef.set({
-        action: 'deleteSabhaEvent',
-        collectionName: events_1.EVENTS_COLLECTION,
-        documentId: date,
-        performedBy: uid,
-        performedAt: new Date().toISOString(),
-        state: 'pending',
+    // Written BEFORE the destructive batch and closed after, so a crash leaves a
+    // row saying an attempt was made. It used to use its own field names —
+    // `performedAt` where every other writer said `timestamp` — and the console
+    // orders by `timestamp`, so Firestore excluded these rows entirely: deleting
+    // a sabha was the one action the audit screen could never show.
+    const auditRef = await (0, audit_1.writeAuditLog)(db, {
+        action: 'event.delete',
+        actorUid: uid,
+        actorName: String(caller.name || 'Manager'),
+        targetCollection: events_1.EVENTS_COLLECTION,
+        targetDocumentId: date,
+        summary: `Deleted the sabha on ${date}`
+            + (preview.responseCount || preview.requestedRideCount
+                ? ` — ${preview.responseCount} attending, ${preview.requestedRideCount} ride request(s) cancelled`
+                : ' — nobody had responded'),
         details: {
             responseCount: preview.responseCount,
             requestedRideIds: requestedRides.map(d => d.id),
             wasCurrentEvent: preview.isCurrentEvent,
         },
+        outcome: 'pending',
     });
     // ── One batch: everything that must be all-or-nothing ───────────────
     const batch = db.batch();
@@ -195,7 +204,11 @@ exports.deleteSabhaEvent = functions.https.onCall(async (data, context) => {
     if (affectedUids.size > 0) {
         await notifyAffected(db, Array.from(affectedUids), date);
     }
-    await auditRef.set({ state: 'done', completedAt: new Date().toISOString() }, { merge: true });
+    // writeAuditLog swallows its own failures and returns null, so the close is
+    // conditional. An unclosed row reads as 'pending', which is the honest answer.
+    if (auditRef) {
+        await auditRef.set({ outcome: 'ok', completedAt: new Date().toISOString() }, { merge: true });
+    }
     return Object.assign(Object.assign({}, preview), { deleted: true });
 });
 /**

@@ -22,21 +22,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
-    // Check user role
-    function hasRole(role) {
-      let data = getUserData();
-      return isAuthenticated() && (
-        (data.role == role) ||
-        (data.registeredRole == role) ||
-        ('roles' in data && data.roles != null && role in data.roles)
-      );
-    }
-    
-    // Check if user is approved
-    function isApproved() {
-      return isAuthenticated() && getUserData().accountStatus == 'approved';
-    }
-    
+    // hasRole(role) and isApproved() lived here. Both had zero call sites — every
+    // rule goes through isManager/isDriver/isStudent below, which inline the same
+    // tests. Two more getUserData() lookups nothing reached.
+
     // Check if user is a manager
     function isManager() {
       let data = getUserData();
@@ -283,18 +272,38 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /system/auditLogs/{logId} {
-      // Only managers can read and write audit logs
-      allow read: if isManager();
-      allow write: if isManager();
-    }
+    // A `match /system/auditLogs/{logId}` block sat here granting managers
+    // read and write. It could never match a document — that path is a
+    // subcollection of the document `system/auditLogs`, which does not exist and
+    // which nothing has ever written. Every audit row is in the top-level
+    // collection below.
 
     match /auditLogs/{logId} {
-      // Top-level audit logs for system console
       allow read: if isManager();
-      allow write: if isManager();
+
+      // APPEND-ONLY. The previous rule was `allow write: if isManager()`, and
+      // `write` covers update and delete — so a manager could edit or remove any
+      // audit row, including the record of their own deletion. An audit trail that
+      // its subject can rewrite is not an audit trail, and the console displays it
+      // as though it were.
+      //
+      // The actor must be the caller: a manager could otherwise file a row under
+      // a colleague's name. `managerId` is accepted alongside `actorUid` for one
+      // release — the schema changed in the same deploy, and a browser sitting on
+      // the previous bundle still sends the old field. logAuditAction swallows its
+      // own failures, so an over-tight rule here would let a manager's edit
+      // succeed silently unlogged, which is the exact outcome this block exists to
+      // prevent. Drop the `managerId` arm once no old bundle can still be live.
+      allow create: if isManager()
+                    && request.resource.data.timestamp is string
+                    && (request.resource.data.get('actorUid', '') == request.auth.uid
+                        || request.resource.data.get('managerId', '') == request.auth.uid);
+
+      // Cloud Functions close a 'pending' row with the Admin SDK, which bypasses
+      // rules, so no client needs update.
+      allow update, delete: if false;
     }
-    
+
     // =====================================
     // NOTIFICATIONS COLLECTION
     // =====================================

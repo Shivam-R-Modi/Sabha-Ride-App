@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAdminDatabase, SupportedCollection } from '../../hooks/useAdminDatabase';
 import { DocumentEditorModal } from './DocumentEditorModal';
 import { useConfirm } from '../shared/useConfirm';
+import { normaliseAuditRow } from '../../src/utils/audit';
 
 export const DatabaseConsole: React.FC = () => {
   const { userProfile, currentUser } = useAuth();
@@ -466,26 +467,38 @@ export const DatabaseConsole: React.FC = () => {
                       </>
                     )}
 
-                    {/* AUDIT LOGS FIELDS */}
-                    {activeTab === 'auditLogs' && (
-                      <>
-                        <td className="py-3 px-4 font-bold">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                            docItem.action === 'CREATE' ? 'bg-green-100 text-green-700' :
-                            docItem.action === 'UPDATE' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
-                          }`}>
-                            {docItem.action}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-bold text-coffee">{docItem.managerName}</td>
-                        <td className="py-3 px-4 font-mono text-[11px] text-gray-500">
-                          {docItem.collection} / {docItem.documentId?.slice(0, 10)}
-                        </td>
-                        <td className="py-3 px-4 text-[11px] text-gray-500">
-                          {docItem.timestamp ? new Date(docItem.timestamp).toLocaleString() : 'N/A'}
-                        </td>
-                      </>
-                    )}
+                    {/* AUDIT LOGS FIELDS
+                        Read through normaliseAuditRow because three field shapes
+                        exist in production and audit history is never rewritten.
+                        This used to read `managerName` and `collection` directly,
+                        so a sabha deletion — written under different names — would
+                        have rendered as blank columns even once the query returned
+                        it. */}
+                    {activeTab === 'auditLogs' && (() => {
+                      const row = normaliseAuditRow(docItem);
+                      return (
+                        <>
+                          <td className="py-3 px-4 font-bold">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                              row.tone === 'create' ? 'bg-green-100 text-green-700' :
+                              row.tone === 'neutral' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {row.action}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-coffee">{row.actorName}</td>
+                          <td className="py-3 px-4 font-mono text-[11px] text-gray-500">
+                            {row.target}
+                            {row.summary && (
+                              <span className="block font-sans text-gray-400 truncate max-w-xs">{row.summary}</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-[11px] text-gray-500">
+                            {row.timestamp ? new Date(row.timestamp).toLocaleString() : 'N/A'}
+                          </td>
+                        </>
+                      );
+                    })()}
 
                     {/* OTHER COLLECTIONS FALLBACK */}
                     {activeTab !== 'users' && activeTab !== 'vehicles' && activeTab !== 'rides' && activeTab !== 'settings' && activeTab !== 'auditLogs' && (

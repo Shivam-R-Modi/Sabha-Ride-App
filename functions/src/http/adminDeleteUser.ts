@@ -7,6 +7,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { assertApprovedManager } from '../utils/authz';
+import { writeAuditLog } from '../utils/audit';
 
 export const adminDeleteUser = functions.https.onCall(async (data, context) => {
     // Verify authentication
@@ -68,20 +69,19 @@ export const adminDeleteUser = functions.https.onCall(async (data, context) => {
                 console.warn(`Auth deletion warning for UID ${uid}:`, authErr.message || authErr);
             }
 
-            // Log Audit Entry
-            try {
-                await db.collection('auditLogs').add({
-                    timestamp: new Date().toISOString(),
-                    managerId: callerUid,
-                    managerName: callerData?.name || 'Manager',
-                    action: 'DELETE',
-                    collection: 'users',
-                    documentId: uid,
-                    details: 'Admin permanently deleted user Firestore record and Firebase Auth account'
-                });
-            } catch (auditErr) {
-                console.warn('Audit log write error:', auditErr);
-            }
+            // Log Audit Entry. writeAuditLog swallows its own failures, for the
+            // same reason the try/catch here did: the account is already gone, and
+            // failing the call now would report a deletion that did happen as an
+            // error.
+            await writeAuditLog(db, {
+                action: 'user.delete',
+                actorUid: callerUid,
+                actorName: String(callerData?.name || 'Manager'),
+                targetCollection: 'users',
+                targetDocumentId: uid,
+                summary: 'Permanently deleted the user\'s profile and sign-in account',
+                details: { deletedAuthAccount: deletedAuthCount > 0 },
+            });
         }
 
         return {

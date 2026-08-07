@@ -42,6 +42,7 @@ exports.adminDeleteUser = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const authz_1 = require("../utils/authz");
+const audit_1 = require("../utils/audit");
 exports.adminDeleteUser = functions.https.onCall(async (data, context) => {
     // Verify authentication
     if (!context.auth) {
@@ -93,21 +94,19 @@ exports.adminDeleteUser = functions.https.onCall(async (data, context) => {
                 // If user doesn't exist in Auth or was already deleted, log warning
                 console.warn(`Auth deletion warning for UID ${uid}:`, authErr.message || authErr);
             }
-            // Log Audit Entry
-            try {
-                await db.collection('auditLogs').add({
-                    timestamp: new Date().toISOString(),
-                    managerId: callerUid,
-                    managerName: (callerData === null || callerData === void 0 ? void 0 : callerData.name) || 'Manager',
-                    action: 'DELETE',
-                    collection: 'users',
-                    documentId: uid,
-                    details: 'Admin permanently deleted user Firestore record and Firebase Auth account'
-                });
-            }
-            catch (auditErr) {
-                console.warn('Audit log write error:', auditErr);
-            }
+            // Log Audit Entry. writeAuditLog swallows its own failures, for the
+            // same reason the try/catch here did: the account is already gone, and
+            // failing the call now would report a deletion that did happen as an
+            // error.
+            await (0, audit_1.writeAuditLog)(db, {
+                action: 'user.delete',
+                actorUid: callerUid,
+                actorName: String((callerData === null || callerData === void 0 ? void 0 : callerData.name) || 'Manager'),
+                targetCollection: 'users',
+                targetDocumentId: uid,
+                summary: 'Permanently deleted the user\'s profile and sign-in account',
+                details: { deletedAuthAccount: deletedAuthCount > 0 },
+            });
         }
         return {
             success: true,
