@@ -40,6 +40,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.releaseAssignment = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const fleet_1 = require("../utils/fleet");
 /**
  * HTTP Callable: Release a ride assignment
  * Input: { rideId: string }
@@ -81,20 +82,15 @@ exports.releaseAssignment = functions.https.onCall(async (data, context) => {
                 currentRideId: null
             });
         }
-        // Update driver status to available and clear activeRideId/currentVehicleId
-        batch.update(db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), {
-            status: 'available',
-            activeRideId: null,
-            currentVehicleId: null
-        });
-        // Update vehicle status back to available
+        // Clear the driver's vehicle under BOTH names. Clearing only
+        // currentVehicleId left a stale currentCarId behind, and
+        // driverDoneForToday falls back to it — releasing a car that another
+        // driver had since been given.
+        batch.update(db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), Object.assign({ status: 'available', activeRideId: null }, fleet_1.DRIVER_VEHICLE_CLEARED));
+        // Update vehicle status back to available, in both collections.
         const vehicleId = ride === null || ride === void 0 ? void 0 : ride.carId;
         if (vehicleId) {
-            batch.update(db.collection('vehicles').doc(vehicleId), {
-                status: 'available',
-                assignedDriverId: null,
-                assignedDriverName: null
-            });
+            (0, fleet_1.writeVehicleState)(batch, db, vehicleId, fleet_1.VEHICLE_RELEASED);
         }
         // Reset ride document status to 'requested' so it returns to the unassigned queue
         batch.update(db.collection('rides').doc(rideId), {

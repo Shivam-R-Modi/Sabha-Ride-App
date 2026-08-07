@@ -136,14 +136,18 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
 
 const DRIVER_HOME = { lat: 42.3600, lng: -71.0600 };
 
-const baseFixture = (rideType: string, driverOverride?: Record<string, unknown>): Fixture => ({
+const baseFixture = (
+    rideType: string,
+    driverOverride?: Record<string, unknown>,
+    carOverride?: Record<string, unknown>,
+): Fixture => ({
     rideType,
     driver: driverOverride ?? {
         name: 'Asha',
         phone: '555-0100',
         location: { lat: DRIVER_HOME.lat, lng: DRIVER_HOME.lng },
     },
-    car: { name: 'Odyssey', color: 'Silver', licensePlate: 'ABC123', capacity: 4, status: 'available' },
+    car: carOverride ?? { name: 'Odyssey', color: 'Silver', licensePlate: 'ABC123', capacity: 4, status: 'available' },
     rides: [
         { id: 'ride-a', data: { studentId: 'stu-a', studentName: 'A', pickupLat: 42.35, pickupLng: -71.07, pickupAddress: '1 St', status: 'requested' } },
         { id: 'ride-b', data: { studentId: 'stu-b', studentName: 'B', pickupLat: 42.37, pickupLng: -71.05, pickupAddress: '2 St', status: 'requested' } },
@@ -220,5 +224,67 @@ describe('globalAssignDriver — persisted navigation URL', () => {
             name: 'Asha',
             location: { latitude: 0, longitude: 0 },
         }))).rejects.toThrow(/location is not set/i);
+    });
+});
+
+describe('globalAssignDriver — one car, one driver', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    const takenCar = (holder: Record<string, unknown>) => ({
+        name: 'Odyssey', color: 'Silver', licensePlate: 'ABC123', capacity: 4,
+        status: 'in_use', ...holder,
+    });
+
+    it('refuses a car another driver already holds', async () => {
+        // The guard read carData.currentDriverId. Every writer sets
+        // assignedDriverId, so it compared undefined against a uid and passed
+        // every time — two drivers, one car.
+        await expect(run(baseFixture('home-to-sabha', undefined,
+            takenCar({ assignedDriverId: 'someone-else' }),
+        ))).rejects.toThrow(/assigned to another driver/i);
+    });
+
+    it('still refuses when the holder is recorded under the legacy name', async () => {
+        await expect(run(baseFixture('home-to-sabha', undefined,
+            takenCar({ currentDriverId: 'someone-else' }),
+        ))).rejects.toThrow(/assigned to another driver/i);
+    });
+
+    it('lets the same driver re-assign the car they already hold', async () => {
+        const { result } = await run(baseFixture('home-to-sabha', undefined,
+            takenCar({ assignedDriverId: 'driver-1' }),
+        ));
+
+        expect(result.status).toBe('success');
+    });
+
+    it('marks the car taken in BOTH collections', async () => {
+        // Writing only `cars` left `vehicles` saying available, and
+        // useAvailableVehicles queries `vehicles` — so the car stayed in every
+        // other driver's picker while it was in use.
+        const { recorder } = await run(baseFixture('home-to-sabha'));
+
+        const fleetWrites = recorder.sets.filter(
+            s => s.path === 'cars/car-1' || s.path === 'vehicles/car-1');
+
+        expect(fleetWrites.map(s => s.path).sort()).toEqual(['cars/car-1', 'vehicles/car-1']);
+        for (const write of fleetWrites) {
+            expect(write.data.status).toBe('in_use');
+            expect(write.data.assignedDriverId).toBe('driver-1');
+        }
+    });
+
+    it('records the driver\'s car under the canonical name and clears the legacy one', async () => {
+        // This wrote only currentCarId while the client reads currentVehicleId.
+        // The two then drifted on release, and the stale one got a car freed out
+        // from under whoever held it next.
+        const { recorder } = await run(baseFixture('home-to-sabha'));
+
+        const driverWrite = recorder.sets.find(s => s.path === 'users/driver-1')!;
+
+        expect(driverWrite.data.currentVehicleId).toBe('car-1');
+        expect(driverWrite.data.currentCarId).toBeNull();
     });
 });

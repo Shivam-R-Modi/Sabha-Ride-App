@@ -5,6 +5,9 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import {
+    writeVehicleState, resolveDriverVehicleId, VEHICLE_RELEASED, DRIVER_VEHICLE_CLEARED,
+} from '../utils/fleet';
 
 /**
  * HTTP Callable: Driver done for today
@@ -45,34 +48,27 @@ export const driverDoneForToday = functions.https.onCall(async (data, context) =
             throw new functions.https.HttpsError('failed-precondition', 'Cannot mark done while in an active ride');
         }
 
-        const vehicleId = driver?.currentVehicleId || driver?.currentCarId;
+        // The currentCarId half of this fallback used to go stale, because
+        // releaseAssignment and completeRide cleared only currentVehicleId.
+        // Both now clear both names, so it can only resolve documents written
+        // before that change.
+        const vehicleId = resolveDriverVehicleId(driver);
         const batch = db.batch();
 
-        // Release vehicle if assigned (safely in both vehicles and cars)
+        // Release vehicle if assigned (both halves of the mirror)
         if (vehicleId) {
-            batch.set(db.collection('vehicles').doc(vehicleId), {
-                status: 'available',
-                assignedDriverId: null,
-                assignedDriverName: null
-            }, { merge: true });
-
-            batch.set(db.collection('cars').doc(vehicleId), {
-                status: 'available',
-                assignedDriverId: null,
-                assignedDriverName: null
-            }, { merge: true });
+            writeVehicleState(batch, db, vehicleId, VEHICLE_RELEASED);
         }
 
         // Update driver status and reset daily session counters
         batch.update(db.collection('users').doc(driverId), {
             status: 'offline',
-            currentVehicleId: null,
+            ...DRIVER_VEHICLE_CLEARED,
             currentVehicleName: null,
             currentVehiclePlate: null,
             carModel: null,
             carColor: null,
             plateNumber: null,
-            currentCarId: null,
             activeRideId: null,
             ridesCompletedToday: 0,
             totalStudentsToday: 0,

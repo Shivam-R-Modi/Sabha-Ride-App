@@ -6,6 +6,9 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { notifyStudentRideCompleted } from '../utils/notifications';
+import {
+    writeVehicleState, resolveDriverVehicleId, VEHICLE_RELEASED, DRIVER_VEHICLE_CLEARED,
+} from '../utils/fleet';
 
 /**
  * HTTP Callable: Complete a ride
@@ -92,19 +95,19 @@ export const completeRide = functions.https.onCall(async (data, context) => {
         const newTotalStudents = (driver?.totalStudentsToday || 0) + (allStudents.length || ride?.students?.length || 1);
         const newTotalDistance = (driver?.totalDistanceToday || 0) + (ride?.estimatedDistance || 0);
 
-        const vehicleId = driver?.currentVehicleId || ride?.carId;
+        // Released in BOTH collections. Clearing only `vehicles` left
+        // `cars/{id}` saying in_use with the previous driver still on it, and
+        // globalAssignDriver reads `cars` — so a completed ride left its
+        // vehicle looking permanently taken to the assigner.
+        const vehicleId = resolveDriverVehicleId(driver) || ride?.carId;
         if (vehicleId) {
-            batch.set(db.collection('vehicles').doc(vehicleId), {
-                status: 'available',
-                assignedDriverId: null,
-                assignedDriverName: null
-            }, { merge: true });
+            writeVehicleState(batch, db, vehicleId, VEHICLE_RELEASED);
         }
 
         batch.update(db.collection('users').doc(driverUid), {
             status: 'available',
             activeRideId: null,
-            currentVehicleId: null,
+            ...DRIVER_VEHICLE_CLEARED,
             ridesCompletedToday: newRidesCompleted,
             totalStudentsToday: newTotalStudents,
             totalDistanceToday: newTotalDistance

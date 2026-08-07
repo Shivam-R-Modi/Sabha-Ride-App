@@ -40,6 +40,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.driverDoneForToday = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const fleet_1 = require("../utils/fleet");
 /**
  * HTTP Callable: Driver done for today
  * Releases car and clears driver session
@@ -71,36 +72,18 @@ exports.driverDoneForToday = functions.https.onCall(async (data, context) => {
         if (driver === null || driver === void 0 ? void 0 : driver.activeRideId) {
             throw new functions.https.HttpsError('failed-precondition', 'Cannot mark done while in an active ride');
         }
-        const vehicleId = (driver === null || driver === void 0 ? void 0 : driver.currentVehicleId) || (driver === null || driver === void 0 ? void 0 : driver.currentCarId);
+        // The currentCarId half of this fallback used to go stale, because
+        // releaseAssignment and completeRide cleared only currentVehicleId.
+        // Both now clear both names, so it can only resolve documents written
+        // before that change.
+        const vehicleId = (0, fleet_1.resolveDriverVehicleId)(driver);
         const batch = db.batch();
-        // Release vehicle if assigned (safely in both vehicles and cars)
+        // Release vehicle if assigned (both halves of the mirror)
         if (vehicleId) {
-            batch.set(db.collection('vehicles').doc(vehicleId), {
-                status: 'available',
-                assignedDriverId: null,
-                assignedDriverName: null
-            }, { merge: true });
-            batch.set(db.collection('cars').doc(vehicleId), {
-                status: 'available',
-                assignedDriverId: null,
-                assignedDriverName: null
-            }, { merge: true });
+            (0, fleet_1.writeVehicleState)(batch, db, vehicleId, fleet_1.VEHICLE_RELEASED);
         }
         // Update driver status and reset daily session counters
-        batch.update(db.collection('users').doc(driverId), {
-            status: 'offline',
-            currentVehicleId: null,
-            currentVehicleName: null,
-            currentVehiclePlate: null,
-            carModel: null,
-            carColor: null,
-            plateNumber: null,
-            currentCarId: null,
-            activeRideId: null,
-            ridesCompletedToday: 0,
-            totalStudentsToday: 0,
-            totalDistanceToday: 0
-        });
+        batch.update(db.collection('users').doc(driverId), Object.assign(Object.assign({ status: 'offline' }, fleet_1.DRIVER_VEHICLE_CLEARED), { currentVehicleName: null, currentVehiclePlate: null, carModel: null, carColor: null, plateNumber: null, activeRideId: null, ridesCompletedToday: 0, totalStudentsToday: 0, totalDistanceToday: 0 }));
         await batch.commit();
         return {
             success: true,

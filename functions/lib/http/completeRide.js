@@ -41,6 +41,7 @@ exports.completeRide = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const notifications_1 = require("../utils/notifications");
+const fleet_1 = require("../utils/fleet");
 /**
  * HTTP Callable: Complete a ride
  * Input: { rideId: string }
@@ -112,22 +113,15 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         const newRidesCompleted = ((driver === null || driver === void 0 ? void 0 : driver.ridesCompletedToday) || 0) + 1;
         const newTotalStudents = ((driver === null || driver === void 0 ? void 0 : driver.totalStudentsToday) || 0) + (allStudents.length || ((_b = ride === null || ride === void 0 ? void 0 : ride.students) === null || _b === void 0 ? void 0 : _b.length) || 1);
         const newTotalDistance = ((driver === null || driver === void 0 ? void 0 : driver.totalDistanceToday) || 0) + ((ride === null || ride === void 0 ? void 0 : ride.estimatedDistance) || 0);
-        const vehicleId = (driver === null || driver === void 0 ? void 0 : driver.currentVehicleId) || (ride === null || ride === void 0 ? void 0 : ride.carId);
+        // Released in BOTH collections. Clearing only `vehicles` left
+        // `cars/{id}` saying in_use with the previous driver still on it, and
+        // globalAssignDriver reads `cars` — so a completed ride left its
+        // vehicle looking permanently taken to the assigner.
+        const vehicleId = (0, fleet_1.resolveDriverVehicleId)(driver) || (ride === null || ride === void 0 ? void 0 : ride.carId);
         if (vehicleId) {
-            batch.set(db.collection('vehicles').doc(vehicleId), {
-                status: 'available',
-                assignedDriverId: null,
-                assignedDriverName: null
-            }, { merge: true });
+            (0, fleet_1.writeVehicleState)(batch, db, vehicleId, fleet_1.VEHICLE_RELEASED);
         }
-        batch.update(db.collection('users').doc(driverUid), {
-            status: 'available',
-            activeRideId: null,
-            currentVehicleId: null,
-            ridesCompletedToday: newRidesCompleted,
-            totalStudentsToday: newTotalStudents,
-            totalDistanceToday: newTotalDistance
-        });
+        batch.update(db.collection('users').doc(driverUid), Object.assign(Object.assign({ status: 'available', activeRideId: null }, fleet_1.DRIVER_VEHICLE_CLEARED), { ridesCompletedToday: newRidesCompleted, totalStudentsToday: newTotalStudents, totalDistanceToday: newTotalDistance }));
         // Determine student status after ride
         const newStudentStatus = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'at_sabha' : 'home_safe';
         const destination = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'Sabha' : 'Home';

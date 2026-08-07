@@ -44,6 +44,7 @@ const admin = __importStar(require("firebase-admin"));
 const clustering_1 = require("../utils/clustering");
 const routing_1 = require("../utils/routing");
 const coords_1 = require("../utils/coords");
+const fleet_1 = require("../utils/fleet");
 const notifications_1 = require("../utils/notifications");
 const settings_1 = require("../utils/settings");
 const rateLimiter_1 = require("../utils/rateLimiter");
@@ -140,7 +141,12 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         if (carData.status !== 'available' && carData.status !== 'in_use') {
             throw new functions.https.HttpsError('failed-precondition', `Vehicle is ${carData.status}.`);
         }
-        if (carData.status === 'in_use' && carData.currentDriverId && carData.currentDriverId !== driverId) {
+        // The guard used to read carData.currentDriverId. Nothing writes that
+        // field — every writer, client and server, sets assignedDriverId — so
+        // this compared undefined against a uid and passed every single time.
+        // Two drivers could hold the same car.
+        const currentHolder = (0, fleet_1.resolveVehicleHolder)(carData);
+        if (carData.status === 'in_use' && currentHolder && currentHolder !== driverId) {
             throw new functions.https.HttpsError('failed-precondition', 'Vehicle is assigned to another driver.');
         }
         const availableSeats = Math.max(1, (carData.capacity || 4) - 1);
@@ -325,16 +331,26 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                 currentRideId: s.rideRequestId
             }, { merge: true });
         }
-        // Update car
-        batch.update(db.collection('cars').doc(carId), {
+        // Mark the car taken in BOTH collections. Writing only `cars` left
+        // `vehicles` saying 'available', and useAvailableVehicles queries
+        // `vehicles` — so the car a driver had just been assigned stayed in
+        // every other driver's picker.
+        (0, fleet_1.writeVehicleState)(batch, db, carId, {
             status: 'in_use',
-            assignedDriverId: driverId
+            assignedDriverId: driverId,
+            assignedDriverName: driverData.name || 'Driver',
         });
         // Upsert driver profile (set+merge is safe even if doc doesn't exist)
         batch.set(db.collection('users').doc(driverId), {
             status: 'assigned',
             activeRideId: primaryRideId,
-            currentCarId: carId,
+            // currentVehicleId is canonical — it is what the client writes and
+            // what the dashboard gates "Assign Me" on. This wrote only
+            // currentCarId, so the two names described the same car and then
+            // drifted apart on release. The legacy name is nulled here so it
+            // can never be the stale one a later release path falls back to.
+            currentVehicleId: carId,
+            currentCarId: null,
             assignedStudentIds: assignedStudents.map(s => s.id)
         }, { merge: true });
         // Delete the lock in the same batch

@@ -161,6 +161,10 @@ export const assignVehicleToDriver = async (vehicle: Vehicle, driverId: string, 
         const userRef = doc(db, 'users', driverId);
         await updateDoc(userRef, {
             currentVehicleId: vehicle.id,
+            // The server's older name for the same thing. Nulled alongside so
+            // the two can never describe different cars — see
+            // functions/src/utils/fleet.ts.
+            currentCarId: null,
             currentVehicleName: vehicle.name,
             currentVehiclePlate: vehicle.licensePlate,
             carModel: vehicle.name,
@@ -193,6 +197,10 @@ export const releaseVehicle = async (vehicleId: string, driverId: string) => {
         const userRef = doc(db, 'users', driverId);
         await updateDoc(userRef, {
             currentVehicleId: null as any,
+            // Clearing only currentVehicleId left driverDoneForToday a stale
+            // currentCarId to fall back to, and it would release a car another
+            // driver had since been given.
+            currentCarId: null as any,
             currentVehicleName: null as any,
             currentVehiclePlate: null as any,
             carModel: null as any,
