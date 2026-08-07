@@ -172,16 +172,57 @@ const baseFixture = (
 });
 
 async function run(fixture: Fixture) {
+    return runAs('driver-1', fixture);
+}
+
+/** Invoke with a caller uid that may differ from the `driverId` in the body. */
+async function runAs(callerUid: string, fixture: Fixture) {
     const made = makeDb(fixture);
     db = made.db;
     const result: any = await (globalAssignDriver as any)(
         { driverId: 'driver-1', carId: 'car-1' },
-        { auth: { uid: 'driver-1' } }
+        { auth: { uid: callerUid } }
     );
     return { result, recorder: made.recorder };
 }
 
 // ── tests ──────────────────────────────────────────────────
+
+describe('globalAssignDriver — a driver may only dispatch themselves', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('refuses a caller dispatching a different driver', async () => {
+        // `driverId` came out of the request body and was never compared to the
+        // caller. Any signed-in account could assign students to any driver, take
+        // their car, overwrite their status and activeRideId, and hold the global
+        // lock — under that driver's name, on that driver's dashboard.
+        await expect(runAs('someone-else', baseFixture('home-to-sabha')))
+            .rejects.toThrow(/only request an assignment for themselves/i);
+    });
+
+    it('refuses before touching the fleet or the lock', async () => {
+        // The point of rejecting at the top: a partial run would leave the car
+        // marked in_use or the assignment lock held by the impersonator.
+        const made = makeDb(baseFixture('home-to-sabha'));
+        db = made.db;
+
+        await expect((globalAssignDriver as any)(
+            { driverId: 'driver-1', carId: 'car-1' },
+            { auth: { uid: 'someone-else' } },
+        )).rejects.toThrow(/only request an assignment for themselves/i);
+
+        expect(made.recorder.sets).toEqual([]);
+        expect(made.recorder.updates).toEqual([]);
+        expect(made.recorder.committed).toBe(false);
+    });
+
+    it('allows the driver to dispatch themselves', async () => {
+        const { result } = await runAs('driver-1', baseFixture('home-to-sabha'));
+        expect(result.status).toBe('success');
+    });
+});
 
 describe('globalAssignDriver — persisted navigation URL', () => {
     beforeEach(() => {

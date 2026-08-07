@@ -97,6 +97,22 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
     if (!driverId || !carId) {
         throw new functions.https.HttpsError('invalid-argument', 'driverId and carId are required');
     }
+    // A driver may only dispatch themselves.
+    //
+    // `driverId` arrives in the request body, and until now nothing compared it
+    // to the caller. Any signed-in account could therefore assign students to
+    // any driver, take that driver's car (`writeVehicleState` below), overwrite
+    // their `status`, `activeRideId` and `currentVehicleId`, and hold the global
+    // assignment lock — all under someone else's name, with the victim's own
+    // dashboard showing the result.
+    //
+    // Strict equality, with no manager override: the one caller
+    // (DriverDashboard) already passes `currentUser.uid`, so an override would be
+    // untested code sitting in the middle of the dispatch path. Manager-initiated
+    // assignment is manualAssignStudent, which authorises separately.
+    if (driverId !== context.auth.uid) {
+        throw new functions.https.HttpsError('permission-denied', 'A driver can only request an assignment for themselves.');
+    }
     const db = admin.firestore();
     // ── Step 1: Acquire lock ────────────────────────────────
     // Define lockRef at function scope so it's accessible in error handler
