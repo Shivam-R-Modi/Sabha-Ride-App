@@ -51,7 +51,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     }
     if (collectionName === 'settings') {
       return {
-        code: 'sabha2024',
+        // Was prefilled with 'sabha2024' — one of the codes hardcoded in the
+        // old client-side check. Prefilling a live access code into an editor
+        // both leaks it and invites saving it back as the real one.
+        code: '',
         address: '11 Maywood St, Boston, MA 02119'
       };
     }

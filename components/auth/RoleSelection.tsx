@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
+import { verifyManagerCode } from '../../src/utils/cloudFunctions';
 import { UserRole } from '../../types';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -78,30 +79,30 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                     return;
                 }
 
-                // Normalize input: remove spaces & lowercase
-                const cleanInput = rawInput.toLowerCase().replace(/\s+/g, '');
+                // The code is checked server-side, and the manager profile is
+                // written server-side with the Admin SDK.
+                //
+                // This screen used to compare the input against
+                // ['sabha2026','sabha2024'] hardcoded right here — shipped in
+                // the bundle to every visitor, readable with View Source, and
+                // impossible to rotate without a redeploy. It then wrote
+                // accountStatus:'approved' onto its own user document, so even
+                // the check was optional: skip it, write the field, be a
+                // manager. Neither the code nor the privilege fields belong in
+                // the browser.
+                const { valid } = await verifyManagerCode(rawInput);
 
-                // Accepted manager codes (supports sabha2026, sabha2024, or Firestore setting)
-                let rawValidCodes = ['sabha2026', 'sabha2024'];
-                try {
-                    const codeDoc = await getDoc(doc(db, 'settings', 'managerCode'));
-                    if (codeDoc.exists() && codeDoc.data()?.code) {
-                        rawValidCodes.push(codeDoc.data().code);
-                    }
-                } catch (e) {
-                    console.warn('Could not fetch settings/managerCode from Firestore, using fallback codes:', e);
-                }
-
-                const cleanValidCodes = rawValidCodes.map(c => c.toLowerCase().replace(/\s+/g, ''));
-
-                if (!cleanValidCodes.includes(cleanInput)) {
+                if (!valid) {
                     setError('Invalid manager access code. Please check with the Sabha coordinator.');
                     setLoading(false);
                     return;
                 }
 
-                // Access code verified! Approve manager immediately.
-                initialStatus = 'approved';
+                // verifyManagerCode has already created the approved manager
+                // profile. Writing it again from here would be denied, and
+                // would be the very thing this change removes.
+                onSelectRole();
+                return;
             } else {
                 // Drivers (Riders) require manager approval
                 initialStatus = 'pending';
@@ -122,7 +123,12 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
             onSelectRole();
         } catch (err: unknown) {
             console.error('Error saving role:', err);
-            setError('Failed to save role. Please try again.');
+            // verifyManagerCode throws for "code not configured" and for rate
+            // limiting, and those messages are the actionable part. A blanket
+            // "Failed to save role" hid them and left the user retyping a
+            // correct code.
+            const message = err instanceof Error ? err.message : '';
+            setError(message || 'Failed to save role. Please try again.');
             setLoading(false);
         }
     };

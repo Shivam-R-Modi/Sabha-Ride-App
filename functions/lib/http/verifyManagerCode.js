@@ -1,8 +1,27 @@
 "use strict";
 // ============================================
 // HTTP FUNCTION: verifyManagerCode
-// Server-side verification of manager access code
-// Now reads from Firestore settings instead of hard-coded constant
+// Server-side verification of the manager access code.
+//
+// This is the ONLY path by which an account becomes a manager. It exists
+// because the browser must never learn the code and must never grant itself
+// the role:
+//
+//  - RoleSelection used to compare the typed code against
+//    ['sabha2026', 'sabha2024'], hardcoded in the client and therefore shipped
+//    in the JS bundle to every visitor. A permanent backdoor that could not be
+//    rotated without a redeploy, and that anyone could read with View Source.
+//  - It also read settings/managerCode straight from the client, so the real
+//    code was exposed to any account that could sign up. firestore.rules now
+//    denies that read, which had quietly left the hardcoded pair as the only
+//    working codes.
+//  - Having verified the code in the browser, it then wrote
+//    accountStatus: 'approved' onto its own user document. Self-granted
+//    authority: skip the check, write the field, become a manager.
+//
+// So the code is compared here, and the profile is written here with the Admin
+// SDK, which bypasses security rules. The client sends a candidate code and
+// receives a boolean.
 // ============================================
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -41,61 +60,76 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.verifyManagerCode = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const rateLimiter_1 = require("../utils/rateLimiter");
+/** Codes are compared case-insensitively and ignoring spaces, as they always were. */
+function normalise(code) {
+    return code.toLowerCase().replace(/\s+/g, '');
+}
 /**
- * HTTP Callable: Verify manager access code
- * Input: { code: string }
+ * HTTP Callable: verify the manager access code and, on success, make the
+ * caller an approved manager.
+ *
+ * Input:  { code: string }
  * Output: { valid: boolean }
  *
- * If valid, auto-approves the calling user's account.
- * Manager code is stored in Firestore: settings/managerCode
+ * An invalid code returns { valid: false } rather than throwing, so the client
+ * can show an inline "wrong code" message and let the user retry. Everything
+ * else — unauthenticated, missing code, code not configured — throws.
  */
 exports.verifyManagerCode = functions.https.onCall(async (data, context) => {
-    // Verify authentication
+    var _a, _b;
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
+    // This endpoint is a guessing oracle for a short shared secret, so it needs
+    // a limit. Five attempts per fifteen minutes leaves room for a typo and
+    // makes brute force impractical.
+    await (0, rateLimiter_1.checkRateLimit)(context.auth.uid, {
+        maxRequests: 5,
+        windowMs: 15 * 60 * 1000,
+        functionName: 'verifyManagerCode',
+    });
     const { code } = data;
-    if (!code || typeof code !== 'string') {
+    if (!code || typeof code !== 'string' || !code.trim()) {
         throw new functions.https.HttpsError('invalid-argument', 'Access code is required');
     }
     const db = admin.firestore();
     const userId = context.auth.uid;
     try {
-        // Get user profile to verify they selected manager role
-        const userDoc = await db.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'User profile not found');
-        }
-        const userData = userDoc.data();
-        if ((userData === null || userData === void 0 ? void 0 : userData.role) !== 'manager' && (userData === null || userData === void 0 ? void 0 : userData.registeredRole) !== 'manager') {
-            throw new functions.https.HttpsError('permission-denied', 'Only manager accounts can verify access codes');
-        }
-        // Read manager code from Firestore settings (not hard-coded)
         const managerCodeDoc = await db.collection('settings').doc('managerCode').get();
         if (!managerCodeDoc.exists) {
-            // Fallback: If no code in Firestore, reject (managers must set code first)
             throw new functions.https.HttpsError('failed-precondition', 'Manager access code not configured. Please contact administrator.');
         }
-        const managerCodeData = managerCodeDoc.data();
-        const validCode = managerCodeData === null || managerCodeData === void 0 ? void 0 : managerCodeData.code;
-        if (!validCode) {
+        const validCode = (_a = managerCodeDoc.data()) === null || _a === void 0 ? void 0 : _a.code;
+        if (!validCode || typeof validCode !== 'string') {
             throw new functions.https.HttpsError('failed-precondition', 'Manager access code not configured properly.');
         }
-        // Verify the code
-        const isValid = code === validCode;
-        if (isValid) {
-            // Auto-approve the manager account
-            await db.collection('users').doc(userId).update({
-                accountStatus: 'approved',
-            });
+        if (normalise(code) !== normalise(validCode)) {
+            console.warn(`[verifyManagerCode] Rejected attempt by ${userId}`);
+            return { valid: false };
         }
-        return { valid: isValid };
+        // Valid. Write the manager profile here rather than letting the client
+        // do it — the whole point of the callable. merge:true covers both
+        // entry points: RoleSelection, where no user document exists yet, and
+        // PendingApproval, where one exists and only needs approving.
+        await db.collection('users').doc(userId).set({
+            role: 'manager',
+            registeredRole: 'manager',
+            roles: ['manager'],
+            activeRole: 'manager',
+            accountStatus: 'approved',
+            email: (_b = context.auth.token.email) !== null && _b !== void 0 ? _b : null,
+            approvedAt: new Date().toISOString(),
+            approvedVia: 'managerCode',
+        }, { merge: true });
+        console.log(`[verifyManagerCode] Approved ${userId} as manager`);
+        return { valid: true };
     }
     catch (error) {
-        console.error('Error verifying manager code:', error);
         if (error instanceof functions.https.HttpsError) {
             throw error;
         }
+        console.error('Error verifying manager code:', error);
         throw new functions.https.HttpsError('internal', 'Failed to verify access code');
     }
 });

@@ -130,12 +130,64 @@ describe('privilege escalation', () => {
     });
 });
 
+describe('escalation at create time', () => {
+    // Blocking privilege fields on UPDATE closed only half the hole. A brand-new
+    // account has no document, so its first write is a create — and a create
+    // could name any role and any accountStatus. Signing up as an approved
+    // manager took one console call and no access code.
+
+    it('a new user cannot create themselves as an approved manager', async () => {
+        const asNew = testEnv.authenticatedContext('sneaky_new').firestore();
+        await assertFails(setDoc(doc(asNew, 'users', 'sneaky_new'), {
+            role: 'manager', registeredRole: 'manager', roles: ['manager'],
+            activeRole: 'manager', accountStatus: 'approved',
+        }));
+    });
+
+    it('a new user cannot create themselves as an approved driver', async () => {
+        const asNew = testEnv.authenticatedContext('sneaky_driver').firestore();
+        await assertFails(setDoc(doc(asNew, 'users', 'sneaky_driver'), {
+            role: 'driver', registeredRole: 'driver', roles: ['driver'],
+            activeRole: 'driver', accountStatus: 'approved',
+        }));
+    });
+
+    it('a new user cannot smuggle a manager role in via the roles array', async () => {
+        // role says student, roles says otherwise — and hasRole()/isManager()
+        // both check the array.
+        const asNew = testEnv.authenticatedContext('sneaky_array').firestore();
+        await assertFails(setDoc(doc(asNew, 'users', 'sneaky_array'), {
+            role: 'student', registeredRole: 'student', roles: ['student', 'manager'],
+            activeRole: 'student', accountStatus: 'approved',
+        }));
+    });
+
+    it('a new user cannot create themselves with a platform role', async () => {
+        const asNew = testEnv.authenticatedContext('sneaky_platform').firestore();
+        await assertFails(setDoc(doc(asNew, 'users', 'sneaky_platform'), {
+            role: 'student', registeredRole: 'student', roles: ['student'],
+            activeRole: 'student', accountStatus: 'approved',
+            platformRole: 'superManager',
+        }));
+    });
+
+    it('a new manager CAN be created pending, which is what the callable approves', async () => {
+        // verifyManagerCode runs with the Admin SDK and bypasses rules, so it is
+        // unaffected either way — but a pending manager must remain a legal
+        // client write, since that is the state PendingApproval retries from.
+        const asNew = testEnv.authenticatedContext('pending_manager').firestore();
+        await assertSucceeds(setDoc(doc(asNew, 'users', 'pending_manager'), {
+            role: 'manager', registeredRole: 'manager', roles: ['manager'],
+            activeRole: 'manager', accountStatus: 'pending',
+        }));
+    });
+});
+
 describe('signup must still work', () => {
-    it('a brand-new user CAN create their profile with a role', async () => {
-        // RoleSelection.tsx:111 writes role, roles, activeRole and
-        // accountStatus in one setDoc. For a new user this is a create, which
-        // is the one legitimate moment a client sets those fields — if this
-        // breaks, nobody can register at all.
+    it('a brand-new student CAN create their approved profile', async () => {
+        // RoleSelection writes role, roles, activeRole and accountStatus in one
+        // setDoc. Students are auto-approved by product decision — if this
+        // breaks, no student can register at all.
         const asNew = testEnv.authenticatedContext('brand_new_user').firestore();
         await assertSucceeds(setDoc(doc(asNew, 'users', 'brand_new_user'), {
             role: 'student', registeredRole: 'student', roles: ['student'],

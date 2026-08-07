@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
+import { verifyManagerCode } from '../../src/utils/cloudFunctions';
 
 interface PendingApprovalProps {
     role: string;
@@ -30,34 +29,24 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
         setSuccessMessage('');
 
         try {
-            const cleanInput = rawInput.toLowerCase().replace(/\s+/g, '');
-            let rawValidCodes = ['sabha2026', 'sabha2024'];
-            try {
-                const codeDoc = await getDoc(doc(db, 'settings', 'managerCode'));
-                if (codeDoc.exists() && codeDoc.data()?.code) {
-                    rawValidCodes.push(codeDoc.data().code);
-                }
-            } catch (e) {
-                console.warn('Could not fetch settings/managerCode from Firestore:', e);
-            }
+            // Same server-side check as RoleSelection. This screen carried its
+            // own copy of the hardcoded ['sabha2026','sabha2024'] pair and its
+            // own self-approving updateDoc — which firestore.rules now denies
+            // anyway, since a user may not write accountStatus on themselves.
+            // The callable does the comparison and the approval.
+            const { valid } = await verifyManagerCode(rawInput);
 
-            const cleanValidCodes = rawValidCodes.map(c => c.toLowerCase().replace(/\s+/g, ''));
-
-            if (!cleanValidCodes.includes(cleanInput)) {
+            if (!valid) {
                 setError('Invalid manager access code');
                 setLoading(false);
                 return;
             }
 
-            // Code verified! Approve manager account
-            await updateDoc(doc(db, 'users', currentUser.uid), {
-                accountStatus: 'approved',
-            });
-
             setSuccessMessage('Account approved! Redirecting...');
         } catch (err: unknown) {
             console.error('Error approving manager:', err);
-            setError('Failed to approve account. Please try again.');
+            const message = err instanceof Error ? err.message : '';
+            setError(message || 'Failed to approve account. Please try again.');
             setLoading(false);
         }
     };

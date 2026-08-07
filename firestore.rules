@@ -90,6 +90,32 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
+    // The same authority question, asked at CREATE time.
+    //
+    // Blocking privilege fields on update closed only half the hole: a brand-new
+    // account has no document yet, so its first write is a create, and a create
+    // could name any role and any accountStatus. One console call was enough to
+    // arrive as an approved manager without ever seeing the access code.
+    //
+    // Students self-approve because that is the product decision — a student has
+    // no authority over anyone. Every other role starts pending and is promoted
+    // by a manager or by verifyManagerCode, both of which run with authority the
+    // client does not have.
+    function createsSelfApprovedStudentOnly() {
+      let d = request.resource.data;
+      return d.get('role', '') == 'student'
+             && d.get('registeredRole', 'student') == 'student'
+             && d.get('activeRole', 'student') == 'student'
+             && (!('roles' in d) || d.roles.hasOnly(['student']));
+    }
+
+    function createsUnprivilegedProfile() {
+      let d = request.resource.data;
+      return !('platformRole' in d)
+             && (d.get('accountStatus', 'pending') == 'pending'
+                 || createsSelfApprovedStudentOnly());
+    }
+
     function touchesPrivilegeFields() {
       return changedKeys().hasAny([
         'role', 'registeredRole', 'roles', 'activeRole',
@@ -127,10 +153,12 @@ service cloud.firestore {
       // database. Read is now self, or a manager.
       allow read: if isOwner(userId) || isManager();
 
-      // Users create their own profile during registration. accountStatus and
-      // role are set here, so this is the one legitimate moment they are
-      // written by a client — the signup flow depends on it.
-      allow create: if isOwner(userId);
+      // Users create their own profile during registration, so role and
+      // accountStatus are written by a client here — but only ever downward.
+      // A self-approved student is fine; a self-approved manager or driver is
+      // the escalation the update guard blocks, arriving one document earlier.
+      // Managers are created by verifyManagerCode with the Admin SDK.
+      allow create: if isOwner(userId) && createsUnprivilegedProfile();
 
       // A user may edit their own PROFILE fields only. Privilege fields
       // (role, roles, accountStatus, platformRole) are excluded, otherwise
