@@ -16,7 +16,30 @@ import { haversineDistance, calculateRouteDistance, estimateTime } from './dista
  * @returns Optimized route with waypoints in order
  */
 /**
- * Helper to generate all permutations of an array
+ * Above this many stops the exact permutation search is abandoned for a
+ * heuristic. 8 stops is 40,320 orderings — fine. The old code had this number
+ * only in a doc comment and never enforced it, while vehicle capacity is a
+ * manager-entered value up to 15 (VehicleForm.tsx). A 12-seat van meant 11
+ * students, 39.9M permutations materialised into a single array, and the
+ * function OOMed. On an OOM kill the caller's `finally` never runs, so
+ * system/assignmentLock was left held and every driver on the platform was
+ * blocked from being assigned until someone deleted the document by hand.
+ */
+const EXACT_TSP_MAX_STOPS = 8;
+
+/** Total Start -> ...stops... -> End distance for a given visiting order. */
+function routeLength(startPoint: GeoLocation, order: RideStudent[], endPoint: GeoLocation): number {
+    if (order.length === 0) return haversineDistance(startPoint, endPoint);
+    let total = haversineDistance(startPoint, order[0].location);
+    for (let i = 0; i < order.length - 1; i++) {
+        total += haversineDistance(order[i].location, order[i + 1].location);
+    }
+    return total + haversineDistance(order[order.length - 1].location, endPoint);
+}
+
+/**
+ * Helper to generate all permutations of an array.
+ * Only ever called with <= EXACT_TSP_MAX_STOPS elements.
  */
 function getPermutations<T>(arr: T[]): T[][] {
     if (arr.length <= 1) return [arr];
@@ -30,6 +53,75 @@ function getPermutations<T>(arr: T[]): T[][] {
         }
     }
     return result;
+}
+
+/** Exhaustive search. Exact, and safe at <= 8 stops. */
+function exactShortestOrder(
+    startPoint: GeoLocation, students: RideStudent[], endPoint: GeoLocation
+): RideStudent[] {
+    let bestOrder = students;
+    let minTotalDistance = Infinity;
+    for (const perm of getPermutations(students)) {
+        const d = routeLength(startPoint, perm, endPoint);
+        if (d < minTotalDistance) {
+            minTotalDistance = d;
+            bestOrder = perm;
+        }
+    }
+    return bestOrder;
+}
+
+/**
+ * Nearest-neighbour seed followed by 2-opt improvement. O(n^2) to build and
+ * O(n^2) per improvement pass instead of O(n!), and in practice lands within a
+ * few percent of optimal at these sizes.
+ */
+function nearestNeighbourThenTwoOpt(
+    startPoint: GeoLocation, students: RideStudent[], endPoint: GeoLocation
+): RideStudent[] {
+    const remaining = [...students];
+    const order: RideStudent[] = [];
+    let cursor: GeoLocation = startPoint;
+
+    while (remaining.length > 0) {
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < remaining.length; i++) {
+            const d = haversineDistance(cursor, remaining[i].location);
+            if (d < bestDist) {
+                bestDist = d;
+                bestIdx = i;
+            }
+        }
+        const [next] = remaining.splice(bestIdx, 1);
+        order.push(next);
+        cursor = next.location;
+    }
+
+    // 2-opt: repeatedly reverse a segment when doing so shortens the whole route.
+    let improved = true;
+    let guard = 0;
+    while (improved && guard++ < 50) {
+        improved = false;
+        let best = routeLength(startPoint, order, endPoint);
+        for (let i = 0; i < order.length - 1; i++) {
+            for (let k = i + 1; k < order.length; k++) {
+                const candidate = [
+                    ...order.slice(0, i),
+                    ...order.slice(i, k + 1).reverse(),
+                    ...order.slice(k + 1),
+                ];
+                const d = routeLength(startPoint, candidate, endPoint);
+                if (d < best - 1e-9) {
+                    order.splice(0, order.length, ...candidate);
+                    best = d;
+                    improved = true;
+                }
+            }
+        }
+    }
+
+    return order;
 }
 
 /**
@@ -56,27 +148,9 @@ export function optimizeRoute(
         ];
     }
 
-    // Generate all permutations of student visits
-    const permutations = getPermutations(students);
-
-    let bestOrder = students;
-    let minTotalDistance = Infinity;
-
-    // Find permutation that yields min total distance from Start -> ...students... -> End
-    for (const perm of permutations) {
-        let currentDist = haversineDistance(startPoint, perm[0].location);
-
-        for (let i = 0; i < perm.length - 1; i++) {
-            currentDist += haversineDistance(perm[i].location, perm[i + 1].location);
-        }
-
-        currentDist += haversineDistance(perm[perm.length - 1].location, endPoint);
-
-        if (currentDist < minTotalDistance) {
-            minTotalDistance = currentDist;
-            bestOrder = perm;
-        }
-    }
+    const bestOrder = students.length <= EXACT_TSP_MAX_STOPS
+        ? exactShortestOrder(startPoint, students, endPoint)
+        : nearestNeighbourThenTwoOpt(startPoint, students, endPoint);
 
     const waypoints: Waypoint[] = [];
 
