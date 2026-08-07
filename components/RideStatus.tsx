@@ -67,9 +67,19 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
             <a href={`tel:${driver.phone}`} className="w-10 h-10 rounded-full bg-green-100 text-green-700 flex items-center justify-center hover:bg-green-200 transition-colors btn-feedback">
               <Phone size={18} />
             </a>
-            <button className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition-colors btn-feedback">
-              <MessageSquare size={18} />
-            </button>
+            {/* Had no onClick — a message button that did nothing. There is no
+                in-app messaging, so it opens the phone's SMS composer to the
+                same number the call button uses. Hidden entirely when the
+                driver's phone is unknown, rather than sitting there inert. */}
+            {driver.phone && (
+              <a
+                href={`sms:${driver.phone}`}
+                title={`Text ${driver.name}`}
+                className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition-colors btn-feedback"
+              >
+                <MessageSquare size={18} />
+              </a>
+            )}
           </div>
         </div>
 

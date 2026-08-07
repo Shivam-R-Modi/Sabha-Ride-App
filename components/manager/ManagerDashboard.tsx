@@ -175,6 +175,7 @@ export const ManagerDashboard: React.FC = () => {
   const [showFleetManagement, setShowFleetManagement] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
 
   // Release modal state
   const [showReleaseModal, setShowReleaseModal] = useState(false);
@@ -502,12 +503,17 @@ export const ManagerDashboard: React.FC = () => {
                   <h2 className="font-header font-bold text-2xl text-coffee">Active Rides & Fleet Map</h2>
                   <p className="text-gray-500 text-sm">Real-time status of assigned rides and live fleet monitoring</p>
                 </div>
-                <div className="bg-white border border-green-200 text-green-700 inline-flex items-center gap-2 px-3 py-1.5 rounded-full shadow-sm">
+                {/* Said "Auto-Dispatch Active", with a pulsing green dot, while
+                    the browser dispatcher it referred to has been disabled
+                    since 80c3c0e (it threw a ReferenceError before doing any
+                    work, and repairing it would have been worse than removing
+                    it). Assignment is driver-pull today; server-side dispatch
+                    is Phase 4. The badge now says what is true. */}
+                <div className="bg-white border border-blue-200 text-blue-700 inline-flex items-center gap-2 px-3 py-1.5 rounded-full shadow-sm">
                   <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
                   </span>
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Auto-Dispatch Active</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Drivers Self-Assign</span>
                 </div>
               </div>
 
@@ -523,6 +529,11 @@ export const ManagerDashboard: React.FC = () => {
                     // highlight the map already implements.
                     setSelectedEntityId(prev => (prev === id ? null : id));
                   }}
+                  // ResponsiveMap has always rendered a fullscreen button and
+                  // taken an onToggleFullscreen prop. Nobody passed one, so the
+                  // button did nothing.
+                  isFullscreen={mapFullscreen}
+                  onToggleFullscreen={() => setMapFullscreen(prev => !prev)}
                 />
               </div>
 

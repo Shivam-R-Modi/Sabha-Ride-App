@@ -218,7 +218,7 @@ export const ManagerReports: React.FC = () => {
                 </div>
 
                 {currentWeekStats ? (
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                         {/* Yes Responses */}
                         <div className="bg-green-50 rounded-2xl p-4 text-center border border-green-100">
                             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -237,14 +237,15 @@ export const ManagerReports: React.FC = () => {
                             <p className="text-xs text-red-600 font-medium mt-1">Not Attending</p>
                         </div>
 
-                        {/* Pending */}
-                        <div className="bg-gray-50 rounded-2xl p-4 text-center border border-gray-200">
-                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <Clock className="w-6 h-6 text-gray-500" />
-                            </div>
-                            <p className="text-2xl font-bold text-gray-600">-</p>
-                            <p className="text-xs text-gray-500 font-medium mt-1">Pending</p>
-                        </div>
+                        {/* A third "Pending" tile used to sit here showing the
+                            literal '-'. Pending means eligible students who
+                            have not answered, and that needs a denominator this
+                            screen does not have — the attendance documents only
+                            record people who DID answer. Getting it would mean
+                            listing every user, which is exactly the query the
+                            roadmap's city-scoping work changes. A permanent '-'
+                            reads as "zero pending" at a glance, which is a
+                            worse answer than not showing the tile. */}
                     </div>
                 ) : (
                     <div className="text-center py-8 text-coffee-500">

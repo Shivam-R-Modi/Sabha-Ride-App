@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { StudentRequest, RideStatus } from '../../types';
-import { 
-  Search, Filter, MoreVertical, Phone, CheckCircle, XCircle, 
-  ChevronDown, ChevronUp, User, MapPin, Clock, ArrowUpDown,
-  Check, Trash2, UserPlus, RefreshCw, AlertCircle
+import {
+  Search, CheckCircle, ChevronDown, ChevronUp, MapPin, Clock, ArrowUpDown,
+  Check, Trash2, UserPlus, AlertCircle
 } from 'lucide-react';
 
 interface RequestTableProps {
@@ -22,7 +21,25 @@ export const RequestTable: React.FC<RequestTableProps> = ({
   const [sortField, setSortField] = useState<'name' | 'time' | 'wait'>('wait');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  /**
+   * Clicking a column header sorts by it; clicking the same one again reverses.
+   * setSortOrder was never called anywhere, so direction was permanently 'desc'
+   * and the arrows on every header were decoration.
+   */
+  const sortBy = (field: 'name' | 'time' | 'wait') => {
+    if (field === sortField) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  const SortArrow: React.FC<{ field: 'name' | 'time' | 'wait' }> = ({ field }) =>
+    field !== sortField
+      ? <ArrowUpDown size={12} className="opacity-40" />
+      : sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
 
   // Sorting logic
   const sortedRequests = [...requests].sort((a, b) => {
@@ -42,11 +59,6 @@ export const RequestTable: React.FC<RequestTableProps> = ({
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  const handleRefresh = () => {
-      setIsRefreshing(true);
-      setTimeout(() => setIsRefreshing(false), 800);
   };
 
   if (loading) return <LoadingSkeleton />;
@@ -81,12 +93,15 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                     </button>
                 </div>
             )}
-            <button 
-                onClick={handleRefresh}
-                className={`tap-target p-2 text-gray-500 hover:text-coffee rounded-xl border border-gray-100 transition-all ${isRefreshing ? 'animate-spin text-saffron' : ''}`}
-            >
-                <RefreshCw size={18} />
-            </button>
+            {/* The Refresh button was removed rather than repaired. It set a
+                spinner state and cleared it 800ms later — it refetched nothing.
+                And it never needed to: this list comes from an onSnapshot
+                subscription, so it is already live. A refresh control implies
+                the opposite, which is worse than not having one. */}
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-green-700 uppercase tracking-widest px-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                Live
+            </div>
             <div className="md:hidden">
                 <select 
                     value={sortField}
@@ -116,15 +131,15 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                     className="w-4 h-4 rounded border-gray-300 text-saffron focus:ring-saffron cursor-pointer" 
                   />
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => setSortField('name')}>
-                  <div className="flex items-center gap-1">Student <ArrowUpDown size={12} /></div>
+                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('name')}>
+                  <div className="flex items-center gap-1">Student <SortArrow field="name" /></div>
                 </th>
                 <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest hidden lg:table-cell">Pickup Address</th>
-                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => setSortField('time')}>
-                  <div className="flex items-center gap-1">Time <ArrowUpDown size={12} /></div>
+                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('time')}>
+                  <div className="flex items-center gap-1">Time <SortArrow field="time" /></div>
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => setSortField('wait')}>
-                  <div className="flex items-center gap-1">Status <ArrowUpDown size={12} /></div>
+                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('wait')}>
+                  <div className="flex items-center gap-1">Status <SortArrow field="wait" /></div>
                 </th>
                 <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest text-right">Actions</th>
               </tr>
@@ -274,8 +289,15 @@ const SwipeableCard: React.FC<{
                      <button onClick={onAssign} className="w-8 h-8 rounded-full bg-orange-50 text-saffron flex items-center justify-center">
                         <UserPlus size={16} />
                      </button>
-                     <button onClick={onDismiss} className="w-8 h-8 rounded-full bg-gray-50 text-gray-300 flex items-center justify-center">
-                        <MoreVertical size={16} />
+                     {/* Was a MoreVertical (⋮) icon — the universal "open a
+                         menu" affordance — wired straight to the destructive
+                         dismiss. Now it looks like what it does. */}
+                     <button
+                        onClick={onDismiss}
+                        title="Dismiss Request"
+                        className="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center"
+                     >
+                        <Trash2 size={16} />
                      </button>
                 </div>
             </div>

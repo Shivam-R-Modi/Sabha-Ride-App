@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Ride } from '../types';
-import { Calendar, Clock, ChevronRight, Loader2 } from 'lucide-react';
+import { Calendar, Clock, ChevronDown, ChevronUp, MapPin, Car, Loader2 } from 'lucide-react';
 
 interface MyRidesProps {
   history: Ride[];
@@ -10,7 +10,14 @@ interface MyRidesProps {
   loadingMore?: boolean;
 }
 
-const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHistory = false }) => (
+const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHistory = false }) => {
+  // "Details ›" had no onClick at all. There is no ride-detail screen to route
+  // to, but the ride document already carries the pickup address and the
+  // vehicle — so the button reveals them in place rather than promising a
+  // destination that does not exist.
+  const [expanded, setExpanded] = useState(false);
+
+  return (
   <div className="clay-card flex flex-col gap-3">
     <div className="flex justify-between items-start">
       <div className="flex gap-3">
@@ -43,12 +50,35 @@ const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHisto
           </>
         )}
       </div>
-      <button className="text-saffron-800 text-xs font-medium flex items-center">
-        Details <ChevronRight size={14} />
+      <button
+        onClick={() => setExpanded(prev => !prev)}
+        aria-expanded={expanded}
+        className="text-saffron-800 text-xs font-medium flex items-center gap-0.5 hover:underline"
+      >
+        Details {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
       </button>
     </div>
+
+    {expanded && (
+      <div className="border-t border-gray-100 pt-3 space-y-2 text-xs text-gray-600">
+        <div className="flex items-start gap-2">
+          <MapPin size={12} className="mt-0.5 shrink-0 text-saffron" />
+          <span>{ride.pickupAddress || 'No pickup address recorded'}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <Car size={12} className="mt-0.5 shrink-0 text-saffron" />
+          <span>
+            {ride.driver
+              ? `${ride.driver.carColor || ''} ${ride.driver.carModel || 'Vehicle'}`.trim()
+                + (ride.driver.plateNumber ? ` — ${ride.driver.plateNumber}` : '')
+              : 'No driver assigned yet'}
+          </span>
+        </div>
+      </div>
+    )}
   </div>
-);
+  );
+};
 
 export const MyRides: React.FC<MyRidesProps> = ({
   history,
