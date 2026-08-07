@@ -16,6 +16,7 @@ import {
     CompleteRideResult
 } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl } from '../../src/utils/googleMaps';
+import { useConfirm } from '../shared/useConfirm';
 
 // Driver workflow states
 type DriverViewState =
@@ -48,6 +49,7 @@ export const DriverDashboard: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [showVehicleSelector, setShowVehicleSelector] = useState(false);
     const [selectingVehicle, setSelectingVehicle] = useState(false);
+    const { ask, confirmDialog } = useConfirm();
 
     // Available vehicles hook for real-time updates
     const { vehicles: availableVehicles, loading: vehiclesLoading } = useAvailableVehicles();
@@ -183,9 +185,14 @@ export const DriverDashboard: React.FC = () => {
         console.log(`Toggling availability to ${newStatus} for user ${currentUser.uid}`);
         try {
             if (newStatus === 'offline') {
-                if (!confirm('Going offline will release your assigned vehicle back to the fleet and reset your daily stats. Are you sure?')) {
-                    return;
-                }
+                const ok = await ask({
+                    title: 'Go offline?',
+                    message: 'Your vehicle goes back to the fleet and today\'s stats reset.',
+                    confirmLabel: 'Go offline',
+                    cancelLabel: 'Stay online',
+                    destructive: true,
+                });
+                if (!ok) return;
                 await driverDoneForToday(currentUser.uid);
             } else {
                 await setDriverAvailability(currentUser.uid, 'available');
@@ -512,7 +519,13 @@ export const DriverDashboard: React.FC = () => {
                             <button
                                 onClick={async () => {
                                     if (!currentUser) return;
-                                    if (!confirm('Are you sure you want to finish for today? Your vehicle will be released.')) return;
+                                    if (!await ask({
+                                        title: 'Finish for today?',
+                                        message: 'Your vehicle will be released back to the fleet.',
+                                        confirmLabel: 'Finish',
+                                        cancelLabel: 'Keep driving',
+                                        destructive: true,
+                                    })) return;
                                     try {
                                         await driverDoneForToday(currentUser.uid);
                                         await refreshProfile();

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ArrowLeft, MapPin, Users, Clock, Car, CheckCircle2, Loader2, Building2, Home, Navigation, AlertCircle } from 'lucide-react';
 import { startRide, releaseAssignment } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
+import { useConfirm } from '../shared/useConfirm';
 
 interface AssignmentPreviewProps {
     assignment: {
@@ -46,6 +47,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
     const [isAccepting, setIsAccepting] = useState(false);
     const [isReleasing, setIsReleasing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { ask, confirmDialog } = useConfirm();
 
     const studentCount = assignment.students.length;
     const capacity = assignment.car.capacity;
@@ -72,9 +74,14 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
     };
 
     const handleRelease = async () => {
-        if (!confirm('Are you sure you want to release this assignment? The students will be returned to the unassigned pool.')) {
-            return;
-        }
+        const ok = await ask({
+            title: 'Release this assignment?',
+            message: 'These students go back into the unassigned pool for another driver to pick up.',
+            confirmLabel: 'Release',
+            cancelLabel: 'Keep it',
+            destructive: true,
+        });
+        if (!ok) return;
 
         setIsReleasing(true);
         setError(null);
@@ -270,6 +277,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                     </button>
                 </div>
             </div>
+        {confirmDialog}
         </div>
     );
 };

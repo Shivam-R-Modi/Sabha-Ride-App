@@ -26,6 +26,7 @@ import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch,
 import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
 import { useSettings } from '../../hooks/useSettings';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
+import { useConfirm } from '../shared/useConfirm';
 
 // Grouped Ride Card Component
 const RideAssignmentCard: React.FC<{
@@ -182,6 +183,7 @@ export const ManagerDashboard: React.FC = () => {
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [pendingReleaseDriver, setPendingReleaseDriver] = useState<{ driverId: string; rideIds: string[]; driver: Driver | null } | null>(null);
   const [releaseLoading, setReleaseLoading] = useState(false);
+  const { ask, confirmDialog } = useConfirm();
 
   useAutoDispatch();
 
@@ -269,7 +271,13 @@ export const ManagerDashboard: React.FC = () => {
   };
 
   const handleDismiss = async (requestId: string) => {
-    if (confirm("Are you sure you want to dismiss this request?")) {
+    if (await ask({
+      title: 'Dismiss this request?',
+      message: 'The rider will not get a ride to this sabha.',
+      confirmLabel: 'Dismiss',
+      cancelLabel: 'Keep it',
+      destructive: true,
+    })) {
       // Pass manager info so student can see who dismissed their request
       await unassignRide(requestId, {
         managerId: currentUser?.uid || '',
@@ -371,7 +379,12 @@ export const ManagerDashboard: React.FC = () => {
   };
 
   const handleDenyDriver = async (driverId: string) => {
-    if (confirm('Are you sure you want to deny this driver?')) {
+    if (await ask({
+      title: 'Deny this driver?',
+      message: 'They will not be able to volunteer until approved.',
+      confirmLabel: 'Deny',
+      destructive: true,
+    })) {
       try {
         await updateUserStatus(driverId, 'rejected');
         alert('Driver denied.');
@@ -393,7 +406,12 @@ export const ManagerDashboard: React.FC = () => {
   };
 
   const handleDenyRider = async (riderId: string) => {
-    if (confirm('Are you sure you want to deny this rider?')) {
+    if (await ask({
+      title: 'Deny this rider?',
+      message: 'They will not be able to request rides until approved.',
+      confirmLabel: 'Deny',
+      destructive: true,
+    })) {
       try {
         await updateUserStatus(riderId, 'rejected');
         alert('Rider denied.');
@@ -838,6 +856,8 @@ export const ManagerDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 };

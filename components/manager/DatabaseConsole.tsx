@@ -19,6 +19,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useAdminDatabase, SupportedCollection } from '../../hooks/useAdminDatabase';
 import { DocumentEditorModal } from './DocumentEditorModal';
+import { useConfirm } from '../shared/useConfirm';
 
 export const DatabaseConsole: React.FC = () => {
   const { userProfile, currentUser } = useAuth();
@@ -31,6 +32,7 @@ export const DatabaseConsole: React.FC = () => {
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { ask, confirmDialog } = useConfirm();
 
   const { documents, loading, error, updateAdminDocument, createAdminDocument, deleteAdminDocument, deleteMultipleAdminDocuments } =
     useAdminDatabase(activeTab);
@@ -83,7 +85,11 @@ export const DatabaseConsole: React.FC = () => {
   };
 
   const handleDelete = async (docId: string) => {
-    if (!confirm(`Are you sure you want to permanently delete record ${docId} from ${activeTab}?`)) {
+    if (!await ask({
+      title: 'Delete permanently?',
+      message: `Record ${docId} in ${activeTab} will be deleted. This cannot be undone.`,
+      destructive: true,
+    })) {
       return;
     }
     setDeletingId(docId);
@@ -99,7 +105,11 @@ export const DatabaseConsole: React.FC = () => {
 
   const handleBulkDelete = async () => {
     if (selectedDocIds.length === 0) return;
-    if (!confirm(`Are you sure you want to permanently delete ${selectedDocIds.length} selected records from ${activeTab}?`)) {
+    if (!await ask({
+      title: 'Delete permanently?',
+      message: `${selectedDocIds.length} records in ${activeTab} will be deleted. This cannot be undone.`,
+      destructive: true,
+    })) {
       return;
     }
     setIsBulkDeleting(true);
@@ -524,6 +534,8 @@ export const DatabaseConsole: React.FC = () => {
           onSave={handleSaveDocument}
         />
       )}
+
+      {confirmDialog}
     </div>
   );
 };

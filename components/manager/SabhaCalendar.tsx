@@ -6,6 +6,7 @@ import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { useSettings } from '../../hooks/useSettings';
 import { AddressAutocomplete } from '../auth/AddressAutocomplete';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
+import { useConfirm } from '../shared/useConfirm';
 import { formatTime } from '../../hooks/useSettings';
 
 /**
@@ -103,6 +104,7 @@ const EventRow: React.FC<{
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { sabhaLocation } = useSettings();
+    const { ask, confirmDialog } = useConfirm();
 
     const cancelled = event.status === 'cancelled';
     const valid = isUsableDuration(start, end);
@@ -146,10 +148,16 @@ const EventRow: React.FC<{
         if (next === 'cancelled') {
             // Cancelling the last one closes the service. The generator will add
             // a replacement, but say so rather than let it be a surprise.
-            const warning = isOnlyScheduled
-                ? `Cancel the sabha on ${formatDate(event.date)}?\n\nThis is the only scheduled sabha. Rides will be closed until another is added — one will be created automatically, or you can add one yourself.`
-                : `Cancel the sabha on ${formatDate(event.date)}? Rides will not open for it.`;
-            if (!confirm(warning)) return;
+            const ok = await ask({
+                title: `Cancel ${formatDate(event.date)}?`,
+                message: isOnlyScheduled
+                    ? 'Rides will not open for it.\n\nThis is the only scheduled sabha, so rides will be closed until another is added — one will be created automatically, or you can add one yourself.'
+                    : 'Rides will not open for it.',
+                confirmLabel: 'Cancel sabha',
+                cancelLabel: 'Keep it',
+                destructive: true,
+            });
+            if (!ok) return;
         }
 
         setBusy(true);
@@ -285,7 +293,7 @@ const EventRow: React.FC<{
                             disabled={busy}
                             className="flex-1 px-2 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-bold"
                         >
-                            Cancel
+                            Discard
                         </button>
                     </div>
                 </div>
@@ -294,6 +302,8 @@ const EventRow: React.FC<{
             {error && (
                 <p className="text-xs text-red-600 font-semibold mt-1.5">{error}</p>
             )}
+
+            {confirmDialog}
         </div>
     );
 };

@@ -4,6 +4,7 @@ import { completeRide, CompleteRideResult } from '../../src/utils/cloudFunctions
 import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
 import { useDriverLocation } from '../../hooks/useDriverLocation';
 import { useAuth } from '../../contexts/AuthContext';
+import { useConfirm } from '../shared/useConfirm';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 
@@ -36,6 +37,7 @@ interface ActiveRideProps {
 
 export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack }) => {
     const { currentUser } = useAuth();
+    const { ask, confirmDialog } = useConfirm();
 
     // Enable real-time GPS location tracking during active ride
     useDriverLocation({
@@ -111,9 +113,14 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
 
     const handleCompleteRide = async () => {
         if (!allVisited) {
-            if (!confirm('Not all students have been picked up/dropped off. Are you sure you want to complete this ride?')) {
-                return;
-            }
+            const ok = await ask({
+                title: 'Complete this ride?',
+                message: 'Not all students have been picked up or dropped off.',
+                confirmLabel: 'Complete anyway',
+                cancelLabel: 'Go back',
+                destructive: true,
+            });
+            if (!ok) return;
         }
 
         setIsCompleting(true);
@@ -341,6 +348,8 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                     ))}
                 </div>
             </div>
+
+            {confirmDialog}
 
             {/* Back Confirmation Modal */}
             {showBackConfirm && (

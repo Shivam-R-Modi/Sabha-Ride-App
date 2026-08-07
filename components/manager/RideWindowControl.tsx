@@ -3,6 +3,7 @@ import { Clock, Loader2, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-rea
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { manuallyUpdateRideContext } from '../../src/utils/cloudFunctions';
+import { useConfirm } from '../shared/useConfirm';
 
 /**
  * Lets a manager open a ride window ahead of the schedule.
@@ -28,6 +29,7 @@ export const RideWindowControl: React.FC = () => {
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState<string | null>(null);
+    const { ask, confirmDialog } = useConfirm();
 
     useEffect(() => {
         const unsub = onSnapshot(
@@ -49,7 +51,10 @@ export const RideWindowControl: React.FC = () => {
         confirmText: string,
         params: { rideType?: 'home-to-sabha' | 'sabha-to-home'; reset?: boolean },
     ) => {
-        if (!confirm(confirmText)) return;
+        // Was window.confirm, which returns false when a browser suppresses
+        // dialogs — so these buttons silently did nothing in a PWA or an
+        // embedded webview.
+        if (!await ask({ message: confirmText, confirmLabel: 'Yes, do it' })) return;
 
         setBusy(label);
         setError(null);
@@ -148,6 +153,8 @@ export const RideWindowControl: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {confirmDialog}
         </div>
     );
 };
