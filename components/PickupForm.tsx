@@ -3,6 +3,7 @@ import { User, Driver } from '../types';
 import { MapPin, ChevronLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { createRideRequest } from '../hooks/useRides';
 import { useSettings, formatTime } from '../hooks/useSettings';
+import { useCurrentEvent } from '../hooks/useCurrentEvent';
 import { LotusLoader, DiyaIcon } from '../constants';
 
 interface PickupFormProps {
@@ -12,36 +13,52 @@ interface PickupFormProps {
 }
 
 export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit }) => {
-  // Was `(settings as any)?.timeSlot || (settings as any)?.arrivalTimeSlot ||
-  // '5:30 PM'`. useSettings returned neither field, so it always fell through
-  // to the literal and no manager could change the time riders were told.
-  // It now comes from the sabha start time a manager sets.
-  const { sabhaStartTime } = useSettings();
-  const arrivalTime = formatTime(sabhaStartTime);
+  // Everything shown here comes from the gathering the server has published,
+  // falling back to the global defaults only until it has.
+  //
+  // This used to read `settings.timeSlot` (a field useSettings never returned, so
+  // it always fell through to a hardcoded '5:30 PM') and computed the date as
+  // "next Friday" from the DEVICE clock — so a rider requesting a ride for a
+  // Thursday sabha filed it against the following Friday.
+  const { sabhaStartTime, sabhaLocation } = useSettings();
+  const { event, eventId, hasEvent } = useCurrentEvent();
+
+  const arrivalTime = formatTime(
+    event?.startsAt
+      ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
+          .format(new Date(event.startsAt))
+      : sabhaStartTime
+  );
+  const venueAddress = event?.venue?.address || sabhaLocation.address;
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getNextFridayDate = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + (5 + 7 - d.getDay()) % 7);
-    return d;
-  };
-
-  const getNextFridayFormatted = () => {
-    return getNextFridayDate().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  /** The gathering's own date, formatted from its parts so no timezone shift. */
+  const eventDateFormatted = () => {
+    if (!eventId) return 'Not scheduled yet';
+    const [y, m, d] = eventId.split('-').map(Number);
+    return new Intl.DateTimeFormat('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric',
+    }).format(new Date(Date.UTC(y, m - 1, d, 12)));
   };
 
   const handleConfirm = async () => {
+    if (!eventId) {
+      setError('No sabha is scheduled yet. Please check back soon.');
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
     try {
-      const nextFriday = getNextFridayDate();
       const formData = {
         address: user.address,
-        date: nextFriday.toISOString().split('T')[0],
+        // The gathering's id IS its date, so the ride is filed against the sabha
+        // it is for rather than against a guessed Friday.
+        date: eventId,
+        eventDate: eventId,
         time: arrivalTime,
         studentName: user.name,
         notes: ''
@@ -76,7 +93,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
         </div>
         <h3 className="text-2xl font-header font-bold text-coffee mb-2">Seva Registered!</h3>
         <p className="text-gray-500 max-w-xs mx-auto">
-          Jai Swaminarayan! Your ride for this Friday has been requested.
+          Jai Swaminarayan! Your ride for the next sabha has been requested.
         </p>
       </div>
     );
@@ -102,8 +119,9 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
         <div className="text-center space-y-2">
           <DiyaIcon className="w-12 h-12 mx-auto text-saffron mb-2 animate-float" />
           <p className="text-xs font-bold text-gold-700 uppercase tracking-[0.2em]">Next Sabha</p>
-          <h3 className="text-xl font-header font-bold text-coffee">{getNextFridayFormatted()}</h3>
+          <h3 className="text-xl font-header font-bold text-coffee">{eventDateFormatted()}</h3>
           <p className="text-sm text-coffee-500">Sabha starts at {arrivalTime}</p>
+          <p className="text-xs text-coffee-500">{venueAddress}</p>
         </div>
 
         <div className="bg-cream/50 rounded-2xl p-5 border border-orange-50 space-y-3">
@@ -121,13 +139,15 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
         <div className="pt-4">
           <button
             onClick={handleConfirm}
-            disabled={isLoading}
+            disabled={isLoading || !hasEvent}
             className="clay-button-primary w-full disabled:opacity-50"
           >
             {isLoading ? (
               <LotusLoader size={24} />
+            ) : hasEvent ? (
+              <>I want a ride to this sabha</>
             ) : (
-              <>I want a ride this Friday</>
+              <>No sabha scheduled yet</>
             )}
           </button>
           <p className="text-center text-[10px] text-gray-500 mt-4 px-4 italic">

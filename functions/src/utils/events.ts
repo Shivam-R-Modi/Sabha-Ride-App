@@ -26,8 +26,34 @@ import {
 
 export const EVENTS_COLLECTION = 'events';
 
-/** How many weeks ahead the weekly template keeps events populated. */
-export const AUTOCREATE_WEEKS_AHEAD = 8;
+/**
+ * How far ahead the generator looks, and therefore the longest shutdown a
+ * manager can declare: cancel every weekly slot inside this window and
+ * generation stops, because each slot has a document saying they decided.
+ *
+ * Must span at least TWO weekly slots. With a 7-day horizon there is exactly one
+ * candidate, so cancelling it leaves nothing to create and rides close until the
+ * slot pointer walks past — the outage this constant exists to prevent.
+ */
+export const CALENDAR_HORIZON_DAYS = 14;
+
+/**
+ * How many SCHEDULED events must exist inside the horizon.
+ *
+ * One. How many sabhas there are is a manager's decision; the generator only
+ * guarantees the service is never silently closed.
+ */
+export const UPCOMING_SCHEDULED_TARGET = 1;
+
+/**
+ * How far ahead `findCurrentEvent` will look for the next gathering.
+ *
+ * A DATE bound, not a document-count bound. `.limit(20)` meant a long run of
+ * cancelled tombstones ahead of a scheduled event returned null while a
+ * scheduled event existed — closing the service on the 21st document rather than
+ * on anything meaningful.
+ */
+const LOOKAHEAD_DAYS = 90;
 
 export type EventStatus = 'scheduled' | 'cancelled';
 
@@ -100,10 +126,14 @@ export async function findCurrentEvent(
     const today = zonedDateKey(now, timeZone);
 
     try {
+        // Both bounds on documentId(), so no composite index is needed. Adding
+        // a status equality here would force one, for no gain — the loop below
+        // filters by status anyway.
         const snapshot = await db.collection(EVENTS_COLLECTION)
             .where(admin.firestore.FieldPath.documentId(), '>=', today)
+            .where(admin.firestore.FieldPath.documentId(), '<=',
+                addDaysToDateKey(today, LOOKAHEAD_DAYS))
             .orderBy(admin.firestore.FieldPath.documentId())
-            .limit(20)
             .get();
 
         for (const doc of snapshot.docs) {
@@ -135,51 +165,106 @@ export function weeklySlotDate(
 }
 
 /**
- * Keep the calendar populated.
+ * Keep at least one SCHEDULED gathering inside the horizon.
  *
- * With a list of events instead of a hardcoded Friday, an empty calendar means
- * no rides at all — so forgetting to add next week would silently close the
- * service on a congregation that has no way to tell why. This fills the next
- * AUTOCREATE_WEEKS_AHEAD occurrences of the weekly slot from the default times.
+ * The invariant is deliberately about scheduled events, not about document
+ * count. "Create the next slot if it is missing" is not equivalent: a manager who
+ * cancels the only upcoming sabha leaves a document on that date, so nothing gets
+ * created, `findCurrentEvent` returns null, and rides close until the weekly slot
+ * pointer walks past the cancelled date — days later, recovering only by
+ * accident. Asking "is there a scheduled event ahead?" instead makes cancelling
+ * roll forward.
  *
- * Only ever CREATES missing documents. It never touches an existing one, so a
- * manager's edited time, moved venue or cancellation is never overwritten.
+ * Only ever CREATES. It never updates and never un-cancels, so an edited time, a
+ * moved venue or a cancellation is never overwritten. That is the most important
+ * property of this function.
+ *
+ * A corollary worth knowing: a cancelled future event inside the horizon is a
+ * load-bearing tombstone. DELETING one makes this function recreate it as
+ * scheduled. Cancel, never delete.
+ *
+ * Returns the dates it created — at most one.
  */
-export async function ensureUpcomingEvents(
+export async function ensureUpcomingScheduled(
     db: admin.firestore.Firestore,
     now: Date,
     timeZone: string,
     defaults: { startTime: string; endTime: string },
     dayOfWeek: number = SABHA_DAY,
 ): Promise<string[]> {
-    const created: string[] = [];
+    const today = zonedDateKey(now, timeZone);
+    const horizonEnd = addDaysToDateKey(today, CALENDAR_HORIZON_DAYS);
 
-    for (let week = 0; week < AUTOCREATE_WEEKS_AHEAD; week++) {
-        const date = weeklySlotDate(now, timeZone, dayOfWeek, week);
-        const ref = db.collection(EVENTS_COLLECTION).doc(date);
+    try {
+        // ONE query answers both questions below: is the invariant satisfied, and
+        // which slots already have a document. The previous version re-read each
+        // slot individually, which is what made it eight reads per call.
+        const snapshot = await db.collection(EVENTS_COLLECTION)
+            .where(admin.firestore.FieldPath.documentId(), '>=', today)
+            .where(admin.firestore.FieldPath.documentId(), '<=', horizonEnd)
+            .orderBy(admin.firestore.FieldPath.documentId())
+            .get();
 
-        try {
-            const existing = await ref.get();
-            if (existing.exists) continue;
+        const existing = new Set<string>();
+        let scheduledAhead = 0;
 
-            await ref.create({
-                date,
-                startTime: defaults.startTime,
-                endTime: defaults.endTime,
-                venue: null,
-                status: 'scheduled',
-                agenda: '',
-                autoCreated: true,
-                createdAt: new Date().toISOString(),
-            });
-            created.push(date);
-        } catch (error: any) {
-            // ALREADY_EXISTS means a concurrent run won the race, which is fine.
-            if (error?.code !== 6) {
+        for (const doc of snapshot.docs) {
+            existing.add(doc.id);
+            const event = toEvent(doc.id, doc.data());
+            if (event && event.status === 'scheduled') scheduledAhead++;
+        }
+
+        if (scheduledAhead >= UPCOMING_SCHEDULED_TARGET) return [];
+
+        for (let week = 0; ; week++) {
+            const date = weeklySlotDate(now, timeZone, dayOfWeek, week);
+            if (date > horizonEnd) break;
+
+            // A document here means a manager already decided this slot, whether
+            // that decision was "moved" or "cancelled". Leave it alone.
+            if (existing.has(date)) continue;
+
+            try {
+                await db.collection(EVENTS_COLLECTION).doc(date).create({
+                    date,
+                    startTime: defaults.startTime,
+                    endTime: defaults.endTime,
+                    venue: null,
+                    status: 'scheduled',
+                    agenda: '',
+                    autoCreated: true,
+                    createdAt: new Date().toISOString(),
+                });
+                return [date];
+            } catch (error: any) {
+                // ALREADY_EXISTS (6): a concurrent run won the race, so the
+                // invariant now holds either way.
+                if (error?.code === 6) return [];
                 console.error(`[events] Could not create ${date}:`, error);
+                return [];
             }
         }
-    }
 
-    return created;
+        // Every slot in the horizon has a document and none of them is scheduled.
+        // The manager has closed the service deliberately. Callers surface this
+        // rather than retrying, so it is visible instead of looking like a bug.
+        return [];
+    } catch (error) {
+        console.error('[events] Could not top up the calendar:', error);
+        return [];
+    }
+}
+
+/**
+ * Is there a scheduled gathering inside the horizon?
+ *
+ * Used to tell "the manager closed the service" apart from "something is broken",
+ * which are indistinguishable to a rider otherwise.
+ */
+export async function hasScheduledEventAhead(
+    db: admin.firestore.Firestore,
+    now: Date,
+    timeZone: string,
+): Promise<boolean> {
+    return (await findCurrentEvent(db, now, timeZone)) !== null;
 }

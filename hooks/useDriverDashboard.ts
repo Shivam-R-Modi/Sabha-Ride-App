@@ -3,31 +3,25 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { Ride, DriverAssignment } from '../types';
-import { VENUE_ADDRESS } from '../constants';
 import { handleSnapshotError } from '../src/utils/firestoreErrors';
+import { useSettings } from './useSettings';
+import { useCurrentEvent } from './useCurrentEvent';
 
 /**
- * Fetch the Sabha venue address from Firestore settings/main.
- * Falls back to the hardcoded VENUE_ADDRESS constant.
+ * The venue address to show a driver, in order of specificity.
+ *
+ * This used to keep its OWN `settings/main` listener and fall back to a
+ * hardcoded constant, which made it a third independent opinion about where
+ * sabha is. It now composes the two hooks that already exist.
+ *
+ * A ride's own snapshotted venue still wins over this — see the call sites — so a
+ * driver mid-route never has their destination change under them.
  */
-function useVenueAddress(): string {
-    const [venueAddr, setVenueAddr] = useState(VENUE_ADDRESS);
+function useDefaultVenueAddress(): string {
+    const { sabhaLocation } = useSettings();
+    const { event } = useCurrentEvent();
 
-    useEffect(() => {
-        const unsub = onSnapshot(
-            doc(db, 'settings', 'main'),
-            (snap) => {
-                if (snap.exists()) {
-                    const addr = snap.data()?.sabhaLocation?.address;
-                    if (addr) setVenueAddr(addr);
-                }
-            },
-            (err) => console.warn('[useVenueAddress] listener error:', err)
-        );
-        return unsub;
-    }, []);
-
-    return venueAddr;
+    return event?.venue?.address || sabhaLocation.address;
 }
 
 // --- Driver Dashboard Data ---
@@ -35,7 +29,7 @@ function useVenueAddress(): string {
 export const useDriverAssignments = (driverId: string) => {
     const [assignments, setAssignments] = useState<DriverAssignment[]>([]);
     const [loading, setLoading] = useState(true);
-    const venueAddress = useVenueAddress();
+    const venueAddress = useDefaultVenueAddress();
 
     useEffect(() => {
         if (!driverId) return;
@@ -87,7 +81,10 @@ export const useDriverAssignments = (driverId: string) => {
                     })),
                     totalDistance: `${activePickups.length * 2.5} mi`,
                     totalTime: `${activePickups.length * 10} min`,
-                    venueAddress: venueAddress
+                    // The venue snapshotted on the ride wins. A driver already on
+                    // the road must not have their destination change because a
+                    // manager edited the next gathering.
+                    venueAddress: (activePickups[0] as any)?.venue?.address || venueAddress
                 });
             }
 
@@ -112,7 +109,7 @@ export const useDriverAssignments = (driverId: string) => {
                     })),
                     totalDistance: `${activeDropoffs.length * 3} mi`,
                     totalTime: `${activeDropoffs.length * 12} min`,
-                    venueAddress: venueAddress
+                    venueAddress: (activeDropoffs[0] as any)?.venue?.address || venueAddress
                 });
             }
 

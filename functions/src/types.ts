@@ -104,6 +104,18 @@ export interface Waypoint {
 export interface Ride {
     id: string;
     eventDate: string;
+    /**
+     * The gathering this ride belongs to ("YYYY-MM-DD"), snapshotted at
+     * assignment so the ride stays tied to its own sabha.
+     */
+    eventId?: string | null;
+    /**
+     * The venue as resolved when this ride was assigned. Snapshotted rather than
+     * looked up live: manualAssignStudent rebuilds the route for every passenger
+     * when one is added, and a live lookup would re-point people already on board
+     * at whatever the current gathering's venue happens to be.
+     */
+    venue?: GeoLocation | null;
     driverId: string;
     driverName: string;
     carId: string;

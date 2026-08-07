@@ -155,16 +155,9 @@ export function isWithinDistance(
     return distance <= thresholdKm;
 }
 
-/**
- * Default Sabha Location — used as fallback only.
- * The live location is stored in Firestore `settings/main`.
- * Use the useSettings() hook to get the current value.
- */
-export const SABHA_LOCATION = {
-    lat: 42.339925,
-    lng: -71.088182,
-    address: '360 Huntington Ave, Boston, MA 02115',
-};
+// SABHA_LOCATION was here, with zero importers. Deleted — see the note in
+// firebase/config.ts. Use the useSettings() hook, or useCurrentEvent for the
+// gathering's own venue.
 
 /**
  * Format coordinates for display

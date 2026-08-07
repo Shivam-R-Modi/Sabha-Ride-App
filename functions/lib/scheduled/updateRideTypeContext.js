@@ -133,13 +133,13 @@ exports.ensureSabhaEvents = functions.pubsub
     const now = new Date();
     try {
         const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
-        const created = await (0, events_1.ensureUpcomingEvents)(db, now, timeZone, {
+        const created = await (0, events_1.ensureUpcomingScheduled)(db, now, timeZone, {
             startTime: typeof sabhaStart === 'string' ? sabhaStart : schedule_1.DEFAULT_SABHA_START,
             endTime: typeof sabhaEnd === 'string' ? sabhaEnd : schedule_1.DEFAULT_SABHA_END,
         });
         console.log(created.length > 0
-            ? `[events] Created ${created.length}: ${created.join(', ')}`
-            : '[events] Calendar already populated');
+            ? `[events] Created ${created.join(', ')}`
+            : '[events] A scheduled sabha already exists ahead — nothing to do');
         return null;
     }
     catch (error) {
@@ -168,18 +168,21 @@ exports.updateRideTypeContext = functions.pubsub
         // The gathering now comes from the events collection. No event means
         // nothing is scheduled — closed, and said plainly.
         let scheduled = await (0, events_1.findCurrentEvent)(db, now, timeZone);
-        // Self-heal an empty calendar. Without this, the first deploy would
-        // close the service until the daily top-up ran, and any future gap
-        // would do the same. ensureUpcomingEvents only creates dates that are
-        // MISSING, so a gathering a manager deliberately cancelled stays
-        // cancelled and this does nothing.
+        // Self-heal a calendar with nothing scheduled ahead. Without this the
+        // first deploy would close the service until the daily job ran, and
+        // any later gap would do the same.
+        //
+        // It only ever CREATES a missing slot, so a gathering a manager
+        // deliberately cancelled stays cancelled — and in that case nothing
+        // is created, `calendarStatus` below says so, and the manager UI shows
+        // it rather than leaving "No rides available" looking like a fault.
         if (!scheduled) {
-            const created = await (0, events_1.ensureUpcomingEvents)(db, now, timeZone, {
+            const created = await (0, events_1.ensureUpcomingScheduled)(db, now, timeZone, {
                 startTime: typeof sabhaStart === 'string' ? sabhaStart : schedule_1.DEFAULT_SABHA_START,
                 endTime: typeof sabhaEnd === 'string' ? sabhaEnd : schedule_1.DEFAULT_SABHA_END,
             });
             if (created.length > 0) {
-                console.log(`[events] Seeded an empty calendar: ${created.join(', ')}`);
+                console.log(`[events] Seeded the calendar: ${created.join(', ')}`);
                 scheduled = await (0, events_1.findCurrentEvent)(db, now, timeZone);
             }
         }
@@ -190,7 +193,10 @@ exports.updateRideTypeContext = functions.pubsub
             })
             : null;
         const window = (0, schedule_1.resolveScheduleWindow)(now, event, timeZone);
-        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), (event !== null && event !== void 0 ? event : { eventId: null })), { overrideUntil: null, lastUpdated: now.toISOString() }));
+        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), (event !== null && event !== void 0 ? event : { eventId: null })), { 
+            // Lets the manager UI say "you cancelled everything" instead of
+            // leaving "No rides available" looking like a malfunction.
+            calendarStatus: event ? 'ok' : 'no-scheduled-event', overrideUntil: null, lastUpdated: now.toISOString() }));
         // Only when the gathering changes, not every minute.
         if (event && (current === null || current === void 0 ? void 0 : current.eventId) !== event.eventId) {
             await recordEventDetails(db, event, (_a = event.venue) !== null && _a !== void 0 ? _a : venue);
@@ -240,7 +246,7 @@ exports.manuallyUpdateRideContext = functions.https.onCall(async (data, context)
     // Reset — hand control straight back to the schedule.
     if (data === null || data === void 0 ? void 0 : data.reset) {
         const window = (0, schedule_1.resolveScheduleWindow)(now, event, timeZone);
-        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), (event !== null && event !== void 0 ? event : { eventId: null })), { overrideUntil: null, lastUpdated: now.toISOString() }));
+        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), (event !== null && event !== void 0 ? event : { eventId: null })), { calendarStatus: event ? 'ok' : 'no-scheduled-event', overrideUntil: null, lastUpdated: now.toISOString() }));
         return window;
     }
     const rideType = data === null || data === void 0 ? void 0 : data.rideType;
@@ -254,9 +260,9 @@ exports.manuallyUpdateRideContext = functions.https.onCall(async (data, context)
         timeContext: 'Opened by a manager',
     };
     if (!event) {
-        throw new functions.https.HttpsError('failed-precondition', 'No sabha is scheduled. Add one in Settings before opening a ride window.');
+        throw new functions.https.HttpsError('failed-precondition', 'No sabha is scheduled. Add one in the Sabha Calendar before opening a ride window.');
     }
-    await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), event), { overrideUntil: endOfLocalDay(now, timeZone), openedBy: context.auth.uid, lastUpdated: now.toISOString() }));
+    await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), event), { calendarStatus: 'ok', overrideUntil: endOfLocalDay(now, timeZone), openedBy: context.auth.uid, lastUpdated: now.toISOString() }));
     // Same one-shot rule as the scheduler: announce only a real change, so
     // re-tapping the button does not notify the congregation twice.
     await announceIfWindowJustOpened(previous === null || previous === void 0 ? void 0 : previous.rideType, window);

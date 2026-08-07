@@ -12,7 +12,7 @@ import { optimizeRoute, buildGoogleMapsNavigationUrl } from '../utils/routing';
 import { resolveHomeCoords } from '../utils/coords';
 import { writeVehicleState, resolveVehicleHolder } from '../utils/fleet';
 import { notifyStudentDriverAssigned, notifyDriverStudentsAssigned } from '../utils/notifications';
-import { getSabhaLocation } from '../utils/settings';
+import { getSabhaLocation, resolveVenue } from '../utils/settings';
 import { checkRateLimit } from '../utils/rateLimiter';
 
 // ── constants ──────────────────────────────────────────────
@@ -95,7 +95,6 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         console.log('[globalAssign] Lock acquired');
         // ── Step 2: Ride context ────────────────────────────
         const rideContextDoc = await db.collection('system').doc('rideContext').get();
-        const SABHA_LOCATION = await getSabhaLocation();
 
         if (!rideContextDoc.exists) {
             throw new functions.https.HttpsError('failed-precondition', 'Ride context not available. Please contact a manager.');
@@ -105,7 +104,16 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
             throw new functions.https.HttpsError('failed-precondition', 'No rides are available at this time.');
         }
         const rideType = rideContext.rideType as RideType;
-        console.log(`[globalAssign] rideType=${rideType}`);
+
+        // The venue for THIS gathering. Taken from the same rideContext document
+        // that produced the rideType above, so the two can never disagree — a
+        // separate read of events/{id} would leave a window where the route's
+        // venue and the window's venue came from different resolutions.
+        // Falls back to settings/main, which is what ran before events had venues.
+        const SABHA_LOCATION = resolveVenue(rideContext.venue, await getSabhaLocation());
+        const eventId: string | null = rideContext.eventId ?? null;
+
+        console.log(`[globalAssign] rideType=${rideType}, venue=${SABHA_LOCATION.address}`);
 
         // ── Step 3: Tapping driver + car ────────────────────
         const driverDoc = await db.collection('users').doc(driverId).get();
@@ -331,6 +339,13 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
                 status: 'assigned',
                 route,
                 googleMapsUrl,
+                // Snapshot, not a live lookup. manualAssignStudent rebuilds the
+                // route for ALL passengers when one is added; if it resolved the
+                // venue live it could silently re-point everyone already on board
+                // at a different venue. Also lets completeRide and
+                // releaseAssignment stay consistent for free.
+                venue: SABHA_LOCATION,
+                eventId,
                 peers: otherPeers,
                 // The full roster. startRide, releaseAssignment and
                 // manualAssignStudent all iterate `ride.students`; until this

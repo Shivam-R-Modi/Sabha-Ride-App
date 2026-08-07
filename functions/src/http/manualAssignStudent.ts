@@ -8,7 +8,7 @@ import * as admin from 'firebase-admin';
 import { Student, Driver, Ride, RideStudent } from '../types';
 import { optimizeRoute, calculateRouteStats } from '../utils/routing';
 import { notifyStudentDriverAssigned } from '../utils/notifications';
-import { getSabhaLocation } from '../utils/settings';
+import { getSabhaLocation, resolveVenue } from '../utils/settings';
 
 /**
  * HTTP Callable: Manually assign student to a driver's active ride
@@ -110,8 +110,11 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         const updatedStudents = [...ride.students, newStudent];
 
         // Recalculate route with new student
-        // Use dynamic Sabha location from settings (not hard-coded)
-        const sabhaLocation = await getSabhaLocation();
+        // Prefer the venue snapshotted on the ride at assignment time. Resolving
+        // it live would re-point every passenger already on this run at whatever
+        // the current gathering's venue is, which is wrong when the ride belongs
+        // to an earlier gathering.
+        const sabhaLocation = resolveVenue(ride.venue, await getSabhaLocation());
         const startPoint = ride.rideType === 'home-to-sabha'
             ? (driver.currentLocation || sabhaLocation)
             : sabhaLocation;

@@ -26,7 +26,6 @@ import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch,
 import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
 import { useSettings } from '../../hooks/useSettings';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
-import { VENUE_ADDRESS } from '../../constants';
 
 // Grouped Ride Card Component
 const RideAssignmentCard: React.FC<{
@@ -188,8 +187,11 @@ export const ManagerDashboard: React.FC = () => {
 
   // The map plots everything relative to the venue, so it needs the venue.
   const { sabhaLocation } = useSettings();
-  // Attendance is per gathering, keyed by the server-published eventId.
-  const { eventId } = useCurrentEvent();
+  // Attendance is per gathering, keyed by the server-published eventId. The
+  // gathering may also override the venue, in which case the map should plot
+  // relative to where people are actually going.
+  const { eventId, event } = useCurrentEvent();
+  const mapVenue = event?.venue ?? sabhaLocation;
 
   const { pendingDrivers } = usePendingDrivers();
   const { pendingRiders } = usePendingRiders();
@@ -525,7 +527,7 @@ export const ManagerDashboard: React.FC = () => {
                 <ResponsiveMap
                   students={pendingRequests}
                   drivers={availableDrivers}
-                  venue={sabhaLocation}
+                  venue={mapVenue}
                   selectedStudentId={selectedEntityId}
                   onMarkerClick={(id) => {
                     // Was a console.log. Selecting the marker at least drives the

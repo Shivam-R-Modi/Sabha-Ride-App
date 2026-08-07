@@ -44,14 +44,10 @@ export const initializeMessaging = async () => {
   }
 };
 
-// Default Sabha Location — used as fallback only.
-// The live location is stored in Firestore `settings/main` and managed
-// by managers via the LocationSettings UI.
-export const SABHA_LOCATION = {
-  lat: 42.339925,
-  lng: -71.088182,
-  address: "360 Huntington Ave, Boston, MA 02115"
-};
+// SABHA_LOCATION was here, with zero importers. Deleted: the venue resolves
+// gathering -> settings/main -> DEFAULT_SABHA_LOCATION (hooks/useSettings.ts on
+// the client, functions/src/utils/settings.ts on the server). An unused fourth
+// copy of the coordinates was only ever going to go stale.
 
 // Default export
 export default app;

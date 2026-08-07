@@ -106,6 +106,24 @@ describe('buildCurrentEvent', () => {
         expect(new Date(event.endsAt) > new Date(event.startsAt)).toBe(true);
         expect(new Date(event.dropoffOpensAt) > new Date(event.startsAt)).toBe(true);
     });
+
+    it('keeps drop-off after the start for a sabha shorter than the lead', () => {
+        // A 10-minute sabha would put dropoffOpensAt 5 minutes BEFORE it starts.
+        // The "sabha in progress" interval then vanishes and pickup flips straight
+        // to drop-off the instant sabha begins — drivers sent to take people home
+        // as they arrive.
+        const event = buildCurrentEvent('2026-08-07', '19:00', '19:10', ZONE);
+
+        expect(new Date(event.dropoffOpensAt) > new Date(event.startsAt)).toBe(true);
+        expect(new Date(event.dropoffOpensAt) <= new Date(event.endsAt)).toBe(true);
+
+        // And the window still moves through all three states in order.
+        const at = (hhmm: string) =>
+            resolveScheduleWindow(boston(FRI, hhmm), event, ZONE).rideType;
+        expect(at('18:00')).toBe('home-to-sabha');
+        expect(at('19:00')).toBeNull();
+        expect(at('19:30')).toBe('sabha-to-home');
+    });
 });
 
 describe('resolveScheduleWindow', () => {

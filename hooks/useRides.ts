@@ -123,6 +123,9 @@ export const createRideRequest = async (userId: string, details: any) => {
             studentName: details.studentName || userData?.name || 'Unknown',
             studentPhone,
             date: details.date,
+            // The gathering this request is for. Two composite indexes exist on
+            // rides.eventDate and nothing wrote it, so they indexed nothing.
+            eventDate: details.eventDate ?? details.date,
             timeSlot: details.time,
             pickupAddress: details.address,
             pickupLat,

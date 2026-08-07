@@ -17,6 +17,40 @@ const DEFAULT_SABHA_LOCATION: SabhaLocation = {
 };
 
 /**
+ * Pick the venue to use, preferring the more specific source.
+ *
+ * The chain is `ride.venue → event venue → settings/main → DEFAULT`, and every
+ * link is a widening: with no per-event override set anywhere this returns
+ * exactly what the app used before per-event venues existed, which is why the
+ * change needs no backfill.
+ *
+ * Rejects 0,0 for the same reason `resolveHomeCoords` does — it is the "address
+ * never geocoded" placeholder, not a point in the Atlantic.
+ */
+export function resolveVenue(
+    candidate: unknown,
+    fallback: SabhaLocation,
+): SabhaLocation {
+    const usable = (v: any): boolean =>
+        !!v
+        && Number.isFinite(v.lat) && Number.isFinite(v.lng)
+        && !(v.lat === 0 && v.lng === 0);
+
+    if (usable(candidate)) {
+        const c = candidate as any;
+        return {
+            lat: c.lat,
+            lng: c.lng,
+            address: typeof c.address === 'string' && c.address
+                ? c.address
+                : fallback.address,
+        };
+    }
+
+    return usable(fallback) ? fallback : DEFAULT_SABHA_LOCATION;
+}
+
+/**
  * Read `settings/main` from Firestore and return the Sabha location.
  * Used by Cloud Functions that need the current venue coordinates.
  */

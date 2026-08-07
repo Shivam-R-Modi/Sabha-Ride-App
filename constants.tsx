@@ -26,5 +26,6 @@ export const LotusLoader: React.FC<{ size?: number }> = ({ size = 64 }) => (
 
 export const OmWatermark: React.FC = () => null;
 
-// Default venue address — the live value is in Firestore `settings/main`
-export const VENUE_ADDRESS = "360 Huntington Ave, Boston, MA 02115";
+// VENUE_ADDRESS was here. Deleted: the venue now comes from the gathering, then
+// settings/main, then DEFAULT_SABHA_LOCATION in hooks/useSettings.ts. A fourth
+// hardcoded copy was just one more thing to drift.

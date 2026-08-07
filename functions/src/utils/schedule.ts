@@ -112,6 +112,18 @@ export function buildCurrentEvent(
     // open drop-off before pickup closed.
     const safeEndMinutes = endMinutes > startMinutes ? endMinutes : startMinutes + 60;
 
+    // Drop-off must open strictly AFTER sabha starts, otherwise a short sabha
+    // inverts the window: a 19:00–19:10 gathering would put dropoffOpensAt at
+    // 18:55, the `now < dropoffOpensAt` branch becomes an empty interval, and
+    // pickup flips straight to drop-off the moment sabha begins — dispatching
+    // drivers to take people home as they arrive, with no "in progress" state.
+    // Clamped rather than rejected: this runs in a scheduled job reading
+    // manager-written data, and refusing would mean no rides at all.
+    const dropoffMinutes = Math.max(
+        safeEndMinutes - DROPOFF_LEAD_MINUTES,
+        startMinutes + 1,
+    );
+
     return {
         eventId: eventDate,
         requestsOpenAt: zonedTimeToInstant(
@@ -123,7 +135,7 @@ export function buildCurrentEvent(
         endsAt: zonedTimeToInstant(eventDate, minutesToTime(safeEndMinutes), timeZone),
         dropoffOpensAt: zonedTimeToInstant(
             eventDate,
-            minutesToTime(safeEndMinutes - DROPOFF_LEAD_MINUTES),
+            minutesToTime(dropoffMinutes),
             timeZone,
         ),
         // Midnight at the end of the gathering's own day, so late drop-off runs

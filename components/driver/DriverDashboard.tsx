@@ -295,10 +295,18 @@ export const DriverDashboard: React.FC = () => {
     const handleAcceptAssignment = () => {
         if (!pendingAssignment) return;
 
+        // Refuse rather than assume. This was `rideContext?.rideType ||
+        // 'home-to-sabha'`, which silently turned a closed window into a pickup
+        // run — the driver would set off towards the venue on a drop-off night.
+        if (!rideContext?.rideType) {
+            setError('The ride window has closed. Please refresh before starting a ride.');
+            return;
+        }
+
         // Activate the ride and transition to ActiveRide screen
         setActiveRide({
             id: pendingAssignment.rideId,
-            rideType: rideContext?.rideType || 'home-to-sabha',
+            rideType: rideContext.rideType,
             students: pendingAssignment.students,
             route: pendingAssignment.route,
             googleMapsUrl: pendingAssignment.googleMapsUrl,

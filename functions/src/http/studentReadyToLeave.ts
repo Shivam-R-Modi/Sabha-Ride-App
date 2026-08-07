@@ -5,7 +5,9 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { getZonedParts, zonedDateKey, DEFAULT_TIME_ZONE } from '../utils/time';
+// getZonedParts is gone from here deliberately: this function no longer decides
+// for itself whether the window is open.
+import { zonedDateKey, DEFAULT_TIME_ZONE } from '../utils/time';
 import { resolveHomeCoords } from '../utils/coords';
 
 /**
@@ -50,18 +52,36 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
             );
         }
 
-        // Check if it's after 10 PM on Friday, in Sabha LOCAL time.
-        // The Date getters read the UTC server clock, so at 10:30 PM Boston
-        // this saw Saturday 02:30 and rejected every drop-off request.
+        // Is the drop-off window open?
+        //
+        // This used to be `if (dayOfWeek !== 5 || hour < 22) throw` — Friday after
+        // 10 PM, hardcoded. Once a manager could move a sabha, that made the
+        // window settings a lie: a Tuesday 6–8 PM gathering had a drop-off window
+        // the app advertised and the server refused. Every rider pressing the
+        // button got "only available after 10 PM on Friday".
+        //
+        // The scheduler already publishes exactly one answer to "which rides are
+        // open right now", derived from the gathering's own times and honouring a
+        // manager's manual override. Read that instead of recomputing, so the
+        // button and the callable can never disagree.
         const now = new Date();
-        const { dayOfWeek, hour } = getZonedParts(now);
 
-        if (dayOfWeek !== 5 || hour < 22) {
+        const rideContextDoc = await db.collection('system').doc('rideContext').get();
+        const rideContext = rideContextDoc.data();
+
+        if (rideContext?.rideType !== 'sabha-to-home') {
             throw new functions.https.HttpsError(
                 'failed-precondition',
-                'Drop-off requests only available after 10 PM on Friday'
+                rideContext?.timeContext
+                    ? `Drop-off rides are not open yet. ${rideContext.timeContext}`
+                    : 'Drop-off rides are not open yet.'
             );
         }
+
+        // The gathering this return leg belongs to. Was `zonedDateKey(now)` —
+        // today's date — which is wrong whenever the sabha is not today, and sits
+        // on a knife edge at midnight while drop-off runs are still going.
+        const eventDate: string = rideContext.eventId || zonedDateKey(now, DEFAULT_TIME_ZONE);
 
         // ── Create the return-leg ride request ──────────────────────
         //
@@ -114,7 +134,6 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
             rideId = rideRef.id;
 
             const nowIso = new Date().toISOString();
-            const eventDate = zonedDateKey(now, DEFAULT_TIME_ZONE);
 
             await rideRef.set({
                 studentId,

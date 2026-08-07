@@ -7,6 +7,7 @@ import { MyRides } from '../MyRides';
 import { Car, Navigation, AlertCircle, Loader2, Sparkles, CheckCircle2, Phone } from 'lucide-react';
 import { useActiveRide, markReadyToLeave, updateUserProfile, useStudentRequestStatus, useWeeklyAttendance, useRideHistory } from '../../hooks/useFirestore';
 import { useNavigation } from '../../contexts/NavigationContext';
+import { useRideWindow } from '../../hooks/useRideWindow';
 import { studentReadyToLeave } from '../../src/utils/cloudFunctions';
 import { WeeklyAttendancePopup } from './WeeklyAttendancePopup';
 import { AttendanceBlockedScreen } from './AttendanceBlockedScreen';
@@ -21,8 +22,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
     const { currentTab } = useNavigation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [showReadyModal, setShowReadyModal] = useState(false);
+    // Whether drop-off is open comes from the server, not from this device's
+    // clock. The old version tested `now.getDay() === 5 && now.getHours() >= 22`
+    // on a 60-second interval: wrong for a phone in another timezone, and
+    // completely deaf to a manager moving sabha or opening the window early.
+    const { dropoffOpen, timeContext } = useRideWindow();
     const [isReadyLoading, setIsReadyLoading] = useState(false);
-    const [showAfterSabhaUI, setShowAfterSabhaUI] = useState(false);
 
 
     // Use Firestore Hook
@@ -51,21 +56,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
             }
         }
     }, [attendanceLoading, hasResponded, attendance]);
-
-    // Check if it's after 10 PM on Friday for drop-off UI
-    useEffect(() => {
-        const checkTime = () => {
-            const now = new Date();
-            const isFriday = now.getDay() === 5;
-            const isAfter10PM = now.getHours() >= 22;
-            setShowAfterSabhaUI(isFriday && isAfter10PM);
-        };
-
-        checkTime();
-        const interval = setInterval(checkTime, 60000); // Check every minute
-
-        return () => clearInterval(interval);
-    }, []);
 
     // Handle attendance popup response
     const handleAttendanceResponse = (response: 'yes' | 'no') => {
@@ -210,9 +200,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                     )}
 
                     <div className="clay-card text-center relative overflow-hidden transition-all group">
-                        {!showAfterSabhaUI && (
+                        {!dropoffOpen && (
                             <div className="absolute inset-0 bg-cream/40 backdrop-blur-[1px] z-10 flex items-center justify-center">
-                                <span className="clay-badge-status">Available After 10 PM</span>
+                                <span className="clay-badge-status text-center px-3">
+                                    {timeContext || 'Not available yet'}
+                                </span>
                             </div>
                         )}
                         <h3 className="font-header font-bold text-coffee text-xl mb-1">Return Trip</h3>
@@ -227,7 +219,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                             </div>
                         ) : (
                             <button
-                                disabled={!showAfterSabhaUI || isReadyLoading}
+                                disabled={!dropoffOpen || isReadyLoading}
                                 onClick={() => setShowReadyModal(true)}
                                 className="clay-btn-cta-large mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
                             >

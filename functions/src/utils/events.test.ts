@@ -7,7 +7,9 @@ vi.mock('firebase-admin', () => ({
     }),
 }));
 
-import { findCurrentEvent, ensureUpcomingEvents, weeklySlotDate, AUTOCREATE_WEEKS_AHEAD } from './events';
+import {
+    findCurrentEvent, ensureUpcomingScheduled, weeklySlotDate, CALENDAR_HORIZON_DAYS,
+} from './events';
 
 const ZONE = 'America/New_York';
 const boston = (day: string, hhmm: string) => new Date(`2026-08-${day}T${hhmm}:00-04:00`);
@@ -16,35 +18,60 @@ const boston = (day: string, hhmm: string) => new Date(`2026-08-${day}T${hhmm}:0
 const MON = '03', WED = '05', FRI = '07', SAT = '08';
 
 /**
- * Minimal fake of the query chain findCurrentEvent uses:
- *   collection().where().orderBy().limit().get()
- * Returns the seeded docs whose id is >= the `>=` bound, in id order.
+ * Minimal fake of the query chain the events module uses:
+ *   collection().where().where().orderBy().get()
+ *
+ * It must honour BOTH bounds. An earlier version kept a single `lowerBound` that
+ * each `where` overwrote, which would have made the horizon tests pass for the
+ * wrong reason — the upper bound would simply have been ignored.
  */
 function fakeDb(events: Record<string, any>) {
-    let lowerBound = '';
-    const chain: any = {
-        where: (_field: any, _op: string, value: string) => { lowerBound = value; return chain; },
-        orderBy: () => chain,
-        limit: () => chain,
-        get: async () => ({
-            docs: Object.keys(events)
-                .filter(id => id >= lowerBound)
-                .sort()
-                .map(id => ({ id, data: () => events[id] })),
-        }),
-    };
-
     const created: Record<string, any> = {};
+
+    const makeChain = () => {
+        let lower = '';
+        let upper = '\uffff';
+        const chain: any = {
+            where: (_field: any, op: string, value: string) => {
+                if (op === '>=' || op === '>') lower = value;
+                else if (op === '<=' || op === '<') upper = value;
+                return chain;
+            },
+            orderBy: () => chain,
+            limit: () => chain,
+            get: async () => ({
+                docs: Object.keys(events)
+                    .filter(id => id >= lower && id <= upper)
+                    .sort()
+                    .map(id => ({ id, data: () => events[id] })),
+            }),
+        };
+        return chain;
+    };
 
     return {
         db: {
-            collection: () => ({
-                ...chain,
-                doc: (id: string) => ({
-                    get: async () => ({ exists: id in events }),
-                    create: async (data: any) => { created[id] = data; },
-                }),
-            }),
+            collection: () => {
+                const chain = makeChain();
+                return {
+                    where: chain.where,
+                    orderBy: chain.orderBy,
+                    limit: chain.limit,
+                    get: chain.get,
+                    doc: (id: string) => ({
+                        get: async () => ({ exists: id in events }),
+                        create: async (data: any) => {
+                            if (id in events) {
+                                const err: any = new Error('ALREADY_EXISTS');
+                                err.code = 6;
+                                throw err;
+                            }
+                            created[id] = data;
+                            events[id] = data;
+                        },
+                    }),
+                };
+            },
         } as any,
         created,
     };
@@ -155,44 +182,114 @@ describe('weeklySlotDate', () => {
     });
 });
 
-describe('ensureUpcomingEvents', () => {
+describe('ensureUpcomingScheduled', () => {
     const defaults = { startTime: '19:00', endTime: '22:00' };
+    const run = (day: string, events: Record<string, any>, dow = 5) => {
+        const { db, created } = fakeDb(events);
+        return ensureUpcomingScheduled(db, boston(day, '03:00'), ZONE, defaults, dow)
+            .then(dates => ({ dates, created }));
+    };
 
-    it('fills an empty calendar', async () => {
-        // An empty calendar means no rides at all, with no error shown to anyone.
-        const { db, created } = fakeDb({});
-        const dates = await ensureUpcomingEvents(db, boston(WED, '10:00'), ZONE, defaults);
+    it('creates exactly ONE event for an empty calendar', async () => {
+        // The whole point of the change: how many sabhas exist is the manager's
+        // decision. Previously this created eight.
+        const { dates, created } = await run(WED, {});
 
-        expect(dates).toHaveLength(AUTOCREATE_WEEKS_AHEAD);
-        expect(dates[0]).toBe('2026-08-07');
-        expect(dates[1]).toBe('2026-08-14');
+        expect(dates).toEqual(['2026-08-07']);
+        expect(Object.keys(created)).toEqual(['2026-08-07']);
         expect(created['2026-08-07'].autoCreated).toBe(true);
         expect(created['2026-08-07'].status).toBe('scheduled');
     });
 
-    it('never overwrites a gathering a manager has touched', async () => {
-        // The edited time, moved venue or cancellation must survive.
-        const { db, created } = fakeDb({
-            '2026-08-07': scheduled('2026-08-07', { startTime: '16:30', status: 'cancelled' }),
-        });
-        const dates = await ensureUpcomingEvents(db, boston(WED, '10:00'), ZONE, defaults);
+    it('does nothing when a scheduled event already exists ahead', async () => {
+        const { dates, created } = await run(WED, { '2026-08-07': scheduled('2026-08-07') });
 
-        expect(dates).not.toContain('2026-08-07');
+        expect(dates).toEqual([]);
+        expect(created).toEqual({});
+    });
+
+    it('creates the NEXT slot when the only one ahead is cancelled', async () => {
+        // The outage this function exists to prevent. Naively "create slot 0 if
+        // missing" does nothing here, findCurrentEvent returns null, and rides
+        // close for days.
+        const { dates, created } = await run(WED, {
+            '2026-08-07': scheduled('2026-08-07', { status: 'cancelled' }),
+        });
+
+        expect(dates).toEqual(['2026-08-14']);
+        expect(created['2026-08-14'].status).toBe('scheduled');
+        // And it must not have resurrected the cancelled one.
         expect(created['2026-08-07']).toBeUndefined();
     });
 
-    it('uses the default times it is given', async () => {
-        const { db, created } = fakeDb({});
-        await ensureUpcomingEvents(db, boston(WED, '10:00'), ZONE, {
-            startTime: '18:00', endTime: '20:30',
+    it('never overwrites or un-cancels an existing event', async () => {
+        const { created } = await run(WED, {
+            '2026-08-07': scheduled('2026-08-07', { startTime: '16:30', status: 'cancelled' }),
+            '2026-08-14': scheduled('2026-08-14', { startTime: '16:30' }),
         });
-        expect(created['2026-08-07'].startTime).toBe('18:00');
-        expect(created['2026-08-07'].endTime).toBe('20:30');
+
+        expect(created).toEqual({});
+    });
+
+    it('stops when the manager has decided every slot in the horizon', async () => {
+        // Cancelling everything inside the horizon is a deliberate shutdown. The
+        // generator must respect it, not fight it.
+        const { dates, created } = await run(WED, {
+            '2026-08-07': scheduled('2026-08-07', { status: 'cancelled' }),
+            '2026-08-14': scheduled('2026-08-14', { status: 'cancelled' }),
+        });
+
+        expect(dates).toEqual([]);
+        expect(created).toEqual({});
+    });
+
+    it('is satisfied by a manager-added one-off, without adding a Friday', async () => {
+        const { dates, created } = await run(WED, {
+            '2026-08-11': scheduled('2026-08-11'), // a Tuesday, hand-added
+        });
+
+        expect(dates).toEqual([]);
+        expect(created).toEqual({});
+    });
+
+    it('does NOT count a scheduled event beyond the horizon', async () => {
+        // Deliberate: pins the choice rather than leaving it to be discovered.
+        // 2026-09-25 is well past today+14, so a nearer sabha is still created.
+        const { dates } = await run(WED, { '2026-09-25': scheduled('2026-09-25') });
+
+        expect(dates).toEqual(['2026-08-07']);
+    });
+
+    it('ignores past events entirely', async () => {
+        const { dates } = await run(WED, { '2026-07-31': scheduled('2026-07-31') });
+        expect(dates).toEqual(['2026-08-07']);
+    });
+
+    it('uses the default times it is given', async () => {
+        const { created } = await run(WED, {}, 5);
+        expect(created['2026-08-07'].startTime).toBe('19:00');
+        expect(created['2026-08-07'].endTime).toBe('22:00');
     });
 
     it('can generate a slot other than Friday', async () => {
-        const { db } = fakeDb({});
-        const dates = await ensureUpcomingEvents(db, boston(MON, '10:00'), ZONE, defaults, 2);
-        expect(dates[0]).toBe('2026-08-04'); // Tuesday
+        const { dates } = await run(MON, {}, 2); // Tuesday
+        expect(dates).toEqual(['2026-08-04']);
+    });
+
+    it('tolerates losing a create race', async () => {
+        // The fake throws code 6 when the doc already exists. Two concurrent runs
+        // picking the same slot must not produce an error.
+        const events: Record<string, any> = {};
+        const { db } = fakeDb(events);
+        const [a, b] = await Promise.all([
+            ensureUpcomingScheduled(db, boston(WED, '03:00'), ZONE, defaults),
+            ensureUpcomingScheduled(db, boston(WED, '03:00'), ZONE, defaults),
+        ]);
+        // At most one of them created it; neither threw.
+        expect([a.length, b.length].sort()).toEqual([0, 1]);
+    });
+
+    it('spans at least two weekly slots, or cancelling would still close rides', () => {
+        expect(CALENDAR_HORIZON_DAYS).toBeGreaterThanOrEqual(14);
     });
 });

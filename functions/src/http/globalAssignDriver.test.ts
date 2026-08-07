@@ -54,6 +54,16 @@ const SABHA = { lat: 42.339925, lng: -71.088182, address: 'Sabha' };
 
 vi.mock('../utils/settings', () => ({
     getSabhaLocation: async () => ({ lat: 42.339925, lng: -71.088182, address: 'Sabha' }),
+    // Real behaviour, not a stub: the venue fallback chain is what these tests
+    // are asserting on.
+    resolveVenue: (candidate: any, fallback: any) => {
+        const usable = (v: any) => !!v
+            && Number.isFinite(v.lat) && Number.isFinite(v.lng)
+            && !(v.lat === 0 && v.lng === 0);
+        return usable(candidate)
+            ? { lat: candidate.lat, lng: candidate.lng, address: candidate.address || fallback.address }
+            : fallback;
+    },
 }));
 
 import { globalAssignDriver } from './globalAssignDriver';
@@ -65,6 +75,9 @@ interface Fixture {
     driver: Record<string, unknown>;
     car: Record<string, unknown>;
     rides: Array<{ id: string; data: Record<string, unknown> }>;
+    /** Per-event venue override published on system/rideContext. */
+    venue?: { lat: number; lng: number; address: string } | null;
+    eventId?: string;
 }
 
 /** Records everything written through the batch so tests can assert on it. */
@@ -85,7 +98,11 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
     const docFor = (collection: string, id: string) => {
         switch (`${collection}/${id}`) {
             case 'system/rideContext':
-                return snap(true, { rideType: fixture.rideType });
+                return snap(true, {
+                    rideType: fixture.rideType,
+                    venue: fixture.venue ?? null,
+                    eventId: fixture.eventId ?? '2026-08-07',
+                });
             case `users/${'driver-1'}`:
                 return snap(true, fixture.driver);
             case `cars/${'car-1'}`:
@@ -286,5 +303,70 @@ describe('globalAssignDriver — one car, one driver', () => {
 
         expect(driverWrite.data.currentVehicleId).toBe('car-1');
         expect(driverWrite.data.currentCarId).toBeNull();
+    });
+});
+
+describe('globalAssignDriver — per-event venue', () => {
+    const HALL_B = { lat: 42.3800, lng: -71.1200, address: 'Hall B, Somerville' };
+
+    it('routes a pickup run to the gathering\'s own venue, not settings/main', async () => {
+        // The venue used to come from settings/main unconditionally, so moving one
+        // sabha to a different hall had no effect on where drivers were sent.
+        const { recorder } = await run({ ...baseFixture('home-to-sabha'), venue: HALL_B });
+
+        const rideUpdate = recorder.updates.find(u => u.path.startsWith('rides/'))!;
+        const url = new URL(rideUpdate.data.googleMapsUrl);
+
+        expect(url.searchParams.get('destination')).toBe(`${HALL_B.lat},${HALL_B.lng}`);
+        expect(url.searchParams.get('destination')).not.toBe(`${SABHA.lat},${SABHA.lng}`);
+    });
+
+    it('starts a drop-off run from the gathering\'s own venue', async () => {
+        const { recorder } = await run({ ...baseFixture('sabha-to-home'), venue: HALL_B });
+
+        const rideUpdate = recorder.updates.find(u => u.path.startsWith('rides/'))!;
+        expect(rideUpdate.data.route[0].lat).toBe(HALL_B.lat);
+        expect(rideUpdate.data.route[0].lng).toBe(HALL_B.lng);
+    });
+
+    it('falls back to settings/main when the gathering has no override', async () => {
+        // The compatibility guarantee: with no override anywhere, behaviour is
+        // byte-identical to before per-event venues existed.
+        const { recorder } = await run({ ...baseFixture('home-to-sabha'), venue: null });
+
+        const rideUpdate = recorder.updates.find(u => u.path.startsWith('rides/'))!;
+        const url = new URL(rideUpdate.data.googleMapsUrl);
+
+        expect(url.searchParams.get('destination')).toBe(`${SABHA.lat},${SABHA.lng}`);
+    });
+
+    it('ignores a 0,0 override rather than routing into the Atlantic', async () => {
+        const { recorder } = await run({
+            ...baseFixture('home-to-sabha'),
+            venue: { lat: 0, lng: 0, address: 'Never geocoded' },
+        });
+
+        const rideUpdate = recorder.updates.find(u => u.path.startsWith('rides/'))!;
+        const url = new URL(rideUpdate.data.googleMapsUrl);
+
+        expect(url.searchParams.get('destination')).toBe(`${SABHA.lat},${SABHA.lng}`);
+    });
+
+    it('snapshots the venue and eventId onto every assigned ride', async () => {
+        // manualAssignStudent reads ride.venue rather than resolving live, so that
+        // adding a passenger cannot re-point everyone already on board.
+        const { recorder } = await run({
+            ...baseFixture('home-to-sabha'),
+            venue: HALL_B,
+            eventId: '2026-08-11',
+        });
+
+        const rideUpdates = recorder.updates.filter(u => u.path.startsWith('rides/'));
+        expect(rideUpdates.length).toBeGreaterThan(0);
+
+        for (const update of rideUpdates) {
+            expect(update.data.venue).toEqual(HALL_B);
+            expect(update.data.eventId).toBe('2026-08-11');
+        }
     });
 });

@@ -11,7 +11,7 @@ import {
     resolveScheduleWindow, buildCurrentEvent, ScheduleWindow, CurrentEvent,
     DEFAULT_SABHA_START, DEFAULT_SABHA_END,
 } from '../utils/schedule';
-import { findCurrentEvent, ensureUpcomingEvents } from '../utils/events';
+import { findCurrentEvent, ensureUpcomingScheduled } from '../utils/events';
 import { notifyEveryone } from '../utils/notifications';
 
 const CONTEXT_DOC = 'system/rideContext';
@@ -119,14 +119,14 @@ export const ensureSabhaEvents = functions.pubsub
         try {
             const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
 
-            const created = await ensureUpcomingEvents(db, now, timeZone, {
+            const created = await ensureUpcomingScheduled(db, now, timeZone, {
                 startTime: typeof sabhaStart === 'string' ? sabhaStart : DEFAULT_SABHA_START,
                 endTime: typeof sabhaEnd === 'string' ? sabhaEnd : DEFAULT_SABHA_END,
             });
 
             console.log(created.length > 0
-                ? `[events] Created ${created.length}: ${created.join(', ')}`
-                : '[events] Calendar already populated');
+                ? `[events] Created ${created.join(', ')}`
+                : '[events] A scheduled sabha already exists ahead — nothing to do');
             return null;
         } catch (error) {
             console.error('[events] Could not top up the calendar:', error);
@@ -159,18 +159,21 @@ export const updateRideTypeContext = functions.pubsub
             // nothing is scheduled — closed, and said plainly.
             let scheduled = await findCurrentEvent(db, now, timeZone);
 
-            // Self-heal an empty calendar. Without this, the first deploy would
-            // close the service until the daily top-up ran, and any future gap
-            // would do the same. ensureUpcomingEvents only creates dates that are
-            // MISSING, so a gathering a manager deliberately cancelled stays
-            // cancelled and this does nothing.
+            // Self-heal a calendar with nothing scheduled ahead. Without this the
+            // first deploy would close the service until the daily job ran, and
+            // any later gap would do the same.
+            //
+            // It only ever CREATES a missing slot, so a gathering a manager
+            // deliberately cancelled stays cancelled — and in that case nothing
+            // is created, `calendarStatus` below says so, and the manager UI shows
+            // it rather than leaving "No rides available" looking like a fault.
             if (!scheduled) {
-                const created = await ensureUpcomingEvents(db, now, timeZone, {
+                const created = await ensureUpcomingScheduled(db, now, timeZone, {
                     startTime: typeof sabhaStart === 'string' ? sabhaStart : DEFAULT_SABHA_START,
                     endTime: typeof sabhaEnd === 'string' ? sabhaEnd : DEFAULT_SABHA_END,
                 });
                 if (created.length > 0) {
-                    console.log(`[events] Seeded an empty calendar: ${created.join(', ')}`);
+                    console.log(`[events] Seeded the calendar: ${created.join(', ')}`);
                     scheduled = await findCurrentEvent(db, now, timeZone);
                 }
             }
@@ -185,6 +188,9 @@ export const updateRideTypeContext = functions.pubsub
             await db.doc(CONTEXT_DOC).set({
                 ...window,
                 ...(event ?? { eventId: null }),
+                // Lets the manager UI say "you cancelled everything" instead of
+                // leaving "No rides available" looking like a malfunction.
+                calendarStatus: event ? 'ok' : 'no-scheduled-event',
                 overrideUntil: null,
                 lastUpdated: now.toISOString(),
             });
@@ -249,6 +255,7 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
         await db.doc(CONTEXT_DOC).set({
             ...window,
             ...(event ?? { eventId: null }),
+            calendarStatus: event ? 'ok' : 'no-scheduled-event',
             overrideUntil: null,
             lastUpdated: now.toISOString(),
         });
@@ -274,13 +281,14 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
     if (!event) {
         throw new functions.https.HttpsError(
             'failed-precondition',
-            'No sabha is scheduled. Add one in Settings before opening a ride window.',
+            'No sabha is scheduled. Add one in the Sabha Calendar before opening a ride window.',
         );
     }
 
     await db.doc(CONTEXT_DOC).set({
         ...window,
         ...event,
+        calendarStatus: 'ok',
         overrideUntil: endOfLocalDay(now, timeZone),
         openedBy: context.auth.uid,
         lastUpdated: now.toISOString(),

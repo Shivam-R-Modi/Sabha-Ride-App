@@ -81,7 +81,7 @@ function isValidPendingRide(docData) {
 }
 // ── main function ──────────────────────────────────────────
 exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     // Auth check
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -117,7 +117,6 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         console.log('[globalAssign] Lock acquired');
         // ── Step 2: Ride context ────────────────────────────
         const rideContextDoc = await db.collection('system').doc('rideContext').get();
-        const SABHA_LOCATION = await (0, settings_1.getSabhaLocation)();
         if (!rideContextDoc.exists) {
             throw new functions.https.HttpsError('failed-precondition', 'Ride context not available. Please contact a manager.');
         }
@@ -126,7 +125,14 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'No rides are available at this time.');
         }
         const rideType = rideContext.rideType;
-        console.log(`[globalAssign] rideType=${rideType}`);
+        // The venue for THIS gathering. Taken from the same rideContext document
+        // that produced the rideType above, so the two can never disagree — a
+        // separate read of events/{id} would leave a window where the route's
+        // venue and the window's venue came from different resolutions.
+        // Falls back to settings/main, which is what ran before events had venues.
+        const SABHA_LOCATION = (0, settings_1.resolveVenue)(rideContext.venue, await (0, settings_1.getSabhaLocation)());
+        const eventId = (_b = rideContext.eventId) !== null && _b !== void 0 ? _b : null;
+        console.log(`[globalAssign] rideType=${rideType}, venue=${SABHA_LOCATION.address}`);
         // ── Step 3: Tapping driver + car ────────────────────
         const driverDoc = await db.collection('users').doc(driverId).get();
         if (!driverDoc.exists) {
@@ -312,6 +318,13 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                 status: 'assigned',
                 route,
                 googleMapsUrl,
+                // Snapshot, not a live lookup. manualAssignStudent rebuilds the
+                // route for ALL passengers when one is added; if it resolved the
+                // venue live it could silently re-point everyone already on board
+                // at a different venue. Also lets completeRide and
+                // releaseAssignment stay consistent for free.
+                venue: SABHA_LOCATION,
+                eventId,
                 peers: otherPeers,
                 // The full roster. startRide, releaseAssignment and
                 // manualAssignStudent all iterate `ride.students`; until this
@@ -365,7 +378,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             }
             for (const s of assignedStudents) {
                 const sDoc = await db.collection('users').doc(s.id).get();
-                const sToken = (_b = sDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
+                const sToken = (_c = sDoc.data()) === null || _c === void 0 ? void 0 : _c.fcmToken;
                 if (sToken) {
                     await (0, notifications_1.notifyStudentDriverAssigned)(sToken, driverData.name || 'Driver', carData.name || 'Vehicle', carData.color || '');
                 }
@@ -416,7 +429,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         // This runs after catch block, providing extra guarantee
         try {
             const lockStillExists = await lockRef.get();
-            if (lockStillExists.exists && ((_c = lockStillExists.data()) === null || _c === void 0 ? void 0 : _c.driverId) === driverId) {
+            if (lockStillExists.exists && ((_d = lockStillExists.data()) === null || _d === void 0 ? void 0 : _d.driverId) === driverId) {
                 await lockRef.delete();
                 console.log('[globalAssign] Lock cleaned up in finally block');
             }

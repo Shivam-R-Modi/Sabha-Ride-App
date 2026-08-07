@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-    collection, doc, onSnapshot, orderBy, query, setDoc, updateDoc, where,
+    collection, doc, documentId, onSnapshot, orderBy, query, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { useCurrentEvent } from './useCurrentEvent';
 
 /**
  * The sabha calendar.
@@ -25,20 +26,37 @@ export interface SabhaEvent {
     autoCreated?: boolean;
 }
 
-/** Today's date as YYYY-MM-DD. Only used to bound the query, never to pick the current event. */
-const todayKey = () => new Date().toISOString().slice(0, 10);
-
-/** Upcoming gatherings, soonest first. Includes cancelled ones so they can be restored. */
+/**
+ * Upcoming gatherings, soonest first. Includes cancelled ones so they can be
+ * restored.
+ *
+ * Bounded by `documentId()`, matching `findCurrentEvent` on the server, and
+ * anchored on the server-published `eventId` rather than the device clock. Both
+ * details matter:
+ *
+ *  - The previous version filtered on the `date` FIELD while the server filtered
+ *    on the document id, so any event missing a `date` field was invisible here
+ *    and visible to the server.
+ *  - Its lower bound was `new Date().toISOString().slice(0, 10)` — a UTC date. At
+ *    20:30 in Boston it is already tomorrow in UTC, so **today's sabha vanished
+ *    from the manager's calendar during the sabha itself.**
+ */
 export function useUpcomingEvents(limitTo = 12) {
     const [events, setEvents] = useState<SabhaEvent[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { eventId } = useCurrentEvent();
 
     useEffect(() => {
+        // Anchor on the current gathering. Until the server has published one,
+        // fall back to the local date — only as a lower bound for a list, never
+        // to decide which gathering is current.
+        const from = eventId ?? new Date().toLocaleDateString('en-CA');
+
         const q = query(
             collection(db, 'events'),
-            where('date', '>=', todayKey()),
-            orderBy('date'),
+            where(documentId(), '>=', from),
+            orderBy(documentId()),
         );
 
         const unsub = onSnapshot(q, (snapshot) => {
@@ -63,7 +81,7 @@ export function useUpcomingEvents(limitTo = 12) {
         });
 
         return unsub;
-    }, [limitTo]);
+    }, [limitTo, eventId]);
 
     return { events, loading, error };
 }
@@ -111,12 +129,15 @@ export async function createEvent(
     endTime: string,
     agenda: string,
     createdByUid: string,
+    venue: SabhaEvent['venue'] = null,
 ): Promise<void> {
     await setDoc(doc(db, 'events', date), {
         date,
         startTime,
         endTime,
-        venue: null,
+        // null means "use the default venue from settings/main". Only ever set
+        // with coordinates — an address without them would poison routing.
+        venue,
         status: 'scheduled',
         agenda,
         autoCreated: false,

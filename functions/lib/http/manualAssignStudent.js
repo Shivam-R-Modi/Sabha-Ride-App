@@ -120,8 +120,11 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         };
         const updatedStudents = [...ride.students, newStudent];
         // Recalculate route with new student
-        // Use dynamic Sabha location from settings (not hard-coded)
-        const sabhaLocation = await (0, settings_1.getSabhaLocation)();
+        // Prefer the venue snapshotted on the ride at assignment time. Resolving
+        // it live would re-point every passenger already on this run at whatever
+        // the current gathering's venue is, which is wrong when the ride belongs
+        // to an earlier gathering.
+        const sabhaLocation = (0, settings_1.resolveVenue)(ride.venue, await (0, settings_1.getSabhaLocation)());
         const startPoint = ride.rideType === 'home-to-sabha'
             ? (driver.currentLocation || sabhaLocation)
             : sabhaLocation;

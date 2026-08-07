@@ -23,6 +23,12 @@ import { db } from '../firebase/config';
 
 export interface CurrentEvent {
     eventId: string | null;
+    /**
+     * 'no-scheduled-event' means the manager has cancelled everything inside the
+     * generator's horizon — a deliberate shutdown, not a fault. Without this the
+     * UI could only say "No rides available", which reads like a malfunction.
+     */
+    calendarStatus?: 'ok' | 'no-scheduled-event';
     requestsOpenAt?: string;
     startsAt?: string;
     endsAt?: string;
@@ -44,6 +50,7 @@ export function useCurrentEvent() {
                 const data = snap.exists() ? snap.data() : null;
                 setEvent({
                     eventId: data?.eventId ?? null,
+                    calendarStatus: data?.calendarStatus,
                     requestsOpenAt: data?.requestsOpenAt,
                     startsAt: data?.startsAt,
                     endsAt: data?.endsAt,
@@ -76,6 +83,7 @@ export function useCurrentEvent() {
     return {
         event,
         eventId: event?.eventId ?? null,
+        calendarStatus: event?.calendarStatus,
         /** False when no sabha is scheduled — attendance and requests make no sense then. */
         hasEvent: !!event?.eventId,
         canWithdraw,
