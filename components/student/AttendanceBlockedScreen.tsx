@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../../types';
 import { updateAttendanceResponse } from '../../hooks/useFirestore';
+import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import '../../claymorphism.css';
 
 interface AttendanceBlockedScreenProps {
@@ -11,15 +12,17 @@ interface AttendanceBlockedScreenProps {
 export const AttendanceBlockedScreen: React.FC<AttendanceBlockedScreenProps> = ({ user, onUnblock }) => {
     const [isUpdating, setIsUpdating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { eventId, canWithdraw } = useCurrentEvent();
 
     const handleChangeMind = async () => {
-        if (isUpdating) return;
+        if (isUpdating || !eventId) return;
 
         setIsUpdating(true);
         setError(null);
 
         try {
-            const result = await updateAttendanceResponse(user.id, 'yes', 'no');
+            // no -> yes is always allowed; canWithdraw only gates yes -> no.
+            const result = await updateAttendanceResponse(user.id, 'yes', 'no', eventId, canWithdraw);
             if (result.success) {
                 onUnblock();
             } else {

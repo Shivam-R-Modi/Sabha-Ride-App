@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { getZonedParts, minutesSinceMidnight, isValidTimeZone, DEFAULT_TIME_ZONE } from './time';
+import {
+    getZonedParts, minutesSinceMidnight, isValidTimeZone, DEFAULT_TIME_ZONE,
+    zonedDateKey, addDaysToDateKey, zonedTimeToInstant,
+} from './time';
 
 const at = (iso: string) => new Date(iso);
 
@@ -75,5 +78,90 @@ describe('isValidTimeZone', () => {
 describe('minutesSinceMidnight', () => {
     it('counts from local midnight', () => {
         expect(minutesSinceMidnight(at('2026-08-08T02:30:00Z'))).toBe(22 * 60 + 30);
+    });
+});
+
+describe('zonedDateKey', () => {
+    it('uses the Sabha local date, not the UTC date', () => {
+        // Fri 10:30 PM Boston is already Sat 02:30 UTC. Keying the ride off the
+        // UTC date would file every drop-off under the following day.
+        expect(zonedDateKey(new Date('2026-08-08T02:30:00Z'), 'America/New_York')).toBe('2026-08-07');
+    });
+
+    it('agrees with UTC when the two are on the same day', () => {
+        expect(zonedDateKey(new Date('2026-08-07T18:00:00Z'), 'America/New_York')).toBe('2026-08-07');
+    });
+
+    it('formats as YYYY-MM-DD with padding', () => {
+        expect(zonedDateKey(new Date('2026-01-09T17:00:00Z'), 'America/New_York')).toBe('2026-01-09');
+    });
+});
+
+describe('addDaysToDateKey', () => {
+    it('moves forward and back', () => {
+        expect(addDaysToDateKey('2026-08-07', 1)).toBe('2026-08-08');
+        expect(addDaysToDateKey('2026-08-07', -1)).toBe('2026-08-06');
+        expect(addDaysToDateKey('2026-08-07', 0)).toBe('2026-08-07');
+    });
+
+    it('rolls over month and year boundaries', () => {
+        expect(addDaysToDateKey('2026-08-31', 1)).toBe('2026-09-01');
+        expect(addDaysToDateKey('2026-12-31', 1)).toBe('2027-01-01');
+        expect(addDaysToDateKey('2026-01-01', -1)).toBe('2025-12-31');
+    });
+
+    it('handles a leap day', () => {
+        expect(addDaysToDateKey('2028-02-28', 1)).toBe('2028-02-29');
+        expect(addDaysToDateKey('2028-02-29', 1)).toBe('2028-03-01');
+    });
+
+    it('crosses a daylight-saving change without losing a day', () => {
+        // US DST starts 8 March 2026. Adding 24h to an instant would land on the
+        // same calendar day; pure calendar arithmetic does not.
+        expect(addDaysToDateKey('2026-03-07', 1)).toBe('2026-03-08');
+        expect(addDaysToDateKey('2026-03-08', 1)).toBe('2026-03-09');
+        // And back in November, when the clocks go the other way.
+        expect(addDaysToDateKey('2026-11-01', 1)).toBe('2026-11-02');
+    });
+});
+
+describe('zonedTimeToInstant', () => {
+    it('converts a summer evening in Boston (EDT, UTC-4)', () => {
+        expect(zonedTimeToInstant('2026-08-07', '19:00', 'America/New_York'))
+            .toBe('2026-08-07T23:00:00.000Z');
+    });
+
+    it('converts a winter evening in Boston (EST, UTC-5)', () => {
+        // Same wall clock, one hour later in UTC. A fixed offset would be wrong
+        // for half the year.
+        expect(zonedTimeToInstant('2026-01-09', '19:00', 'America/New_York'))
+            .toBe('2026-01-10T00:00:00.000Z');
+    });
+
+    it('round-trips back to the same local date', () => {
+        const instant = zonedTimeToInstant('2026-08-07', '19:00', 'America/New_York');
+        expect(zonedDateKey(new Date(instant), 'America/New_York')).toBe('2026-08-07');
+    });
+
+    it('keeps a late-evening time on its own local date', () => {
+        // 10:30 PM Boston is past midnight UTC — the exact case that made the
+        // scheduler think it was no longer Friday.
+        const instant = zonedTimeToInstant('2026-08-07', '22:30', 'America/New_York');
+        expect(instant).toBe('2026-08-08T02:30:00.000Z');
+        expect(zonedDateKey(new Date(instant), 'America/New_York')).toBe('2026-08-07');
+    });
+
+    it('handles midnight', () => {
+        const instant = zonedTimeToInstant('2026-08-07', '00:00', 'America/New_York');
+        expect(zonedDateKey(new Date(instant), 'America/New_York')).toBe('2026-08-07');
+        expect(getZonedParts(new Date(instant), 'America/New_York').hour).toBe(0);
+    });
+
+    it('resolves the day daylight saving starts', () => {
+        // 8 March 2026, 2 AM does not exist in New York. The two-pass conversion
+        // must still return a real instant rather than NaN.
+        const instant = zonedTimeToInstant('2026-03-08', '19:00', 'America/New_York');
+        expect(Number.isNaN(new Date(instant).getTime())).toBe(false);
+        expect(zonedDateKey(new Date(instant), 'America/New_York')).toBe('2026-03-08');
     });
 });

@@ -18,7 +18,8 @@
  * moving before the hall empties rather than after.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_SABHA_END = exports.DEFAULT_SABHA_START = exports.DROPOFF_LEAD_MINUTES = exports.SABHA_DAY = exports.PICKUP_OPENS_DAY = void 0;
+exports.ATTENDANCE_LOCK_HOUR = exports.DEFAULT_SABHA_END = exports.DEFAULT_SABHA_START = exports.DROPOFF_LEAD_MINUTES = exports.SABHA_DAY = exports.PICKUP_OPENS_DAY = void 0;
+exports.resolveCurrentEvent = resolveCurrentEvent;
 exports.parseTimeToMinutes = parseTimeToMinutes;
 exports.formatTimeForDisplay = formatTimeForDisplay;
 exports.resolveScheduleWindow = resolveScheduleWindow;
@@ -31,6 +32,37 @@ exports.SABHA_DAY = 5; // Friday
 exports.DROPOFF_LEAD_MINUTES = 15;
 exports.DEFAULT_SABHA_START = '19:00';
 exports.DEFAULT_SABHA_END = '22:00';
+/**
+ * Attendance closes at this hour, on the day before the gathering.
+ * Once past it, a "yes" cannot be withdrawn — drivers are already planned
+ * around it.
+ */
+exports.ATTENDANCE_LOCK_HOUR = '18:00';
+/**
+ * Which gathering are we working towards right now?
+ *
+ * The upcoming sabha, or today's if today is the sabha day. Saturday rolls
+ * forward to next week, which preserves the existing "Saturday 00:00 to Friday
+ * 23:59" cycle the attendance records were already keyed by — so no historical
+ * record is orphaned by this change.
+ */
+function resolveCurrentEvent(now, timeZone, sabhaStart, sabhaEnd) {
+    var _a, _b;
+    const { dayOfWeek } = (0, time_1.getZonedParts)(now, timeZone);
+    // 0 when today IS the sabha day, so Friday keeps pointing at itself all day.
+    const daysUntilSabha = (exports.SABHA_DAY - dayOfWeek + 7) % 7;
+    const eventId = (0, time_1.addDaysToDateKey)((0, time_1.zonedDateKey)(now, timeZone), daysUntilSabha);
+    const startMinutes = (_a = parseTimeToMinutes(sabhaStart)) !== null && _a !== void 0 ? _a : parseTimeToMinutes(exports.DEFAULT_SABHA_START);
+    const endMinutes = (_b = parseTimeToMinutes(sabhaEnd)) !== null && _b !== void 0 ? _b : parseTimeToMinutes(exports.DEFAULT_SABHA_END);
+    const safeEndMinutes = endMinutes > startMinutes ? endMinutes : startMinutes + 60;
+    return {
+        eventId,
+        startsAt: (0, time_1.zonedTimeToInstant)(eventId, minutesToTime(startMinutes), timeZone),
+        endsAt: (0, time_1.zonedTimeToInstant)(eventId, minutesToTime(safeEndMinutes), timeZone),
+        dropoffOpensAt: (0, time_1.zonedTimeToInstant)(eventId, minutesToTime(safeEndMinutes - exports.DROPOFF_LEAD_MINUTES), timeZone),
+        attendanceLocksAt: (0, time_1.zonedTimeToInstant)((0, time_1.addDaysToDateKey)(eventId, -1), exports.ATTENDANCE_LOCK_HOUR, timeZone),
+    };
+}
 /**
  * Parse "HH:MM" into minutes since midnight.
  *

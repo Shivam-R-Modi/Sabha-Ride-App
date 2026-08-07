@@ -351,6 +351,12 @@ export interface WeeklyAttendanceRecord {
   studentPhone: string;
   studentAddress: string;
   studentId: string;
+  /**
+   * The gathering this response is for. Also the parent document id, but stored
+   * on the record too so an exported row says which sabha it belongs to without
+   * needing its path.
+   */
+  eventId?: string;
 }
 
 // --- Audit Logging Types ---

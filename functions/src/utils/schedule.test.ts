@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    resolveScheduleWindow, parseTimeToMinutes, formatTimeForDisplay,
+    resolveScheduleWindow, resolveCurrentEvent, parseTimeToMinutes, formatTimeForDisplay,
     DEFAULT_SABHA_START, DEFAULT_SABHA_END,
 } from './schedule';
 
@@ -112,5 +112,74 @@ describe('resolveScheduleWindow', () => {
         // Wed 00:30 Boston is Wed 04:30 UTC — still Wednesday either way, but
         // Tue 20:30 Boston is Wed 00:30 UTC and must stay closed.
         expect(windowAt(TUE, '20:30').rideType).toBeNull();
+    });
+});
+
+describe('resolveCurrentEvent', () => {
+    const eventAt = (day: string, hhmm: string, start = '19:00', end = '22:00') =>
+        resolveCurrentEvent(boston(day, hhmm), ZONE, start, end);
+
+    it('points at this Friday from Wednesday and Thursday', () => {
+        expect(eventAt(WED, '10:00').eventId).toBe('2026-08-07');
+        expect(eventAt(THU, '23:00').eventId).toBe('2026-08-07');
+    });
+
+    it('keeps pointing at today all through Friday', () => {
+        // Including after sabha has ended — the record must not roll over
+        // mid-evening while drop-off rides are still running.
+        expect(eventAt(FRI, '00:30').eventId).toBe('2026-08-07');
+        expect(eventAt(FRI, '19:30').eventId).toBe('2026-08-07');
+        expect(eventAt(FRI, '23:50').eventId).toBe('2026-08-07');
+    });
+
+    it('rolls forward to the next Friday once Saturday arrives', () => {
+        // Preserves the existing "Saturday 00:00 to Friday 23:59" cycle the
+        // attendance records were already keyed by, so no history is orphaned.
+        // Sat 8 Aug -> Fri 14 Aug.
+        expect(eventAt(SAT, '00:10').eventId).toBe('2026-08-14');
+        // And the days after it, which are in the same cycle.
+        expect(eventAt('10', '12:00').eventId).toBe('2026-08-14'); // Mon 10 Aug
+        expect(eventAt('11', '23:00').eventId).toBe('2026-08-14'); // Tue 11 Aug
+    });
+
+    it('points at the Friday of the current cycle, not always next week', () => {
+        // Mon 3 Aug comes BEFORE Fri 7 Aug, so it points at the 7th.
+        expect(eventAt(MON, '12:00').eventId).toBe('2026-08-07');
+        expect(eventAt(TUE, '23:00').eventId).toBe('2026-08-07');
+    });
+
+    it('does not roll over because UTC has already ticked past midnight', () => {
+        // Fri 10:30 PM Boston is Sat 02:30 UTC. Read off a UTC clock this looks
+        // like Saturday and the eventId jumps a week mid-drop-off.
+        expect(eventAt(FRI, '22:30').eventId).toBe('2026-08-07');
+    });
+
+    it('publishes absolute instants for the sabha times', () => {
+        const event = eventAt(WED, '10:00');
+        expect(event.startsAt).toBe('2026-08-07T23:00:00.000Z'); // 7 PM EDT
+        expect(event.endsAt).toBe('2026-08-08T02:00:00.000Z');   // 10 PM EDT
+        expect(event.dropoffOpensAt).toBe('2026-08-08T01:45:00.000Z'); // 9:45 PM
+    });
+
+    it('follows the times a manager sets', () => {
+        const event = eventAt(WED, '10:00', '16:30', '18:00');
+        expect(event.startsAt).toBe('2026-08-07T20:30:00.000Z');       // 4:30 PM EDT
+        expect(event.dropoffOpensAt).toBe('2026-08-07T21:45:00.000Z'); // 5:45 PM EDT
+    });
+
+    it('locks attendance at 6 PM the day before', () => {
+        // Thursday 6 PM EDT = Thursday 22:00 UTC.
+        expect(eventAt(WED, '10:00').attendanceLocksAt).toBe('2026-08-06T22:00:00.000Z');
+    });
+
+    it('leaves the lock in the past once Friday has arrived', () => {
+        const event = eventAt(FRI, '12:00');
+        expect(new Date(event.attendanceLocksAt) < boston(FRI, '12:00')).toBe(true);
+    });
+
+    it('still resolves when the times are missing', () => {
+        const event = resolveCurrentEvent(boston(WED, '10:00'), ZONE, undefined, undefined);
+        expect(event.eventId).toBe('2026-08-07');
+        expect(event.startsAt).toBe('2026-08-07T23:00:00.000Z');
     });
 });

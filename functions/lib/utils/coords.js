@@ -11,7 +11,6 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveHomeCoords = resolveHomeCoords;
-exports.zonedDateKey = zonedDateKey;
 const isUsable = (n) => typeof n === 'number' && !Number.isNaN(n);
 /**
  * Pull usable home coordinates off a user document, tolerating every shape the
@@ -39,14 +38,6 @@ function resolveHomeCoords(user) {
     }
     return null;
 }
-/**
- * Calendar date (YYYY-MM-DD) in the given zone. Ride documents are keyed by
- * event date, and deriving it from the UTC server clock would roll the date
- * over mid-evening — the same bug class as the ride-window scheduling.
- */
-function zonedDateKey(date, timeZone) {
-    return new Intl.DateTimeFormat('en-CA', {
-        timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
-    }).format(date);
-}
+// zonedDateKey used to live here. It now sits in ./time alongside the other
+// zone-aware helpers, so there is one place that knows how to read a clock.
 //# sourceMappingURL=coords.js.map

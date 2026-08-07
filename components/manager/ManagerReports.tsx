@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { collection, query, getDocs, where, orderBy, limit } from 'firebase/firestore';
-import { getCurrentWeekId } from '../../src/utils/weekUtils';
+import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { downloadAttendanceCSV } from '../../hooks/useFirestore';
 import '../../claymorphism.css';
 
@@ -41,17 +41,22 @@ export const ManagerReports: React.FC = () => {
     });
     const [loading, setLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
+    // Attendance is per gathering. eventId comes from the server, so this agrees
+    // with what students wrote whatever timezone their devices are in.
+    const { eventId } = useCurrentEvent();
 
     useEffect(() => {
-        fetchStats();
-    }, []);
+        if (eventId) fetchStats();
+        // Refetch when the gathering rolls over, so the numbers are never for
+        // last week's sabha.
+    }, [eventId]);
 
     const fetchStats = async () => {
         setLoading(true);
         try {
-            // Fetch current week attendance stats
-            const currentWeekId = getCurrentWeekId();
-            const responsesRef = collection(db, 'weeklyAttendance', currentWeekId, 'responses');
+            // Attendance for the current gathering, keyed by the eventId the
+            // server publishes rather than a locally-guessed Friday.
+            const responsesRef = collection(db, 'weeklyAttendance', eventId!, 'responses');
             const responsesSnapshot = await getDocs(responsesRef);
 
             let yesCount = 0;
@@ -63,7 +68,7 @@ export const ManagerReports: React.FC = () => {
             });
 
             setWeeklyStats([{
-                weekId: currentWeekId,
+                weekId: eventId!,
                 totalYes: yesCount,
                 totalNo: noCount,
                 totalResponses: yesCount + noCount
@@ -109,7 +114,7 @@ export const ManagerReports: React.FC = () => {
         if (isDownloading) return;
         setIsDownloading(true);
         try {
-            await downloadAttendanceCSV();
+            await downloadAttendanceCSV(eventId!);
         } catch (error) {
             console.error('Error downloading:', error);
             alert('Failed to download attendance CSV');

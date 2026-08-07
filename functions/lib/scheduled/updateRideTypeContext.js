@@ -45,6 +45,34 @@ const schedule_1 = require("../utils/schedule");
 const notifications_1 = require("../utils/notifications");
 const CONTEXT_DOC = 'system/rideContext';
 /**
+ * Stamp the gathering's own details onto its attendance record.
+ *
+ * Attendance lives at `weeklyAttendance/{eventId}/responses/{uid}`, and the
+ * parent document was never written — so a record said who was coming but
+ * nothing about what they were coming to. Once the sabha time or venue can
+ * change week to week, "the 7th of August" alone stops being enough to
+ * reconstruct what happened.
+ *
+ * set+merge, so re-running is harmless and manager edits to the venue mid-week
+ * are picked up.
+ */
+async function recordEventDetails(db, event, venue) {
+    try {
+        await db.collection('weeklyAttendance').doc(event.eventId).set({
+            eventId: event.eventId,
+            startsAt: event.startsAt,
+            endsAt: event.endsAt,
+            attendanceLocksAt: event.attendanceLocksAt,
+            venue: venue !== null && venue !== void 0 ? venue : null,
+            updatedAt: new Date().toISOString(),
+        }, { merge: true });
+    }
+    catch (error) {
+        // Best-effort. Losing the header must not stop the window opening.
+        console.error('[rideContext] Could not record event details:', error);
+    }
+}
+/**
  * Read the manager-set sabha times.
  *
  * These used to be literals in this file, so moving sabha meant a code change
@@ -59,11 +87,15 @@ async function readSabhaTimes(db) {
             sabhaStart: data === null || data === void 0 ? void 0 : data.sabhaStartTime,
             sabhaEnd: data === null || data === void 0 ? void 0 : data.sabhaEndTime,
             timeZone: (data === null || data === void 0 ? void 0 : data.timeZone) || time_1.DEFAULT_TIME_ZONE,
+            venue: data === null || data === void 0 ? void 0 : data.sabhaLocation,
         };
     }
     catch (error) {
         console.error('[rideContext] Could not read settings/main:', error);
-        return { sabhaStart: undefined, sabhaEnd: undefined, timeZone: time_1.DEFAULT_TIME_ZONE };
+        return {
+            sabhaStart: undefined, sabhaEnd: undefined,
+            timeZone: time_1.DEFAULT_TIME_ZONE, venue: undefined,
+        };
     }
 }
 /**
@@ -98,9 +130,14 @@ exports.updateRideTypeContext = functions.pubsub
             console.log(`[rideContext] Manual override active until ${current.overrideUntil}`);
             return null;
         }
-        const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
+        const { sabhaStart, sabhaEnd, timeZone, venue } = await readSabhaTimes(db);
         const window = (0, schedule_1.resolveScheduleWindow)(now, timeZone, sabhaStart, sabhaEnd);
-        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign({}, window), { overrideUntil: null, lastUpdated: now.toISOString() }));
+        const event = (0, schedule_1.resolveCurrentEvent)(now, timeZone, sabhaStart, sabhaEnd);
+        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), event), { overrideUntil: null, lastUpdated: now.toISOString() }));
+        // Only when the gathering changes, not every minute.
+        if ((current === null || current === void 0 ? void 0 : current.eventId) !== event.eventId) {
+            await recordEventDetails(db, event, venue);
+        }
         await announceIfWindowJustOpened(current === null || current === void 0 ? void 0 : current.rideType, window);
         console.log('[rideContext] Updated:', window);
         return null;
@@ -136,10 +173,11 @@ exports.manuallyUpdateRideContext = functions.https.onCall(async (data, context)
         throw new functions.https.HttpsError('permission-denied', 'Only managers can change the ride window.');
     }
     const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
+    const event = (0, schedule_1.resolveCurrentEvent)(now, timeZone, sabhaStart, sabhaEnd);
     // Reset — hand control straight back to the schedule.
     if (data === null || data === void 0 ? void 0 : data.reset) {
         const window = (0, schedule_1.resolveScheduleWindow)(now, timeZone, sabhaStart, sabhaEnd);
-        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign({}, window), { overrideUntil: null, lastUpdated: now.toISOString() }));
+        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), event), { overrideUntil: null, lastUpdated: now.toISOString() }));
         return window;
     }
     const rideType = data === null || data === void 0 ? void 0 : data.rideType;
@@ -152,7 +190,7 @@ exports.manuallyUpdateRideContext = functions.https.onCall(async (data, context)
         displayText: rideType === 'home-to-sabha' ? 'Home → Sabha' : 'Sabha → Home',
         timeContext: 'Opened by a manager',
     };
-    await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign({}, window), { overrideUntil: endOfLocalDay(now, timeZone), openedBy: context.auth.uid, lastUpdated: now.toISOString() }));
+    await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), event), { overrideUntil: endOfLocalDay(now, timeZone), openedBy: context.auth.uid, lastUpdated: now.toISOString() }));
     // Same one-shot rule as the scheduler: announce only a real change, so
     // re-tapping the button does not notify the congregation twice.
     await announceIfWindowJustOpened(previous === null || previous === void 0 ? void 0 : previous.rideType, window);

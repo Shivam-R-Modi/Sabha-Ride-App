@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveHomeCoords, zonedDateKey } from './coords';
+import { resolveHomeCoords } from './coords';
 
 describe('resolveHomeCoords', () => {
     it('reads the shape ProfileSetup actually writes', () => {
@@ -53,21 +53,5 @@ describe('resolveHomeCoords', () => {
             location: { latitude: 0, longitude: 0 },
             homeLocation: { lat: 42.1, lng: -71.1 },
         })).toEqual({ lat: 42.1, lng: -71.1 });
-    });
-});
-
-describe('zonedDateKey', () => {
-    it('uses the Sabha local date, not the UTC date', () => {
-        // Fri 10:30 PM Boston is already Sat 02:30 UTC. Keying the ride off the
-        // UTC date would file every drop-off under the following day.
-        expect(zonedDateKey(new Date('2026-08-08T02:30:00Z'), 'America/New_York')).toBe('2026-08-07');
-    });
-
-    it('agrees with UTC when the two are on the same day', () => {
-        expect(zonedDateKey(new Date('2026-08-07T18:00:00Z'), 'America/New_York')).toBe('2026-08-07');
-    });
-
-    it('formats as YYYY-MM-DD with padding', () => {
-        expect(zonedDateKey(new Date('2026-01-09T17:00:00Z'), 'America/New_York')).toBe('2026-01-09');
     });
 });

@@ -124,7 +124,7 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
             const rideRef = db.collection('rides').doc();
             rideId = rideRef.id;
             const nowIso = new Date().toISOString();
-            const eventDate = (0, coords_1.zonedDateKey)(now, time_1.DEFAULT_TIME_ZONE);
+            const eventDate = (0, time_1.zonedDateKey)(now, time_1.DEFAULT_TIME_ZONE);
             await rideRef.set({
                 studentId,
                 studentName: (student === null || student === void 0 ? void 0 : student.name) || 'Student',

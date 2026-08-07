@@ -17,7 +17,9 @@
  * moving before the hall empties rather than after.
  */
 
-import { getZonedParts } from './time';
+import {
+    getZonedParts, zonedDateKey, addDaysToDateKey, zonedTimeToInstant,
+} from './time';
 import type { RideType } from '../types';
 
 /** 0 = Sunday. Pickups open at the start of this day. */
@@ -32,10 +34,80 @@ export const DROPOFF_LEAD_MINUTES = 15;
 export const DEFAULT_SABHA_START = '19:00';
 export const DEFAULT_SABHA_END = '22:00';
 
+/**
+ * Attendance closes at this hour, on the day before the gathering.
+ * Once past it, a "yes" cannot be withdrawn — drivers are already planned
+ * around it.
+ */
+export const ATTENDANCE_LOCK_HOUR = '18:00';
+
 export interface ScheduleWindow {
     rideType: RideType | null;
     displayText: string;
     timeContext: string;
+}
+
+/**
+ * Everything about the gathering the app is currently working towards.
+ *
+ * All four times are ABSOLUTE instants, deliberately. Clients compare them
+ * against `now` and never compute a day-of-week or an hour themselves — which
+ * is what the attendance code used to do off the *browser* clock, so a student
+ * whose device was in another timezone wrote their response into a different
+ * gathering's record than the one their manager was reading.
+ */
+export interface CurrentEvent {
+    /** "YYYY-MM-DD" of the gathering, in Sabha local time. The attendance key. */
+    eventId: string;
+    startsAt: string;
+    endsAt: string;
+    /** Drop-off rides open here, 15 minutes before the end. */
+    dropoffOpensAt: string;
+    /** After this, a "yes" is committed. */
+    attendanceLocksAt: string;
+}
+
+/**
+ * Which gathering are we working towards right now?
+ *
+ * The upcoming sabha, or today's if today is the sabha day. Saturday rolls
+ * forward to next week, which preserves the existing "Saturday 00:00 to Friday
+ * 23:59" cycle the attendance records were already keyed by — so no historical
+ * record is orphaned by this change.
+ */
+export function resolveCurrentEvent(
+    now: Date,
+    timeZone: string,
+    sabhaStart: unknown,
+    sabhaEnd: unknown,
+): CurrentEvent {
+    const { dayOfWeek } = getZonedParts(now, timeZone);
+
+    // 0 when today IS the sabha day, so Friday keeps pointing at itself all day.
+    const daysUntilSabha = (SABHA_DAY - dayOfWeek + 7) % 7;
+    const eventId = addDaysToDateKey(zonedDateKey(now, timeZone), daysUntilSabha);
+
+    const startMinutes = parseTimeToMinutes(sabhaStart)
+        ?? parseTimeToMinutes(DEFAULT_SABHA_START)!;
+    const endMinutes = parseTimeToMinutes(sabhaEnd)
+        ?? parseTimeToMinutes(DEFAULT_SABHA_END)!;
+    const safeEndMinutes = endMinutes > startMinutes ? endMinutes : startMinutes + 60;
+
+    return {
+        eventId,
+        startsAt: zonedTimeToInstant(eventId, minutesToTime(startMinutes), timeZone),
+        endsAt: zonedTimeToInstant(eventId, minutesToTime(safeEndMinutes), timeZone),
+        dropoffOpensAt: zonedTimeToInstant(
+            eventId,
+            minutesToTime(safeEndMinutes - DROPOFF_LEAD_MINUTES),
+            timeZone,
+        ),
+        attendanceLocksAt: zonedTimeToInstant(
+            addDaysToDateKey(eventId, -1),
+            ATTENDANCE_LOCK_HOUR,
+            timeZone,
+        ),
+    };
 }
 
 /**

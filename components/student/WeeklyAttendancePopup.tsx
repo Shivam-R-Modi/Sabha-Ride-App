@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../../types';
 import { submitWeeklyAttendance } from '../../hooks/useFirestore';
+import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import '../../claymorphism.css';
 
 interface WeeklyAttendancePopupProps {
@@ -11,9 +12,12 @@ interface WeeklyAttendancePopupProps {
 export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ user, onResponse }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // The gathering this response belongs to, from the server. Never derived
+    // from the device clock — see useCurrentEvent.
+    const { eventId } = useCurrentEvent();
 
     const handleResponse = async (response: 'yes' | 'no') => {
-        if (isSubmitting) return;
+        if (isSubmitting || !eventId) return;
 
         setIsSubmitting(true);
         setError(null);
@@ -22,7 +26,7 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
                 name: user.name,
                 phone: user.phone,
                 address: user.address
-            });
+            }, eventId);
             onResponse(response);
         } catch (error) {
             console.error('Error submitting attendance:', error);

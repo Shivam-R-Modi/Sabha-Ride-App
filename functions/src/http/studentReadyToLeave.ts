@@ -5,8 +5,8 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { getZonedParts, DEFAULT_TIME_ZONE } from '../utils/time';
-import { resolveHomeCoords, zonedDateKey } from '../utils/coords';
+import { getZonedParts, zonedDateKey, DEFAULT_TIME_ZONE } from '../utils/time';
+import { resolveHomeCoords } from '../utils/coords';
 
 /**
  * HTTP Callable: Student ready to leave Sabha

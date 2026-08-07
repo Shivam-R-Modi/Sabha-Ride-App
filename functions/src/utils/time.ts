@@ -83,3 +83,85 @@ export function minutesSinceMidnight(date: Date, timeZone: string = DEFAULT_TIME
     const { hour, minute } = getZonedParts(date, timeZone);
     return hour * 60 + minute;
 }
+
+/** How far `timeZone` is from UTC at this instant, in milliseconds. */
+function zoneOffsetMs(date: Date, timeZone: string): number {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hourCycle: 'h23',
+    }).formatToParts(date);
+
+    const valueOf = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+
+    const asIfUtc = Date.UTC(
+        valueOf('year'), valueOf('month') - 1, valueOf('day'),
+        valueOf('hour'), valueOf('minute'), valueOf('second'),
+    );
+
+    return asIfUtc - date.getTime();
+}
+
+/**
+ * Turn a local wall-clock time into an absolute instant.
+ *
+ * `dateKey` is "YYYY-MM-DD" and `hhmm` is "HH:MM", both as read on a clock in
+ * `timeZone`. Returns an ISO string.
+ *
+ * This is what lets the server publish absolute instants and the clients simply
+ * compare them against `now` — no client ever computes a day-of-week or an
+ * hour, which is the entire class of bug that broke drop-off rides every Friday.
+ *
+ * Two passes, because the offset depends on the instant we are trying to find.
+ * The first guess gets us close enough to read the right offset; the second
+ * catches the daylight-saving boundary where the first guess landed on the wrong
+ * side.
+ */
+export function zonedTimeToInstant(
+    dateKey: string,
+    hhmm: string,
+    timeZone: string = DEFAULT_TIME_ZONE,
+): string {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    const [hour, minute] = hhmm.split(':').map(Number);
+
+    const naive = Date.UTC(year, month - 1, day, hour, minute);
+
+    const firstOffset = zoneOffsetMs(new Date(naive), timeZone);
+    let instant = naive - firstOffset;
+
+    const secondOffset = zoneOffsetMs(new Date(instant), timeZone);
+    if (secondOffset !== firstOffset) {
+        instant = naive - secondOffset;
+    }
+
+    return new Date(instant).toISOString();
+}
+
+/**
+ * Calendar date (YYYY-MM-DD) as read in the given zone.
+ *
+ * Deriving this from the UTC server clock rolls the date over mid-evening in the
+ * Americas — the same failure as the ride-window scheduling.
+ */
+export function zonedDateKey(date: Date, timeZone: string = DEFAULT_TIME_ZONE): string {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(date);
+}
+
+/**
+ * Shift a "YYYY-MM-DD" key by whole days.
+ *
+ * Pure calendar arithmetic in UTC, deliberately: adding 24-hour spans to an
+ * instant double-counts or skips an hour across a daylight-saving change, and
+ * would land the wrong date twice a year.
+ */
+export function addDaysToDateKey(dateKey: string, days: number): string {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    const shifted = new Date(Date.UTC(year, month - 1, day + days));
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`;
+}

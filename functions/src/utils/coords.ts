@@ -43,13 +43,5 @@ export function resolveHomeCoords(user: any): Coords | null {
     return null;
 }
 
-/**
- * Calendar date (YYYY-MM-DD) in the given zone. Ride documents are keyed by
- * event date, and deriving it from the UTC server clock would roll the date
- * over mid-evening — the same bug class as the ride-window scheduling.
- */
-export function zonedDateKey(date: Date, timeZone: string): string {
-    return new Intl.DateTimeFormat('en-CA', {
-        timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
-    }).format(date);
-}
+// zonedDateKey used to live here. It now sits in ./time alongside the other
+// zone-aware helpers, so there is one place that knows how to read a clock.

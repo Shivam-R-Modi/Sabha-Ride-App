@@ -7,10 +7,42 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { RideType } from '../types';
 import { DEFAULT_TIME_ZONE } from '../utils/time';
-import { resolveScheduleWindow, ScheduleWindow } from '../utils/schedule';
+import { resolveScheduleWindow, resolveCurrentEvent, ScheduleWindow, CurrentEvent } from '../utils/schedule';
 import { notifyEveryone } from '../utils/notifications';
 
 const CONTEXT_DOC = 'system/rideContext';
+
+/**
+ * Stamp the gathering's own details onto its attendance record.
+ *
+ * Attendance lives at `weeklyAttendance/{eventId}/responses/{uid}`, and the
+ * parent document was never written — so a record said who was coming but
+ * nothing about what they were coming to. Once the sabha time or venue can
+ * change week to week, "the 7th of August" alone stops being enough to
+ * reconstruct what happened.
+ *
+ * set+merge, so re-running is harmless and manager edits to the venue mid-week
+ * are picked up.
+ */
+async function recordEventDetails(
+    db: admin.firestore.Firestore,
+    event: CurrentEvent,
+    venue: unknown,
+): Promise<void> {
+    try {
+        await db.collection('weeklyAttendance').doc(event.eventId).set({
+            eventId: event.eventId,
+            startsAt: event.startsAt,
+            endsAt: event.endsAt,
+            attendanceLocksAt: event.attendanceLocksAt,
+            venue: venue ?? null,
+            updatedAt: new Date().toISOString(),
+        }, { merge: true });
+    } catch (error) {
+        // Best-effort. Losing the header must not stop the window opening.
+        console.error('[rideContext] Could not record event details:', error);
+    }
+}
 
 /**
  * Read the manager-set sabha times.
@@ -27,10 +59,14 @@ async function readSabhaTimes(db: admin.firestore.Firestore) {
             sabhaStart: data?.sabhaStartTime,
             sabhaEnd: data?.sabhaEndTime,
             timeZone: data?.timeZone || DEFAULT_TIME_ZONE,
+            venue: data?.sabhaLocation,
         };
     } catch (error) {
         console.error('[rideContext] Could not read settings/main:', error);
-        return { sabhaStart: undefined, sabhaEnd: undefined, timeZone: DEFAULT_TIME_ZONE };
+        return {
+            sabhaStart: undefined, sabhaEnd: undefined,
+            timeZone: DEFAULT_TIME_ZONE, venue: undefined,
+        };
     }
 }
 
@@ -78,14 +114,21 @@ export const updateRideTypeContext = functions.pubsub
                 return null;
             }
 
-            const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
+            const { sabhaStart, sabhaEnd, timeZone, venue } = await readSabhaTimes(db);
             const window = resolveScheduleWindow(now, timeZone, sabhaStart, sabhaEnd);
+            const event = resolveCurrentEvent(now, timeZone, sabhaStart, sabhaEnd);
 
             await db.doc(CONTEXT_DOC).set({
                 ...window,
+                ...event,
                 overrideUntil: null,
                 lastUpdated: now.toISOString(),
             });
+
+            // Only when the gathering changes, not every minute.
+            if (current?.eventId !== event.eventId) {
+                await recordEventDetails(db, event, venue);
+            }
 
             await announceIfWindowJustOpened(current?.rideType, window);
 
@@ -128,12 +171,14 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
     }
 
     const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
+    const event = resolveCurrentEvent(now, timeZone, sabhaStart, sabhaEnd);
 
     // Reset — hand control straight back to the schedule.
     if (data?.reset) {
         const window = resolveScheduleWindow(now, timeZone, sabhaStart, sabhaEnd);
         await db.doc(CONTEXT_DOC).set({
             ...window,
+            ...event,
             overrideUntil: null,
             lastUpdated: now.toISOString(),
         });
@@ -158,6 +203,7 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
 
     await db.doc(CONTEXT_DOC).set({
         ...window,
+        ...event,
         overrideUntil: endOfLocalDay(now, timeZone),
         openedBy: context.auth.uid,
         lastUpdated: now.toISOString(),

@@ -1,18 +1,27 @@
 /**
  * Week Utilities for Sabha Ride Seva
- * 
- * Week cycle: Saturday 12:00 AM to Friday 11:59 PM
- * weekId format: YYYY-MM-DD (the Friday of current week)
+ *
+ * The gathering's identity now comes from the server, via `useCurrentEvent` —
+ * see hooks/useCurrentEvent.ts. Read it from there, not from here.
+ *
+ * What remains below is a fallback for the moment before the scheduler has
+ * published, plus date formatting.
  */
 
 /**
- * Gets the Friday date of the current week cycle.
- * - If today is Saturday, returns next week's Friday
- * - Week cycle: Saturday 12:00 AM to Friday 11:59 PM
- * 
+ * The gathering's date, worked out locally.
+ *
+ * ONLY for use before the server has published `eventId`. It reads the device
+ * clock, so a phone in another timezone — or with the wrong date set — resolves
+ * a different gathering than the manager sees, which silently splits the
+ * attendance record in two. That is the bug `useCurrentEvent` exists to fix.
+ *
+ * Kept so attendance keeps working through the deploy rather than writing to an
+ * `undefined` key. Delete once the scheduler has been live for a week.
+ *
  * @returns Date string in "YYYY-MM-DD" format (e.g., "2026-02-06")
  */
-export const getCurrentWeekId = (): string => {
+export const fallbackEventId = (): string => {
     const now = new Date();
     const dayOfWeek = now.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
 
@@ -40,36 +49,11 @@ export const getCurrentWeekId = (): string => {
     return `${year}-${month}-${day}`;
 };
 
-/**
- * Checks if the user can change their response from "yes" to "no".
- * Cutoff is Thursday 6:00 PM of the current week.
- * 
- * @returns true if current time is before Thursday 6:00 PM
- */
-export const canChangeResponseToNo = (): boolean => {
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 = Sunday, 4 = Thursday, 5 = Friday, 6 = Saturday
-    const hours = now.getHours();
-
-    // If it's Saturday, we're in a new week - can change
-    if (dayOfWeek === 6) {
-        return true;
-    }
-
-    // If it's Friday, cutoff has passed
-    if (dayOfWeek === 5) {
-        return false;
-    }
-
-    // If it's Thursday
-    if (dayOfWeek === 4) {
-        // Cutoff is 6:00 PM (18:00)
-        return hours < 18;
-    }
-
-    // Sunday (0) to Wednesday (3) - can change
-    return true;
-};
+// canChangeResponseToNo used to live here and derived "is it past Thursday 6
+// PM?" from the device clock and a hardcoded day-of-week. The server now
+// publishes `attendanceLocksAt` as an absolute instant and the client simply
+// compares it against now — see the `canWithdraw` value from useCurrentEvent.
+// That also means the cutoff moves correctly if the gathering ever moves.
 
 /**
  * Formats a timestamp into a readable date string.

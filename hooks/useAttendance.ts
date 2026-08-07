@@ -3,26 +3,35 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, updateDoc, doc, setDoc, getDocs, getDoc } from 'firebase/firestore';
 import { WeeklyAttendanceRecord } from '../types';
-import { getCurrentWeekId, canChangeResponseToNo } from '../src/utils/weekUtils';
+import { useCurrentEvent } from './useCurrentEvent';
 
-// --- Weekly Attendance System ---
+// --- Attendance, per gathering ---
+//
+// Every path below is keyed by `eventId` — the gathering's date, as published by
+// the server in system/rideContext. It used to be computed in the browser by
+// getCurrentWeekId(), which read the DEVICE clock: a phone in another timezone
+// resolved a different key, so its owner's response landed in a record the
+// manager never read. The count was quietly short with nothing to diagnose.
+//
+// eventId is threaded through as an argument rather than recomputed, so there is
+// exactly one answer per render and it is the server's.
 
 /**
- * Hook to check if a user has responded to this week's attendance check
+ * Hook to check if a user has responded for the current gathering
  */
 export const useWeeklyAttendance = (userId: string) => {
     const [attendance, setAttendance] = useState<WeeklyAttendanceRecord | null>(null);
     const [loading, setLoading] = useState(true);
     const [hasResponded, setHasResponded] = useState(false);
+    const { eventId } = useCurrentEvent();
 
     useEffect(() => {
-        if (!userId) {
+        if (!userId || !eventId) {
             setLoading(false);
             return;
         }
 
-        const weekId = getCurrentWeekId();
-        const docRef = doc(db, 'weeklyAttendance', weekId, 'responses', userId);
+        const docRef = doc(db, 'weeklyAttendance', eventId, 'responses', userId);
 
         const unsubscribe = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -40,7 +49,7 @@ export const useWeeklyAttendance = (userId: string) => {
         });
 
         return unsubscribe;
-    }, [userId]);
+    }, [userId, eventId]);
 
     return { attendance, loading, hasResponded };
 };
@@ -52,10 +61,11 @@ export const useWeeklyAttendance = (userId: string) => {
 export const submitWeeklyAttendance = async (
     userId: string,
     response: 'yes' | 'no',
-    userProfile: { name: string; phone?: string; address?: string }
+    userProfile: { name: string; phone?: string; address?: string },
+    eventId: string
 ): Promise<void> => {
-    const weekId = getCurrentWeekId();
-    const docRef = doc(db, 'weeklyAttendance', weekId, 'responses', userId);
+    if (!eventId) throw new Error('No gathering is scheduled right now.');
+    const docRef = doc(db, 'weeklyAttendance', eventId, 'responses', userId);
 
     // Check if response already exists
     const existingDoc = await getDoc(docRef);
@@ -69,7 +79,8 @@ export const submitWeeklyAttendance = async (
         studentName: userProfile.name,
         studentPhone: userProfile.phone || '',
         studentAddress: userProfile.address || '',
-        studentId: userId
+        studentId: userId,
+        eventId
     };
 
     await setDoc(docRef, record);
@@ -81,20 +92,23 @@ export const submitWeeklyAttendance = async (
 export const updateAttendanceResponse = async (
     userId: string,
     newResponse: 'yes' | 'no',
-    currentResponse: 'yes' | 'no'
+    currentResponse: 'yes' | 'no',
+    eventId: string,
+    canWithdraw: boolean
 ): Promise<{ success: boolean; error?: string }> => {
-    // Check if changing from yes to no after Thursday 6 PM
-    if (currentResponse === 'yes' && newResponse === 'no') {
-        if (!canChangeResponseToNo()) {
-            return {
-                success: false,
-                error: 'Cannot change response to "No" after Thursday 6:00 PM. You are committed to attending this week.'
-            };
-        }
+    if (!eventId) return { success: false, error: 'No gathering is scheduled right now.' };
+
+    // Withdrawing a yes is only allowed before the lock, which the server
+    // publishes as an absolute instant. This used to be worked out from the
+    // device clock and a hardcoded Thursday.
+    if (currentResponse === 'yes' && newResponse === 'no' && !canWithdraw) {
+        return {
+            success: false,
+            error: 'Responses are locked for this sabha. Drivers have already been planned around your yes — please contact a coordinator.'
+        };
     }
 
-    const weekId = getCurrentWeekId();
-    const docRef = doc(db, 'weeklyAttendance', weekId, 'responses', userId);
+    const docRef = doc(db, 'weeklyAttendance', eventId, 'responses', userId);
 
     await updateDoc(docRef, {
         response: newResponse,
@@ -110,10 +124,11 @@ export const updateAttendanceResponse = async (
 export const useWeeklyAttendanceCount = () => {
     const [yesCount, setYesCount] = useState(0);
     const [loading, setLoading] = useState(true);
+    const { eventId } = useCurrentEvent();
 
     useEffect(() => {
-        const weekId = getCurrentWeekId();
-        const responsesRef = collection(db, 'weeklyAttendance', weekId, 'responses');
+        if (!eventId) return;
+        const responsesRef = collection(db, 'weeklyAttendance', eventId, 'responses');
         const q = query(responsesRef, where('response', '==', 'yes'));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -125,7 +140,7 @@ export const useWeeklyAttendanceCount = () => {
         });
 
         return unsubscribe;
-    }, []);
+    }, [eventId]);
 
     return { yesCount, loading };
 };
@@ -133,15 +148,18 @@ export const useWeeklyAttendanceCount = () => {
 /**
  * Fetch all "yes" responses and generate CSV download
  */
-export const downloadAttendanceCSV = async (): Promise<void> => {
-    const weekId = getCurrentWeekId();
-    const responsesRef = collection(db, 'weeklyAttendance', weekId, 'responses');
+export const downloadAttendanceCSV = async (eventId: string): Promise<void> => {
+    if (!eventId) {
+        alert('No gathering is scheduled right now.');
+        return;
+    }
+    const responsesRef = collection(db, 'weeklyAttendance', eventId, 'responses');
     const q = query(responsesRef, where('response', '==', 'yes'));
 
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-        alert('No confirmed attendees for this week yet.');
+        alert('No confirmed attendees for this sabha yet.');
         return;
     }
 
@@ -173,7 +191,7 @@ export const downloadAttendanceCSV = async (): Promise<void> => {
     const url = URL.createObjectURL(blob);
 
     link.setAttribute('href', url);
-    link.setAttribute('download', `sabha-attendance-${weekId}.csv`);
+    link.setAttribute('download', `sabha-attendance-${eventId}.csv`);
     link.style.visibility = 'hidden';
 
     document.body.appendChild(link);

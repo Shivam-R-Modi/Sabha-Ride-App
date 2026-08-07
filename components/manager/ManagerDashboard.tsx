@@ -24,6 +24,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, useWeeklyAttendanceCount, downloadAttendanceCSV, returnStudentToPool, releaseVehicle, setDriverAvailability } from '../../hooks/useFirestore';
 import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
 import { useSettings } from '../../hooks/useSettings';
+import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { VENUE_ADDRESS } from '../../constants';
 
 // Grouped Ride Card Component
@@ -186,6 +187,8 @@ export const ManagerDashboard: React.FC = () => {
 
   // The map plots everything relative to the venue, so it needs the venue.
   const { sabhaLocation } = useSettings();
+  // Attendance is per gathering, keyed by the server-published eventId.
+  const { eventId } = useCurrentEvent();
 
   const { pendingDrivers } = usePendingDrivers();
   const { pendingRiders } = usePendingRiders();
@@ -241,7 +244,7 @@ export const ManagerDashboard: React.FC = () => {
     if (isDownloading) return;
     setIsDownloading(true);
     try {
-      await downloadAttendanceCSV();
+      await downloadAttendanceCSV(eventId!);
     } catch (error) {
       console.error('Error downloading attendance:', error);
       alert('Failed to download attendance CSV');
