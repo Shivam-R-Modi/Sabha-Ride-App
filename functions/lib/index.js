@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.geocodeAddress = exports.adminDeleteUser = exports.verifyManagerCode = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.geocodeAddress = exports.adminDeleteUser = exports.verifyManagerCode = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -46,6 +46,7 @@ admin.initializeApp();
 var updateRideTypeContext_1 = require("./scheduled/updateRideTypeContext");
 Object.defineProperty(exports, "updateRideTypeContext", { enumerable: true, get: function () { return updateRideTypeContext_1.updateRideTypeContext; } });
 Object.defineProperty(exports, "manuallyUpdateRideContext", { enumerable: true, get: function () { return updateRideTypeContext_1.manuallyUpdateRideContext; } });
+Object.defineProperty(exports, "ensureSabhaEvents", { enumerable: true, get: function () { return updateRideTypeContext_1.ensureSabhaEvents; } });
 // ============================================
 // HTTP CALLABLE FUNCTIONS
 // ============================================

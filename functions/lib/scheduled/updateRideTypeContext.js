@@ -37,11 +37,12 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.manuallyUpdateRideContext = exports.updateRideTypeContext = exports.ensureSabhaEvents = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const time_1 = require("../utils/time");
 const schedule_1 = require("../utils/schedule");
+const events_1 = require("../utils/events");
 const notifications_1 = require("../utils/notifications");
 const CONTEXT_DOC = 'system/rideContext';
 /**
@@ -111,12 +112,45 @@ async function announceIfWindowJustOpened(previousRideType, next) {
         return;
     const isPickup = next.rideType === 'home-to-sabha';
     await (0, notifications_1.notifyEveryone)(isPickup ? 'Ride requests are open' : 'Drop-off rides are open', isPickup
-        ? 'Tap to request your ride to sabha this Friday.'
+        // Not "this Friday" any more — the date can move.
+        ? 'Tap to request your ride to the next sabha.'
         : 'Drivers are heading out. Tap when you are ready to leave.', { rideType: next.rideType, reason: 'window-opened' });
 }
+/**
+ * Keep the sabha calendar populated.
+ *
+ * With a list of real events instead of a hardcoded Friday, an empty calendar
+ * means no rides at all. Nobody would get an error — the app would simply say
+ * "no sabha is scheduled" to a congregation expecting a ride. This tops the list
+ * up daily from the weekly slot, and only ever creates what is missing, so an
+ * edited time, a moved venue or a cancellation is never overwritten.
+ */
+exports.ensureSabhaEvents = functions.pubsub
+    .schedule('every day 03:00')
+    .timeZone(time_1.DEFAULT_TIME_ZONE)
+    .onRun(async () => {
+    const db = admin.firestore();
+    const now = new Date();
+    try {
+        const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
+        const created = await (0, events_1.ensureUpcomingEvents)(db, now, timeZone, {
+            startTime: typeof sabhaStart === 'string' ? sabhaStart : schedule_1.DEFAULT_SABHA_START,
+            endTime: typeof sabhaEnd === 'string' ? sabhaEnd : schedule_1.DEFAULT_SABHA_END,
+        });
+        console.log(created.length > 0
+            ? `[events] Created ${created.length}: ${created.join(', ')}`
+            : '[events] Calendar already populated');
+        return null;
+    }
+    catch (error) {
+        console.error('[events] Could not top up the calendar:', error);
+        return null;
+    }
+});
 exports.updateRideTypeContext = functions.pubsub
     .schedule('every 1 minutes')
     .onRun(async () => {
+    var _a;
     const db = admin.firestore();
     try {
         const currentDoc = await db.doc(CONTEXT_DOC).get();
@@ -131,12 +165,35 @@ exports.updateRideTypeContext = functions.pubsub
             return null;
         }
         const { sabhaStart, sabhaEnd, timeZone, venue } = await readSabhaTimes(db);
-        const window = (0, schedule_1.resolveScheduleWindow)(now, timeZone, sabhaStart, sabhaEnd);
-        const event = (0, schedule_1.resolveCurrentEvent)(now, timeZone, sabhaStart, sabhaEnd);
-        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), event), { overrideUntil: null, lastUpdated: now.toISOString() }));
+        // The gathering now comes from the events collection. No event means
+        // nothing is scheduled — closed, and said plainly.
+        let scheduled = await (0, events_1.findCurrentEvent)(db, now, timeZone);
+        // Self-heal an empty calendar. Without this, the first deploy would
+        // close the service until the daily top-up ran, and any future gap
+        // would do the same. ensureUpcomingEvents only creates dates that are
+        // MISSING, so a gathering a manager deliberately cancelled stays
+        // cancelled and this does nothing.
+        if (!scheduled) {
+            const created = await (0, events_1.ensureUpcomingEvents)(db, now, timeZone, {
+                startTime: typeof sabhaStart === 'string' ? sabhaStart : schedule_1.DEFAULT_SABHA_START,
+                endTime: typeof sabhaEnd === 'string' ? sabhaEnd : schedule_1.DEFAULT_SABHA_END,
+            });
+            if (created.length > 0) {
+                console.log(`[events] Seeded an empty calendar: ${created.join(', ')}`);
+                scheduled = await (0, events_1.findCurrentEvent)(db, now, timeZone);
+            }
+        }
+        const event = scheduled
+            ? (0, schedule_1.buildCurrentEvent)(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
+                venue: scheduled.venue,
+                agenda: scheduled.agenda,
+            })
+            : null;
+        const window = (0, schedule_1.resolveScheduleWindow)(now, event, timeZone);
+        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), (event !== null && event !== void 0 ? event : { eventId: null })), { overrideUntil: null, lastUpdated: now.toISOString() }));
         // Only when the gathering changes, not every minute.
-        if ((current === null || current === void 0 ? void 0 : current.eventId) !== event.eventId) {
-            await recordEventDetails(db, event, venue);
+        if (event && (current === null || current === void 0 ? void 0 : current.eventId) !== event.eventId) {
+            await recordEventDetails(db, event, (_a = event.venue) !== null && _a !== void 0 ? _a : venue);
         }
         await announceIfWindowJustOpened(current === null || current === void 0 ? void 0 : current.rideType, window);
         console.log('[rideContext] Updated:', window);
@@ -172,12 +229,18 @@ exports.manuallyUpdateRideContext = functions.https.onCall(async (data, context)
     if (!isManager) {
         throw new functions.https.HttpsError('permission-denied', 'Only managers can change the ride window.');
     }
-    const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
-    const event = (0, schedule_1.resolveCurrentEvent)(now, timeZone, sabhaStart, sabhaEnd);
+    const { timeZone } = await readSabhaTimes(db);
+    const scheduled = await (0, events_1.findCurrentEvent)(db, now, timeZone);
+    const event = scheduled
+        ? (0, schedule_1.buildCurrentEvent)(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
+            venue: scheduled.venue,
+            agenda: scheduled.agenda,
+        })
+        : null;
     // Reset — hand control straight back to the schedule.
     if (data === null || data === void 0 ? void 0 : data.reset) {
-        const window = (0, schedule_1.resolveScheduleWindow)(now, timeZone, sabhaStart, sabhaEnd);
-        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), event), { overrideUntil: null, lastUpdated: now.toISOString() }));
+        const window = (0, schedule_1.resolveScheduleWindow)(now, event, timeZone);
+        await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), (event !== null && event !== void 0 ? event : { eventId: null })), { overrideUntil: null, lastUpdated: now.toISOString() }));
         return window;
     }
     const rideType = data === null || data === void 0 ? void 0 : data.rideType;
@@ -190,6 +253,9 @@ exports.manuallyUpdateRideContext = functions.https.onCall(async (data, context)
         displayText: rideType === 'home-to-sabha' ? 'Home → Sabha' : 'Sabha → Home',
         timeContext: 'Opened by a manager',
     };
+    if (!event) {
+        throw new functions.https.HttpsError('failed-precondition', 'No sabha is scheduled. Add one in Settings before opening a ride window.');
+    }
     await db.doc(CONTEXT_DOC).set(Object.assign(Object.assign(Object.assign({}, window), event), { overrideUntil: endOfLocalDay(now, timeZone), openedBy: context.auth.uid, lastUpdated: now.toISOString() }));
     // Same one-shot rule as the scheduler: announce only a real change, so
     // re-tapping the button does not notify the congregation twice.

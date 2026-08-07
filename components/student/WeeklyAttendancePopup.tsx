@@ -14,7 +14,11 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
     const [error, setError] = useState<string | null>(null);
     // The gathering this response belongs to, from the server. Never derived
     // from the device clock — see useCurrentEvent.
-    const { eventId } = useCurrentEvent();
+    const { eventId, hasEvent } = useCurrentEvent();
+    // No gathering scheduled means there is nothing to respond to. Both buttons
+    // would otherwise return silently on the !eventId guard below — tappable and
+    // inert, which is the exact failure this app was full of.
+    const blocked = !hasEvent;
 
     const handleResponse = async (response: 'yes' | 'no') => {
         if (isSubmitting || !eventId) return;
@@ -118,14 +122,14 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
                     <button
                         className="clay-button-primary"
                         onClick={() => handleResponse('yes')}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || blocked}
                         style={{
                             padding: '16px 24px',
                             fontSize: '1rem',
                             fontWeight: '600',
                             width: '100%',
-                            cursor: isSubmitting ? 'wait' : 'pointer',
-                            opacity: isSubmitting ? 0.7 : 1
+                            cursor: isSubmitting ? 'wait' : blocked ? 'not-allowed' : 'pointer',
+                            opacity: (isSubmitting || blocked) ? 0.7 : 1
                         }}
                     >
                         {isSubmitting ? 'Submitting...' : 'Yes, of course!'}
@@ -134,14 +138,14 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
                     <button
                         className="clay-button-secondary"
                         onClick={() => handleResponse('no')}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || blocked}
                         style={{
                             padding: '14px 24px',
                             fontSize: '0.95rem',
                             fontWeight: '500',
                             width: '100%',
-                            cursor: isSubmitting ? 'wait' : 'pointer',
-                            opacity: isSubmitting ? 0.7 : 1,
+                            cursor: isSubmitting ? 'wait' : blocked ? 'not-allowed' : 'pointer',
+                            opacity: (isSubmitting || blocked) ? 0.7 : 1,
                             background: 'transparent',
                             color: 'var(--clay-text-secondary)',
                             border: '2px solid var(--clay-border)'
@@ -151,13 +155,16 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
                     </button>
                 </div>
 
-                {/* Subtle footer text */}
+                {/* Subtle footer text — or the reason the buttons are disabled */}
                 <p style={{
                     fontSize: '0.75rem',
-                    color: 'var(--clay-text-muted)',
+                    color: blocked ? '#b91c1c' : 'var(--clay-text-muted)',
+                    fontWeight: blocked ? 600 : 400,
                     marginTop: '20px',
                 }}>
-                    This helps us plan rides for everyone 🚗
+                    {blocked
+                        ? 'No sabha is scheduled yet — please check back soon.'
+                        : 'This helps us plan rides for everyone 🚗'}
                 </p>
             </div>
         </div>

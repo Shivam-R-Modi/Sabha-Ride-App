@@ -361,6 +361,20 @@ service cloud.firestore {
       }
     }
     // =====================================
+    // SABHA EVENTS
+    // =====================================
+    match /events/{eventId} {
+      // Everyone signed in reads the calendar — the student dashboard shows when
+      // the next sabha is, and the driver dashboard gates "Assign Me" on it.
+      allow read: if isAuthenticated();
+
+      // Only managers schedule, move or cancel a gathering. Writing here changes
+      // when rides open for the whole congregation, so it is the same authority
+      // as changing the venue.
+      allow write: if isManager();
+    }
+
+    // =====================================
     // SETTINGS COLLECTION (Sabha location, etc.)
     // =====================================
     match /settings/{settingId} {

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { fallbackEventId } from '../src/utils/weekUtils';
 
 /**
  * The gathering the app is currently working towards, as published by the
@@ -16,14 +15,22 @@ import { fallbackEventId } from '../src/utils/weekUtils';
  * `attendanceLocksAt` is an absolute instant for the same reason: the client
  * compares it against `now` rather than working out whether it is "past
  * Thursday 6 PM" itself.
+ *
+ * `eventId` is null when no sabha is scheduled. Callers must handle that rather
+ * than substituting a guessed date — inventing one is how an empty calendar used
+ * to look like a normal week.
  */
 
 export interface CurrentEvent {
-    eventId: string;
+    eventId: string | null;
+    requestsOpenAt?: string;
     startsAt?: string;
     endsAt?: string;
     dropoffOpensAt?: string;
+    closesAt?: string;
     attendanceLocksAt?: string;
+    venue?: { lat: number; lng: number; address: string } | null;
+    agenda?: string;
 }
 
 export function useCurrentEvent() {
@@ -36,20 +43,21 @@ export function useCurrentEvent() {
             (snap) => {
                 const data = snap.exists() ? snap.data() : null;
                 setEvent({
-                    // Until the scheduler has published once, fall back to the
-                    // local calculation so attendance keeps working through the
-                    // deploy rather than writing to `undefined`.
-                    eventId: data?.eventId || fallbackEventId(),
+                    eventId: data?.eventId ?? null,
+                    requestsOpenAt: data?.requestsOpenAt,
                     startsAt: data?.startsAt,
                     endsAt: data?.endsAt,
                     dropoffOpensAt: data?.dropoffOpensAt,
+                    closesAt: data?.closesAt,
                     attendanceLocksAt: data?.attendanceLocksAt,
+                    venue: data?.venue ?? null,
+                    agenda: data?.agenda,
                 });
                 setLoading(false);
             },
             (error) => {
                 console.error('[useCurrentEvent] Listener error:', error);
-                setEvent({ eventId: fallbackEventId() });
+                setEvent({ eventId: null });
                 setLoading(false);
             }
         );
@@ -65,5 +73,12 @@ export function useCurrentEvent() {
         return new Date() < new Date(event.attendanceLocksAt);
     })();
 
-    return { event, eventId: event?.eventId, canWithdraw, loading };
+    return {
+        event,
+        eventId: event?.eventId ?? null,
+        /** False when no sabha is scheduled — attendance and requests make no sense then. */
+        hasEvent: !!event?.eventId,
+        canWithdraw,
+        loading,
+    };
 }

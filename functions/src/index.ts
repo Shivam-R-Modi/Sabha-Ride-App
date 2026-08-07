@@ -11,7 +11,7 @@ admin.initializeApp();
 // SCHEDULED FUNCTIONS
 // ============================================
 
-export { updateRideTypeContext, manuallyUpdateRideContext } from './scheduled/updateRideTypeContext';
+export { updateRideTypeContext, manuallyUpdateRideContext, ensureSabhaEvents } from './scheduled/updateRideTypeContext';
 
 // ============================================
 // HTTP CALLABLE FUNCTIONS

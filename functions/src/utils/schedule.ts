@@ -1,31 +1,42 @@
 /**
- * When rides are open, derived from times a manager sets.
+ * When rides are open, derived from a scheduled gathering.
  *
- * Previously every boundary was a literal in updateRideTypeContext: Friday only,
- * pickup before 19:00, drop-off from 22:00. Changing the sabha time meant a code
- * edit and a deploy, which is not something a coordinator can do on a Thursday.
+ * Every boundary here used to be a literal in updateRideTypeContext: Friday
+ * only, pickup before 19:00, drop-off from 22:00. Moving sabha meant a code edit
+ * and a deploy, which is not something a coordinator can do on a Thursday.
  *
- * The manager now sets two things — when sabha starts and when it ends. Both are
- * "HH:MM" in Sabha local time. Everything else is derived:
+ * Now a gathering has its own date, start and end (see ./events), and the
+ * windows fall out of it:
  *
- *   Wed 00:00  ──────────────────────────►  pickup open (home → sabha)
- *   Fri <start>                              sabha in progress, no rides
- *   Fri <end − 15min> ──────────────────►  drop-off open (sabha → home)
- *   Sat 00:00                                closed
+ *   date − 2 days, 00:00  ──────────────►  ride requests open (home → sabha)
+ *   <start>                                 sabha in progress, no rides
+ *   <end − 15min> ──────────────────────►  drop-off open (sabha → home)
+ *   end of that day                         closed
  *
  * Drop-off deliberately opens 15 minutes BEFORE sabha ends, so drivers are
  * moving before the hall empties rather than after.
+ *
+ * Everything is compared as absolute instants, so nothing in this file needs to
+ * know what day of the week it is. That is what lets the date move.
  */
 
-import {
-    getZonedParts, zonedDateKey, addDaysToDateKey, zonedTimeToInstant,
-} from './time';
+import { addDaysToDateKey, zonedTimeToInstant } from './time';
 import type { RideType } from '../types';
 
-/** 0 = Sunday. Pickups open at the start of this day. */
-export const PICKUP_OPENS_DAY = 3; // Wednesday
+/**
+ * Ride requests open this many days before the gathering.
+ *
+ * Was the constant "Wednesday". Expressed as a lead time it means the same thing
+ * for a Friday sabha and keeps working when the date moves, which it now can.
+ */
+export const PICKUP_LEAD_DAYS = 2;
 
-/** 0 = Sunday. The day sabha is held. */
+/**
+ * 0 = Sunday. The day the weekly template generates events on.
+ *
+ * No longer the source of truth for when sabha IS — that comes from the events
+ * collection. This is only the default slot new events are generated in.
+ */
 export const SABHA_DAY = 5; // Friday
 
 /** Drop-off opens this many minutes before sabha ends. */
@@ -59,54 +70,72 @@ export interface ScheduleWindow {
 export interface CurrentEvent {
     /** "YYYY-MM-DD" of the gathering, in Sabha local time. The attendance key. */
     eventId: string;
+    /** Ride requests open here — PICKUP_LEAD_DAYS before, at midnight. */
+    requestsOpenAt: string;
     startsAt: string;
     endsAt: string;
     /** Drop-off rides open here, 15 minutes before the end. */
     dropoffOpensAt: string;
+    /** Everything shuts at the end of the gathering's own day. */
+    closesAt: string;
     /** After this, a "yes" is committed. */
     attendanceLocksAt: string;
+    /** Where this gathering is, when it overrides the default venue. */
+    venue?: { lat: number; lng: number; address: string } | null;
+    agenda?: string;
 }
 
 /**
- * Which gathering are we working towards right now?
+ * Turn a gathering's date and times into the absolute instants everything else
+ * compares against.
  *
- * The upcoming sabha, or today's if today is the sabha day. Saturday rolls
- * forward to next week, which preserves the existing "Saturday 00:00 to Friday
- * 23:59" cycle the attendance records were already keyed by — so no historical
- * record is orphaned by this change.
+ * The date is now given, not derived — it comes from the events collection. This
+ * function used to work out "the upcoming Friday" itself, which is exactly the
+ * assumption that made the day unchangeable.
  */
-export function resolveCurrentEvent(
-    now: Date,
+export function buildCurrentEvent(
+    eventDate: string,
+    startTime: unknown,
+    endTime: unknown,
     timeZone: string,
-    sabhaStart: unknown,
-    sabhaEnd: unknown,
+    extras?: {
+        venue?: { lat: number; lng: number; address: string } | null;
+        agenda?: string;
+    },
 ): CurrentEvent {
-    const { dayOfWeek } = getZonedParts(now, timeZone);
-
-    // 0 when today IS the sabha day, so Friday keeps pointing at itself all day.
-    const daysUntilSabha = (SABHA_DAY - dayOfWeek + 7) % 7;
-    const eventId = addDaysToDateKey(zonedDateKey(now, timeZone), daysUntilSabha);
-
-    const startMinutes = parseTimeToMinutes(sabhaStart)
+    const startMinutes = parseTimeToMinutes(startTime)
         ?? parseTimeToMinutes(DEFAULT_SABHA_START)!;
-    const endMinutes = parseTimeToMinutes(sabhaEnd)
+    const endMinutes = parseTimeToMinutes(endTime)
         ?? parseTimeToMinutes(DEFAULT_SABHA_END)!;
+
+    // An end at or before the start would produce a negative-length sabha and
+    // open drop-off before pickup closed.
     const safeEndMinutes = endMinutes > startMinutes ? endMinutes : startMinutes + 60;
 
     return {
-        eventId,
-        startsAt: zonedTimeToInstant(eventId, minutesToTime(startMinutes), timeZone),
-        endsAt: zonedTimeToInstant(eventId, minutesToTime(safeEndMinutes), timeZone),
+        eventId: eventDate,
+        requestsOpenAt: zonedTimeToInstant(
+            addDaysToDateKey(eventDate, -PICKUP_LEAD_DAYS),
+            '00:00',
+            timeZone,
+        ),
+        startsAt: zonedTimeToInstant(eventDate, minutesToTime(startMinutes), timeZone),
+        endsAt: zonedTimeToInstant(eventDate, minutesToTime(safeEndMinutes), timeZone),
         dropoffOpensAt: zonedTimeToInstant(
-            eventId,
+            eventDate,
             minutesToTime(safeEndMinutes - DROPOFF_LEAD_MINUTES),
             timeZone,
         ),
+        // Midnight at the end of the gathering's own day, so late drop-off runs
+        // are not cut off by the clock.
+        closesAt: zonedTimeToInstant(addDaysToDateKey(eventDate, 1), '00:00', timeZone),
         attendanceLocksAt: zonedTimeToInstant(
-            addDaysToDateKey(eventId, -1),
+            addDaysToDateKey(eventDate, -1),
             ATTENDANCE_LOCK_HOUR,
             timeZone,
         ),
+        venue: extras?.venue ?? null,
+        agenda: extras?.agenda ?? '',
     };
 }
 
@@ -144,72 +173,86 @@ export function formatTimeForDisplay(value: string): string {
 }
 
 /**
- * Which rides — if any — are open at this instant.
+ * Which rides — if any — are open at this instant, for a given gathering.
  *
- * Falls back to the default times when a setting is missing or malformed. The
- * failure mode of throwing here is "no rides at all", which strands people, so
- * a bad value degrades to the previous behaviour instead.
+ * Compares `now` against the gathering's own absolute instants, so nothing here
+ * cares what day of the week it is. That is what lets the date move.
+ *
+ * `event` null means nothing is scheduled — closed, and say so plainly rather
+ * than guessing a date.
  */
 export function resolveScheduleWindow(
     now: Date,
+    event: CurrentEvent | null,
     timeZone: string,
-    sabhaStart: unknown,
-    sabhaEnd: unknown,
 ): ScheduleWindow {
-    const { dayOfWeek, hour, minute } = getZonedParts(now, timeZone);
-    const nowMinutes = hour * 60 + minute;
-
-    const startMinutes = parseTimeToMinutes(sabhaStart)
-        ?? parseTimeToMinutes(DEFAULT_SABHA_START)!;
-    const endMinutes = parseTimeToMinutes(sabhaEnd)
-        ?? parseTimeToMinutes(DEFAULT_SABHA_END)!;
-
-    // A manager who sets an end time at or before the start would otherwise
-    // produce a negative-length sabha and open drop-off before pickup closes.
-    const safeEndMinutes = endMinutes > startMinutes ? endMinutes : startMinutes + 60;
-    const dropoffFrom = safeEndMinutes - DROPOFF_LEAD_MINUTES;
-
-    const startLabel = formatTimeForDisplay(minutesToTime(startMinutes));
-    const endLabel = formatTimeForDisplay(minutesToTime(safeEndMinutes));
-
-    // Wednesday and Thursday: pickup is open all day.
-    if (dayOfWeek === PICKUP_OPENS_DAY || dayOfWeek === PICKUP_OPENS_DAY + 1) {
+    if (!event) {
         return {
-            rideType: 'home-to-sabha',
-            displayText: 'Home → Sabha',
-            timeContext: `Requesting is open for Friday's sabha (${startLabel})`,
+            rideType: null,
+            displayText: 'No rides available',
+            timeContext: 'No sabha is scheduled yet',
         };
     }
 
-    if (dayOfWeek === SABHA_DAY) {
-        if (nowMinutes < startMinutes) {
-            return {
-                rideType: 'home-to-sabha',
-                displayText: 'Home → Sabha',
-                timeContext: `Sabha starts at ${startLabel}`,
-            };
-        }
+    const startsAt = new Date(event.startsAt);
+    const dropoffOpensAt = new Date(event.dropoffOpensAt);
+    const requestsOpenAt = new Date(event.requestsOpenAt);
+    const closesAt = new Date(event.closesAt);
 
-        if (nowMinutes < dropoffFrom) {
-            return {
-                rideType: null,
-                displayText: 'Sabha in Progress',
-                timeContext: `Drop-off rides open ${DROPOFF_LEAD_MINUTES} minutes before sabha ends at ${endLabel}`,
-            };
-        }
+    const startLabel = formatInstantForDisplay(startsAt, timeZone);
+    const dayLabel = formatDayForDisplay(startsAt, timeZone);
 
+    if (now < requestsOpenAt) {
+        return {
+            rideType: null,
+            displayText: 'No rides available',
+            timeContext: `Ride requests open ${formatDayForDisplay(requestsOpenAt, timeZone)} for ${dayLabel}'s sabha`,
+        };
+    }
+
+    if (now < startsAt) {
+        return {
+            rideType: 'home-to-sabha',
+            displayText: 'Home → Sabha',
+            timeContext: `Sabha ${dayLabel} at ${startLabel}`,
+        };
+    }
+
+    if (now < dropoffOpensAt) {
+        return {
+            rideType: null,
+            displayText: 'Sabha in Progress',
+            timeContext: `Drop-off rides open ${DROPOFF_LEAD_MINUTES} minutes before sabha ends at ${formatInstantForDisplay(new Date(event.endsAt), timeZone)}`,
+        };
+    }
+
+    if (now < closesAt) {
         return {
             rideType: 'sabha-to-home',
             displayText: 'Sabha → Home',
-            timeContext: `Sabha ends at ${endLabel}`,
+            timeContext: `Sabha ends at ${formatInstantForDisplay(new Date(event.endsAt), timeZone)}`,
         };
     }
 
     return {
         rideType: null,
         displayText: 'No rides available',
-        timeContext: 'Ride requests open Wednesday',
+        timeContext: 'Rides for this sabha have closed',
     };
+}
+
+/** "7:00 PM" in the venue's zone. */
+function formatInstantForDisplay(instant: Date, timeZone: string): string {
+    return new Intl.DateTimeFormat('en-US', {
+        timeZone, hour: 'numeric', minute: '2-digit', hour12: true,
+    }).format(instant);
+}
+
+/** "Friday 14 Aug" in the venue's zone. */
+function formatDayForDisplay(instant: Date, timeZone: string): string {
+    return new Intl.DateTimeFormat('en-US', {
+        timeZone, weekday: 'long', day: 'numeric', month: 'short',
+    }).format(instant);
 }
 
 /** Inverse of parseTimeToMinutes, for building display labels. */

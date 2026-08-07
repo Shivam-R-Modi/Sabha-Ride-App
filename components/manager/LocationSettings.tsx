@@ -157,7 +157,7 @@ export const LocationSettings: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                     <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                            Sabha Starts
+                            Default Start
                         </label>
                         <input
                             type="time"
@@ -173,7 +173,7 @@ export const LocationSettings: React.FC = () => {
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                            Sabha Ends
+                            Default End
                         </label>
                         <input
                             type="time"
@@ -190,13 +190,23 @@ export const LocationSettings: React.FC = () => {
                 </div>
 
                 <div className="bg-amber-50/60 border border-amber-100 rounded-lg px-3 py-2 space-y-1">
+                    {/*
+                      These are the times NEW Fridays are created with. Once an
+                      event exists it carries its own times, so changing this does
+                      not move a sabha that is already on the calendar. Saying so
+                      plainly, because a manager changing this expecting tonight
+                      to move is exactly the kind of quiet mismatch this app has
+                      been full of.
+                    */}
                     <p className="text-xs text-gray-600">
-                        Ride requests open <span className="font-semibold">Wednesday</span> and
-                        stay open until sabha starts.
+                        Used for <span className="font-semibold">newly added Fridays</span>. To
+                        change a sabha already on the calendar, edit it in{' '}
+                        <span className="font-semibold">Sabha Calendar</span> above.
                     </p>
                     <p className="text-xs text-gray-600">
-                        Drop-off rides open automatically{' '}
-                        <span className="font-semibold">15 minutes before sabha ends</span>.
+                        Ride requests open <span className="font-semibold">2 days before</span> each
+                        sabha. Drop-off opens{' '}
+                        <span className="font-semibold">15 minutes before it ends</span>.
                     </p>
                     {timesChanged && !timesValid && (
                         <p className="text-xs text-red-600 font-semibold">

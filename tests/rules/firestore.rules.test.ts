@@ -357,3 +357,65 @@ describe('manager approval flow still works', () => {
         )));
     });
 });
+
+describe('the sabha calendar', () => {
+    beforeEach(async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'events', '2026-08-14'), {
+                date: '2026-08-14', startTime: '19:00', endTime: '22:00',
+                status: 'scheduled', venue: null, agenda: '',
+            });
+        });
+    });
+
+    it('a student CAN read the calendar', async () => {
+        // The dashboard tells riders when the next sabha is.
+        await assertSucceeds(getDoc(doc(asStudent(), 'events', '2026-08-14')));
+    });
+
+    it('a driver CAN read the calendar', async () => {
+        await assertSucceeds(getDoc(doc(asDriver(), 'events', '2026-08-14')));
+    });
+
+    it('a student cannot move a sabha', async () => {
+        // Changing a gathering's time changes when rides open for everyone.
+        await assertFails(updateDoc(doc(asStudent(), 'events', '2026-08-14'), {
+            startTime: '06:00',
+        }));
+    });
+
+    it('a student cannot cancel a sabha', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'events', '2026-08-14'), {
+            status: 'cancelled',
+        }));
+    });
+
+    it('a student cannot invent a sabha', async () => {
+        await assertFails(setDoc(doc(asStudent(), 'events', '2026-08-21'), {
+            date: '2026-08-21', startTime: '19:00', endTime: '22:00', status: 'scheduled',
+        }));
+    });
+
+    it('a driver cannot move a sabha either', async () => {
+        await assertFails(updateDoc(doc(asDriver(), 'events', '2026-08-14'), {
+            startTime: '06:00',
+        }));
+    });
+
+    it('a manager CAN schedule, move and cancel', async () => {
+        await assertSucceeds(setDoc(doc(asManager(), 'events', '2026-08-21'), {
+            date: '2026-08-21', startTime: '18:00', endTime: '20:00',
+            status: 'scheduled', venue: null, agenda: 'Youth sabha',
+        }));
+        await assertSucceeds(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
+            startTime: '16:30',
+        }));
+        await assertSucceeds(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
+            status: 'cancelled',
+        }));
+    });
+
+    it('an anonymous visitor cannot read the calendar', async () => {
+        await assertFails(getDoc(doc(asAnon(), 'events', '2026-08-14')));
+    });
+});
