@@ -35,11 +35,13 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveVenue = resolveVenue;
 exports.getSabhaLocation = getSabhaLocation;
+exports.getTimeZone = getTimeZone;
 /**
  * Fetch the Sabha location from the Firestore settings document.
  * Falls back to a default if the document doesn't exist or is missing data.
  */
 const admin = __importStar(require("firebase-admin"));
+const time_1 = require("./time");
 const DEFAULT_SABHA_LOCATION = {
     lat: 42.339925,
     lng: -71.088182,
@@ -99,6 +101,30 @@ async function getSabhaLocation() {
     catch (err) {
         console.error('[getSabhaLocation] Error fetching settings:', err);
         return DEFAULT_SABHA_LOCATION;
+    }
+}
+/**
+ * The zone the congregation's clocks are in.
+ *
+ * Anything deriving a calendar date needs this, because the server clock is UTC
+ * and rolls over mid-evening in the Americas. An unrecognised zone falls back
+ * rather than throwing: `Intl` rejects a bad zone at format time, which would
+ * turn a typo in a settings document into a failing ride completion.
+ */
+async function getTimeZone() {
+    var _a;
+    try {
+        const db = admin.firestore();
+        const snap = await db.collection('settings').doc('main').get();
+        const configured = (_a = snap.data()) === null || _a === void 0 ? void 0 : _a.timeZone;
+        if (typeof configured === 'string' && (0, time_1.isValidTimeZone)(configured)) {
+            return configured;
+        }
+        return time_1.DEFAULT_TIME_ZONE;
+    }
+    catch (err) {
+        console.error('[getTimeZone] Error fetching settings:', err);
+        return time_1.DEFAULT_TIME_ZONE;
     }
 }
 //# sourceMappingURL=settings.js.map

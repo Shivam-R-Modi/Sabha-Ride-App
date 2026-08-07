@@ -70,10 +70,9 @@ service cloud.firestore {
       ) && (data.accountStatus == 'approved');
     }
 
-    // Check if driver is assigned to a specific ride
-    function isAssignedDriver(rideId) {
-      return isDriver() && get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid;
-    }
+    // isAssignedDriver(rideId) lived here. Its only caller was the /students
+    // update rule, which is gone, so it was a billed get() that nothing reached.
+    // A driver's authority over a ride is checked directly in the /rides rules.
 
     // =====================================
     // FIELD-LEVEL GUARDS
@@ -176,43 +175,32 @@ service cloud.firestore {
     }
     
     // =====================================
-    // STUDENTS COLLECTION
+    // STUDENTS / DRIVERS COLLECTIONS — legacy, closed
     // =====================================
+    //
+    // These were per-role mirrors of a user's profile. Nothing writes them any
+    // more: no client and no Cloud Function creates or reads one, and the only
+    // remaining references anywhere are the cleanup deletes in adminDeleteUser,
+    // which run under the Admin SDK and so bypass these rules entirely.
+    //
+    // They previously carried `allow read: if isAuthenticated()` — the same hole
+    // just closed on /users, and on the same data: name, phone, email and home
+    // address, for minors as well as adults. Left open, anything that ever
+    // repopulated them would silently republish every family to every account,
+    // with no UI showing that it had happened.
+    //
+    // Closed rather than tightened, because a rule granting access to a
+    // collection no code uses can only ever be a way in. If per-role documents
+    // are wanted again, they belong under a real access rule written for the
+    // read paths that need them.
     match /students/{studentId} {
-      // Authenticated users can read student data
-      allow read: if isAuthenticated();
-      
-      // Students can create their own record
-      allow create: if isOwner(studentId);
-      
-      // Students can update their own record
-      // Drivers can update assigned students
-      // Managers can update any student
-      allow update: if isOwner(studentId) || isManager() || 
-        (isDriver() && isAssignedDriver(resource.data.currentRideId));
-      
-      // Only managers can delete
-      allow delete: if isManager();
+      allow read, write: if false;
     }
-    
-    // =====================================
-    // DRIVERS COLLECTION
-    // =====================================
+
     match /drivers/{driverId} {
-      // Authenticated users can read driver data
-      allow read: if isAuthenticated();
-      
-      // Drivers can create their own record
-      allow create: if isOwner(driverId);
-      
-      // Drivers can update their own record
-      // Managers can update any driver
-      allow update: if isOwner(driverId) || isManager();
-      
-      // Only managers can delete
-      allow delete: if isManager();
+      allow read, write: if false;
     }
-    
+
     // =====================================
     // RIDES COLLECTION
     // =====================================

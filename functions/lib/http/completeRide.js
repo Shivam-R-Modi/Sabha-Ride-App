@@ -42,13 +42,16 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const notifications_1 = require("../utils/notifications");
 const fleet_1 = require("../utils/fleet");
+const events_1 = require("../utils/events");
+const settings_1 = require("../utils/settings");
+const time_1 = require("../utils/time");
 /**
  * HTTP Callable: Complete a ride
  * Input: { rideId: string }
  * Output: Driver's today stats
  */
 exports.completeRide = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -78,7 +81,15 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         }
         const batch = db.batch();
         const now = new Date().toISOString();
-        const eventDate = new Date().toISOString().split('T')[0];
+        // Which gathering these numbers belong to.
+        //
+        // This was `new Date().toISOString().split('T')[0]` — the UTC calendar
+        // date. A drop-off run finishing at 22:30 in Boston is already the next
+        // day in UTC, so the sabha's own drop-off figures were filed under
+        // tomorrow while its pickup figures sat under today, and generateEventCSV
+        // (which looks up `statistics/{the sabha's date}`) found neither complete.
+        // The ride knows which sabha it served; ask it.
+        const eventDate = (_b = (0, events_1.eventKeyFromRide)(ride)) !== null && _b !== void 0 ? _b : (0, time_1.zonedDateKey)(new Date(), await (0, settings_1.getTimeZone)());
         // Find ALL active rides for this driver to complete all documents in multi-student grouped rides
         const activeRidesSnap = await db.collection('rides')
             .where('driverId', '==', driverUid)
@@ -111,7 +122,7 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         const driverDoc = await db.collection('users').doc(driverUid).get();
         const driver = driverDoc.data();
         const newRidesCompleted = ((driver === null || driver === void 0 ? void 0 : driver.ridesCompletedToday) || 0) + 1;
-        const newTotalStudents = ((driver === null || driver === void 0 ? void 0 : driver.totalStudentsToday) || 0) + (allStudents.length || ((_b = ride === null || ride === void 0 ? void 0 : ride.students) === null || _b === void 0 ? void 0 : _b.length) || 1);
+        const newTotalStudents = ((driver === null || driver === void 0 ? void 0 : driver.totalStudentsToday) || 0) + (allStudents.length || ((_c = ride === null || ride === void 0 ? void 0 : ride.students) === null || _c === void 0 ? void 0 : _c.length) || 1);
         const newTotalDistance = ((driver === null || driver === void 0 ? void 0 : driver.totalDistanceToday) || 0) + ((ride === null || ride === void 0 ? void 0 : ride.estimatedDistance) || 0);
         // Released in BOTH collections. Clearing only `vehicles` left
         // `cars/{id}` saying in_use with the previous driver still on it, and
@@ -134,7 +145,7 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
             // Send notification to student
             try {
                 const studentDoc = await db.collection('users').doc(student.id).get();
-                const fcmToken = (_c = studentDoc.data()) === null || _c === void 0 ? void 0 : _c.fcmToken;
+                const fcmToken = (_d = studentDoc.data()) === null || _d === void 0 ? void 0 : _d.fcmToken;
                 if (fcmToken) {
                     await (0, notifications_1.notifyStudentRideCompleted)(fcmToken, destination);
                 }

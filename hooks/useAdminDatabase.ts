@@ -205,10 +205,11 @@ export function useAdminDatabase(targetCollection: SupportedCollection) {
 
       await deleteDoc(doc(db, targetCol, docId));
 
-      if (targetCol === 'users') {
-        await deleteDoc(doc(db, 'students', docId)).catch(() => {});
-        await deleteDoc(doc(db, 'drivers', docId)).catch(() => {});
-      }
+      // The `students/{uid}` and `drivers/{uid}` mirrors used to be swept here.
+      // Nothing has written one in a long time, firestore.rules now denies them
+      // outright, and adminDeleteUser already clears any legacy row under the
+      // Admin SDK. Kept as `.catch(() => {})`, these were two writes that could
+      // only ever fail silently.
 
       if (targetCol === 'vehicles') {
         await deleteDoc(doc(db, 'cars', docId)).catch(() => {});
@@ -249,10 +250,6 @@ export function useAdminDatabase(targetCollection: SupportedCollection) {
       await Promise.all(
         docIds.map(async (docId) => {
           await deleteDoc(doc(db, targetCol, docId));
-          if (targetCol === 'users') {
-            await deleteDoc(doc(db, 'students', docId)).catch(() => {});
-            await deleteDoc(doc(db, 'drivers', docId)).catch(() => {});
-          }
           if (targetCol === 'vehicles') {
             await deleteDoc(doc(db, 'cars', docId)).catch(() => {});
           }

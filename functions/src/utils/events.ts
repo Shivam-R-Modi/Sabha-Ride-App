@@ -48,6 +48,35 @@ const LOOKAHEAD_DAYS = 90;
 /** How far the one-off seed will look for a free weekly slot. Bounds the loop. */
 const SEED_SEARCH_DAYS = 56;
 
+/** An event id is the gathering's own date. */
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Which gathering a ride belongs to, taken from the ride itself.
+ *
+ * Returns null when the ride cannot say — callers then fall back to today's date
+ * *in the congregation's zone*, never to a UTC one. That distinction is the whole
+ * point of this function: a Friday-night drop-off in Boston completes after
+ * midnight UTC, so a UTC date files it under Saturday, splitting one gathering's
+ * numbers across two documents and leaving the Friday one unfindable.
+ *
+ * `eventId` is preferred over `eventDate` because the server writes it from
+ * `system/rideContext` when the ride is assigned, whereas `eventDate` comes from
+ * the requesting browser. Both are the gathering's date, so they agree whenever
+ * the device clock did.
+ */
+export function eventKeyFromRide(ride: unknown): string | null {
+    const r = ride as { eventId?: unknown; eventDate?: unknown } | null | undefined;
+    if (!r) return null;
+
+    for (const candidate of [r.eventId, r.eventDate]) {
+        if (typeof candidate === 'string' && DATE_KEY_PATTERN.test(candidate)) {
+            return candidate;
+        }
+    }
+    return null;
+}
+
 export type EventStatus = 'scheduled' | 'cancelled';
 
 export interface SabhaEvent {

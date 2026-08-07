@@ -67,6 +67,16 @@ beforeEach(async () => {
         });
         await setDoc(doc(db, 'system', 'rideContext'), { rideType: 'home-to-sabha' });
         await setDoc(doc(db, 'system', 'assignmentLock'), { driverId: 'x', timestamp: 1 });
+
+        // Legacy per-role mirrors. Seeded deliberately: the point of the tests
+        // below is that documents which DO exist stay unreadable, not merely
+        // that a read of a missing path fails.
+        await setDoc(doc(db, 'students', STUDENT), {
+            name: 'Alice', phone: '555', address: '1 Main St',
+        });
+        await setDoc(doc(db, 'drivers', DRIVER), {
+            name: 'Dave', phone: '557', address: '3 Main St',
+        });
     });
 });
 
@@ -243,6 +253,48 @@ describe('PII exposure', () => {
     it('an anonymous visitor cannot read anything', async () => {
         await assertFails(getDoc(doc(asAnon(), 'users', STUDENT)));
         await assertFails(getDoc(doc(asAnon(), 'rides', 'ride_alice')));
+    });
+});
+
+describe('the legacy students/ and drivers/ mirrors are closed', () => {
+    // These held the same PII as /users and were readable by any signed-in
+    // account — a side door around the /users rule above, on identical data.
+    // No code reads or writes them, so every role is denied outright.
+
+    it('nobody can read students/{uid}', async () => {
+        await assertFails(getDoc(doc(asStudent(), 'students', STUDENT)));
+        await assertFails(getDoc(doc(asDriver(), 'students', STUDENT)));
+        await assertFails(getDoc(doc(asManager(), 'students', STUDENT)));
+        await assertFails(getDoc(doc(asAnon(), 'students', STUDENT)));
+    });
+
+    it('nobody can read drivers/{uid}', async () => {
+        await assertFails(getDoc(doc(asStudent(), 'drivers', DRIVER)));
+        await assertFails(getDoc(doc(asDriver(), 'drivers', DRIVER)));
+        await assertFails(getDoc(doc(asManager(), 'drivers', DRIVER)));
+        await assertFails(getDoc(doc(asAnon(), 'drivers', DRIVER)));
+    });
+
+    it('not even the owner can read their own mirror', async () => {
+        // The old rule was isAuthenticated(), so this is the case most likely to
+        // be re-granted by reflex. There is no read path that needs it.
+        await assertFails(getDoc(doc(asStudent(), 'students', STUDENT)));
+        await assertFails(getDoc(doc(asDriver(), 'drivers', DRIVER)));
+    });
+
+    it('nobody can list them', async () => {
+        await assertFails(getDocs(collection(asManager(), 'students')));
+        await assertFails(getDocs(collection(asDriver(), 'drivers')));
+    });
+
+    it('nobody can create, update or delete a mirror', async () => {
+        // Deletion is denied too: adminDeleteUser sweeps legacy rows under the
+        // Admin SDK, which bypasses rules, so no client needs the permission.
+        await assertFails(setDoc(doc(asStudent(), 'students', STUDENT), { name: 'X' }));
+        await assertFails(updateDoc(doc(asStudent(), 'students', STUDENT), { name: 'X' }));
+        await assertFails(deleteDoc(doc(asManager(), 'students', STUDENT)));
+        await assertFails(setDoc(doc(asDriver(), 'drivers', DRIVER), { name: 'X' }));
+        await assertFails(deleteDoc(doc(asManager(), 'drivers', DRIVER)));
     });
 });
 

@@ -3,6 +3,7 @@
  * Falls back to a default if the document doesn't exist or is missing data.
  */
 import * as admin from 'firebase-admin';
+import { DEFAULT_TIME_ZONE, isValidTimeZone } from './time';
 
 export interface SabhaLocation {
     lat: number;
@@ -80,5 +81,29 @@ export async function getSabhaLocation(): Promise<SabhaLocation> {
     } catch (err) {
         console.error('[getSabhaLocation] Error fetching settings:', err);
         return DEFAULT_SABHA_LOCATION;
+    }
+}
+
+/**
+ * The zone the congregation's clocks are in.
+ *
+ * Anything deriving a calendar date needs this, because the server clock is UTC
+ * and rolls over mid-evening in the Americas. An unrecognised zone falls back
+ * rather than throwing: `Intl` rejects a bad zone at format time, which would
+ * turn a typo in a settings document into a failing ride completion.
+ */
+export async function getTimeZone(): Promise<string> {
+    try {
+        const db = admin.firestore();
+        const snap = await db.collection('settings').doc('main').get();
+        const configured = snap.data()?.timeZone;
+
+        if (typeof configured === 'string' && isValidTimeZone(configured)) {
+            return configured;
+        }
+        return DEFAULT_TIME_ZONE;
+    } catch (err) {
+        console.error('[getTimeZone] Error fetching settings:', err);
+        return DEFAULT_TIME_ZONE;
     }
 }

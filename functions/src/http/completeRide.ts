@@ -9,6 +9,9 @@ import { notifyStudentRideCompleted } from '../utils/notifications';
 import {
     writeVehicleState, resolveDriverVehicleId, VEHICLE_RELEASED, DRIVER_VEHICLE_CLEARED,
 } from '../utils/fleet';
+import { eventKeyFromRide } from '../utils/events';
+import { getTimeZone } from '../utils/settings';
+import { zonedDateKey } from '../utils/time';
 
 /**
  * HTTP Callable: Complete a ride
@@ -53,7 +56,17 @@ export const completeRide = functions.https.onCall(async (data, context) => {
 
         const batch = db.batch();
         const now = new Date().toISOString();
-        const eventDate = new Date().toISOString().split('T')[0];
+
+        // Which gathering these numbers belong to.
+        //
+        // This was `new Date().toISOString().split('T')[0]` — the UTC calendar
+        // date. A drop-off run finishing at 22:30 in Boston is already the next
+        // day in UTC, so the sabha's own drop-off figures were filed under
+        // tomorrow while its pickup figures sat under today, and generateEventCSV
+        // (which looks up `statistics/{the sabha's date}`) found neither complete.
+        // The ride knows which sabha it served; ask it.
+        const eventDate = eventKeyFromRide(ride)
+            ?? zonedDateKey(new Date(), await getTimeZone());
 
         // Find ALL active rides for this driver to complete all documents in multi-student grouped rides
         const activeRidesSnap = await db.collection('rides')

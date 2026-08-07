@@ -7,7 +7,9 @@ vi.mock('firebase-admin', () => ({
     }),
 }));
 
-import { findCurrentEvent, seedFirstEventIfNeeded, weeklySlotDate } from './events';
+import {
+    findCurrentEvent, seedFirstEventIfNeeded, weeklySlotDate, eventKeyFromRide,
+} from './events';
 
 const ZONE = 'America/New_York';
 const boston = (day: string, hhmm: string) => new Date(`2026-08-${day}T${hhmm}:00-04:00`);
@@ -227,6 +229,41 @@ describe('weeklySlotDate', () => {
 
     it('rolls past the weekend on Saturday', () => {
         expect(weeklySlotDate(boston(SAT, '10:00'), ZONE, 5, 0)).toBe('2026-08-14');
+    });
+});
+
+describe('eventKeyFromRide', () => {
+    it('prefers the server-written eventId', () => {
+        // globalAssignDriver copies this off system/rideContext at assignment.
+        expect(eventKeyFromRide({ eventId: '2026-08-07', eventDate: '2026-08-14' }))
+            .toBe('2026-08-07');
+    });
+
+    it('falls back to eventDate when there is no eventId', () => {
+        // Rides requested before eventId was written carry only eventDate.
+        expect(eventKeyFromRide({ eventDate: '2026-08-07' })).toBe('2026-08-07');
+    });
+
+    it('returns null when the ride cannot say which sabha it served', () => {
+        expect(eventKeyFromRide({})).toBeNull();
+        expect(eventKeyFromRide(null)).toBeNull();
+        expect(eventKeyFromRide(undefined)).toBeNull();
+    });
+
+    it('rejects anything that is not a plain YYYY-MM-DD key', () => {
+        // The value becomes a document id. A timestamp or a Date would silently
+        // create a second statistics document for the same gathering — which is
+        // the exact bug this helper exists to close, in a new disguise.
+        expect(eventKeyFromRide({ eventId: '2026-08-07T00:00:00.000Z' })).toBeNull();
+        expect(eventKeyFromRide({ eventId: new Date('2026-08-07') })).toBeNull();
+        expect(eventKeyFromRide({ eventId: 20260807 })).toBeNull();
+        expect(eventKeyFromRide({ eventId: '' })).toBeNull();
+        expect(eventKeyFromRide({ eventId: '2026-8-7' })).toBeNull();
+    });
+
+    it('skips a malformed eventId rather than trusting it over a good eventDate', () => {
+        expect(eventKeyFromRide({ eventId: null, eventDate: '2026-08-07' })).toBe('2026-08-07');
+        expect(eventKeyFromRide({ eventId: 'today', eventDate: '2026-08-07' })).toBe('2026-08-07');
     });
 });
 
