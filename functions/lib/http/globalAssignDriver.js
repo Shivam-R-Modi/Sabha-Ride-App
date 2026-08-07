@@ -288,6 +288,12 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                 status: 'assigned',
                 route,
                 peers: otherPeers,
+                // The full roster. startRide, releaseAssignment and
+                // manualAssignStudent all iterate `ride.students`; until this
+                // was written they silently operated on an empty array, so
+                // students were never marked in_ride, never returned to the
+                // pool on release, and manual assignment threw on the spread.
+                students: rideStudents,
                 assignedStudentIds: assignedStudents.map(st => st.id),
                 estimatedDistance,
                 estimatedTime,
