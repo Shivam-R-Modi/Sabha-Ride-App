@@ -203,27 +203,47 @@ export function calculateRouteStats(waypoints: Waypoint[]): {
 }
 
 /**
- * Build Google Maps URL for navigation
- * Opens external Google Maps with waypoints pre-loaded
+ * Build the driver's navigation URL from a persisted `route`.
+ *
+ * Deliberately omits `origin`. The Maps URL API routes from the device's live
+ * location when origin is absent, which is what a driver about to set off
+ * actually wants — and it is strictly better than the single GPS fix the client
+ * used to take before opening the URL. That fix cost a permission prompt and an
+ * async hop, and the async hop spent the user activation, so iOS Safari and
+ * Chrome Android blocked the resulting window.open outright.
+ *
+ * Destination is the route's `end` waypoint, so a drop-off run ends at the
+ * driver's home rather than the venue they are already standing in.
+ *
+ * Returns '' when the route cannot produce a usable URL. Callers must surface
+ * that rather than no-op: an empty string here used to mean a dead button with
+ * nothing logged anywhere.
  */
-export function buildGoogleMapsUrl(waypoints: Waypoint[]): string {
-    if (waypoints.length < 2) return '';
+export function buildGoogleMapsNavigationUrl(route: Waypoint[]): string {
+    if (route.length < 2) return '';
 
-    const origin = `${waypoints[0].lat},${waypoints[0].lng}`;
-    const destination = `${waypoints[waypoints.length - 1].lat},${waypoints[waypoints.length - 1].lng}`;
+    const usable = (wp: { lat: number; lng: number }) =>
+        Number.isFinite(wp.lat) && Number.isFinite(wp.lng);
 
-    // Middle waypoints (if any)
-    const middleWaypoints = waypoints.slice(1, -1);
-    let waypointsParam = '';
+    const end = route[route.length - 1];
+    if (!usable(end)) return '';
 
-    if (middleWaypoints.length > 0) {
-        const waypointStr = middleWaypoints
-            .map(wp => `${wp.lat},${wp.lng}`)
-            .join('|');
-        waypointsParam = `&waypoints=${encodeURIComponent(waypointStr)}`;
-    }
+    // Only the student stops become waypoints. `start` is where the driver is
+    // (that's the omitted origin) and `end` is the destination.
+    // Note: the Maps URL API accepts at most 9 waypoints. Vehicle capacity is
+    // manager-entered and can reach 15, so a very large van could exceed it.
+    const stops = route
+        .filter(wp => wp.type === 'pickup' || wp.type === 'dropoff')
+        .filter(usable);
 
-    return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypointsParam}&travelmode=driving`;
+    const waypointsParam = stops.length > 0
+        ? `&waypoints=${encodeURIComponent(stops.map(wp => `${wp.lat},${wp.lng}`).join('|'))}`
+        : '';
+
+    return `https://www.google.com/maps/dir/?api=1` +
+        `&destination=${end.lat},${end.lng}` +
+        `${waypointsParam}` +
+        `&travelmode=driving`;
 }
 
 /**

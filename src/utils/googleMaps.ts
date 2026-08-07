@@ -13,34 +13,43 @@ interface Waypoint {
 }
 
 /**
- * Build Google Maps URL for navigation with waypoints
- * Opens external Google Maps app/website with route pre-loaded
- * 
- * @param waypoints - Ordered array of waypoints (start, pickups/dropoffs, end)
- * @returns Google Maps URL
+ * Build the driver's navigation URL from a ride's persisted `route`.
+ *
+ * Must stay in step with `buildGoogleMapsNavigationUrl` in
+ * `functions/src/utils/routing.ts`, which is what writes `ride.googleMapsUrl`.
+ * This copy exists so a ride assigned before that field was persisted can still
+ * produce a working URL from the `route` it does have. The two projects build
+ * and deploy separately, hence the duplication rather than a shared import.
+ *
+ * `origin` is deliberately omitted: the Maps URL API then routes from the
+ * device's live location, which is what the driver wants and which removes the
+ * async geolocation hop that used to spend the user activation and get the
+ * resulting window.open blocked on mobile.
+ *
+ * @param route - Ordered waypoints as persisted on the ride
+ * @returns Google Maps URL, or '' when the route cannot produce one
  */
-export function buildGoogleMapsNavigationUrl(waypoints: Waypoint[]): string {
-    if (waypoints.length < 2) {
-        console.error('Need at least 2 waypoints for navigation');
-        return '';
-    }
+export function buildGoogleMapsNavigationUrl(route: Waypoint[]): string {
+    if (route.length < 2) return '';
 
-    const origin = `${waypoints[0].lat},${waypoints[0].lng}`;
-    const destination = `${waypoints[waypoints.length - 1].lat},${waypoints[waypoints.length - 1].lng}`;
+    const usable = (wp: { lat: number; lng: number }) =>
+        Number.isFinite(wp.lat) && Number.isFinite(wp.lng);
 
-    // Middle waypoints (if any)
-    const middleWaypoints = waypoints.slice(1, -1);
-    let waypointsParam = '';
+    const end = route[route.length - 1];
+    if (!usable(end)) return '';
 
-    if (middleWaypoints.length > 0) {
-        const waypointStr = middleWaypoints
-            .map(wp => `${wp.lat},${wp.lng}`)
-            .join('|');
-        waypointsParam = `&waypoints=${encodeURIComponent(waypointStr)}`;
-    }
+    const stops = route
+        .filter(wp => wp.type === 'pickup' || wp.type === 'dropoff')
+        .filter(usable);
 
-    // Use the directions URL format for better compatibility
-    return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypointsParam}&travelmode=driving`;
+    const waypointsParam = stops.length > 0
+        ? `&waypoints=${encodeURIComponent(stops.map(wp => `${wp.lat},${wp.lng}`).join('|'))}`
+        : '';
+
+    return `https://www.google.com/maps/dir/?api=1` +
+        `&destination=${end.lat},${end.lng}` +
+        `${waypointsParam}` +
+        `&travelmode=driving`;
 }
 
 /**

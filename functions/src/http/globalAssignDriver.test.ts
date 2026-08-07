@@ -1,0 +1,224 @@
+/**
+ * The regression guard for the reported "Open in Google Maps does nothing" bug.
+ *
+ * The URL used to be built AFTER the batch committed and returned only in the
+ * callable's response. So the driver who had just tapped Assign Me held a
+ * working URL in memory, and the very next Firestore snapshot — which reads
+ * `googleMapsUrl` off the ride document, where it had never been written —
+ * replaced it with ''. `if (ride.googleMapsUrl)` then returned immediately.
+ * The button worked exactly once per assignment and was dead after any reload,
+ * with no error anywhere.
+ *
+ * These tests assert on the batch.update payload, because that is the thing
+ * that was wrong: the response was always fine.
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// ── module mocks ───────────────────────────────────────────
+// Set by each test before invoking the handler.
+let db: any;
+
+// The factory is hoisted above every top-level declaration in this file, so
+// the error class has to be defined inside it.
+vi.mock('firebase-functions', () => {
+    class FakeHttpsError extends Error {
+        constructor(public code: string, message: string) {
+            super(message);
+            this.name = 'HttpsError';
+        }
+    }
+    return {
+        https: {
+            // onCall returns the handler itself so the test can call it directly.
+            onCall: (handler: any) => handler,
+            HttpsError: FakeHttpsError,
+        },
+    };
+});
+
+vi.mock('firebase-admin', () => ({
+    firestore: () => db,
+}));
+
+vi.mock('../utils/rateLimiter', () => ({
+    checkRateLimit: vi.fn(async () => undefined),
+}));
+
+vi.mock('../utils/notifications', () => ({
+    notifyStudentDriverAssigned: vi.fn(async () => undefined),
+    notifyDriverStudentsAssigned: vi.fn(async () => undefined),
+}));
+
+const SABHA = { lat: 42.339925, lng: -71.088182, address: 'Sabha' };
+
+vi.mock('../utils/settings', () => ({
+    getSabhaLocation: async () => ({ lat: 42.339925, lng: -71.088182, address: 'Sabha' }),
+}));
+
+import { globalAssignDriver } from './globalAssignDriver';
+
+// ── fake Firestore ─────────────────────────────────────────
+
+interface Fixture {
+    rideType: string;
+    driver: Record<string, unknown>;
+    car: Record<string, unknown>;
+    rides: Array<{ id: string; data: Record<string, unknown> }>;
+}
+
+/** Records everything written through the batch so tests can assert on it. */
+interface Recorder {
+    updates: Array<{ path: string; data: any }>;
+    sets: Array<{ path: string; data: any }>;
+    committed: boolean;
+}
+
+function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
+    const recorder: Recorder = { updates: [], sets: [], committed: false };
+
+    const snap = (exists: boolean, data?: any) => ({
+        exists,
+        data: () => data,
+    });
+
+    const docFor = (collection: string, id: string) => {
+        switch (`${collection}/${id}`) {
+            case 'system/rideContext':
+                return snap(true, { rideType: fixture.rideType });
+            case `users/${'driver-1'}`:
+                return snap(true, fixture.driver);
+            case `cars/${'car-1'}`:
+                return snap(true, fixture.car);
+            default:
+                // Student profile reads during the notification step.
+                return snap(true, {});
+        }
+    };
+
+    const querySnap = (docs: Array<{ id: string; data: Record<string, unknown> }>) => ({
+        empty: docs.length === 0,
+        docs: docs.map(d => ({ id: d.id, data: () => d.data })),
+    });
+
+    const collection = (name: string) => {
+        const chain: any = {
+            doc: (id: string) => ({ id, path: `${name}/${id}`, get: async () => docFor(name, id) }),
+            where: () => chain,
+            get: async () => {
+                if (name === 'rides') return querySnap(fixture.rides);
+                // The "other available drivers" query. Only the tapping driver
+                // exists in these fixtures.
+                return querySnap([]);
+            },
+        };
+        return chain;
+    };
+
+    const db = {
+        doc: (path: string) => ({
+            path,
+            get: async () => snap(false),
+            set: async () => undefined,
+            delete: async () => undefined,
+        }),
+        collection,
+        batch: () => ({
+            update: (ref: any, data: any) => recorder.updates.push({ path: ref.path, data }),
+            set: (ref: any, data: any) => recorder.sets.push({ path: ref.path, data }),
+            delete: () => undefined,
+            commit: async () => { recorder.committed = true; },
+        }),
+    };
+
+    return { db, recorder };
+}
+
+const DRIVER_HOME = { lat: 42.3600, lng: -71.0600 };
+
+const baseFixture = (rideType: string, driverOverride?: Record<string, unknown>): Fixture => ({
+    rideType,
+    driver: driverOverride ?? {
+        name: 'Asha',
+        phone: '555-0100',
+        location: { lat: DRIVER_HOME.lat, lng: DRIVER_HOME.lng },
+    },
+    car: { name: 'Odyssey', color: 'Silver', licensePlate: 'ABC123', capacity: 4, status: 'available' },
+    rides: [
+        { id: 'ride-a', data: { studentId: 'stu-a', studentName: 'A', pickupLat: 42.35, pickupLng: -71.07, pickupAddress: '1 St', status: 'requested' } },
+        { id: 'ride-b', data: { studentId: 'stu-b', studentName: 'B', pickupLat: 42.37, pickupLng: -71.05, pickupAddress: '2 St', status: 'requested' } },
+    ],
+});
+
+async function run(fixture: Fixture) {
+    const made = makeDb(fixture);
+    db = made.db;
+    const result: any = await (globalAssignDriver as any)(
+        { driverId: 'driver-1', carId: 'car-1' },
+        { auth: { uid: 'driver-1' } }
+    );
+    return { result, recorder: made.recorder };
+}
+
+// ── tests ──────────────────────────────────────────────────
+
+describe('globalAssignDriver — persisted navigation URL', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('writes googleMapsUrl onto every assigned ride document', async () => {
+        const { result, recorder } = await run(baseFixture('home-to-sabha'));
+
+        expect(result.status).toBe('success');
+        expect(recorder.committed).toBe(true);
+
+        const rideUpdates = recorder.updates.filter(u => u.path.startsWith('rides/'));
+        expect(rideUpdates.length).toBeGreaterThan(0);
+
+        for (const update of rideUpdates) {
+            expect(update.data.googleMapsUrl).toBeTruthy();
+            expect(update.data.googleMapsUrl).toContain('google.com/maps/dir/');
+        }
+    });
+
+    it('persists the same URL it returns, so a reload behaves like the fresh response', async () => {
+        const { result, recorder } = await run(baseFixture('home-to-sabha'));
+
+        const rideUpdate = recorder.updates.find(u => u.path.startsWith('rides/'))!;
+        expect(rideUpdate.data.googleMapsUrl).toBe(result.googleMapsUrl);
+    });
+
+    it('points a drop-off run at the driver\'s home, not the venue', async () => {
+        const { recorder } = await run(baseFixture('sabha-to-home'));
+
+        const rideUpdate = recorder.updates.find(u => u.path.startsWith('rides/'))!;
+        const url = new URL(rideUpdate.data.googleMapsUrl);
+
+        expect(url.searchParams.get('destination')).toBe(`${DRIVER_HOME.lat},${DRIVER_HOME.lng}`);
+        expect(url.searchParams.get('destination')).not.toBe(`${SABHA.lat},${SABHA.lng}`);
+    });
+
+    it('resolves a homeLocation written as {latitude, longitude}', async () => {
+        // ProfileSetup writes this shape. Read raw, `.lat` was undefined and the
+        // End waypoint — and every URL built from it — became NaN.
+        const { recorder } = await run(baseFixture('sabha-to-home', {
+            name: 'Asha',
+            homeLocation: { latitude: DRIVER_HOME.lat, longitude: DRIVER_HOME.lng },
+        }));
+
+        const rideUpdate = recorder.updates.find(u => u.path.startsWith('rides/'))!;
+        const url = new URL(rideUpdate.data.googleMapsUrl);
+
+        expect(url.searchParams.get('destination')).toBe(`${DRIVER_HOME.lat},${DRIVER_HOME.lng}`);
+        expect(rideUpdate.data.googleMapsUrl).not.toContain('NaN');
+        expect(rideUpdate.data.googleMapsUrl).not.toContain('undefined');
+    });
+
+    it('refuses the 0,0 placeholder instead of routing into the Atlantic', async () => {
+        await expect(run(baseFixture('home-to-sabha', {
+            name: 'Asha',
+            location: { latitude: 0, longitude: 0 },
+        }))).rejects.toThrow(/location is not set/i);
+    });
+});

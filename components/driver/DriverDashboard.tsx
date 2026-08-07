@@ -15,7 +15,7 @@ import {
     GlobalAssignResult,
     CompleteRideResult
 } from '../../src/utils/cloudFunctions';
-import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
+import { buildGoogleMapsNavigationUrl } from '../../src/utils/googleMaps';
 
 // Driver workflow states
 type DriverViewState =
@@ -106,18 +106,30 @@ export const DriverDashboard: React.FC = () => {
                 }
             });
 
+            const route = primaryDoc.route || [];
             const reconstructedActiveRide = {
                 id: primaryDoc.id,
                 rideType: (primaryDoc.rideType || rideContext?.rideType || 'home-to-sabha') as 'home-to-sabha' | 'sabha-to-home',
                 students: students.length > 0 ? students : (primaryDoc.students || []),
-                route: primaryDoc.route || [],
-                googleMapsUrl: primaryDoc.googleMapsUrl || '',
+                route,
+                // Rides assigned before globalAssignDriver persisted this field
+                // have no googleMapsUrl. Rebuilding from `route` keeps their
+                // navigation working instead of handing ActiveRide an '' that
+                // made the button a silent no-op.
+                googleMapsUrl: primaryDoc.googleMapsUrl || buildGoogleMapsNavigationUrl(route),
                 estimatedDistance: primaryDoc.estimatedDistance || 0,
                 estimatedTime: primaryDoc.estimatedTime || 0,
             };
 
             setActiveRide(reconstructedActiveRide);
-            setViewState('active');
+            // Don't yank the driver out of the preview they are reading. This
+            // snapshot fires as soon as globalAssignDriver commits, so forcing
+            // 'active' here meant AssignmentPreview flashed and vanished — and
+            // it is the one screen with an Accept/Release choice. Rehydration
+            // after a reload or a role switch still lands on 'active', which is
+            // correct: pendingAssignment only exists in the tab that tapped
+            // Assign Me, so 'preview' would render nothing.
+            setViewState(prev => (prev === 'preview' ? prev : 'active'));
         }, (error) => {
             console.error('[DriverDashboard] Error listening to active driver ride:', error);
         });

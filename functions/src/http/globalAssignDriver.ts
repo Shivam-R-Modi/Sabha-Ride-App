@@ -8,7 +8,8 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { RideType, RideStudent } from '../types';
 import { kMeansWithDriverSeeds, LightPoint } from '../utils/clustering';
-import { optimizeRoute } from '../utils/routing';
+import { optimizeRoute, buildGoogleMapsNavigationUrl } from '../utils/routing';
+import { resolveHomeCoords } from '../utils/coords';
 import { notifyStudentDriverAssigned, notifyDriverStudentsAssigned } from '../utils/notifications';
 import { getSabhaLocation } from '../utils/settings';
 import { checkRateLimit } from '../utils/rateLimiter';
@@ -126,13 +127,14 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         }
 
         const availableSeats = Math.max(1, (carData.capacity || 4) - 1);
-        // Normalize location: support both {lat, lng} and {latitude, longitude} key formats
-        const rawDriverLoc = driverData.location || driverData.homeLocation;
-        const tappingDriverLoc = rawDriverLoc ? {
-            lat: typeof rawDriverLoc.lat === 'number' ? rawDriverLoc.lat : rawDriverLoc.latitude,
-            lng: typeof rawDriverLoc.lng === 'number' ? rawDriverLoc.lng : rawDriverLoc.longitude,
-        } : null;
-        if (!tappingDriverLoc || typeof tappingDriverLoc.lat !== 'number') {
+        // resolveHomeCoords tolerates every shape the codebase writes
+        // ({lat,lng} and {latitude,longitude}, under `location` or
+        // `homeLocation`) and rejects the 0,0 placeholder that means "address
+        // never geocoded". Reading it by hand here — and raw at the endPoint
+        // below — was how a driver with only {latitude,longitude} ended up with
+        // an undefined `.lat` poisoning the route and every URL built from it.
+        const tappingDriverLoc = resolveHomeCoords(driverData);
+        if (!tappingDriverLoc) {
             throw new functions.https.HttpsError('failed-precondition', 'Your location is not set. Please update your profile.');
         }
 
@@ -198,17 +200,9 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         // Add other available drivers
         for (const doc of driversSnap.docs) {
             if (doc.id === driverId) continue; // already added
-            const dd = doc.data();
-            const rawLoc = dd.location || dd.homeLocation;
-            // Normalize: support both {lat, lng} and {latitude, longitude}
-            const locLat = rawLoc ? (typeof rawLoc.lat === 'number' ? rawLoc.lat : rawLoc.latitude) : undefined;
-            const locLng = rawLoc ? (typeof rawLoc.lng === 'number' ? rawLoc.lng : rawLoc.longitude) : undefined;
-            if (typeof locLat === 'number' && typeof locLng === 'number') {
-                driverPointsMap.set(doc.id, {
-                    id: doc.id,
-                    lat: locLat,
-                    lng: locLng
-                });
+            const loc = resolveHomeCoords(doc.data());
+            if (loc) {
+                driverPointsMap.set(doc.id, { id: doc.id, lat: loc.lat, lng: loc.lng });
             }
         }
 
@@ -270,13 +264,22 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         }));
 
         const startPoint = rideType === 'home-to-sabha'
-            ? (tappingDriverLoc || SABHA_LOCATION)
+            ? tappingDriverLoc
             : SABHA_LOCATION;
         const endPoint = rideType === 'home-to-sabha'
             ? SABHA_LOCATION
-            : (driverData.homeLocation || SABHA_LOCATION);
+            : tappingDriverLoc;
 
         const route = optimizeRoute(startPoint, rideStudents, endPoint, rideType);
+
+        // Built HERE, before the batch, so it can be persisted with the ride.
+        // It used to be built after the commit and returned only in the callable
+        // response, so the fresh response had a working URL and the very next
+        // Firestore snapshot replaced it with '' — the "Open in Google Maps"
+        // button worked once and was dead from then on, silently.
+        // Derived from `route`, so a drop-off run ends at the driver's home
+        // rather than the venue they are already standing in.
+        const googleMapsUrl = buildGoogleMapsNavigationUrl(route);
 
         const estimatedDistance = rideStudents.length * 2; // ~2 mi per student
         const estimatedTime = rideStudents.length * 5;     // ~5 min per student
@@ -321,6 +324,7 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
                 rideType,
                 status: 'assigned',
                 route,
+                googleMapsUrl,
                 peers: otherPeers,
                 // The full roster. startRide, releaseAssignment and
                 // manualAssignStudent all iterate `ride.students`; until this
@@ -385,22 +389,6 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         }
 
         // ── Step 11: Build response ─────────────────────────
-        // Build full multi-stop Maps URL:
-        // origin = driver location, waypoints = students in route order, destination = Sabha
-        const pickupWaypoints = route
-            .filter(wp => wp.type === 'pickup' || wp.type === 'dropoff')
-            .map(wp => `${wp.lat},${wp.lng}`)
-            .join('|');
-        const waypointsParam = pickupWaypoints
-            ? `&waypoints=${encodeURIComponent(pickupWaypoints)}`
-            : '';
-        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1` +
-            `&origin=${tappingDriverLoc.lat},${tappingDriverLoc.lng}` +
-            `&destination=${SABHA_LOCATION.lat},${SABHA_LOCATION.lng}` +
-            `${waypointsParam}` +
-            `&travelmode=driving`;
-
-
         const remainingUnassigned = allStudentPoints.length - assignedStudents.length;
         console.log(`[globalAssign] SUCCESS: ${assignedStudents.length} assigned, ${remainingUnassigned} remaining`);
 

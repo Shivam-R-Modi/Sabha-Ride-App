@@ -14,5 +14,12 @@
     "compileOnSave": true,
     "include": [
         "src"
+    ],
+    // Tests run under vitest straight off the TypeScript sources, so they do
+    // not need compiling — and compiling them put `*.test.js` into lib/, which
+    // is the directory uploaded on deploy. That shipped test code importing
+    // `vitest`, a devDependency absent from the functions runtime.
+    "exclude": [
+        "src/**/*.test.ts"
     ]
 }

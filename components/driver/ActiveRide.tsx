@@ -1,26 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ArrowLeft, Navigation, Users, Clock, MapPin, Phone, CheckCircle2, Circle, Loader2, AlertCircle } from 'lucide-react';
 import { completeRide, CompleteRideResult } from '../../src/utils/cloudFunctions';
-import { openGoogleMaps } from '../../src/utils/googleMaps';
+import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
 import { useDriverLocation } from '../../hooks/useDriverLocation';
 import { useAuth } from '../../contexts/AuthContext';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-
-/** Replace/inject the origin in a Maps URL with the driver's live GPS position. */
-async function openMapsWithLiveOrigin(baseUrl: string): Promise<void> {
-    const injectOrigin = (lat: number, lng: number) => {
-        const url = new URL(baseUrl);
-        url.searchParams.set('origin', `${lat},${lng}`);
-        openGoogleMaps(url.toString());
-    };
-    if (!navigator.geolocation) { openGoogleMaps(baseUrl); return; }
-    navigator.geolocation.getCurrentPosition(
-        (pos) => injectOrigin(pos.coords.latitude, pos.coords.longitude),
-        () => openGoogleMaps(baseUrl),
-        { enableHighAccuracy: true, timeout: 5000 }
-    );
-}
 
 interface ActiveRideProps {
     ride: {
@@ -106,10 +91,22 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
         }
     };
 
+    // Prefer the URL the assignment persisted; rebuild it from `route` for rides
+    // assigned before that field was written, so an in-flight ride still
+    // navigates. '' means neither source was usable — the button says so rather
+    // than looking tappable and doing nothing.
+    const mapsUrl = useMemo(
+        () => ride.googleMapsUrl || buildGoogleMapsNavigationUrl(ride.route || []),
+        [ride.googleMapsUrl, ride.route]
+    );
+
     const handleOpenMaps = () => {
-        if (ride.googleMapsUrl) {
-            openMapsWithLiveOrigin(ride.googleMapsUrl);
-        }
+        // Opened synchronously from the click. This used to run inside the
+        // navigator.geolocation.getCurrentPosition callback, by which point the
+        // user activation was spent and iOS Safari and Chrome Android blocked
+        // window.open outright. The URL carries no origin, so Maps routes from
+        // the device's live location anyway — better than one stale GPS fix.
+        openGoogleMaps(mapsUrl);
     };
 
     const handleCompleteRide = async () => {
@@ -226,11 +223,21 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
             <div className="px-4 mt-4 space-y-3">
                 <button
                     onClick={handleOpenMaps}
-                    className="w-full clay-button-secondary py-3 flex items-center justify-center gap-2"
+                    disabled={!mapsUrl}
+                    className={`w-full py-3 flex items-center justify-center gap-2 rounded-2xl ${mapsUrl
+                        ? 'clay-button-secondary'
+                        : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        }`}
                 >
                     <Navigation size={18} />
                     Open in Google Maps
                 </button>
+
+                {!mapsUrl && (
+                    <p className="text-center text-xs text-gray-500">
+                        No route available for this ride — ask a manager to reassign it.
+                    </p>
+                )}
 
                 <button
                     onClick={handleCompleteRide}

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { optimizeRoute } from './routing';
-import type { RideStudent, GeoLocation } from '../types';
+import { optimizeRoute, buildGoogleMapsNavigationUrl } from './routing';
+import type { RideStudent, GeoLocation, Waypoint } from '../types';
 
 const at = (lat: number, lng: number, id: string): RideStudent => ({
     id, name: id, phone: '', picked: false,
@@ -80,5 +80,73 @@ describe('optimizeRoute', () => {
         const route = optimizeRoute(SABHA, students, DRIVER, 'sabha-to-home');
         expect(route[0].type).toBe('start');
         expect(route[route.length - 1].type).toBe('end');
+    });
+});
+
+describe('buildGoogleMapsNavigationUrl', () => {
+    const students = [at(42.35, -71.07, 'a'), at(42.37, -71.05, 'b')];
+
+    it('sends a drop-off run to the driver\'s home, not back to the venue', () => {
+        // The reported bug: rideType appeared nowhere in the URL block and the
+        // destination was hardcoded to the venue, so a sabha-to-home run
+        // navigated the driver to the hall they were already standing in.
+        const route = optimizeRoute(SABHA, students, DRIVER, 'sabha-to-home');
+        const url = new URL(buildGoogleMapsNavigationUrl(route));
+
+        expect(url.searchParams.get('destination')).toBe(`${DRIVER.lat},${DRIVER.lng}`);
+        expect(url.searchParams.get('destination')).not.toBe(`${SABHA.lat},${SABHA.lng}`);
+    });
+
+    it('sends a pickup run to the venue', () => {
+        const route = optimizeRoute(DRIVER, students, SABHA, 'home-to-sabha');
+        const url = new URL(buildGoogleMapsNavigationUrl(route));
+
+        expect(url.searchParams.get('destination')).toBe(`${SABHA.lat},${SABHA.lng}`);
+    });
+
+    it('omits origin so Maps routes from the device\'s live location', () => {
+        const route = optimizeRoute(DRIVER, students, SABHA, 'home-to-sabha');
+        const url = new URL(buildGoogleMapsNavigationUrl(route));
+
+        expect(url.searchParams.has('origin')).toBe(false);
+    });
+
+    it('carries every student stop, in route order', () => {
+        const route = optimizeRoute(DRIVER, students, SABHA, 'home-to-sabha');
+        const url = new URL(buildGoogleMapsNavigationUrl(route));
+
+        const expected = route
+            .filter(w => w.type === 'pickup' || w.type === 'dropoff')
+            .map(w => `${w.lat},${w.lng}`)
+            .join('|');
+
+        expect(url.searchParams.get('waypoints')).toBe(expected);
+    });
+
+    it('rebuilds a usable URL from a route with no students', () => {
+        const route = optimizeRoute(DRIVER, [], SABHA, 'home-to-sabha');
+        const url = new URL(buildGoogleMapsNavigationUrl(route));
+
+        expect(url.searchParams.get('destination')).toBe(`${SABHA.lat},${SABHA.lng}`);
+        expect(url.searchParams.has('waypoints')).toBe(false);
+    });
+
+    it('returns empty rather than a NaN destination when the end point is unusable', () => {
+        // homeLocation read raw used to yield `.lat === undefined`, which
+        // stringified into `destination=undefined,undefined` and opened Maps on
+        // a nonsense query. Refusing is better; the caller disables the button.
+        const route = [
+            { lat: 42.35, lng: -71.07, name: 'Start', type: 'start', visited: false },
+            { lat: NaN, lng: NaN, name: 'End', type: 'end', visited: false },
+        ] as Waypoint[];
+
+        expect(buildGoogleMapsNavigationUrl(route)).toBe('');
+    });
+
+    it('returns empty for a degenerate route', () => {
+        expect(buildGoogleMapsNavigationUrl([])).toBe('');
+        expect(buildGoogleMapsNavigationUrl([
+            { lat: 42.35, lng: -71.07, name: 'Start', type: 'start', visited: false },
+        ] as Waypoint[])).toBe('');
     });
 });
