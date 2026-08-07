@@ -159,12 +159,71 @@ export const updateRideDetails = async (rideId: string, updates: Partial<Ride>) 
     }
 };
 
+/**
+ * Assign a pending request to a driver from the manager dashboard.
+ *
+ * This used to write exactly `{ status: 'assigned', driver: <object> }` — with
+ * no `driverId`. The driver dashboard subscribes with
+ * `where('driverId', '==', uid)`, so a ride assigned this way was invisible to
+ * the driver it had been assigned to. The manager saw "assigned", the student's
+ * card showed a driver's name and car, and nobody was coming.
+ *
+ * That is the same defect the browser auto-dispatcher was disabled for in
+ * 80c3c0e. It survived here because this path is manager-triggered rather than
+ * automatic, so it was never part of that hook. It now writes the shape
+ * globalAssignDriver writes, including the `students` roster that startRide,
+ * releaseAssignment and completeRide all iterate — they silently operated on an
+ * empty array otherwise.
+ */
 export const assignRideToDriver = async (rideId: string, driver: Driver) => {
     try {
         const rideRef = doc(db, 'rides', rideId);
+        const rideSnap = await getDoc(rideRef);
+        if (!rideSnap.exists()) throw new Error('That ride request no longer exists.');
+
+        const ride = rideSnap.data();
+        const d = driver as any;
+
+        const carModel = d.carModel || d.currentVehicleName || 'Vehicle';
+        const plateNumber = d.plateNumber || d.currentVehiclePlate || '';
+        const avatarUrl = d.avatarUrl
+            || `https://ui-avatars.com/api/?name=${encodeURIComponent(driver.name || 'Driver')}&background=FF6B35&color=fff`;
+
         await updateDoc(rideRef, {
             status: 'assigned',
-            driver: driver
+            // The field the driver dashboard actually queries on.
+            driverId: driver.id,
+            driverName: driver.name || 'Driver',
+            // The nested object the student's ride card renders.
+            driver: {
+                id: driver.id,
+                name: driver.name || 'Driver',
+                phone: d.phone || '',
+                avatarUrl,
+                carModel,
+                carColor: d.carColor || 'Unknown',
+                plateNumber,
+            },
+            carId: d.currentVehicleId || d.currentCarId || null,
+            carModel,
+            carColor: d.carColor || 'Unknown',
+            carLicensePlate: plateNumber,
+            // The roster the ride lifecycle functions iterate.
+            students: [{
+                id: ride.studentId,
+                rideRequestId: rideId,
+                name: ride.studentName || 'Student',
+                phone: ride.studentPhone || '',
+                location: {
+                    lat: ride.pickupLat,
+                    lng: ride.pickupLng,
+                    address: ride.pickupAddress || '',
+                },
+                status: 'assigned',
+                picked: false,
+            }],
+            assignedStudentIds: ride.studentId ? [ride.studentId] : [],
+            assignedAt: new Date().toISOString(),
         });
     } catch (error) {
         console.error("Error assigning ride:", error);

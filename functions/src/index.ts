@@ -18,7 +18,12 @@ export { updateRideTypeContext, manuallyUpdateRideContext } from './scheduled/up
 // ============================================
 
 // Driver Functions
-export { assignStudentsToDriver } from './http/assignStudentsToDriver';
+//
+// assignStudentsToDriver was removed. It was a deployed, callable, live endpoint
+// that nothing in the app had ever called: no rate limit, no assignment lock,
+// the same "vehicle already taken" guard bug as globalAssignDriver, and the
+// unnormalised homeLocation read that produced NaN coordinates. globalAssignDriver
+// is the assignment path, and it has all three fixed.
 export { globalAssignDriver } from './http/globalAssignDriver';
 export { startRide } from './http/startRide';
 export { completeRide } from './http/completeRide';

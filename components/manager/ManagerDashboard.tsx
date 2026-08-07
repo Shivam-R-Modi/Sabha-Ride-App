@@ -22,7 +22,6 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, useWeeklyAttendanceCount, downloadAttendanceCSV, returnStudentToPool, releaseVehicle, setDriverAvailability } from '../../hooks/useFirestore';
 import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
-import { manualAssignStudent } from '../../src/utils/cloudFunctions';
 import { useSettings } from '../../hooks/useSettings';
 import { VENUE_ADDRESS } from '../../constants';
 
@@ -343,17 +342,16 @@ export const ManagerDashboard: React.FC = () => {
     alert(`Assigned ${ids.length} requests to ${available.name}`);
   };
 
-  // Handle manual assignment using Cloud Function
-  const handleManualAssign = async (studentId: string, driverId: string) => {
-    try {
-      const result = await manualAssignStudent(studentId, driverId);
-      alert(`Student assigned successfully! Total students in ride: ${result.updatedStats.totalStudents}`);
-      setSelectedEntityId(null);
-    } catch (error: unknown) {
-      console.error('Error manually assigning student:', error);
-      alert(error.message || 'Failed to assign student');
-    }
-  };
+  // handleManualAssign was defined here and never referenced in the JSX.
+  //
+  // The remediation plan called for wiring it to the Assign buttons. It cannot
+  // serve them: manualAssignStudent ADDS a rider to a driver's existing ride and
+  // throws 'Driver does not have an active ride' otherwise, whereas the Assign
+  // button assigns a pending request to an idle driver. Two different
+  // operations. The dead handler is removed; the callable stays deployed
+  // (manager-gated) for the "add a rider to a run already going out" screen that
+  // does not exist yet. Making the Assign button correct meant fixing
+  // assignRideToDriver instead — see hooks/useRides.ts.
 
   const handleApproveDriver = async (driverId: string) => {
     try {

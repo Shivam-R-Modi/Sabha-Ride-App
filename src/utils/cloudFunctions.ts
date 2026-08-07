@@ -63,9 +63,9 @@ export interface AssignStudentsResult {
     };
 }
 
-export async function assignStudentsToDriver(driverId: string, carId: string): Promise<AssignStudentsResult> {
-    return callFunction<AssignStudentsResult>('assignStudentsToDriver', { driverId, carId });
-}
+// The assignStudentsToDriver wrapper was removed along with the function it
+// called. AssignStudentsResult stays — DriverDashboard uses it as the shape it
+// maps a globalAssignDriver response into.
 
 // Global assignment (Approach B) — driver-seeded K-means with lock
 export interface GlobalAssignResult {
