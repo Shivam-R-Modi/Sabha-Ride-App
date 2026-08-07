@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { Driver, StudentRequest, User } from '../types';
+import { handleSnapshotError } from '../src/utils/firestoreErrors';
 
 // --- Users / Admin ---
 
@@ -24,7 +25,7 @@ export const usePendingDrivers = () => {
             });
             setPendingDrivers(drivers);
             setLoading(false);
-        });
+        }, handleSnapshotError('useUsers', () => setLoading(false)));
 
         return unsubscribe;
     }, []);
@@ -87,7 +88,7 @@ export const usePendingRequests = () => {
             });
             setRequests(list);
             setLoading(false);
-        });
+        }, handleSnapshotError('useUsers', () => setLoading(false)));
         return unsubscribe;
     }, []);
 

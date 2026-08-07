@@ -4,6 +4,7 @@ import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { Ride, DriverAssignment } from '../types';
 import { VENUE_ADDRESS } from '../constants';
+import { handleSnapshotError } from '../src/utils/firestoreErrors';
 
 /**
  * Fetch the Sabha venue address from Firestore settings/main.
@@ -117,7 +118,7 @@ export const useDriverAssignments = (driverId: string) => {
 
             setAssignments(newAssignments);
             setLoading(false);
-        });
+        }, handleSnapshotError('useDriverDashboard', () => setLoading(false)));
 
         return unsubscribe;
     }, [driverId]);

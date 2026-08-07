@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDoc, getDocs, orderBy, limit, startAfter, DocumentSnapshot } from 'firebase/firestore';
 import { Ride, RideStatus, Driver } from '../types';
+import { handleSnapshotError } from '../src/utils/firestoreErrors';
 
 // --- Rides ---
 
@@ -79,7 +80,7 @@ export const useAllActiveRides = () => {
             });
             setRides(list);
             setLoading(false);
-        });
+        }, handleSnapshotError('useRides', () => setLoading(false)));
         return unsubscribe;
     }, []);
 
