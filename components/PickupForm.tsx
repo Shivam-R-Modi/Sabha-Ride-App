@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, Driver } from '../types';
 import { MapPin, ChevronLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { createRideRequest } from '../hooks/useRides';
-import { useSettings } from '../hooks/useSettings';
+import { useSettings, formatTime } from '../hooks/useSettings';
 import { LotusLoader, DiyaIcon } from '../constants';
 
 interface PickupFormProps {
@@ -14,9 +14,10 @@ interface PickupFormProps {
 export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit }) => {
   // Was `(settings as any)?.timeSlot || (settings as any)?.arrivalTimeSlot ||
   // '5:30 PM'`. useSettings returned neither field, so it always fell through
-  // to the literal and no manager could change it. It is a real setting now,
-  // editable in Location Settings, with the same value as the default.
-  const { arrivalTime } = useSettings();
+  // to the literal and no manager could change the time riders were told.
+  // It now comes from the sabha start time a manager sets.
+  const { sabhaStartTime } = useSettings();
+  const arrivalTime = formatTime(sabhaStartTime);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -102,7 +103,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
           <DiyaIcon className="w-12 h-12 mx-auto text-saffron mb-2 animate-float" />
           <p className="text-xs font-bold text-gold-700 uppercase tracking-[0.2em]">Next Sabha</p>
           <h3 className="text-xl font-header font-bold text-coffee">{getNextFridayFormatted()}</h3>
-          <p className="text-sm text-coffee-500">Standard arrival at {arrivalTime}</p>
+          <p className="text-sm text-coffee-500">Sabha starts at {arrivalTime}</p>
         </div>
 
         <div className="bg-cream/50 rounded-2xl p-5 border border-orange-50 space-y-3">

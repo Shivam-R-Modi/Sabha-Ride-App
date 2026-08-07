@@ -1,112 +1,113 @@
 // ============================================
 // SCHEDULED FUNCTION: updateRideTypeContext
-// Runs every 1 minute to auto-detect ride type
+// Runs every 1 minute to publish which rides are currently open
 // ============================================
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { RideContext, RideType } from '../types';
-import { getZonedParts, DEFAULT_TIME_ZONE } from '../utils/time';
+import { RideType } from '../types';
+import { DEFAULT_TIME_ZONE } from '../utils/time';
+import { resolveScheduleWindow, ScheduleWindow } from '../utils/schedule';
+import { notifyEveryone } from '../utils/notifications';
+
+const CONTEXT_DOC = 'system/rideContext';
 
 /**
- * Scheduled function that runs every minute
- * Automatically detects if it's pickup time or drop-off time
+ * Read the manager-set sabha times.
+ *
+ * These used to be literals in this file, so moving sabha meant a code change
+ * and a deploy. Missing or malformed values fall through to the defaults inside
+ * resolveScheduleWindow rather than closing the service.
  */
+async function readSabhaTimes(db: admin.firestore.Firestore) {
+    try {
+        const snap = await db.collection('settings').doc('main').get();
+        const data = snap.data();
+        return {
+            sabhaStart: data?.sabhaStartTime,
+            sabhaEnd: data?.sabhaEndTime,
+            timeZone: data?.timeZone || DEFAULT_TIME_ZONE,
+        };
+    } catch (error) {
+        console.error('[rideContext] Could not read settings/main:', error);
+        return { sabhaStart: undefined, sabhaEnd: undefined, timeZone: DEFAULT_TIME_ZONE };
+    }
+}
+
+/**
+ * Announce that ride requests have opened — once.
+ *
+ * This function runs every minute, so notifying whenever pickup is open would
+ * send roughly 60 pushes an hour for three days. It fires only on the
+ * transition INTO a ride type, which is why the previous rideType has to be
+ * read before the new one is written.
+ */
+async function announceIfWindowJustOpened(
+    previousRideType: RideType | null | undefined,
+    next: ScheduleWindow,
+): Promise<void> {
+    if (!next.rideType || previousRideType === next.rideType) return;
+
+    const isPickup = next.rideType === 'home-to-sabha';
+
+    await notifyEveryone(
+        isPickup ? 'Ride requests are open' : 'Drop-off rides are open',
+        isPickup
+            ? 'Tap to request your ride to sabha this Friday.'
+            : 'Drivers are heading out. Tap when you are ready to leave.',
+        { rideType: next.rideType, reason: 'window-opened' },
+    );
+}
+
 export const updateRideTypeContext = functions.pubsub
     .schedule('every 1 minutes')
-    .onRun(async (context) => {
+    .onRun(async () => {
         const db = admin.firestore();
 
         try {
-            // First, check if test mode is active - if so, don't overwrite
-            const currentContextDoc = await db.collection('system').doc('rideContext').get();
-            if (currentContextDoc.exists) {
-                const currentContext = currentContextDoc.data();
-                if (currentContext?.testMode === true) {
-                    console.log('Test mode is active - skipping automatic update');
-                    return null;
-                }
+            const currentDoc = await db.doc(CONTEXT_DOC).get();
+            const current = currentDoc.data();
+            const now = new Date();
+
+            // A manual override holds until it expires. Without the expiry a
+            // manager who forgot to reset would freeze the schedule
+            // indefinitely — and the failure mode of a frozen schedule is
+            // people waiting for rides that never open.
+            if (current?.overrideUntil && new Date(current.overrideUntil) > now) {
+                console.log(`[rideContext] Manual override active until ${current.overrideUntil}`);
+                return null;
             }
 
-            const now = new Date();
-            const rideContext = determineRideContext(now);
+            const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
+            const window = resolveScheduleWindow(now, timeZone, sabhaStart, sabhaEnd);
 
-            // Update the system ride context document
-            await db.collection('system').doc('rideContext').set({
-                ...rideContext,
-                testMode: false, // Ensure testMode is explicitly false in auto mode
-                lastUpdated: now.toISOString()
+            await db.doc(CONTEXT_DOC).set({
+                ...window,
+                overrideUntil: null,
+                lastUpdated: now.toISOString(),
             });
 
-            console.log('Ride context updated:', rideContext);
+            await announceIfWindowJustOpened(current?.rideType, window);
+
+            console.log('[rideContext] Updated:', window);
             return null;
         } catch (error) {
-            console.error('Error updating ride context:', error);
+            console.error('[rideContext] Error updating ride context:', error);
             return null;
         }
     });
 
 /**
- * Determine the current ride context based on day and time
- * Rules:
- * - If NOT Friday → No rides available
- * - If Friday AND before 7 PM (hour < 19) → Pickup rides (Home → Sabha)
- * - If Friday AND after 10 PM (hour >= 22) → Drop-off rides (Sabha → Home)
- * - If Friday AND between 7 PM - 10 PM → During Sabha (no rides)
- */
-function determineRideContext(now: Date, timeZone: string = DEFAULT_TIME_ZONE): RideContext {
-    // Sabha LOCAL time. Reading now.getDay()/getHours() here gave the UTC
-    // server clock, which shifted the whole window 4-5 hours and rolled the
-    // day over at 8 PM Boston — closing drop-off rides every Friday night.
-    const { dayOfWeek, hour } = getZonedParts(now, timeZone);
-
-    // Check if it's Friday
-    const isFriday = dayOfWeek === 5;
-
-    if (!isFriday) {
-        return {
-            rideType: null,
-            displayText: 'No rides available',
-            timeContext: 'Rides only available on Fridays',
-            lastUpdated: now.toISOString()
-        };
-    }
-
-    // Friday before 7 PM - Pickup time
-    if (hour < 19) {
-        return {
-            rideType: 'home-to-sabha' as RideType,
-            displayText: 'Home → Sabha (Auto-detected)',
-            timeContext: 'Before Sabha starts',
-            lastUpdated: now.toISOString()
-        };
-    }
-
-    // Friday between 7 PM - 10 PM - During Sabha
-    if (hour >= 19 && hour < 22) {
-        return {
-            rideType: null,
-            displayText: 'Sabha in Progress',
-            timeContext: 'Drop-off rides available after 10 PM',
-            lastUpdated: now.toISOString()
-        };
-    }
-
-    // Friday after 10 PM - Drop-off time
-    return {
-        rideType: 'sabha-to-home' as RideType,
-        displayText: 'Sabha → Home (Auto-detected)',
-        timeContext: 'After Sabha ends',
-        lastUpdated: now.toISOString()
-    };
-}
-
-/**
- * HTTP function to manually trigger ride context update (for testing)
- * Can be called with testMode: true and forceRideType: 'home-to-sabha' or 'sabha-to-home'
+ * HTTP Callable: manager opens a ride window early, or returns to automatic.
+ *
+ * Input:
+ *   { rideType: 'home-to-sabha' | 'sabha-to-home' }  → open it now
+ *   { reset: true }                                   → back to the schedule
+ *
+ * The override expires at the end of the current day in Sabha local time, so
+ * the schedule always resumes on its own even if nobody resets it.
  */
 export const manuallyUpdateRideContext = functions.https.onCall(async (data, context) => {
-    // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
@@ -114,28 +115,82 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
     const db = admin.firestore();
     const now = new Date();
 
-    // Check if test mode is enabled
-    if (data?.testMode && data?.forceRideType) {
-        const testRideContext = {
-            rideType: data.forceRideType as RideType,
-            displayText: `${data.forceRideType === 'home-to-sabha' ? 'Home → Sabha' : 'Sabha → Home'} (Test Mode)`,
-            timeContext: 'Test mode - rides enabled',
-            testMode: true, // This flag prevents scheduled function from overwriting
-            lastUpdated: now.toISOString()
-        };
-
-        await db.collection('system').doc('rideContext').set(testRideContext);
-        return testRideContext;
+    // Only a manager may move the service window for everyone.
+    const callerDoc = await db.collection('users').doc(context.auth.uid).get();
+    const caller = callerDoc.data();
+    const isManager = caller?.accountStatus === 'approved' && (
+        caller?.role === 'manager'
+        || caller?.registeredRole === 'manager'
+        || (Array.isArray(caller?.roles) && caller.roles.includes('manager'))
+    );
+    if (!isManager) {
+        throw new functions.https.HttpsError('permission-denied', 'Only managers can change the ride window.');
     }
 
-    // Normal mode - use time-based detection (disables test mode)
-    const rideContext = determineRideContext(now);
+    const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
 
-    await db.collection('system').doc('rideContext').set({
-        ...rideContext,
-        testMode: false, // Disable test mode, let scheduled function take over
-        lastUpdated: now.toISOString()
+    // Reset — hand control straight back to the schedule.
+    if (data?.reset) {
+        const window = resolveScheduleWindow(now, timeZone, sabhaStart, sabhaEnd);
+        await db.doc(CONTEXT_DOC).set({
+            ...window,
+            overrideUntil: null,
+            lastUpdated: now.toISOString(),
+        });
+        return window;
+    }
+
+    const rideType = data?.rideType as RideType | undefined;
+    if (rideType !== 'home-to-sabha' && rideType !== 'sabha-to-home') {
+        throw new functions.https.HttpsError(
+            'invalid-argument',
+            'rideType must be home-to-sabha or sabha-to-home, or pass reset: true',
+        );
+    }
+
+    const previous = (await db.doc(CONTEXT_DOC).get()).data();
+
+    const window: ScheduleWindow = {
+        rideType,
+        displayText: rideType === 'home-to-sabha' ? 'Home → Sabha' : 'Sabha → Home',
+        timeContext: 'Opened by a manager',
+    };
+
+    await db.doc(CONTEXT_DOC).set({
+        ...window,
+        overrideUntil: endOfLocalDay(now, timeZone),
+        openedBy: context.auth.uid,
+        lastUpdated: now.toISOString(),
     });
 
-    return rideContext;
+    // Same one-shot rule as the scheduler: announce only a real change, so
+    // re-tapping the button does not notify the congregation twice.
+    await announceIfWindowJustOpened(previous?.rideType, window);
+
+    return window;
 });
+
+/**
+ * Midnight tonight, in Sabha local time, as an ISO instant.
+ *
+ * Derived by asking what the local date is and walking forward in hours, rather
+ * than by assuming a fixed UTC offset — the offset changes twice a year.
+ */
+function endOfLocalDay(now: Date, timeZone: string): string {
+    const localDate = new Intl.DateTimeFormat('en-CA', {
+        timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(now);
+
+    // Step forward in 30-minute jumps until the local calendar date changes.
+    // At most 48 hours of steps, so this terminates regardless of the zone.
+    let cursor = now.getTime();
+    for (let i = 0; i < 96; i++) {
+        cursor += 30 * 60 * 1000;
+        const candidate = new Intl.DateTimeFormat('en-CA', {
+            timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+        }).format(new Date(cursor));
+        if (candidate !== localDate) return new Date(cursor).toISOString();
+    }
+
+    return new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+}

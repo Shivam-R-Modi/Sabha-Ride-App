@@ -38,6 +38,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendNotification = sendNotification;
 exports.sendMulticastNotification = sendMulticastNotification;
+exports.notifyEveryone = notifyEveryone;
 exports.notifyStudentDriverAssigned = notifyStudentDriverAssigned;
 exports.notifyDriverStudentsAssigned = notifyDriverStudentsAssigned;
 exports.notifyStudentRideStarting = notifyStudentRideStarting;
@@ -100,6 +101,43 @@ async function sendMulticastNotification(fcmTokens, title, body, data) {
     }
     catch (error) {
         console.error('Error sending multicast notification:', error);
+    }
+}
+/** FCM accepts at most 500 tokens per multicast call. */
+const MULTICAST_BATCH_SIZE = 500;
+/**
+ * Notify every user who has push enabled.
+ *
+ * Used when a ride window opens, which is congregation-wide news rather than
+ * something aimed at one person.
+ *
+ * Only reaches accounts with an fcmToken — that is, people who granted
+ * notification permission in their browser. Everyone else sees the change on
+ * their dashboard, which is live either way.
+ *
+ * This reads the whole users collection. Fine for one congregation; when the
+ * platform is multi-city (roadmap phase 8) this should become an FCM topic per
+ * location so it does not scale with total membership.
+ */
+async function notifyEveryone(title, body, data) {
+    try {
+        const snapshot = await admin.firestore().collection('users').get();
+        const tokens = snapshot.docs
+            .map(doc => { var _a; return (_a = doc.data()) === null || _a === void 0 ? void 0 : _a.fcmToken; })
+            .filter((token) => typeof token === 'string' && token.length > 0);
+        if (tokens.length === 0) {
+            console.log('[notifyEveryone] No push tokens registered — nothing sent');
+            return;
+        }
+        for (let i = 0; i < tokens.length; i += MULTICAST_BATCH_SIZE) {
+            await sendMulticastNotification(tokens.slice(i, i + MULTICAST_BATCH_SIZE), title, body, data);
+        }
+        console.log(`[notifyEveryone] Sent "${title}" to ${tokens.length} devices`);
+    }
+    catch (error) {
+        // Best-effort, like every other notification here. A push failure must
+        // not stop the ride window from opening.
+        console.error('[notifyEveryone] Error:', error);
     }
 }
 /**

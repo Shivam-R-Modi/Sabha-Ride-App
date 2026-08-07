@@ -208,9 +208,20 @@ export interface RideContextResult {
     lastUpdated: string;
 }
 
+/**
+ * Manager control over the ride window.
+ *
+ * `rideType` opens that window immediately, overriding the schedule until the
+ * end of the day in Sabha local time. `reset` hands control back to the
+ * schedule straight away.
+ *
+ * The old shape was `{ testMode, forceRideType }`, and testMode blocked the
+ * scheduler indefinitely — a manager who forgot to clear it froze the ride
+ * window for everyone until someone edited Firestore by hand.
+ */
 export interface ManuallyUpdateRideContextParams {
-    testMode?: boolean;
-    forceRideType?: 'home-to-sabha' | 'sabha-to-home';
+    rideType?: 'home-to-sabha' | 'sabha-to-home';
+    reset?: boolean;
 }
 
 export async function manuallyUpdateRideContext(params?: ManuallyUpdateRideContextParams): Promise<RideContextResult> {

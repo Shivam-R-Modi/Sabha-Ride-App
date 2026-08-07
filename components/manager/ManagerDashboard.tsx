@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RequestTable } from './RequestTable';
 import { FleetManagement } from './FleetManagement';
 import { LocationSettings } from './LocationSettings';
+import { RideWindowControl } from './RideWindowControl';
 import { ResponsiveMap } from './ResponsiveMap';
 import {
   Bell,
@@ -754,6 +755,7 @@ export const ManagerDashboard: React.FC = () => {
               </button>
             </div>
             <div className="overflow-y-auto max-h-[calc(90vh-80px)] p-4">
+              <RideWindowControl />
               <LocationSettings />
             </div>
           </div>

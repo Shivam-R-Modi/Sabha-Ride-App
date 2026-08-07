@@ -7,11 +7,15 @@ import { PlaceDetails } from '../../hooks/useGooglePlaces';
 
 export const LocationSettings: React.FC = () => {
     const { currentUser } = useAuth();
-    const { sabhaLocation, arrivalTime, loading, updateSabhaLocation, updateArrivalTime } = useSettings();
+    const {
+        sabhaLocation, sabhaStartTime, sabhaEndTime, loading,
+        updateSabhaLocation, updateSabhaTimes,
+    } = useSettings();
 
     const [address, setAddress] = useState('');
     const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
-    const [timeInput, setTimeInput] = useState('');
+    const [startInput, setStartInput] = useState('');
+    const [endInput, setEndInput] = useState('');
     const [saving, setSaving] = useState(false);
     const [savedSuccess, setSavedSuccess] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -24,11 +28,17 @@ export const LocationSettings: React.FC = () => {
     }, [loading, sabhaLocation]);
 
     useEffect(() => {
-        if (!loading) setTimeInput(arrivalTime);
-    }, [loading, arrivalTime]);
+        if (!loading) {
+            setStartInput(sabhaStartTime);
+            setEndInput(sabhaEndTime);
+        }
+    }, [loading, sabhaStartTime, sabhaEndTime]);
 
-    const timeChanged = timeInput.trim() !== '' && timeInput.trim() !== arrivalTime;
-    const canSave = !!selectedPlace || timeChanged;
+    const timesChanged = startInput !== sabhaStartTime || endInput !== sabhaEndTime;
+    // An end at or before the start would mean a negative-length sabha, and
+    // drop-off would open before pickup closed.
+    const timesValid = !!startInput && !!endInput && endInput > startInput;
+    const canSave = !!selectedPlace || (timesChanged && timesValid);
 
     const handlePlaceSelect = (details: PlaceDetails) => {
         setSelectedPlace(details);
@@ -40,8 +50,13 @@ export const LocationSettings: React.FC = () => {
     const handleSave = async () => {
         if (!currentUser) return;
 
+        if (timesChanged && !timesValid) {
+            setErrorMsg('Sabha must end after it starts.');
+            return;
+        }
+
         if (!canSave) {
-            setErrorMsg('Nothing to save — change the arrival time, or pick an address from the suggestions.');
+            setErrorMsg('Nothing to save — change a time, or pick an address from the suggestions.');
             return;
         }
 
@@ -60,8 +75,8 @@ export const LocationSettings: React.FC = () => {
                     currentUser.uid
                 );
             }
-            if (timeChanged) {
-                await updateArrivalTime(timeInput.trim(), currentUser.uid);
+            if (timesChanged) {
+                await updateSabhaTimes(startInput, endInput, currentUser.uid);
             }
             setSavedSuccess(true);
             setSelectedPlace(null); // Reset selection state after save
@@ -139,25 +154,55 @@ export const LocationSettings: React.FC = () => {
                     )}
                 </div>
 
-                <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Standard Arrival Time
-                    </label>
-                    <input
-                        type="text"
-                        value={timeInput}
-                        onChange={(e) => {
-                            setTimeInput(e.target.value);
-                            setSavedSuccess(false);
-                            setErrorMsg(null);
-                        }}
-                        disabled={saving}
-                        placeholder="5:30 PM"
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron disabled:opacity-50"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                        Shown to riders when they confirm a ride.
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Sabha Starts
+                        </label>
+                        <input
+                            type="time"
+                            value={startInput}
+                            onChange={(e) => {
+                                setStartInput(e.target.value);
+                                setSavedSuccess(false);
+                                setErrorMsg(null);
+                            }}
+                            disabled={saving}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron disabled:opacity-50"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Sabha Ends
+                        </label>
+                        <input
+                            type="time"
+                            value={endInput}
+                            onChange={(e) => {
+                                setEndInput(e.target.value);
+                                setSavedSuccess(false);
+                                setErrorMsg(null);
+                            }}
+                            disabled={saving}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron disabled:opacity-50"
+                        />
+                    </div>
+                </div>
+
+                <div className="bg-amber-50/60 border border-amber-100 rounded-lg px-3 py-2 space-y-1">
+                    <p className="text-xs text-gray-600">
+                        Ride requests open <span className="font-semibold">Wednesday</span> and
+                        stay open until sabha starts.
                     </p>
+                    <p className="text-xs text-gray-600">
+                        Drop-off rides open automatically{' '}
+                        <span className="font-semibold">15 minutes before sabha ends</span>.
+                    </p>
+                    {timesChanged && !timesValid && (
+                        <p className="text-xs text-red-600 font-semibold">
+                            Sabha must end after it starts.
+                        </p>
+                    )}
                 </div>
 
                 {/* Status Messages */}
