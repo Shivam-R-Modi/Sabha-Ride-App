@@ -6,6 +6,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { assertApprovedManager } from '../utils/authz';
 
 export const adminDeleteUser = functions.https.onCall(async (data, context) => {
     // Verify authentication
@@ -18,20 +19,12 @@ export const adminDeleteUser = functions.https.onCall(async (data, context) => {
     const db = admin.firestore();
 
     try {
-        // 1. Verify caller is an approved manager
-        const callerDoc = await db.collection('users').doc(callerUid).get();
-        if (!callerDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Caller profile not found');
-        }
-
-        const callerData = callerDoc.data();
-        const isCallerManager =
-            (callerData?.role === 'manager' || callerData?.registeredRole === 'manager') &&
-            callerData?.accountStatus === 'approved';
-
-        if (!isCallerManager) {
-            throw new functions.https.HttpsError('permission-denied', 'Only approved managers can delete users');
-        }
+        // 1. Verify caller is an approved manager.
+        // This check omitted the `roles` array arm, so it disagreed with the other
+        // four call sites and with firestore.rules: a manager whose document
+        // records the role only in `roles[]` was refused here while passing
+        // everywhere else.
+        const callerData = await assertApprovedManager(db, callerUid, 'delete users');
 
         // Collect array of target UIDs to delete
         const uidsToDelete: string[] = [];

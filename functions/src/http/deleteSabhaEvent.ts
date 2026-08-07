@@ -27,6 +27,7 @@ import { findCurrentEvent, EVENTS_COLLECTION, SEED_MARKER_DOC } from '../utils/e
 import { buildCurrentEvent, resolveScheduleWindow } from '../utils/schedule';
 import { sendMulticastNotification } from '../utils/notifications';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { assertApprovedManager } from '../utils/authz';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -43,28 +44,6 @@ interface DeletePreview {
     isCurrentEvent: boolean;
 }
 
-/** Approved manager? Mirrors isManager() in firestore.rules. */
-async function assertManager(
-    db: admin.firestore.Firestore,
-    uid: string,
-): Promise<void> {
-    const snap = await db.collection('users').doc(uid).get();
-    const user = snap.data();
-
-    const isManager = user?.accountStatus === 'approved' && (
-        user?.role === 'manager'
-        || user?.registeredRole === 'manager'
-        || (Array.isArray(user?.roles) && user.roles.includes('manager'))
-    );
-
-    if (!isManager) {
-        throw new functions.https.HttpsError(
-            'permission-denied',
-            'Only managers can delete a sabha.',
-        );
-    }
-}
-
 export const deleteSabhaEvent = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -73,7 +52,7 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     const db = admin.firestore();
     const uid = context.auth.uid;
 
-    await assertManager(db, uid);
+    await assertApprovedManager(db, uid, 'delete a sabha');
 
     const date: unknown = data?.date;
     if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {

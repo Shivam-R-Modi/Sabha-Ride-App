@@ -154,14 +154,17 @@ describe('deleteSabhaEvent — refusals', () => {
             .rejects.toThrow(/authenticated/i);
     });
 
+    // The check itself now lives in utils/authz.ts, shared with the four other
+    // callables that each had their own divergent copy. Its truth table is
+    // covered cell by cell in authz.test.ts; these two keep the guard wired in.
     it('refuses a non-manager', async () => {
         makeDb({ caller: { role: 'student', accountStatus: 'approved' } });
-        await expect(call({ date: '2026-08-14' })).rejects.toThrow(/Only managers/i);
+        await expect(call({ date: '2026-08-14' })).rejects.toThrow(/Only approved managers/i);
     });
 
     it('refuses an unapproved manager', async () => {
         makeDb({ caller: { role: 'manager', accountStatus: 'pending' } });
-        await expect(call({ date: '2026-08-14' })).rejects.toThrow(/Only managers/i);
+        await expect(call({ date: '2026-08-14' })).rejects.toThrow(/Only approved managers/i);
     });
 
     it('refuses a malformed date', async () => {

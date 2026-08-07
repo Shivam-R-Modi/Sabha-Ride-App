@@ -43,13 +43,14 @@ const admin = __importStar(require("firebase-admin"));
 const routing_1 = require("../utils/routing");
 const notifications_1 = require("../utils/notifications");
 const settings_1 = require("../utils/settings");
+const authz_1 = require("../utils/authz");
 /**
  * HTTP Callable: Manually assign student to a driver's active ride
  * Input: { studentId: string, driverId: string }
  * Output: Updated ride details
  */
 exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c;
+    var _a, _b;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -60,15 +61,11 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
     }
     const db = admin.firestore();
     try {
-        // Verify the caller is a manager
-        const userDoc = await db.collection('users').doc(context.auth.uid).get();
-        if (!userDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'User not found');
-        }
-        const user = userDoc.data();
-        if ((user === null || user === void 0 ? void 0 : user.role) !== 'manager' && (user === null || user === void 0 ? void 0 : user.activeRole) !== 'manager' && !((_a = user === null || user === void 0 ? void 0 : user.roles) === null || _a === void 0 ? void 0 : _a.includes('manager'))) {
-            throw new functions.https.HttpsError('permission-denied', 'Only managers can manually assign students');
-        }
+        // This check used to accept `activeRole == 'manager'` and skip
+        // `accountStatus` entirely, so it was strictly weaker than the rules it
+        // was meant to mirror: a manager whose account had been rejected kept the
+        // ability to assign riders to drivers.
+        await (0, authz_1.assertApprovedManager)(db, context.auth.uid, 'manually assign students');
         // Get student details
         const studentDoc = await db.collection('users').doc(studentId).get();
         if (!studentDoc.exists) {
@@ -101,7 +98,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         if (ride.carId) {
             const vehicleDoc = await db.collection('vehicles').doc(ride.carId).get();
             if (vehicleDoc.exists) {
-                capacity = ((_b = vehicleDoc.data()) === null || _b === void 0 ? void 0 : _b.capacity) || capacity;
+                capacity = ((_a = vehicleDoc.data()) === null || _a === void 0 ? void 0 : _a.capacity) || capacity;
             }
         }
         // Check capacity (capacity - 1 for driver seat)
@@ -149,7 +146,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         await batch.commit();
         // Notify student
         try {
-            const fcmToken = (_c = studentDoc.data()) === null || _c === void 0 ? void 0 : _c.fcmToken;
+            const fcmToken = (_b = studentDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
             if (fcmToken) {
                 await (0, notifications_1.notifyStudentDriverAssigned)(fcmToken, driver.name, ride.carModel, ride.carColor);
             }

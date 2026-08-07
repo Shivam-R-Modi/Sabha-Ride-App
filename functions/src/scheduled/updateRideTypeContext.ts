@@ -15,6 +15,7 @@ import { findCurrentEvent, seedFirstEventIfNeeded } from '../utils/events';
 import { notifyEveryone } from '../utils/notifications';
 import { drainAttendanceDelete } from '../http/deleteSabhaEvent';
 import { SEED_MARKER_DOC } from '../utils/events';
+import { assertApprovedManager } from '../utils/authz';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -259,16 +260,7 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
     const now = new Date();
 
     // Only a manager may move the service window for everyone.
-    const callerDoc = await db.collection('users').doc(context.auth.uid).get();
-    const caller = callerDoc.data();
-    const isManager = caller?.accountStatus === 'approved' && (
-        caller?.role === 'manager'
-        || caller?.registeredRole === 'manager'
-        || (Array.isArray(caller?.roles) && caller.roles.includes('manager'))
-    );
-    if (!isManager) {
-        throw new functions.https.HttpsError('permission-denied', 'Only managers can change the ride window.');
-    }
+    await assertApprovedManager(db, context.auth.uid, 'change the ride window');
 
     const { timeZone } = await readSabhaTimes(db);
     const scheduled = await findCurrentEvent(db, now, timeZone);

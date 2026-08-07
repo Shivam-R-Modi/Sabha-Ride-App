@@ -9,6 +9,7 @@ import { Student, Driver, Ride, RideStudent } from '../types';
 import { optimizeRoute, calculateRouteStats } from '../utils/routing';
 import { notifyStudentDriverAssigned } from '../utils/notifications';
 import { getSabhaLocation, resolveVenue } from '../utils/settings';
+import { assertApprovedManager } from '../utils/authz';
 
 /**
  * HTTP Callable: Manually assign student to a driver's active ride
@@ -30,16 +31,11 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
     const db = admin.firestore();
 
     try {
-        // Verify the caller is a manager
-        const userDoc = await db.collection('users').doc(context.auth.uid).get();
-        if (!userDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'User not found');
-        }
-
-        const user = userDoc.data();
-        if (user?.role !== 'manager' && user?.activeRole !== 'manager' && !user?.roles?.includes('manager')) {
-            throw new functions.https.HttpsError('permission-denied', 'Only managers can manually assign students');
-        }
+        // This check used to accept `activeRole == 'manager'` and skip
+        // `accountStatus` entirely, so it was strictly weaker than the rules it
+        // was meant to mirror: a manager whose account had been rejected kept the
+        // ability to assign riders to drivers.
+        await assertApprovedManager(db, context.auth.uid, 'manually assign students');
 
         // Get student details
         const studentDoc = await db.collection('users').doc(studentId).get();

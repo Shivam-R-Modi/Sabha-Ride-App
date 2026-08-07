@@ -5,6 +5,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { assertApprovedManager } from '../utils/authz';
 
 /**
  * HTTP Callable: Generate CSV export for an event
@@ -25,18 +26,11 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
     const db = admin.firestore();
 
     try {
-        // Verify the caller is a manager
-        const userDoc = await db.collection('users').doc(context.auth.uid).get();
-        if (!userDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'User not found');
-        }
-
-        const user = userDoc.data();
-        // Check for both 'roles' array and 'role' string
-        const isManager = (user?.roles?.includes?.('manager')) || user?.role === 'manager';
-        if (!isManager) {
-            throw new functions.https.HttpsError('permission-denied', 'Only managers can export data');
-        }
+        // This check skipped `accountStatus`, and the rows below are every
+        // rider's name, phone number and home address. A manager whose account
+        // had been rejected could still export the lot — revocation never reached
+        // the one function where it mattered most.
+        await assertApprovedManager(db, context.auth.uid, 'export data');
 
         const rows: string[] = [];
 

@@ -40,13 +40,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateEventCSV = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const authz_1 = require("../utils/authz");
 /**
  * HTTP Callable: Generate CSV export for an event
  * Input: { eventDate: string } (YYYY-MM-DD format)
  * Output: { csvContent: string }
  */
 exports.generateEventCSV = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c, _d;
+    var _a, _b;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -56,17 +57,11 @@ exports.generateEventCSV = functions.https.onCall(async (data, context) => {
     const targetDate = eventDate || new Date().toISOString().split('T')[0];
     const db = admin.firestore();
     try {
-        // Verify the caller is a manager
-        const userDoc = await db.collection('users').doc(context.auth.uid).get();
-        if (!userDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'User not found');
-        }
-        const user = userDoc.data();
-        // Check for both 'roles' array and 'role' string
-        const isManager = ((_b = (_a = user === null || user === void 0 ? void 0 : user.roles) === null || _a === void 0 ? void 0 : _a.includes) === null || _b === void 0 ? void 0 : _b.call(_a, 'manager')) || (user === null || user === void 0 ? void 0 : user.role) === 'manager';
-        if (!isManager) {
-            throw new functions.https.HttpsError('permission-denied', 'Only managers can export data');
-        }
+        // This check skipped `accountStatus`, and the rows below are every
+        // rider's name, phone number and home address. A manager whose account
+        // had been rejected could still export the lot — revocation never reached
+        // the one function where it mattered most.
+        await (0, authz_1.assertApprovedManager)(db, context.auth.uid, 'export data');
         const rows = [];
         // Header
         rows.push('Student Name,Phone,Pickup Address,Status,Request Date');
@@ -88,10 +83,10 @@ exports.generateEventCSV = functions.https.onCall(async (data, context) => {
         const statsDoc = await db.collection('statistics').doc(targetDate).get();
         if (statsDoc.exists && statsDoc.data()) {
             const stats = statsDoc.data();
-            (((_c = stats === null || stats === void 0 ? void 0 : stats.pickup) === null || _c === void 0 ? void 0 : _c.students) || []).forEach((s) => {
+            (((_a = stats === null || stats === void 0 ? void 0 : stats.pickup) === null || _a === void 0 ? void 0 : _a.students) || []).forEach((s) => {
                 completedPickups.set(s.id, s);
             });
-            (((_d = stats === null || stats === void 0 ? void 0 : stats.dropoff) === null || _d === void 0 ? void 0 : _d.students) || []).forEach((s) => {
+            (((_b = stats === null || stats === void 0 ? void 0 : stats.dropoff) === null || _b === void 0 ? void 0 : _b.students) || []).forEach((s) => {
                 completedDropoffs.set(s.id, s);
             });
         }

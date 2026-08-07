@@ -63,20 +63,10 @@ const events_1 = require("../utils/events");
 const schedule_1 = require("../utils/schedule");
 const notifications_1 = require("../utils/notifications");
 const rateLimiter_1 = require("../utils/rateLimiter");
+const authz_1 = require("../utils/authz");
 const CONTEXT_DOC = 'system/rideContext';
 /** Ride states that mean a driver is already on the road for this gathering. */
 const IN_FLIGHT_STATUSES = ['assigned', 'driver_en_route', 'arriving', 'in_progress'];
-/** Approved manager? Mirrors isManager() in firestore.rules. */
-async function assertManager(db, uid) {
-    const snap = await db.collection('users').doc(uid).get();
-    const user = snap.data();
-    const isManager = (user === null || user === void 0 ? void 0 : user.accountStatus) === 'approved' && ((user === null || user === void 0 ? void 0 : user.role) === 'manager'
-        || (user === null || user === void 0 ? void 0 : user.registeredRole) === 'manager'
-        || (Array.isArray(user === null || user === void 0 ? void 0 : user.roles) && user.roles.includes('manager')));
-    if (!isManager) {
-        throw new functions.https.HttpsError('permission-denied', 'Only managers can delete a sabha.');
-    }
-}
 exports.deleteSabhaEvent = functions.https.onCall(async (data, context) => {
     var _a;
     if (!context.auth) {
@@ -84,7 +74,7 @@ exports.deleteSabhaEvent = functions.https.onCall(async (data, context) => {
     }
     const db = admin.firestore();
     const uid = context.auth.uid;
-    await assertManager(db, uid);
+    await (0, authz_1.assertApprovedManager)(db, uid, 'delete a sabha');
     const date = data === null || data === void 0 ? void 0 : data.date;
     if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         throw new functions.https.HttpsError('invalid-argument', 'A sabha date is required.');

@@ -46,6 +46,7 @@ const events_1 = require("../utils/events");
 const notifications_1 = require("../utils/notifications");
 const deleteSabhaEvent_1 = require("../http/deleteSabhaEvent");
 const events_2 = require("../utils/events");
+const authz_1 = require("../utils/authz");
 const CONTEXT_DOC = 'system/rideContext';
 /**
  * Stamp the gathering's own details onto its attendance record.
@@ -258,14 +259,7 @@ exports.manuallyUpdateRideContext = functions.https.onCall(async (data, context)
     const db = admin.firestore();
     const now = new Date();
     // Only a manager may move the service window for everyone.
-    const callerDoc = await db.collection('users').doc(context.auth.uid).get();
-    const caller = callerDoc.data();
-    const isManager = (caller === null || caller === void 0 ? void 0 : caller.accountStatus) === 'approved' && ((caller === null || caller === void 0 ? void 0 : caller.role) === 'manager'
-        || (caller === null || caller === void 0 ? void 0 : caller.registeredRole) === 'manager'
-        || (Array.isArray(caller === null || caller === void 0 ? void 0 : caller.roles) && caller.roles.includes('manager')));
-    if (!isManager) {
-        throw new functions.https.HttpsError('permission-denied', 'Only managers can change the ride window.');
-    }
+    await (0, authz_1.assertApprovedManager)(db, context.auth.uid, 'change the ride window');
     const { timeZone } = await readSabhaTimes(db);
     const scheduled = await (0, events_1.findCurrentEvent)(db, now, timeZone);
     const event = scheduled
