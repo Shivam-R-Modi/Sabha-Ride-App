@@ -7,20 +7,28 @@ import { PlaceDetails } from '../../hooks/useGooglePlaces';
 
 export const LocationSettings: React.FC = () => {
     const { currentUser } = useAuth();
-    const { sabhaLocation, loading, updateSabhaLocation } = useSettings();
+    const { sabhaLocation, arrivalTime, loading, updateSabhaLocation, updateArrivalTime } = useSettings();
 
     const [address, setAddress] = useState('');
     const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
+    const [timeInput, setTimeInput] = useState('');
     const [saving, setSaving] = useState(false);
     const [savedSuccess, setSavedSuccess] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    // Initialize form with current location from Firestore
+    // Initialize form with current settings from Firestore
     useEffect(() => {
         if (!loading && sabhaLocation) {
             setAddress(sabhaLocation.address);
         }
     }, [loading, sabhaLocation]);
+
+    useEffect(() => {
+        if (!loading) setTimeInput(arrivalTime);
+    }, [loading, arrivalTime]);
+
+    const timeChanged = timeInput.trim() !== '' && timeInput.trim() !== arrivalTime;
+    const canSave = !!selectedPlace || timeChanged;
 
     const handlePlaceSelect = (details: PlaceDetails) => {
         setSelectedPlace(details);
@@ -32,8 +40,8 @@ export const LocationSettings: React.FC = () => {
     const handleSave = async () => {
         if (!currentUser) return;
 
-        if (!selectedPlace) {
-            setErrorMsg('Please select an address from the suggestions.');
+        if (!canSave) {
+            setErrorMsg('Nothing to save — change the arrival time, or pick an address from the suggestions.');
             return;
         }
 
@@ -42,14 +50,19 @@ export const LocationSettings: React.FC = () => {
         setSavedSuccess(false);
 
         try {
-            await updateSabhaLocation(
-                {
-                    lat: selectedPlace.latitude,
-                    lng: selectedPlace.longitude,
-                    address: selectedPlace.formattedAddress,
-                },
-                currentUser.uid
-            );
+            if (selectedPlace) {
+                await updateSabhaLocation(
+                    {
+                        lat: selectedPlace.latitude,
+                        lng: selectedPlace.longitude,
+                        address: selectedPlace.formattedAddress,
+                    },
+                    currentUser.uid
+                );
+            }
+            if (timeChanged) {
+                await updateArrivalTime(timeInput.trim(), currentUser.uid);
+            }
             setSavedSuccess(true);
             setSelectedPlace(null); // Reset selection state after save
             setTimeout(() => setSavedSuccess(false), 3000);
@@ -126,6 +139,27 @@ export const LocationSettings: React.FC = () => {
                     )}
                 </div>
 
+                <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Standard Arrival Time
+                    </label>
+                    <input
+                        type="text"
+                        value={timeInput}
+                        onChange={(e) => {
+                            setTimeInput(e.target.value);
+                            setSavedSuccess(false);
+                            setErrorMsg(null);
+                        }}
+                        disabled={saving}
+                        placeholder="5:30 PM"
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron disabled:opacity-50"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                        Shown to riders when they confirm a ride.
+                    </p>
+                </div>
+
                 {/* Status Messages */}
                 {errorMsg && (
                     <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 rounded-lg">
@@ -142,7 +176,7 @@ export const LocationSettings: React.FC = () => {
 
                 <button
                     onClick={handleSave}
-                    disabled={saving || !selectedPlace}
+                    disabled={saving || !canSave}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-saffron text-white rounded-lg font-semibold text-sm hover:bg-saffron/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                     {saving ? (
@@ -150,7 +184,7 @@ export const LocationSettings: React.FC = () => {
                     ) : (
                         <Save size={16} />
                     )}
-                    {saving ? 'Saving...' : 'Update Location'}
+                    {saving ? 'Saving...' : 'Save Settings'}
                 </button>
             </div>
         </div>

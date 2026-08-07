@@ -1,30 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StudentRequest, Driver } from '../../types';
-import { 
-  MapPin, 
-  Maximize2, 
-  Minimize2, 
-  Plus, 
-  Minus, 
-  Navigation, 
-  Car, 
-  Info,
+import {
+  MapPin,
+  Maximize2,
+  Minimize2,
+  Plus,
+  Minus,
+  Navigation,
+  Car,
   X,
-  Navigation2
 } from 'lucide-react';
+import {
+  projectToMapPercent, resolveUserCoords, LatLng, MapPercent, MAP_RADIUS_MILES,
+} from '../../src/utils/mapProjection';
 
 interface ResponsiveMapProps {
   students: StudentRequest[];
   drivers: Driver[];
+  /** The venue. Sits at the centre of the box; everything else is relative to it. */
+  venue: LatLng;
   selectedStudentId?: string | null;
   onMarkerClick: (id: string, type: 'student' | 'driver') => void;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
 }
 
-export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({ 
-  students, 
-  drivers, 
+export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({
+  students,
+  drivers,
+  venue,
   selectedStudentId,
   onMarkerClick,
   isFullscreen = false,
@@ -33,8 +37,37 @@ export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({
   const [zoom, setZoom] = useState(1);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  // Auto-pan logic simulation: center on selected student if it exists
-  const selectedStudent = students.find(s => s.id === selectedStudentId);
+  // Project each request's real pickup point onto the box. Requests whose
+  // coordinates are missing or never geocoded are dropped rather than pinned to
+  // the centre — the old `{ x: 50, y: 50 }` fallback put every marker on top of
+  // the venue and made an empty map look like a full one.
+  const plotted = useMemo(
+    () => students
+      .map(student => ({
+        student,
+        at: projectToMapPercent(
+          student.pickupLat !== undefined && student.pickupLng !== undefined
+            ? { lat: student.pickupLat, lng: student.pickupLng }
+            : null,
+          venue,
+        ),
+      }))
+      .filter((entry): entry is { student: StudentRequest; at: MapPercent } =>
+        entry.at !== null),
+    [students, venue],
+  );
+
+  // Drivers were laid out on a fake diagonal — `30 + idx * 12` percent across,
+  // alternating down — which looked like fleet positions and was arithmetic.
+  const plottedDrivers = useMemo(
+    () => drivers
+      .map(driver => ({ driver, at: projectToMapPercent(resolveUserCoords(driver), venue) }))
+      .filter((entry): entry is { driver: Driver; at: MapPercent } => entry.at !== null),
+    [drivers, venue],
+  );
+
+  const unplottedCount =
+    (students.length - plotted.length) + (drivers.length - plottedDrivers.length);
 
   return (
     <div className={`
@@ -71,13 +104,13 @@ export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({
         </div>
 
         {/* Student Markers */}
-        {students.map(student => {
+        {plotted.map(({ student, at }) => {
           const isSelected = student.id === selectedStudentId;
           const isHovered = student.id === hoveredId;
           const isUrgent = (Date.now() - new Date(student.requestTime).getTime()) > 30 * 60 * 1000;
 
           return (
-            <div 
+            <div
               key={student.id}
               onClick={() => onMarkerClick(student.id, 'student')}
               onMouseEnter={() => setHoveredId(student.id)}
@@ -85,7 +118,7 @@ export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({
               className={`absolute cursor-pointer transition-all duration-300 z-20 flex flex-col items-center
                 ${isSelected ? 'scale-125 z-30' : 'hover:scale-110'}
               `}
-              style={{ left: `${student.coordinates.x}%`, top: `${student.coordinates.y}%` }}
+              style={{ left: `${at.x}%`, top: `${at.y}%` }}
             >
               <div className={`
                 relative flex items-center justify-center transition-all
@@ -111,14 +144,12 @@ export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({
         })}
 
         {/* Driver Markers */}
-        {drivers.map((driver, idx) => {
-          const fallbackX = 30 + (idx * 12);
-          const fallbackY = 20 + (idx % 2 * 15);
+        {plottedDrivers.map(({ driver, at }) => {
           return (
-            <div 
+            <div
               key={driver.id}
               className="absolute transition-all duration-300 cursor-pointer z-10"
-              style={{ left: `${fallbackX}%`, top: `${fallbackY}%` }}
+              style={{ left: `${at.x}%`, top: `${at.y}%` }}
               onClick={() => onMarkerClick(driver.id, 'driver')}
             >
               <div className="bg-white/90 backdrop-blur-md p-1 rounded-full shadow-md border border-blue-100 flex items-center gap-1.5 px-2">
@@ -167,6 +198,17 @@ export const ResponsiveMap: React.FC<ResponsiveMapProps> = ({
             <Car size={8} className="text-blue-600" />
           </div>
           <span className="text-[10px] font-bold text-coffee uppercase tracking-widest">Volunteer Driver</span>
+        </div>
+        <div className="pt-1 mt-1 border-t border-orange-100 space-y-0.5">
+          <span className="block text-[9px] text-coffee-500">
+            Approx. positions within {MAP_RADIUS_MILES} mi of the venue
+          </span>
+          {/* Say so rather than quietly plotting fewer pins than there are people. */}
+          {unplottedCount > 0 && (
+            <span className="block text-[9px] font-bold text-red-600">
+              {unplottedCount} not shown — no saved address
+            </span>
+          )}
         </div>
       </div>
 

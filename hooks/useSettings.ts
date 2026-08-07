@@ -17,8 +17,19 @@ export interface SabhaLocation {
     address: string;
 }
 
+/**
+ * Standard arrival time shown on the ride request screen.
+ *
+ * PickupForm read `settings.timeSlot`, then `settings.arrivalTimeSlot`, and
+ * useSettings returned neither — it only ever returned sabhaLocation. So the
+ * expression always fell through to the literal below and no manager could
+ * change the time a rider is told to arrive. It is a real setting now.
+ */
+export const DEFAULT_ARRIVAL_TIME = '5:30 PM';
+
 export interface AppSettings {
     sabhaLocation: SabhaLocation;
+    arrivalTime: string;
     lastUpdated?: string;
     updatedBy?: string;
 }
@@ -31,6 +42,7 @@ export interface AppSettings {
 export function useSettings() {
     const [settings, setSettings] = useState<AppSettings>({
         sabhaLocation: DEFAULT_SABHA_LOCATION,
+        arrivalTime: DEFAULT_ARRIVAL_TIME,
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -40,15 +52,19 @@ export function useSettings() {
             doc(db, 'settings', 'main'),
             (snap) => {
                 if (snap.exists()) {
-                    const data = snap.data() as AppSettings;
+                    const data = snap.data() as Partial<AppSettings>;
                     setSettings({
                         sabhaLocation: data.sabhaLocation ?? DEFAULT_SABHA_LOCATION,
+                        arrivalTime: data.arrivalTime || DEFAULT_ARRIVAL_TIME,
                         lastUpdated: data.lastUpdated,
                         updatedBy: data.updatedBy,
                     });
                 } else {
-                    // Document doesn't exist yet — use default
-                    setSettings({ sabhaLocation: DEFAULT_SABHA_LOCATION });
+                    // Document doesn't exist yet — use defaults
+                    setSettings({
+                        sabhaLocation: DEFAULT_SABHA_LOCATION,
+                        arrivalTime: DEFAULT_ARRIVAL_TIME,
+                    });
                 }
                 setLoading(false);
             },
@@ -85,11 +101,26 @@ export function useSettings() {
         );
     };
 
+    /** Update the standard arrival time. Manager-only, enforced by rules. */
+    const updateArrivalTime = async (arrivalTime: string, updatedByUid: string) => {
+        await setDoc(
+            doc(db, 'settings', 'main'),
+            {
+                arrivalTime,
+                lastUpdated: new Date().toISOString(),
+                updatedBy: updatedByUid,
+            },
+            { merge: true }
+        );
+    };
+
     return {
         sabhaLocation: settings.sabhaLocation,
+        arrivalTime: settings.arrivalTime,
         settings,
         loading,
         error,
         updateSabhaLocation,
+        updateArrivalTime,
     };
 }

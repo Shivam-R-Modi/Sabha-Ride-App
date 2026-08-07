@@ -12,8 +12,11 @@ interface PickupFormProps {
 }
 
 export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit }) => {
-  const { settings } = useSettings();
-  const arrivalTime = (settings as any)?.timeSlot || (settings as any)?.arrivalTimeSlot || '5:30 PM';
+  // Was `(settings as any)?.timeSlot || (settings as any)?.arrivalTimeSlot ||
+  // '5:30 PM'`. useSettings returned neither field, so it always fell through
+  // to the literal and no manager could change it. It is a real setting now,
+  // editable in Location Settings, with the same value as the default.
+  const { arrivalTime } = useSettings();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);

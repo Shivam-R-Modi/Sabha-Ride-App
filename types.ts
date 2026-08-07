@@ -300,7 +300,14 @@ export interface StudentRequest {
   requestTime: string;
   requestedTimeSlot: string;
   status: 'pending' | 'grouped' | 'assigned';
-  coordinates: { x: number; y: number };
+  /**
+   * The real pickup point, as written by createRideRequest. The dashboard map
+   * projects these onto its box. It used to expect a `coordinates: {x, y}`
+   * percentage pair that nothing ever wrote, and defaulted every marker to the
+   * exact centre — which is where the venue pin already is.
+   */
+  pickupLat?: number;
+  pickupLng?: number;
 }
 
 export interface RideGroup {

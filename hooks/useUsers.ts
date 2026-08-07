@@ -5,6 +5,10 @@ import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/f
 import { Driver, StudentRequest, User } from '../types';
 import { handleSnapshotError } from '../src/utils/firestoreErrors';
 
+/** Same generated avatar the assignment function builds for ride peers. */
+const avatarUrlFor = (name: string) =>
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FF6B35&color=fff`;
+
 // --- Users / Admin ---
 
 export const usePendingDrivers = () => {
@@ -74,16 +78,26 @@ export const usePendingRequests = () => {
             snapshot.forEach((doc) => {
                 const data = doc.data();
                 // Map fields to StudentRequest type for UI
+                const name = data.studentName || 'Student';
                 list.push({
                     id: doc.id,
-                    name: data.studentName,
+                    name,
                     address: data.pickupAddress,
-                    avatarUrl: data.studentAvatarUrl,
-                    phone: '',
+                    // `studentAvatarUrl` is read here and rendered by
+                    // RequestTable, and nothing has ever written it — every
+                    // request row showed a broken image. Derived from the name
+                    // the same way globalAssignDriver derives peer avatars.
+                    avatarUrl: data.studentAvatarUrl || avatarUrlFor(name),
+                    phone: data.studentPhone || '',
                     requestTime: data.createdAt,
                     requestedTimeSlot: data.timeSlot,
                     status: 'pending',
-                    coordinates: data.coordinates || { x: 50, y: 50 } // fallback
+                    // The real pickup point. The map projects it; it used to
+                    // read a `coordinates` field nothing writes and fall back
+                    // to the exact centre of the box, stacking every student
+                    // marker on the venue pin.
+                    pickupLat: data.pickupLat,
+                    pickupLng: data.pickupLng,
                 } as StudentRequest);
             });
             setRequests(list);

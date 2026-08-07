@@ -23,6 +23,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, useWeeklyAttendanceCount, downloadAttendanceCSV, returnStudentToPool, releaseVehicle, setDriverAvailability } from '../../hooks/useFirestore';
 import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
 import { manualAssignStudent } from '../../src/utils/cloudFunctions';
+import { useSettings } from '../../hooks/useSettings';
 import { VENUE_ADDRESS } from '../../constants';
 
 // Grouped Ride Card Component
@@ -181,6 +182,9 @@ export const ManagerDashboard: React.FC = () => {
   const [releaseLoading, setReleaseLoading] = useState(false);
 
   useAutoDispatch();
+
+  // The map plots everything relative to the venue, so it needs the venue.
+  const { sabhaLocation } = useSettings();
 
   const { pendingDrivers } = usePendingDrivers();
   const { pendingRiders } = usePendingRiders();
@@ -512,8 +516,12 @@ export const ManagerDashboard: React.FC = () => {
                 <ResponsiveMap
                   students={pendingRequests}
                   drivers={availableDrivers}
-                  onMarkerClick={(id, type) => {
-                    console.log('[LiveOpsMap] Marker clicked:', id, type);
+                  venue={sabhaLocation}
+                  selectedStudentId={selectedEntityId}
+                  onMarkerClick={(id) => {
+                    // Was a console.log. Selecting the marker at least drives the
+                    // highlight the map already implements.
+                    setSelectedEntityId(prev => (prev === id ? null : id));
                   }}
                 />
               </div>
