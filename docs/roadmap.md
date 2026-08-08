@@ -19,6 +19,7 @@ The app works and serves **one** location. Everything about it assumes that.
 | Env guard | A build with missing Firebase vars now fails instead of silently shipping a blank page. |
 | **Stage 0 — schedule timezone** | Server read local rules off a UTC clock, so drop-off rides could never run. Fixed, tested, **merged and deployed to production**. First behavioural confirmation is Friday. |
 | **Silent-failure remediation** | The class of bug where UI and data paths look functional, fail silently and log nothing. Persisted navigation URLs, the manager access code out of the bundle, create-time privilege escalation closed, two-drivers-one-car, the dashboard map plotting real positions, dead controls swept, dead code deleted. **Deployed to production.** |
+| **Phase 1 — security groundwork** | Closed two live privilege holes, unified the role model, moved manager reads onto custom claims, replaced the shared access code with single-use invites, and stamped tenancy keys. Detail in §10. **Deployed to production.** |
 | **Phase 5 — events model + schedule UI** | Each sabha is now a record with its own date, times, venue override, agenda and status. Managers get a Sabha Calendar: move a sabha, cancel one, add a one-off. Ride windows and attendance derive from the gathering, not from a hardcoded Friday. Calendar self-populates so it cannot go empty. **Built; see the limitation below.** |
 
 **Target state**
@@ -42,11 +43,11 @@ Findings from reading the code, not speculation. Each is a hard blocker.
 
 | # | Blocker | Evidence | Consequence |
 |---|---|---|---|
-| B1 | Profiles are world-readable to any signed-in account | `firestore.rules` — `match /users/{userId} { allow read: if isAuthenticated() }` | Any account reads every name, phone and home address nationwide. With dependents, that includes children. **The single most serious item here** — and the reason the city silo is a compliance control, not a convenience. |
+| ~~B1~~ ✅ | ~~Profiles are world-readable to any signed-in account~~ **CLOSED** (`0af2da0`, `a1cd8c2`) | `firestore.rules` now reads `allow read: if isOwner(userId) \|\| isManagerForRead()`, and the `/students` and `/drivers` mirrors carrying the same PII are denied outright | Was: any account reads every name, phone and home address. What remains is **city scoping**, which with one city authorises the identical set of people — it is Phase 8 enforcement groundwork, not a live exposure. |
 | B2 | `system/rideContext` is one document platform-wide | `updateRideTypeContext.ts`, `globalAssignDriver.ts` | One city's ride window overwrites another's |
 | B3 | `system/assignmentLock` is one global mutex, 10s TTL | `globalAssignDriver.ts:17` | Every driver nationwide serialises through it. Atlanta blocks Boston at 10 PM Friday |
 | B4 | `settings/main` holds exactly one venue | `functions/src/utils/settings.ts` | `getSabhaLocation()` returns *the* destination for clustering and routing |
-| B5 | `settings/managerCode` is one static platform-wide code | `verifyManagerCode.ts` | Anyone who learns it becomes a manager anywhere |
+| ~~B5~~ ✅ | ~~`settings/managerCode` is one static platform-wide code~~ **CLOSED** (`a941797`, `bcbcce7`) | Replaced by `managerInvites`: single-use, expiring, salted-hashed, naming who issued and who redeemed. The document and its callable are deleted | Was: anyone who learned it became a manager anywhere, forever, and any manager could read the plaintext back out of Firestore |
 | B6 | Queries have no location filter | `useUsers.ts:68` — `query(collection(db,'rides'), where('status','==','requested'))` | Every manager streams every ride request in the country, and dispatch can pull a rider from another city |
 | B7 | Dispatch runs in the manager's browser | `useAutoDispatch.ts:23` — *"runs in the Manager Dashboard and acts as the Server logic"* | N managers = N brains competing to dispatch the same rides |
 | B8 | Every request is exactly one seat | `vrpSolver.ts` — `totalDemand + 1` | A group of three gets placed in one free seat. Breaks the moment guests exist |
@@ -221,8 +222,8 @@ Sizes are relative (S/M/L/XL), not estimates.
 | Phase | What | Fixes | Size | User-visible? |
 |---|---|---|---|---|
 | **0** ✅ | Schedule timezone | — | S | No (fixes Friday) |
-| **1** | **Security & silo groundwork.** Scope `/users` reads **by city**; custom claims (`city`, `mgr`, `sm`); add `cityId` + `locationId` to `users`/`rides` with a backfill; audit-log skeleton; remove the shared manager code | B1, B5, B9 | M | No |
-| **2** | **Introduce cities + locations, one of each live.** `cities` and `locations` collections; per-location rideContext, lock, settings; scope every query by `cityId` | B2, B3, B4, B6 | L | No |
+| **1** ✅ | **Security groundwork.** Delivered: caller identity on `globalAssignDriver`; one shared manager check; audit log unified and append-only; one role model; custom claims for reads; single-use manager invites; `cityId`/`locationId` stamped and verified. **No `where('cityId', …)` — that is Phase 2.** | B1, B5 | M | No |
+| **2** | **Introduce cities + locations, one of each live.** `cities` and `locations` collections; per-location rideContext, lock, settings; **scope every query by `cityId`, all at once, gated on `node scripts/tenancy.cjs verify` reading zero** | B2, B3, B4, B6 | L | No |
 | **3** | **Passenger model.** Dependents, guests, manifests, seat-aware VRP | B8 | M | **Yes** |
 | **4** | **Server-side dispatch.** Auto-dispatch out of the browser into a Cloud Function, per location | B7 | XL | No |
 | **5** ✅ | **Events model + manager schedule UI.** Date, start/end, agenda, venue, cancellations | — | L | **Yes** |
@@ -383,3 +384,56 @@ choice — is the actual cost.
 `locations/{id}/events/{eventId}` anyway. Doing the key work now means doing it
 twice. Revisit if two sabhas on one day becomes a real plan rather than a
 hypothetical.
+
+---
+
+## 10. What Phase 1 actually found
+
+Recorded because three of these were not in the plan, and were only found by
+measuring production before writing code. Each had been live for months and none
+was visible from the running site.
+
+**Any account could dispatch as any driver.** `globalAssignDriver` took `driverId`
+from the request body and never compared it to the caller, so a signed-in account
+could assign riders to another driver, take their car, overwrite their record and
+hold the global assignment lock — under that driver's name, on that driver's
+dashboard. Fixed in `0e80419`; the only caller already passed the right value, so
+nothing legitimate changed.
+
+**Rejecting a manager did not revoke them.** "Reject" writes `accountStatus` and
+leaves `role: 'manager'` in place, and two functions never checked
+`accountStatus` — so a revoked manager kept manual assignment and kept the CSV
+export of every rider's name, phone and home address. Five hand-written copies of
+the manager check existed and no two agreed. `91e678a`.
+
+**The audit log could not show the most destructive action.** `deleteSabhaEvent`
+wrote `performedAt` where the console orders by `timestamp`, and Firestore
+excludes documents missing the orderBy field — so all five sabha deletions were
+absent from the screen while the code looked like it was recording them. Managers
+could also delete audit rows, including the record of their own deletion.
+`de277c8`.
+
+**Rides were never actually shared between drivers.** The dispatcher seeded its
+clustering from `activeRole == 'driver'`, and no account has ever had that value:
+`activeRole` is denied to users by `touchesPrivilegeFields()`, so the RoleSwitcher
+only changes React state and the stored value stays frozen at signup. The query
+returned zero rows every time, every dispatch ran K=1, and one driver was handed
+every rider in range instead of the nearest share. The same root cause left the
+manager's driver picker empty and the active-drivers tile reading zero.
+
+The fix is worth recording because the obvious one was also wrong: querying
+`roles array-contains 'driver'` matched nobody either, since in this congregation
+the drivers *are* the managers and their `roles` said `['manager']`. `roles` is now
+the granted set — manager implies driver implies student — backfilled and applied
+at every write site. `b24351d`.
+
+### The rule this phase kept running into
+
+Every one of these failed **silently**. A query returning an empty list, a guard
+whose failure mode is "quietly allow", a log write nobody checks. None produced an
+error, and several looked correct in the code.
+
+That is why the tenancy work stops at stamping. `where('cityId', …)` against an
+unstamped document does not error — it returns nothing, and no handler runs. The
+verifier (`node scripts/tenancy.cjs verify`, exits non-zero) is the gate before any
+filter lands in Phase 2, and it is not optional.
