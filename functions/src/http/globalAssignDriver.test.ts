@@ -85,10 +85,12 @@ interface Recorder {
     updates: Array<{ path: string; data: any }>;
     sets: Array<{ path: string; data: any }>;
     committed: boolean;
+    /** Every where() chain built, so query filters can be asserted on. */
+    queries: Array<{ collection: string; clauses: Array<[string, string, unknown]> }>;
 }
 
 function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
-    const recorder: Recorder = { updates: [], sets: [], committed: false };
+    const recorder: Recorder = { updates: [], sets: [], committed: false, queries: [] };
 
     const snap = (exists: boolean, data?: any) => ({
         exists,
@@ -119,9 +121,17 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
     });
 
     const collection = (name: string) => {
+        // where() records rather than discarding: the driver-pool query silently
+        // matched nobody for months, and a filter nothing asserts on is exactly
+        // how that survived.
+        const clauses: Array<[string, string, unknown]> = [];
         const chain: any = {
             doc: (id: string) => ({ id, path: `${name}/${id}`, get: async () => docFor(name, id) }),
-            where: () => chain,
+            where: (field: string, op: string, value: unknown) => {
+                clauses.push([field, op, value]);
+                recorder.queries.push({ collection: name, clauses: [...clauses] });
+                return chain;
+            },
             get: async () => {
                 if (name === 'rides') return querySnap(fixture.rides);
                 // The "other available drivers" query. Only the tapping driver
@@ -221,6 +231,50 @@ describe('globalAssignDriver — a driver may only dispatch themselves', () => {
     it('allows the driver to dispatch themselves', async () => {
         const { result } = await runAs('driver-1', baseFixture('home-to-sabha'));
         expect(result.status).toBe('success');
+    });
+});
+
+describe('globalAssignDriver — the driver pool must match real drivers', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('seeds clustering from granted roles, not activeRole', async () => {
+        // The bug this replaces: the pool queried `activeRole == 'driver'`, and
+        // activeRole is denied to users by touchesPrivilegeFields() in
+        // firestore.rules — so the RoleSwitcher never persists it and the stored
+        // value stays frozen at signup. Measured against production the query
+        // returned zero rows every time, so every dispatch ran K=1 and one driver
+        // was handed every rider instead of the nearest share.
+        const { recorder } = await run(baseFixture('home-to-sabha'));
+
+        const poolQuery = recorder.queries
+            .filter(q => q.collection === 'users')
+            .sort((a, b) => b.clauses.length - a.clauses.length)[0];
+
+        expect(poolQuery).toBeDefined();
+        expect(poolQuery.clauses).toEqual([
+            ['roles', 'array-contains', 'driver'],
+            ['accountStatus', '==', 'approved'],
+            ['status', '==', 'available'],
+        ]);
+    });
+
+    it('never queries activeRole', async () => {
+        const { recorder } = await run(baseFixture('home-to-sabha'));
+
+        const fields = recorder.queries.flatMap(q => q.clauses.map(c => c[0]));
+        expect(fields).not.toContain('activeRole');
+    });
+
+    it('requires an approved account, so a revoked driver gets no riders', async () => {
+        const { recorder } = await run(baseFixture('home-to-sabha'));
+
+        const poolQuery = recorder.queries
+            .filter(q => q.collection === 'users')
+            .sort((a, b) => b.clauses.length - a.clauses.length)[0];
+
+        expect(poolQuery.clauses).toContainEqual(['accountStatus', '==', 'approved']);
     });
 });
 

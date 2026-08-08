@@ -91,9 +91,12 @@ export const ManagerReports: React.FC = () => {
                 if (data.driverId) driverIds.add(data.driverId);
             });
 
-            // Fetch active drivers count
+            // Fetch active drivers count.
+            // `roles` (the granted set), not `role`: every driver here is recorded
+            // as a manager, so this tile reported 0 active drivers while drivers
+            // were on the road.
             const driversRef = collection(db, 'users');
-            const driversQuery = query(driversRef, where('role', '==', 'driver'), where('accountStatus', '==', 'approved'));
+            const driversQuery = query(driversRef, where('roles', 'array-contains', 'driver'), where('accountStatus', '==', 'approved'));
             const driversSnapshot = await getDocs(driversQuery);
 
             setRideStats({

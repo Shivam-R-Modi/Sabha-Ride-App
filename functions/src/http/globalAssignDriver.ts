@@ -216,8 +216,23 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         console.log(`[globalAssign] ${allStudentPoints.length} unassigned students`);
 
         // ── Step 5: All remaining available drivers ──────────
+        //
+        // This queried `activeRole == 'driver'`, which matched NOBODY. activeRole
+        // is listed in touchesPrivilegeFields() in firestore.rules, so a user
+        // cannot write it: the RoleSwitcher only changes React state and the
+        // stored value stays frozen at whatever signup wrote. Measured against
+        // production, this query returned zero rows every time, so every dispatch
+        // ran K=1 and the tapping driver was handed every rider in range instead
+        // of the nearest share of them. The clustering below was seeded with one
+        // point and did nothing.
+        //
+        // `roles` is now the GRANTED set — a manager may act as a driver, which in
+        // this congregation is how every driver is recorded — so one query serves
+        // it with no special case. `accountStatus` is checked because a revoked
+        // account must not be handed riders.
         const driversSnap = await db.collection('users')
-            .where('activeRole', '==', 'driver')
+            .where('roles', 'array-contains', 'driver')
+            .where('accountStatus', '==', 'approved')
             .where('status', '==', 'available')
             .get();
 

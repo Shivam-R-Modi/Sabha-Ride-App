@@ -16,9 +16,15 @@ export const usePendingDrivers = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // `registeredRole`, not `roles`. This queue is "who signed up as a driver
+        // and needs approving", which is a question about what someone registered
+        // as — whereas `roles` now records everything they may ACT as, so a
+        // manager carries 'driver' too and would appear here awaiting a driver
+        // approval they never asked for. Managers are approved by the invite path,
+        // not from this list.
         const q = query(
             collection(db, 'users'),
-            where('roles', 'array-contains', 'driver'),
+            where('registeredRole', '==', 'driver'),
             where('accountStatus', '==', 'pending')
         );
 
@@ -42,9 +48,17 @@ export const usePendingRiders = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // `registeredRole` for the same reason as the drivers queue above: every
+        // role grants 'student', so querying `roles` here would list every pending
+        // account regardless of what they signed up as.
+        //
+        // This queue has always been empty and still is — students self-approve at
+        // signup, so no student is ever pending. It is left wired rather than
+        // deleted because the safeguarding work may reintroduce approval for
+        // minors, and a correct empty query is cheap.
         const q = query(
             collection(db, 'users'),
-            where('roles', 'array-contains', 'student'),
+            where('registeredRole', '==', 'student'),
             where('accountStatus', '==', 'pending')
         );
 
@@ -146,9 +160,15 @@ export const useAvailableDrivers = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Was `role == 'driver'`, which listed nobody: every driver in this
+        // congregation is recorded as a manager, and `role` holds one value. So
+        // the manager's "assign to any driver" control could only ever report
+        // "No available drivers found", however many were on the road.
+        //
+        // `roles` is the granted set, so a manager who drives is included.
         const q = query(
             collection(db, 'users'),
-            where('role', '==', 'driver'),
+            where('roles', 'array-contains', 'driver'),
             where('accountStatus', '==', 'approved')
         );
 
