@@ -193,8 +193,48 @@ export interface VerifyManagerCodeResult {
     valid: boolean;
 }
 
+/**
+ * @deprecated The one shared, never-expiring access code. Replaced by
+ * redeemManagerInvite. Kept only until no cached bundle can still call it.
+ */
 export async function verifyManagerCode(code: string): Promise<VerifyManagerCodeResult> {
     return callFunction<VerifyManagerCodeResult>('verifyManagerCode', { code });
+}
+
+export interface CreateInviteResult {
+    /** The plaintext. Returned once and never retrievable again. */
+    code: string;
+    ref: string;
+    expiresAt: string;
+}
+
+/**
+ * Mint a single-use manager invite. Approved managers only.
+ *
+ * The returned code exists nowhere else — Firestore holds only a salted hash — so
+ * a caller that loses it must mint another. That is the point: the old
+ * settings/managerCode could be read back out of the database by any manager.
+ */
+export async function createManagerInvite(label?: string): Promise<CreateInviteResult> {
+    return callFunction<CreateInviteResult>('createManagerInvite', { label });
+}
+
+export interface RedeemInviteResult {
+    redeemed: boolean;
+    /** 'not-found' | 'already-used' | 'revoked' | 'expired' | 'wrong-code' */
+    reason?: string;
+    /** Ready to show the user. Each refusal says something different on purpose. */
+    message?: string;
+}
+
+/**
+ * Redeem an invite and become an approved manager.
+ *
+ * Resolves rather than throwing on a bad code, so the caller can show an inline
+ * retry instead of an error screen — a mistyped code is the expected case.
+ */
+export async function redeemManagerInvite(code: string): Promise<RedeemInviteResult> {
+    return callFunction<RedeemInviteResult>('redeemManagerInvite', { code });
 }
 
 // ============================================

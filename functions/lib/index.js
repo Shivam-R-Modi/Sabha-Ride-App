@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.geocodeAddress = exports.adminDeleteUser = exports.verifyManagerCode = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.geocodeAddress = exports.adminDeleteUser = exports.verifyManagerCode = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -77,6 +77,13 @@ var generateEventCSV_1 = require("./http/generateEventCSV");
 Object.defineProperty(exports, "generateEventCSV", { enumerable: true, get: function () { return generateEventCSV_1.generateEventCSV; } });
 var deleteSabhaEvent_1 = require("./http/deleteSabhaEvent");
 Object.defineProperty(exports, "deleteSabhaEvent", { enumerable: true, get: function () { return deleteSabhaEvent_1.deleteSabhaEvent; } });
+// Single-use, expiring invites. These ship ALONGSIDE verifyManagerCode rather
+// than replacing it in one step: removing the old callable while a cached bundle
+// still calls it turns signup into an opaque "internal" error. It goes in a
+// second deploy, once a real invite has been redeemed end to end.
+var managerInvites_1 = require("./http/managerInvites");
+Object.defineProperty(exports, "createManagerInvite", { enumerable: true, get: function () { return managerInvites_1.createManagerInvite; } });
+Object.defineProperty(exports, "redeemManagerInvite", { enumerable: true, get: function () { return managerInvites_1.redeemManagerInvite; } });
 var verifyManagerCode_1 = require("./http/verifyManagerCode");
 Object.defineProperty(exports, "verifyManagerCode", { enumerable: true, get: function () { return verifyManagerCode_1.verifyManagerCode; } });
 var adminDeleteUser_1 = require("./http/adminDeleteUser");

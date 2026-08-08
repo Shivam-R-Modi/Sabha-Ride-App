@@ -1,0 +1,156 @@
+/**
+ * Manager invite codes: generation, parsing and verification.
+ *
+ * Replaces `settings/managerCode`, which was one static string with no expiry, no
+ * single use, no record of who it was given to, and no revocation short of
+ * changing it for everyone at once. firestore.rules also let any approved manager
+ * read it in plaintext, so anyone who became a manager could mint managers
+ * forever.
+ *
+ * ## Shape of a code
+ *
+ *     A7K2M9-4FQXB2NRH3
+ *     └ ref ┘ └ secret ┘
+ *
+ * The reference is the invite's Firestore document id, so redeeming is a single
+ * document read rather than a scan of every invite testing each hash in turn. The
+ * secret is never stored — only a salted scrypt hash of it — so the Database
+ * Console cannot show a working code, which is exactly what it does today with
+ * settings/managerCode.
+ *
+ * The alphabet omits I, L, O, U, 0 and 1: these get read aloud, written down and
+ * retyped, and O/0 and I/1/L are where that goes wrong. Input is normalised
+ * before comparison, so case, spaces and dashes do not matter.
+ *
+ * 10 secret characters over a 30-character alphabet is a little under 50 bits.
+ * Combined with the redeem rate limit that is not brute-forceable; the hash is
+ * scrypt rather than a bare SHA so that a leaked database dump is not either.
+ */
+
+import * as crypto from 'crypto';
+
+/** No I, L, O, U, 0 or 1 — the characters people mis-transcribe. */
+const ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+const REF_LENGTH = 6;
+const SECRET_LENGTH = 10;
+
+/** How long a fresh invite stays redeemable. */
+export const INVITE_TTL_DAYS = 7;
+
+const SCRYPT_KEYLEN = 32;
+
+function randomFrom(alphabet: string, length: number): string {
+    // rejection-free: 256 % 30 != 0 would bias, so draw a 32-bit value per char
+    // and reject the tail rather than taking a modulo of a byte.
+    const out: string[] = [];
+    while (out.length < length) {
+        const n = crypto.randomBytes(4).readUInt32BE(0);
+        const limit = Math.floor(0xffffffff / alphabet.length) * alphabet.length;
+        if (n >= limit) continue;
+        out.push(alphabet[n % alphabet.length]);
+    }
+    return out.join('');
+}
+
+export interface GeneratedInvite {
+    /** Firestore document id. Safe to store and display. */
+    ref: string;
+    /** Shown to the manager once and never persisted. */
+    secret: string;
+    /** What the manager passes on: `REF-SECRET`. */
+    code: string;
+}
+
+export function generateInvite(): GeneratedInvite {
+    const ref = randomFrom(ALPHABET, REF_LENGTH);
+    const secret = randomFrom(ALPHABET, SECRET_LENGTH);
+    return { ref, secret, code: `${ref}-${secret}` };
+}
+
+/** Upper-case and drop anything outside the alphabet, so dashes/spaces/case are free. */
+export function normaliseCode(input: string): string {
+    return input.toUpperCase().split('').filter(c => ALPHABET.includes(c)).join('');
+}
+
+/**
+ * Split a typed code into its reference and secret.
+ *
+ * Returns null when the input cannot be a code at all, so the caller can reject
+ * without a Firestore read.
+ */
+export function splitCode(input: string): { ref: string; secret: string } | null {
+    const clean = normaliseCode(input);
+    if (clean.length !== REF_LENGTH + SECRET_LENGTH) return null;
+    return {
+        ref: clean.slice(0, REF_LENGTH),
+        secret: clean.slice(REF_LENGTH),
+    };
+}
+
+export function makeSalt(): string {
+    return crypto.randomBytes(16).toString('hex');
+}
+
+export function hashSecret(secret: string, salt: string): string {
+    return crypto.scryptSync(secret, salt, SCRYPT_KEYLEN).toString('hex');
+}
+
+/**
+ * Constant-time comparison.
+ *
+ * A plain `===` on a hash leaks its matching prefix through timing. That is a
+ * thin attack over the network, but the correct comparison costs one line.
+ */
+export function verifySecret(secret: string, salt: string, expectedHash: string): boolean {
+    const actual = Buffer.from(hashSecret(secret, salt), 'hex');
+    let expected: Buffer;
+    try {
+        expected = Buffer.from(expectedHash, 'hex');
+    } catch {
+        return false;
+    }
+    if (actual.length !== expected.length) return false;
+    return crypto.timingSafeEqual(actual, expected);
+}
+
+export type InviteRejection =
+    | 'not-found'
+    | 'already-used'
+    | 'revoked'
+    | 'expired'
+    | 'wrong-code';
+
+/** The stored shape, minus the fields only Firestore fills in. */
+export interface InviteRecord {
+    salt?: unknown;
+    codeHash?: unknown;
+    expiresAt?: unknown;
+    usedBy?: unknown;
+    revokedAt?: unknown;
+}
+
+/**
+ * Why this invite cannot be redeemed, or null if it can.
+ *
+ * Pure, so every refusal is testable without a Firestore fake — each one is a
+ * separate path a user can hit and each needs its own message.
+ */
+export function rejectionFor(
+    invite: InviteRecord | null | undefined,
+    secret: string,
+    now: Date,
+): InviteRejection | null {
+    if (!invite) return 'not-found';
+    if (invite.usedBy) return 'already-used';
+    if (invite.revokedAt) return 'revoked';
+
+    if (typeof invite.expiresAt !== 'string') return 'expired';
+    const expiry = Date.parse(invite.expiresAt);
+    if (!Number.isFinite(expiry) || expiry <= now.getTime()) return 'expired';
+
+    if (typeof invite.salt !== 'string' || typeof invite.codeHash !== 'string') return 'wrong-code';
+    if (!verifySecret(secret, invite.salt, invite.codeHash)) return 'wrong-code';
+
+    return null;
+}

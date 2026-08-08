@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { verifyManagerCode } from '../../src/utils/cloudFunctions';
+import { redeemManagerInvite } from '../../src/utils/cloudFunctions';
 
 interface PendingApprovalProps {
     role: string;
@@ -29,15 +29,19 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
         setSuccessMessage('');
 
         try {
-            // Same server-side check as RoleSelection. This screen carried its
-            // own copy of the hardcoded ['sabha2026','sabha2024'] pair and its
-            // own self-approving updateDoc — which firestore.rules now denies
-            // anyway, since a user may not write accountStatus on themselves.
-            // The callable does the comparison and the approval.
-            const { valid } = await verifyManagerCode(rawInput);
+            // Same server-side path as RoleSelection. This screen once carried its
+            // own copy of the hardcoded ['sabha2026','sabha2024'] pair and its own
+            // self-approving updateDoc; then a shared, never-expiring code; now a
+            // single-use invite that expires, names who issued it and who used it,
+            // and is stored only as a salted hash.
+            //
+            // The refusal message comes from the server because the five reasons
+            // need different answers — a mistyped code is worth retrying, an
+            // expired one needs a new invite.
+            const { redeemed, message } = await redeemManagerInvite(rawInput);
 
-            if (!valid) {
-                setError('Invalid manager access code');
+            if (!redeemed) {
+                setError(message || 'That invite code was not recognised.');
                 setLoading(false);
                 return;
             }
@@ -92,16 +96,16 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                     {role === 'manager' && (
                         <form onSubmit={handleUnlockManager} className="bg-orange-50 border-2 border-saffron/30 rounded-xl p-4 text-left space-y-3">
                             <label className="block text-sm font-bold text-coffee">
-                                Have a Manager Access Code?
+                                Have a manager invite code?
                             </label>
                             <p className="text-xs text-coffee-700">
-                                Enter your code below to instantly approve your account.
+                                Enter it below to approve your account. Invites are single-use and expire.
                             </p>
                             <input
                                 type="password"
                                 value={managerCode}
                                 onChange={(e) => setManagerCode(e.target.value)}
-                                placeholder="Enter access code..."
+                                placeholder="e.g. A7K2M9-4FQXB2NRH3"
                                 className="w-full px-3 py-2 rounded-lg border border-mocha/20 text-sm focus:outline-none focus:border-saffron bg-white"
                                 disabled={loading}
                             />
@@ -112,7 +116,7 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                                 disabled={loading || !managerCode.trim()}
                                 className="w-full bg-saffron text-white py-2 rounded-lg text-sm font-bold hover:bg-saffron/90 transition-all disabled:opacity-50"
                             >
-                                {loading ? 'Verifying...' : 'Unlock Manager Account'}
+                                {loading ? 'Checking\u2026' : 'Unlock Manager Account'}
                             </button>
                         </form>
                     )}

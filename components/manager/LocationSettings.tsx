@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Save, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { MapPin, Save, CheckCircle2, AlertCircle, Loader2, KeyRound } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../hooks/useSettings';
 import { AddressAutocomplete } from '../auth/AddressAutocomplete';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
+import { createManagerInvite, CreateInviteResult } from '../../src/utils/cloudFunctions';
+
+/** Must match INVITE_TTL_DAYS in functions/src/utils/invites.ts. */
+const INVITE_TTL_DAYS = 7;
 
 export const LocationSettings: React.FC = () => {
     const { currentUser } = useAuth();
@@ -19,6 +23,29 @@ export const LocationSettings: React.FC = () => {
     const [saving, setSaving] = useState(false);
     const [savedSuccess, setSavedSuccess] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    // Manager invites. `newInvite` holds the only copy of a freshly minted code
+    // that will ever exist — Firestore stores a salted hash — so it is kept in
+    // state until the manager dismisses it rather than cleared on a timer.
+    const [inviteLabel, setInviteLabel] = useState('');
+    const [minting, setMinting] = useState(false);
+    const [newInvite, setNewInvite] = useState<CreateInviteResult | null>(null);
+    const [inviteError, setInviteError] = useState<string | null>(null);
+
+    const handleCreateInvite = async () => {
+        setMinting(true);
+        setInviteError(null);
+        setNewInvite(null);
+        try {
+            setNewInvite(await createManagerInvite(inviteLabel.trim() || undefined));
+            setInviteLabel('');
+        } catch (err: unknown) {
+            console.error('Error creating manager invite:', err);
+            setInviteError(err instanceof Error ? err.message : 'Could not create an invite.');
+        } finally {
+            setMinting(false);
+        }
+    };
 
     // Initialize form with current settings from Firestore
     useEffect(() => {
@@ -241,6 +268,75 @@ export const LocationSettings: React.FC = () => {
                     )}
                     {saving ? 'Saving...' : 'Save Settings'}
                 </button>
+            </div>
+
+            {/* ── Manager invites ─────────────────────────────────────────── */}
+            <div className="border-t border-gray-100 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                    <KeyRound size={16} className="text-saffron" />
+                    <h3 className="text-sm font-bold text-gray-800">Manager invites</h3>
+                </div>
+
+                <p className="text-xs text-gray-500">
+                    Creates a single-use code that expires in {INVITE_TTL_DAYS} days. Give it to
+                    one person. You will see it once — it is stored scrambled, so it cannot be
+                    looked up later.
+                </p>
+
+                <input
+                    type="text"
+                    value={inviteLabel}
+                    onChange={(e) => setInviteLabel(e.target.value)}
+                    placeholder="Who is this for? (optional, for your records)"
+                    className="w-full px-3 py-2 rounded-lg border border-mocha/20 text-sm focus:outline-none focus:border-saffron bg-white"
+                    disabled={minting}
+                />
+
+                <button
+                    onClick={handleCreateInvite}
+                    disabled={minting}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-saffron text-saffron rounded-lg font-semibold text-sm hover:bg-saffron/5 disabled:opacity-50 transition-all"
+                >
+                    {minting ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
+                    {minting ? 'Creating…' : 'Create an invite'}
+                </button>
+
+                {inviteError && (
+                    <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 rounded-lg">
+                        <AlertCircle size={14} />
+                        <span className="text-xs">{inviteError}</span>
+                    </div>
+                )}
+
+                {/* Shown once. Nothing can retrieve it again, so it stays on screen
+                    until the manager dismisses it rather than auto-hiding. */}
+                {newInvite && (
+                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-3 space-y-2">
+                        <p className="text-xs font-bold text-green-900">
+                            Copy this now — it will not be shown again
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <code className="flex-1 font-mono text-sm bg-white px-3 py-2 rounded border border-green-200 tracking-wider select-all break-all">
+                                {newInvite.code}
+                            </code>
+                            <button
+                                onClick={() => navigator.clipboard?.writeText(newInvite.code)}
+                                className="px-3 py-2 text-xs font-semibold text-green-900 border border-green-300 rounded hover:bg-green-100"
+                            >
+                                Copy
+                            </button>
+                        </div>
+                        <p className="text-[11px] text-green-800">
+                            Expires {new Date(newInvite.expiresAt).toLocaleDateString()}. Single use.
+                        </p>
+                        <button
+                            onClick={() => setNewInvite(null)}
+                            className="text-[11px] text-green-900 underline"
+                        >
+                            Done, hide it
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

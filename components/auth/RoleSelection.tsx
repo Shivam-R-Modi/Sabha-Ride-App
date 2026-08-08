@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
-import { verifyManagerCode } from '../../src/utils/cloudFunctions';
+import { redeemManagerInvite } from '../../src/utils/cloudFunctions';
 import { UserRole } from '../../types';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -90,10 +90,10 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                 // the check was optional: skip it, write the field, be a
                 // manager. Neither the code nor the privilege fields belong in
                 // the browser.
-                const { valid } = await verifyManagerCode(rawInput);
+                const { redeemed, message } = await redeemManagerInvite(rawInput);
 
-                if (!valid) {
-                    setError('Invalid manager access code. Please check with the Sabha coordinator.');
+                if (!redeemed) {
+                    setError(message || 'That invite code was not recognised. Please check with the Sabha coordinator.');
                     setLoading(false);
                     return;
                 }

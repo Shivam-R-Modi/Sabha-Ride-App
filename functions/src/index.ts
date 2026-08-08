@@ -37,6 +37,11 @@ export { studentReadyToLeave } from './http/studentReadyToLeave';
 export { manualAssignStudent } from './http/manualAssignStudent';
 export { generateEventCSV } from './http/generateEventCSV';
 export { deleteSabhaEvent } from './http/deleteSabhaEvent';
+// Single-use, expiring invites. These ship ALONGSIDE verifyManagerCode rather
+// than replacing it in one step: removing the old callable while a cached bundle
+// still calls it turns signup into an opaque "internal" error. It goes in a
+// second deploy, once a real invite has been redeemed end to end.
+export { createManagerInvite, redeemManagerInvite } from './http/managerInvites';
 export { verifyManagerCode } from './http/verifyManagerCode';
 export { adminDeleteUser } from './http/adminDeleteUser';
 

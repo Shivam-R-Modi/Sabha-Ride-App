@@ -221,6 +221,24 @@ service cloud.firestore {
     }
     
     // =====================================
+    // MANAGER INVITES — server only
+    // =====================================
+    //
+    // Closed to every client, managers included, in both directions.
+    //
+    // Read would expose the salt and hash of a live invite, and reading is how
+    // settings/managerCode failed: any approved manager could fetch the plaintext
+    // and mint managers indefinitely, with nothing recording that they had.
+    // Write would let a manager forge an invite as somebody else, or clear
+    // `usedBy` to make a spent code live again.
+    //
+    // createManagerInvite and redeemManagerInvite run under the Admin SDK, which
+    // bypasses rules, so denying clients costs nothing at all.
+    match /managerInvites/{inviteId} {
+      allow read, write: if false;
+    }
+
+    // =====================================
     // STUDENTS / DRIVERS COLLECTIONS — legacy, closed
     // =====================================
     //
