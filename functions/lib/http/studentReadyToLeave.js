@@ -45,6 +45,7 @@ const admin = __importStar(require("firebase-admin"));
 const time_1 = require("../utils/time");
 const coords_1 = require("../utils/coords");
 const tenancy_1 = require("../constants/tenancy");
+const seats_1 = require("../constants/seats");
 /**
  * HTTP Callable: Student ready to leave Sabha
  * Updates student status for drop-off assignment
@@ -134,6 +135,21 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
             const r = d.data();
             return r.rideType === 'sabha-to-home' && OPEN_STATUSES.includes(r.status);
         });
+        // How many people are going home.
+        //
+        // Without this the return leg defaults to one seat, so a family of six who
+        // were brought here in two cars would be offered a single place home — and
+        // nothing would report it, because one seat is a perfectly valid request.
+        //
+        // Taken from the outbound legs rather than a profile field: it is the
+        // number that actually travelled. Legs of a split group are summed, since
+        // each carried part of the party. Falls back to 1, which is what every
+        // ride predating seats means.
+        const outboundSeats = mySnap.docs
+            .map(d => d.data())
+            .filter(r => r.rideType === 'home-to-sabha' && r.eventDate === eventDate)
+            .reduce((n, r) => n + (0, seats_1.seatsOf)(r), 0);
+        const seatsRequested = outboundSeats > 0 ? Math.min(outboundSeats, seats_1.MAX_SEATS) : seats_1.DEFAULT_SEATS;
         let rideId;
         if (existing) {
             rideId = existing.id;
@@ -156,6 +172,7 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
                 notes: '',
                 status: 'requested',
                 rideType: 'sabha-to-home',
+                seatsRequested,
                 // The return leg is the SECOND place a ride is created, and easy
                 // to miss: the rider never sees this form.
                 cityId: tenancy_1.FOUNDING_CITY_ID,

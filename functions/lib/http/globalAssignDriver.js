@@ -42,6 +42,9 @@ exports.globalAssignDriver = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const clustering_1 = require("../utils/clustering");
+const seats_1 = require("../utils/seats");
+const seats_2 = require("../constants/seats");
+const tenancy_1 = require("../constants/tenancy");
 const routing_1 = require("../utils/routing");
 const coords_1 = require("../utils/coords");
 const fleet_1 = require("../utils/fleet");
@@ -81,7 +84,7 @@ function isValidPendingRide(docData) {
 }
 // ── main function ──────────────────────────────────────────
 exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
     // Auth check
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -172,6 +175,12 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'Vehicle is assigned to another driver.');
         }
         const availableSeats = Math.max(1, (carData.capacity || 4) - 1);
+        // The largest vehicle the fleet HAS, which decides whether a group too big
+        // for this car should wait for a bigger one or be split across several.
+        // Read live rather than cached: a stale value silently splits families who
+        // could have travelled together, or strands ones who cannot.
+        const fleetSnap = await db.collection('vehicles').get();
+        const maxFleetSeats = (0, seats_1.maxPassengerSeats)(fleetSnap.docs.map(d => { var _a; return (_a = d.data()) === null || _a === void 0 ? void 0 : _a.capacity; }));
         // resolveHomeCoords tolerates every shape the codebase writes
         // ({lat,lng} and {latitude,longitude}, under `location` or
         // `homeLocation`) and rejects the 0,0 placeholder that means "address
@@ -190,25 +199,44 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         if (ridesSnap.empty) {
             return { status: 'no_students' };
         }
-        const studentMap = new Map();
+        // Keyed by RIDE DOCUMENT, not by rider.
+        //
+        // This used to deduplicate by studentId, keeping the first request per
+        // person. That was right when one rider could only ever have one waiting
+        // request. It is wrong now: splitting a group across cars leaves the same
+        // rider holding the assigned share AND a waiting remainder, and releasing
+        // an assignment puts a second waiting request back in the pool. Under the
+        // old key the remainder was dropped from the pool without a trace — the
+        // family's other three seats simply stopped existing.
+        //
+        // Over-serving a rider who somehow files two requests is visible: a driver
+        // arrives with spare seats. Under-serving is silent. Prefer the visible one.
+        const requestMap = new Map();
         for (const doc of ridesSnap.docs) {
             const d = doc.data();
             if (!isValidPendingRide(d))
                 continue;
-            // Deduplicate by studentId to prevent duplicate entries if a student has multiple pending requests
-            if (!studentMap.has(d.studentId)) {
-                studentMap.set(d.studentId, {
-                    id: d.studentId,
-                    rideRequestId: doc.id,
-                    name: d.studentName || 'Student',
-                    phone: d.studentPhone || '',
-                    lat: d.pickupLat,
-                    lng: d.pickupLng,
-                    address: d.pickupAddress || 'Unknown'
-                });
-            }
+            requestMap.set(doc.id, {
+                id: doc.id,
+                rideRequestId: doc.id,
+                studentId: d.studentId,
+                name: d.studentName || 'Student',
+                phone: d.studentPhone || '',
+                lat: d.pickupLat,
+                lng: d.pickupLng,
+                address: d.pickupAddress || 'Unknown',
+                seats: (0, seats_2.seatsOf)(d),
+                allowSplit: d.allowSplit !== false,
+                isRemainder: !!d.groupId,
+                groupId: (_c = d.groupId) !== null && _c !== void 0 ? _c : null,
+                groupSeatsTotal: (_d = d.groupSeatsTotal) !== null && _d !== void 0 ? _d : null,
+                // Carried so a split remainder is filed against the same gathering
+                // as the request it came from, rather than being re-derived.
+                date: (_f = (_e = d.date) !== null && _e !== void 0 ? _e : d.eventDate) !== null && _f !== void 0 ? _f : '',
+                timeSlot: (_g = d.timeSlot) !== null && _g !== void 0 ? _g : '',
+            });
         }
-        const allStudentPoints = Array.from(studentMap.values());
+        const allStudentPoints = Array.from(requestMap.values());
         if (allStudentPoints.length === 0) {
             return { status: 'no_students' };
         }
@@ -278,22 +306,58 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         })
             .filter(s => s.distMi <= GEO_FENCE_MILES)
             .sort((a, b) => a.distMi - b.distMi);
-        // Take up to available seats
-        const assignedStudents = sortedStudents.slice(0, availableSeats);
+        // ── Step 7b: Fill by SEATS, not by head count ───────
+        //
+        // This was `sortedStudents.slice(0, availableSeats)` — one request, one
+        // seat. A family of four was booked a single place and the driver turned
+        // up with room for one.
+        //
+        // remaindersFirst puts the leftover of an already-split group ahead of
+        // untouched requests. Without it, starting to serve a family drops their
+        // remainder back into distance competition, so beginning to help them can
+        // make them wait longer than a group nobody ever touched.
+        const offerOrder = (0, seats_1.remaindersFirst)(sortedStudents);
+        const { taken, skipped } = (0, seats_1.fillBySeats)(offerOrder.map(s => ({
+            id: s.rideRequestId,
+            seats: s.seats,
+            allowSplit: s.allowSplit,
+            isRemainder: s.isRemainder,
+        })), availableSeats, maxFleetSeats);
+        const offerMap = new Map(offerOrder.map(s => [s.rideRequestId, s]));
+        const assignedStudents = taken.map(t => (Object.assign(Object.assign({}, offerMap.get(t.id)), { seatsTaken: t.seats, groupTotalSeats: t.totalSeats, wasSplit: t.split })));
+        // Aggregated by reason, with no names or ids: a driver needs to know THAT
+        // a larger group is waiting, not who they are. The per-rider detail
+        // belongs on the manager's queue, which reads the ride documents directly.
+        const waiting = Object.values(skipped.reduce((acc, s) => {
+            var _a;
+            const row = (_a = acc[s.reason]) !== null && _a !== void 0 ? _a : (acc[s.reason] = { reason: s.reason, groups: 0, seats: 0 });
+            row.groups += 1;
+            row.seats += s.seats;
+            return acc;
+        }, {}));
         if (assignedStudents.length === 0) {
-            return { status: 'no_students' };
+            // Not always "nobody is waiting" any more: it can mean everyone waiting
+            // needs a bigger vehicle than this one. Saying which is the difference
+            // between a driver going home and a manager registering a larger car.
+            return { status: 'no_students', waiting };
         }
-        console.log(`[globalAssign] Assigning ${assignedStudents.length} students`);
+        console.log(`[globalAssign] Assigning ${assignedStudents.length} requests, ` +
+            `${taken.reduce((n, t) => n + t.seats, 0)} seats of ${availableSeats}`);
         // ── Step 8: Build RideStudents + route ──────────────
-        const rideStudents = assignedStudents.map(s => ({
-            id: s.id,
-            rideRequestId: s.rideRequestId,
-            name: s.name,
-            phone: s.phone,
-            location: { lat: s.lat, lng: s.lng, address: s.address },
-            status: 'assigned',
-            picked: false
-        }));
+        const rideStudents = assignedStudents.map(s => {
+            var _a;
+            return (Object.assign(Object.assign({ 
+                // The RIDER's uid. `s.id` is the ride document now that the pool is
+                // keyed by request rather than by person — writing it here would send
+                // every users/{uid} update to a document named after a ride.
+                id: s.studentId, rideRequestId: s.rideRequestId, name: s.name, phone: s.phone, location: { lat: s.lat, lng: s.lng, address: s.address }, 
+                // How many people this stop is for. The driver's screen shows it so
+                // they do not pull away from an address with three of the party still
+                // on the pavement.
+                seats: s.seatsTaken }, (s.wasSplit || s.groupSeatsTotal
+                ? { groupSeats: (_a = s.groupSeatsTotal) !== null && _a !== void 0 ? _a : s.groupTotalSeats }
+                : {})), { status: 'assigned', picked: false }));
+        });
         const startPoint = rideType === 'home-to-sabha'
             ? tappingDriverLoc
             : SABHA_LOCATION;
@@ -315,13 +379,13 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         const batch = db.batch();
         const primaryRideId = assignedStudents[0].rideRequestId;
         const assignedStudentProfiles = assignedStudents.map(s => ({
-            id: s.id,
+            id: s.studentId,
             name: s.name,
             avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=FF6B35&color=fff`
         }));
         for (const s of assignedStudents) {
             const rideRef = db.collection('rides').doc(s.rideRequestId);
-            const otherPeers = assignedStudentProfiles.filter(p => p.id !== s.id);
+            const otherPeers = assignedStudentProfiles.filter(p => p.id !== s.studentId);
             batch.update(rideRef, {
                 driverId,
                 driverName: driverData.name || 'Driver',
@@ -363,13 +427,70 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                 // students were never marked in_ride, never returned to the
                 // pool on release, and manual assignment threw on the spread.
                 students: rideStudents,
-                assignedStudentIds: assignedStudents.map(st => st.id),
+                assignedStudentIds: assignedStudents.map(st => st.studentId),
+                // What this car is actually carrying for this request. On a split
+                // it is LESS than the rider asked for, and the sibling document
+                // below holds the rest.
+                seatsRequested: s.seatsTaken,
+                groupId: s.wasSplit ? ((_h = s.groupId) !== null && _h !== void 0 ? _h : s.rideRequestId) : ((_j = s.groupId) !== null && _j !== void 0 ? _j : null),
+                groupSeatsTotal: s.wasSplit
+                    ? ((_k = s.groupSeatsTotal) !== null && _k !== void 0 ? _k : s.groupTotalSeats)
+                    : ((_l = s.groupSeatsTotal) !== null && _l !== void 0 ? _l : null),
                 estimatedDistance,
                 estimatedTime,
                 assignedAt: new Date().toISOString()
             });
+            // ── The remainder of a split group ──────────────
+            //
+            // No single tap can commit a second driver, so a group too big for any
+            // vehicle is served SEQUENTIALLY: this car takes what fits and the rest
+            // goes straight back into the waiting pool as an ordinary request, for
+            // whichever driver taps next. Written inside the same batch as the
+            // assignment, so there is no instant where the seats have been taken
+            // from the rider but not yet offered to anyone else.
+            if (s.wasSplit) {
+                // Against THIS request's size, not the party's original total.
+                // A group of 8 against 3-seat cars splits more than once: the
+                // second car is dividing a 5-seat remainder, and measuring that
+                // against the original 8 would book 8-3=5 more seats instead of
+                // 5-3=2 — inventing three people who do not exist and sending a
+                // car for them, every round, for ever.
+                const remainderSeats = s.groupTotalSeats - s.seatsTaken;
+                if (remainderSeats > 0) {
+                    const remainderRef = db.collection('rides').doc();
+                    batch.set(remainderRef, {
+                        studentId: s.studentId,
+                        studentName: s.name,
+                        studentPhone: s.phone,
+                        date: s.date || eventId,
+                        eventDate: s.date || eventId,
+                        timeSlot: s.timeSlot,
+                        pickupAddress: s.address,
+                        pickupLat: s.lat,
+                        pickupLng: s.lng,
+                        notes: '',
+                        status: 'requested',
+                        rideType,
+                        seatsRequested: remainderSeats,
+                        allowSplit: s.allowSplit,
+                        // Ties the pieces together so the rider's screen can say
+                        // "3 of your 6 seats are with Ravi", the driver knows the
+                        // stop is part of a larger party, and completion waits for
+                        // the whole group rather than declaring the family home
+                        // while half of them are still waiting.
+                        groupId: (_m = s.groupId) !== null && _m !== void 0 ? _m : s.rideRequestId,
+                        groupSeatsTotal: (_o = s.groupSeatsTotal) !== null && _o !== void 0 ? _o : s.groupTotalSeats,
+                        splitFromRideId: s.rideRequestId,
+                        cityId: tenancy_1.FOUNDING_CITY_ID,
+                        locationId: tenancy_1.FOUNDING_LOCATION_ID,
+                        createdAt: new Date().toISOString(),
+                        peers: [],
+                        isReadyToLeave: false,
+                    });
+                }
+            }
             // Upsert student user profile (set+merge is safe even if doc doesn't exist)
-            const studentRef = db.collection('users').doc(s.id);
+            const studentRef = db.collection('users').doc(s.studentId);
             batch.set(studentRef, {
                 status: 'assigned',
                 currentRideId: s.rideRequestId
@@ -395,7 +516,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             // can never be the stale one a later release path falls back to.
             currentVehicleId: carId,
             currentCarId: null,
-            assignedStudentIds: assignedStudents.map(s => s.id)
+            assignedStudentIds: assignedStudents.map(s => s.studentId)
         }, { merge: true });
         // Delete the lock in the same batch
         batch.delete(lockRef);
@@ -407,9 +528,11 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             if (driverFcmToken) {
                 await (0, notifications_1.notifyDriverStudentsAssigned)(driverFcmToken, rideStudents.length);
             }
-            for (const s of assignedStudents) {
-                const sDoc = await db.collection('users').doc(s.id).get();
-                const sToken = (_c = sDoc.data()) === null || _c === void 0 ? void 0 : _c.fcmToken;
+            // By rider, not by request: a rider holding two of this car's stops
+            // should get one message, not two.
+            for (const studentId of new Set(assignedStudents.map(s => s.studentId))) {
+                const sDoc = await db.collection('users').doc(studentId).get();
+                const sToken = (_p = sDoc.data()) === null || _p === void 0 ? void 0 : _p.fcmToken;
                 if (sToken) {
                     await (0, notifications_1.notifyStudentDriverAssigned)(sToken, driverData.name || 'Driver', carData.name || 'Vehicle', carData.color || '');
                 }
@@ -435,6 +558,10 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                 licensePlate: carData.licensePlate || '',
                 capacity: carData.capacity || 4
             },
+            seatsTaken: assignedStudents.reduce((n, s) => n + s.seatsTaken, 0),
+            availableSeats,
+            // Why anyone nearer was passed over. Aggregated, no names.
+            waiting,
             remainingUnassigned
         };
     }
@@ -460,7 +587,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         // This runs after catch block, providing extra guarantee
         try {
             const lockStillExists = await lockRef.get();
-            if (lockStillExists.exists && ((_d = lockStillExists.data()) === null || _d === void 0 ? void 0 : _d.driverId) === driverId) {
+            if (lockStillExists.exists && ((_q = lockStillExists.data()) === null || _q === void 0 ? void 0 : _q.driverId) === driverId) {
                 await lockRef.delete();
                 console.log('[globalAssign] Lock cleaned up in finally block');
             }

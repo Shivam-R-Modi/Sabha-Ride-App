@@ -45,6 +45,9 @@ const fleet_1 = require("../utils/fleet");
 const events_1 = require("../utils/events");
 const settings_1 = require("../utils/settings");
 const time_1 = require("../utils/time");
+const seats_1 = require("../constants/seats");
+/** A ride still owed to a rider. Used to hold their status while a split leg runs. */
+const OPEN_RIDE_STATUSES = ['requested', 'assigned', 'driver_en_route', 'arriving', 'in_progress'];
 /**
  * HTTP Callable: Complete a ride
  * Input: { rideId: string }
@@ -96,6 +99,8 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
             .where('status', 'in', ['assigned', 'in_progress', 'driver_en_route', 'arriving'])
             .get();
         const allStudentsMap = new Map();
+        /** The rides this call is closing, so a rider's OTHER open rides stand out. */
+        const completingRideIds = new Set(activeRidesSnap.docs.map(d => d.id));
         for (const doc of activeRidesSnap.docs) {
             batch.update(doc.ref, {
                 status: 'completed',
@@ -105,14 +110,17 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
             if (data.studentId) {
                 allStudentsMap.set(data.studentId, {
                     id: data.studentId,
-                    name: data.studentName || 'Student'
+                    name: data.studentName || 'Student',
+                    // People carried, not documents closed. Absent means one.
+                    seats: (0, seats_1.seatsOf)(data),
                 });
             }
             if (Array.isArray(data.students)) {
                 for (const s of data.students) {
                     allStudentsMap.set(s.id, {
                         id: s.id,
-                        name: s.name || 'Student'
+                        name: s.name || 'Student',
+                        seats: (0, seats_1.seatsOf)({ seatsRequested: s.seats }),
                     });
                 }
             }
@@ -122,7 +130,12 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         const driverDoc = await db.collection('users').doc(driverUid).get();
         const driver = driverDoc.data();
         const newRidesCompleted = ((driver === null || driver === void 0 ? void 0 : driver.ridesCompletedToday) || 0) + 1;
-        const newTotalStudents = ((driver === null || driver === void 0 ? void 0 : driver.totalStudentsToday) || 0) + (allStudents.length || ((_c = ride === null || ride === void 0 ? void 0 : ride.students) === null || _c === void 0 ? void 0 : _c.length) || 1);
+        // Seats carried, not rows closed. A driver who took a family of four had
+        // this read 1, so their day's tally — and the manager's — undercounted
+        // every group they moved.
+        const seatsCarried = allStudents.reduce((n, s) => n + (s.seats || 1), 0);
+        const newTotalStudents = ((driver === null || driver === void 0 ? void 0 : driver.totalStudentsToday) || 0)
+            + (seatsCarried || ((_c = ride === null || ride === void 0 ? void 0 : ride.students) === null || _c === void 0 ? void 0 : _c.length) || 1);
         const newTotalDistance = ((driver === null || driver === void 0 ? void 0 : driver.totalDistanceToday) || 0) + ((ride === null || ride === void 0 ? void 0 : ride.estimatedDistance) || 0);
         // Released in BOTH collections. Clearing only `vehicles` left
         // `cars/{id}` saying in_use with the previous driver still on it, and
@@ -138,6 +151,21 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         const destination = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'Sabha' : 'Home';
         // Update students status and notify
         for (const student of allStudents) {
+            // A group too large for one car is split across cars, so a rider can
+            // still have a leg outstanding when this one finishes. Marking them
+            // 'home_safe' then would be a plain lie on the manager's screen — and
+            // it would clear currentRideId, cutting their remaining half loose.
+            //
+            // Single-field query filtered in memory, matching studentReadyToLeave:
+            // adding `status` would need a rides(studentId, status) composite.
+            const theirRides = await db.collection('rides')
+                .where('studentId', '==', student.id)
+                .get();
+            const stillTravelling = theirRides.docs.some(d => { var _a; return !completingRideIds.has(d.id) && OPEN_RIDE_STATUSES.includes((_a = d.data()) === null || _a === void 0 ? void 0 : _a.status); });
+            if (stillTravelling) {
+                console.log(`[completeRide] ${student.id} has another leg open — status held`);
+                continue;
+            }
             batch.update(db.collection('users').doc(student.id), {
                 status: newStudentStatus,
                 currentRideId: null
@@ -159,12 +187,15 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
             ? ride.students
             : (allStudents.length > 0 ? allStudents : ((ride === null || ride === void 0 ? void 0 : ride.studentId) ? [{ id: ride.studentId, name: ride.studentName || 'Student' }] : []));
         const rideStudents = rawStudents.map((s) => {
-            var _a;
+            var _a, _b;
             return ({
                 id: s.id || '',
                 name: s.name || 'Student',
+                // Carried onto the attendance row so the sabha's headcount is people,
+                // not accounts. One rider bringing three is one row and three seats.
+                seats: (_a = s.seats) !== null && _a !== void 0 ? _a : (0, seats_1.seatsOf)({ seatsRequested: s.seatsRequested }),
                 driverId: driverUid,
-                driverName: (ride === null || ride === void 0 ? void 0 : ride.driverName) || ((_a = ride === null || ride === void 0 ? void 0 : ride.driver) === null || _a === void 0 ? void 0 : _a.name) || 'Driver',
+                driverName: (ride === null || ride === void 0 ? void 0 : ride.driverName) || ((_b = ride === null || ride === void 0 ? void 0 : ride.driver) === null || _b === void 0 ? void 0 : _b.name) || 'Driver',
                 carModel: (ride === null || ride === void 0 ? void 0 : ride.carModel) || '',
                 carLicensePlate: (ride === null || ride === void 0 ? void 0 : ride.carLicensePlate) || ''
             });
@@ -180,7 +211,10 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         const newStudents = rideStudents.filter(s => !existingStudentIds.has(s.id));
         const deduplicatedStudents = [...(currentBlock.students || []), ...newStudents];
         const updatedBlock = {
-            totalStudents: deduplicatedStudents.length,
+            // Sum of seats, not a row count. The rows are still de-duplicated by
+            // rider above, so a rider who travelled in two cars appears once and
+            // contributes each leg's seats — never counted twice as a person.
+            totalStudents: deduplicatedStudents.reduce((n, s) => n + (Number(s.seats) || 1), 0),
             completedRides: (currentBlock.completedRides || 0) + 1,
             totalDrivers: Math.max(1, (currentBlock.totalDrivers || 0) + 1),
             students: deduplicatedStudents

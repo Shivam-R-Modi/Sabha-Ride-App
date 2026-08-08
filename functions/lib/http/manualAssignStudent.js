@@ -44,6 +44,7 @@ const routing_1 = require("../utils/routing");
 const notifications_1 = require("../utils/notifications");
 const settings_1 = require("../utils/settings");
 const authz_1 = require("../utils/authz");
+const seats_1 = require("../constants/seats");
 /**
  * HTTP Callable: Manually assign student to a driver's active ride
  * Input: { studentId: string, driverId: string }
@@ -101,11 +102,31 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
                 capacity = ((_a = vehicleDoc.data()) === null || _a === void 0 ? void 0 : _a.capacity) || capacity;
             }
         }
-        // Check capacity (capacity - 1 for driver seat)
+        // How many people is this rider bringing?
+        //
+        // Deliberately a single-field query filtered in memory, matching
+        // studentReadyToLeave: adding `status` to the query would need a
+        // rides(studentId, status) composite and this is a handful of documents.
+        const myRidesSnap = await db.collection('rides')
+            .where('studentId', '==', studentId)
+            .get();
+        const waitingRequest = myRidesSnap.docs
+            .map(d => d.data())
+            .find(r => r.status === 'requested');
+        const seatsNeeded = (0, seats_1.seatsOf)(waitingRequest);
+        // Check capacity (capacity - 1 for driver seat).
+        //
+        // This counted ENTRIES — `existingStudents.length >= availableSeats` —
+        // so a car already carrying a family of three looked like it held one
+        // passenger, and a manager could keep adding riders to a full vehicle.
         const availableSeats = Math.max(1, capacity - 1);
         const existingStudents = ride.students || [];
-        if (existingStudents.length >= availableSeats) {
-            throw new functions.https.HttpsError('failed-precondition', `Vehicle is at full capacity (${availableSeats} seats available, driver takes 1)`);
+        const seatsTaken = existingStudents.reduce((n, s) => n + (0, seats_1.seatsOf)({ seatsRequested: s.seats }), 0);
+        const seatsFree = availableSeats - seatsTaken;
+        if (seatsNeeded > seatsFree) {
+            throw new functions.https.HttpsError('failed-precondition', seatsFree <= 0
+                ? `Vehicle is full (${availableSeats} seats, driver takes 1).`
+                : `Not enough room: this rider needs ${seatsNeeded} seat${seatsNeeded === 1 ? '' : 's'} and ${seatsFree} ${seatsFree === 1 ? 'is' : 'are'} free.`);
         }
         // Add student to ride
         const newStudent = {
@@ -113,6 +134,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
             name: student.name,
             phone: student.phone || '',
             location: student.location,
+            seats: seatsNeeded,
             picked: false
         };
         const updatedStudents = [...ride.students, newStudent];

@@ -25,6 +25,7 @@ import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch,
 import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { useConfirm } from '../shared/useConfirm';
+import { seatsOnRide } from '../../src/constants/seats';
 
 // Grouped Ride Card Component
 const RideAssignmentCard: React.FC<{
@@ -33,6 +34,8 @@ const RideAssignmentCard: React.FC<{
   onUnassign?: (rideId: string) => void;
   onRelease?: (driverId: string, rideIds: string[]) => void;
 }> = ({ driver, rides, onUnassign, onRelease }) => {
+  // People this driver is carrying, across all their ride documents.
+  const ridePassengers = rides.reduce((n, r) => n + seatsOnRide(r), 0);
   return (
     <div className="clay-card bg-white overflow-hidden flex flex-col h-full">
       {/* Driver Header */}
@@ -144,7 +147,11 @@ const RideAssignmentCard: React.FC<{
       <div className="bg-cream/50 p-2 border-t border-cream-dark flex justify-between items-center text-xs text-coffee-500">
         <div className="flex items-center gap-1">
           <Users size={12} />
-          <span>{rides.length} Passengers</span>
+          {/* Seats, not ride documents. This read `rides.length`, so a driver
+              carrying one family of four showed "1 Passengers" — the count of
+              rows, which is the same head-count-as-seat-count mistake the seat
+              work removed everywhere else. */}
+          <span>{ridePassengers} {ridePassengers === 1 ? 'Passenger' : 'Passengers'}</span>
         </div>
         <div className="flex items-center gap-1">
           <Clock size={12} />
