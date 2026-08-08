@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { geocodeAddress, adminDeleteUserViaCloud } from '../src/utils/cloudFunctions';
 import { writeAuditLog } from '../src/utils/audit';
+import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../src/constants/tenancy';
 
 /**
  * Collections the admin console may browse and edit.
@@ -158,6 +159,10 @@ export function useAdminDatabase(targetCollection: SupportedCollection) {
   ) => {
     try {
       const payload = {
+        // Stamped unless the manager typed one explicitly, so a hand-created
+        // record is not the one document the verifier trips over.
+        cityId: FOUNDING_CITY_ID,
+        locationId: FOUNDING_LOCATION_ID,
         ...data,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()

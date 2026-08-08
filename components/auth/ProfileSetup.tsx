@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
+import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../../src/constants/tenancy';
 import { useAuth } from '../../contexts/AuthContext';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { PhoneNumberInput } from './PhoneNumberInput';
@@ -70,6 +71,10 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                     geocodedAt: serverTimestamp(),
                 },
                 avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FF6B35&color=fff&size=200`,
+                // Belt and braces with RoleSelection. A profile is created there
+                // and completed here, and either write can be the one that lands.
+                cityId: FOUNDING_CITY_ID,
+                locationId: FOUNDING_LOCATION_ID,
             }, { merge: true });
 
             onComplete();

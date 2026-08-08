@@ -44,6 +44,7 @@ const admin = __importStar(require("firebase-admin"));
 // for itself whether the window is open.
 const time_1 = require("../utils/time");
 const coords_1 = require("../utils/coords");
+const tenancy_1 = require("../constants/tenancy");
 /**
  * HTTP Callable: Student ready to leave Sabha
  * Updates student status for drop-off assignment
@@ -155,6 +156,10 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
                 notes: '',
                 status: 'requested',
                 rideType: 'sabha-to-home',
+                // The return leg is the SECOND place a ride is created, and easy
+                // to miss: the rider never sees this form.
+                cityId: tenancy_1.FOUNDING_CITY_ID,
+                locationId: tenancy_1.FOUNDING_LOCATION_ID,
                 createdAt: nowIso,
                 peers: [],
                 isReadyToLeave: true,

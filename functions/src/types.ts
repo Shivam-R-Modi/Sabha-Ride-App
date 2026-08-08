@@ -30,6 +30,14 @@ export interface GeoLocation {
 }
 
 export interface User {
+  /**
+   * The congregation this record belongs to. Written everywhere, read by nothing
+   * yet — filtering comes a release later, behind a verifier. Optional because
+   * documents created before the backfill do not carry it, and a rule requiring
+   * it would reject a ride request on a Friday evening.
+   */
+  cityId?: string;
+  locationId?: string;
     id: string;
     email: string;
     name: string;
@@ -102,6 +110,14 @@ export interface Waypoint {
 }
 
 export interface Ride {
+  /**
+   * The congregation this record belongs to. Written everywhere, read by nothing
+   * yet — filtering comes a release later, behind a verifier. Optional because
+   * documents created before the backfill do not carry it, and a rule requiring
+   * it would reject a ride request on a Friday evening.
+   */
+  cityId?: string;
+  locationId?: string;
     id: string;
     eventDate: string;
     /**

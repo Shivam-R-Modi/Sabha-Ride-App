@@ -9,6 +9,7 @@ import * as admin from 'firebase-admin';
 // for itself whether the window is open.
 import { zonedDateKey, DEFAULT_TIME_ZONE } from '../utils/time';
 import { resolveHomeCoords } from '../utils/coords';
+import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../constants/tenancy';
 
 /**
  * HTTP Callable: Student ready to leave Sabha
@@ -148,6 +149,10 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
                 notes: '',
                 status: 'requested',
                 rideType: 'sabha-to-home',
+                // The return leg is the SECOND place a ride is created, and easy
+                // to miss: the rider never sees this form.
+                cityId: FOUNDING_CITY_ID,
+                locationId: FOUNDING_LOCATION_ID,
                 createdAt: nowIso,
                 peers: [],
                 isReadyToLeave: true,

@@ -3,6 +3,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
 import { redeemManagerInvite } from '../../src/utils/cloudFunctions';
+import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../../src/constants/tenancy';
 import { UserRole } from '../../types';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -123,6 +124,11 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                 email: currentUser.email,
                 phone: currentUser.phoneNumber,
                 accountStatus: initialStatus,
+                // Stamped on BOTH profile writes. A profile is created here and
+                // completed in ProfileSetup, with a gap between; stamping only one
+                // leaves a window where the document exists unstamped.
+                cityId: FOUNDING_CITY_ID,
+                locationId: FOUNDING_LOCATION_ID,
                 createdAt: new Date().toISOString(),
             }, { merge: true });
 

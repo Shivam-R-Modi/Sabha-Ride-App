@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
+import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../src/constants/tenancy';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDoc, getDocs, orderBy, limit, startAfter, DocumentSnapshot } from 'firebase/firestore';
 import { Ride, RideStatus, Driver } from '../types';
 import { handleSnapshotError } from '../src/utils/firestoreErrors';
@@ -134,7 +135,14 @@ export const createRideRequest = async (userId: string, details: any) => {
             status: 'requested',
             createdAt: new Date().toISOString(),
             peers: [],
-            isReadyToLeave: false
+            isReadyToLeave: false,
+            // Which congregation this belongs to. Written and read by nothing —
+            // the filtering comes a release later, once a verifier proves every
+            // document carries it. Stamping first is deliberate: a query filtered
+            // on an unstamped document does not error, it simply returns nothing,
+            // and no handler anywhere would ever fire.
+            cityId: FOUNDING_CITY_ID,
+            locationId: FOUNDING_LOCATION_ID,
         });
         return true;
     } catch (error) {
