@@ -26,37 +26,57 @@ service cloud.firestore {
     // rule goes through isManager/isDriver/isStudent below, which inline the same
     // tests. Two more getUserData() lookups nothing reached.
 
-    // Check if user is a manager
+    // A role counts however the document happens to record it.
+    //
+    // The same three-way test was spelled out separately inside isManager,
+    // isDriver and isStudent (and twice more in dead helpers), so the four role
+    // fields could drift apart one helper at a time — which is exactly what
+    // happened on the server, where five hand-written copies disagreed.
+    //
+    // `activeRole` is deliberately NOT consulted. It records which hat the user is
+    // wearing in the UI, not what they may do, and it is listed in
+    // touchesPrivilegeFields() below — so a user cannot write it, the RoleSwitcher
+    // only ever changes React state, and the stored value stays frozen at whatever
+    // signup wrote. Authorising on a field the app cannot keep current is how
+    // manualAssignStudent ended up weaker than these rules.
+    //
+    // Mirrors recordedRoles() in src/roles.ts and functions/src/utils/roles.ts.
+    function recordsRole(data, role) {
+      return (data.role == role)
+             || (data.registeredRole == role)
+             || ('roles' in data && data.roles != null && role in data.roles);
+    }
+
+    // The hierarchy, expanded DOWNWARD only: a manager may act as a driver or a
+    // student, a driver as a student. Nothing below manager ever implies it.
+    function grantsRole(data, role) {
+      return recordsRole(data, role)
+             || (role == 'student' && (recordsRole(data, 'manager') || recordsRole(data, 'driver')))
+             || (role == 'driver' && recordsRole(data, 'manager'));
+    }
+
+    function isApprovedAs(role) {
+      let data = getUserData();
+      return isAuthenticated()
+             && grantsRole(data, role)
+             && data.accountStatus == 'approved';
+    }
+
+    // Authority question — recorded, never inherited.
     function isManager() {
-      let data = getUserData();
-      return isAuthenticated() && (
-        (data.role == 'manager') ||
-        (data.registeredRole == 'manager') ||
-        ('roles' in data && data.roles != null && 'manager' in data.roles)
-      ) && (data.accountStatus == 'approved');
+      return isApprovedAs('manager');
     }
-    
-    // Check if user is a driver
+
+    // Capability questions — the hierarchy applies, which is what the old
+    // isStudent() was reaching for when it listed registeredRole == 'manager' and
+    // 'driver' by hand. isDriver() gains the same treatment it always should have
+    // had: a manager who drives is a driver.
     function isDriver() {
-      let data = getUserData();
-      return isAuthenticated() && (
-        (data.role == 'driver') ||
-        (data.registeredRole == 'driver') ||
-        ('roles' in data && data.roles != null && 'driver' in data.roles)
-      ) && (data.accountStatus == 'approved');
+      return isApprovedAs('driver');
     }
-    
-    // Check if user is a student (or manager/driver acting as student)
+
     function isStudent() {
-      let data = getUserData();
-      return isAuthenticated() && (
-        (data.role == 'student') ||
-        (data.registeredRole == 'student') ||
-        (data.activeRole == 'student') ||
-        (data.registeredRole == 'manager') ||
-        (data.registeredRole == 'driver') ||
-        ('roles' in data && data.roles != null && 'student' in data.roles)
-      ) && (data.accountStatus == 'approved');
+      return isApprovedAs('student');
     }
 
     // isAssignedDriver(rideId) lived here. Its only caller was the /students

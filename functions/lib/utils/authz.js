@@ -65,22 +65,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.isApprovedManagerData = isApprovedManagerData;
 exports.assertApprovedManager = assertApprovedManager;
 const functions = __importStar(require("firebase-functions"));
+const roles_1 = require("./roles");
 /**
  * The authority test, as a pure function over a user document.
  *
  * Separated from the read so it can be exhaustively tested without a Firestore
  * fake — the truth table is the part that was wrong five times.
+ *
+ * Uses `hasRecordedRole`, not `hasGrantedRole`: the role hierarchy expands
+ * downward only, so nothing below manager may imply it. Reading the granted set
+ * here would make every driver a manager.
  */
 function isApprovedManagerData(data) {
     const user = data;
     if (!user)
         return false;
-    if (user.accountStatus !== 'approved')
-        return false;
-    const roles = user.roles;
-    return user.role === 'manager'
-        || user.registeredRole === 'manager'
-        || (Array.isArray(roles) && roles.includes('manager'));
+    return user.accountStatus === 'approved' && (0, roles_1.hasRecordedRole)(user, 'manager');
 }
 /**
  * Throw unless `uid` belongs to an approved manager. Returns their document, so

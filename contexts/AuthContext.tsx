@@ -4,6 +4,7 @@ import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth
 import { doc, onSnapshot, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { User, Driver, UserRole } from '../types';
+import { grantedRoles } from '../src/roles';
 
 interface AuthContextType {
   currentUser: FirebaseUser | null;
@@ -132,24 +133,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Get available roles based on the user's registered role
-  const getAvailableRoles = (): UserRole[] => {
-    if (!userProfile) return [];
-
-    // Use registeredRole if available, otherwise fall back to role
-    const registeredRole = userProfile.registeredRole || userProfile.role;
-
-    switch (registeredRole) {
-      case 'manager':
-        return ['manager', 'driver', 'student'];
-      case 'driver':
-        return ['driver', 'student'];
-      case 'student':
-        return ['student'];
-      default:
-        return [];
-    }
-  };
+  /**
+   * Which roles the switcher offers.
+   *
+   * Was a switch on `registeredRole || role` with the hierarchy hardcoded here.
+   * Same output for every document shape in production — no user has disagreeing
+   * role fields — but it now reads the same table the rest of the app does, and
+   * it no longer returns an empty list for a document that records the role only
+   * in `roles[]`, which the old lookup missed entirely.
+   */
+  const getAvailableRoles = (): UserRole[] => grantedRoles(userProfile);
 
   return (
     <AuthContext.Provider value={{

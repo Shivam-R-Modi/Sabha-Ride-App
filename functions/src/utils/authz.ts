@@ -30,23 +30,23 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { hasRecordedRole, RoleBearing } from './roles';
 
 /**
  * The authority test, as a pure function over a user document.
  *
  * Separated from the read so it can be exhaustively tested without a Firestore
  * fake — the truth table is the part that was wrong five times.
+ *
+ * Uses `hasRecordedRole`, not `hasGrantedRole`: the role hierarchy expands
+ * downward only, so nothing below manager may imply it. Reading the granted set
+ * here would make every driver a manager.
  */
 export function isApprovedManagerData(data: unknown): boolean {
-    const user = data as Record<string, unknown> | null | undefined;
+    const user = data as RoleBearing | null | undefined;
     if (!user) return false;
 
-    if (user.accountStatus !== 'approved') return false;
-
-    const roles = user.roles;
-    return user.role === 'manager'
-        || user.registeredRole === 'manager'
-        || (Array.isArray(roles) && roles.includes('manager'));
+    return user.accountStatus === 'approved' && hasRecordedRole(user, 'manager');
 }
 
 /**

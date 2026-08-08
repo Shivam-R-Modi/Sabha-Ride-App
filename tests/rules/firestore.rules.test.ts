@@ -85,6 +85,63 @@ const asDriver = () => testEnv.authenticatedContext(DRIVER).firestore();
 const asManager = () => testEnv.authenticatedContext(MANAGER).firestore();
 const asAnon = () => testEnv.unauthenticatedContext().firestore();
 
+describe('a role counts however it is recorded', () => {
+    // isManager/isDriver/isStudent each spelled the role test out separately, so
+    // the four fields could drift apart one helper at a time. These pin each
+    // field on its own BEFORE the helpers are collapsed onto a shared one, so the
+    // refactor is guarded cell by cell rather than by "the suite still passes".
+    //
+    // settings/managerCode is the probe: manager-only read, one getUserData().
+
+    const asUid = (uid: string) => testEnv.authenticatedContext(uid).firestore();
+
+    const seedUser = async (uid: string, data: Record<string, unknown>) => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'users', uid), data);
+        });
+    };
+
+    it('manager recorded in `role` alone is a manager', async () => {
+        await seedUser('m_role', { role: 'manager', accountStatus: 'approved' });
+        await assertSucceeds(getDoc(doc(asUid('m_role'), 'settings', 'managerCode')));
+    });
+
+    it('manager recorded in `registeredRole` alone is a manager', async () => {
+        await seedUser('m_reg', { registeredRole: 'manager', accountStatus: 'approved' });
+        await assertSucceeds(getDoc(doc(asUid('m_reg'), 'settings', 'managerCode')));
+    });
+
+    it('manager recorded in `roles[]` alone is a manager', async () => {
+        await seedUser('m_arr', { roles: ['manager'], accountStatus: 'approved' });
+        await assertSucceeds(getDoc(doc(asUid('m_arr'), 'settings', 'managerCode')));
+    });
+
+    it('manager in `activeRole` alone is NOT a manager', async () => {
+        // activeRole is a UI preference, not authority. A user cannot even write
+        // it — touchesPrivilegeFields() denies it — so treating it as a grant
+        // would be trusting a field the app cannot keep current.
+        await seedUser('m_active', { activeRole: 'manager', accountStatus: 'approved' });
+        await assertFails(getDoc(doc(asUid('m_active'), 'settings', 'managerCode')));
+    });
+
+    it('none of the four grants manager without approval', async () => {
+        await seedUser('m_pending', {
+            role: 'manager', registeredRole: 'manager', roles: ['manager'],
+            accountStatus: 'pending',
+        });
+        await assertFails(getDoc(doc(asUid('m_pending'), 'settings', 'managerCode')));
+    });
+
+    it('a driver is not a manager, however it is recorded', async () => {
+        // The hierarchy expands downward only. Nothing below manager implies it.
+        await seedUser('d_all', {
+            role: 'driver', registeredRole: 'driver', roles: ['driver'],
+            accountStatus: 'approved',
+        });
+        await assertFails(getDoc(doc(asUid('d_all'), 'settings', 'managerCode')));
+    });
+});
+
 describe('privilege escalation', () => {
     it('a student cannot make themselves a manager', async () => {
         // The whole authorisation model rests on this. isManager() reads
