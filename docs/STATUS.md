@@ -1,9 +1,11 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-08**, at commit `76c087d`.
+at the end. Last updated **2026-08-08**, at the tip of
+`claude/project-status-review-6nsvaf`.
 
-`main` matches production exactly. Working tree clean, everything pushed.
+`main` still matches production exactly; that branch is one commit ahead of it.
+Working tree clean, everything pushed.
 
 ---
 
@@ -15,9 +17,12 @@ at the end. Last updated **2026-08-08**, at commit `76c087d`.
 | Cloud Functions | ✅ | all 16 updated |
 | Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
 
-**Test suites, all green:** `functions` **245** · client **70** · rules **81** —
-**396 total**. `npm run typecheck` reports **22** errors, which is the clean
+**Test suites, all green:** `functions` **245** · client **73** · rules **81** —
+**399 total**. `npm run typecheck` reports **22** errors, which is the clean
 baseline, not a regression.
+
+One commit is ahead of production: the Request Center actions fix below. Rules,
+functions and hosting are unchanged by it — it is client-only, and **undeployed**.
 
 `node scripts/tenancy.cjs verify` reads **0 unstamped** (owner's Mac only — needs
 the Admin SDK key).
@@ -64,19 +69,41 @@ Full design and the rejected alternatives: [`plans/phase-3-seats.md`](plans/phas
 
 ---
 
+## Fixed since: Request Center actions were hover-only
+
+`RequestTable.tsx`'s desktop table drew Assign and Dismiss as
+`opacity-0 group-hover:opacity-100`, so the row's only two controls were
+invisible until the mouse was over them. Reported from the live app: the buttons
+vanish once the window is wide enough for the table, and come back on a narrow
+window — which is the mobile card layout, where they are always drawn.
+
+It is worse than an annoyance. `md:` and wider gets the table, and plenty of
+devices that wide have no hover at all (tablet, touchscreen laptop), so the
+actions were simply unreachable there. `opacity-0` also leaves a button in the
+tab order, so keyboard focus landed on something invisible. Same family as the
+dead controls earlier releases removed.
+
+The opacity classes are gone; the buttons are always visible.
+`tests/ui/hoverOnlyControls.test.ts` fails if `opacity-0` is ever paired with
+`group-hover:opacity-*` anywhere in the app — a decorative glow can still fade in
+from a *visible* resting opacity, which is what StudentDashboard does.
+
+---
+
 ## Open items
 
 Nothing is blocked. Nothing is half-finished.
 
 **For the owner, not code:**
 
-- **The sabha calendar may only have Aug 7 left.** The audit log shows five
-  Fridays were deleted. Worth checking before the next gathering.
-- **Two UI surfaces have never been seen rendered** — they are covered by tests
-  and confirmed present in the live bundle, but nobody has looked at them in a
-  browser, because reaching them needs a sign-in. Rider → *Request Pickup* (seat
-  stepper, "Keep us in one car"); Manager → **Request Center** (Seats column).
-  Note that is Request Center, *not* Live Operations.
+- **The calendar question is settled.** The five deleted Fridays were deliberate.
+  The manager sets each sabha time manually, and that is the intended design —
+  do not "fix" it into a recurring schedule.
+- **One UI surface has still never been seen rendered.** Rider → *Request Pickup*
+  (seat stepper, "Keep us in one car"). It is covered by tests and confirmed
+  present in the live bundle, but reaching it needs a sign-in. Manager →
+  **Request Center** has now been seen in the live app; the Seats column renders,
+  and looking at it is what turned up the hover bug above.
 
 **Known gap, deliberately not fixed:** bulk-select on the manager's queue exists
 only in the desktop table. On a phone the checkboxes and "Assign Bulk" are

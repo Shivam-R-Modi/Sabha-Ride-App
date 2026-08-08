@@ -233,7 +233,14 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                       {getWaitBadge(req.requestTime)}
                     </td>
                     <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Assign and Dismiss used to be opacity-0 until the row
+                          was hovered. A pointer that cannot hover — a tablet or
+                          a touchscreen laptop, which is md+ and so gets this
+                          table, not the mobile cards — never revealed them, and
+                          opacity-0 keeps a button in the tab order, so keyboard
+                          focus landed on something invisible. Actions on a queue
+                          are the point of the screen; they stay visible. */}
+                      <div className="flex justify-end gap-2">
                         <button 
                             onClick={() => onAssign(req.id)}
                             className="p-2 bg-green-50 text-green-800 hover:bg-green-100 rounded-lg transition-colors"
