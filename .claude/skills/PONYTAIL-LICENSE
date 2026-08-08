@@ -1,0 +1,36 @@
+These skills are vendored from ponytail, copied not installed.
+
+  Source   https://github.com/DietrichGebert/ponytail
+  Tag      v4.9.0
+  Commit   0a4dd63ad4541f4f655c4108a295916f3c1d8fda
+  Fetched  2026-08-08T03:35:07Z
+  Files    skills/<name>/SKILL.md  ->  .claude/skills/<name>/SKILL.md
+
+Pinned to the tag rather than main deliberately: these files are instructions the
+agent follows, and an instruction set that changes underneath you without a diff
+is worse than one that is merely out of date. To update, re-fetch a newer tag and
+read the diff before keeping it.
+
+Upstream licence follows, retained as MIT requires.
+
+MIT License
+
+Copyright (c) 2026 DietrichGebert
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
