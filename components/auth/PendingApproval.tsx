@@ -8,7 +8,7 @@ interface PendingApprovalProps {
 }
 
 export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, refreshClaims } = useAuth();
     const [managerCode, setManagerCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -41,6 +41,13 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                 setLoading(false);
                 return;
             }
+
+            // The callable set a `mgr` claim, and claims are attached when a token
+            // is minted — so without this the new manager's own token would not
+            // carry it until the SDK refreshed, up to an hour later. Their reads
+            // work regardless, since firestore.rules falls back to the user
+            // document; this is about speed, not access.
+            await refreshClaims();
 
             setSuccessMessage('Account approved! Redirecting...');
         } catch (err: unknown) {

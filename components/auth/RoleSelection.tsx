@@ -11,7 +11,7 @@ interface RoleSelectionProps {
 }
 
 export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, refreshClaims } = useAuth();
     const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
     const [managerCode, setManagerCode] = useState('');
     const [showManagerCode, setShowManagerCode] = useState(false);
@@ -101,6 +101,12 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                 // verifyManagerCode has already created the approved manager
                 // profile. Writing it again from here would be denied, and
                 // would be the very thing this change removes.
+                //
+                // It also set a `mgr` claim, which only lands on a token when one
+                // is minted — so force a refresh rather than leaving the new
+                // manager's first hour running on the slower document check.
+                await refreshClaims();
+
                 onSelectRole();
                 return;
             } else {

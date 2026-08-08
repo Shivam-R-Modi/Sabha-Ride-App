@@ -63,8 +63,45 @@ service cloud.firestore {
     }
 
     // Authority question — recorded, never inherited.
+    //
+    // Reads the user document every time, so a demotion takes effect on the very
+    // next request. This is the DEFAULT deliberately: any rule that reaches for
+    // "is this a manager?" and types isManager() gets the strict, instantly
+    // revocable answer. Use it for every write, every delete, and for reads that
+    // guard a secret.
     function isManager() {
       return isApprovedAs('manager');
+    }
+
+    // A manager's claim, if their ID token carries one.
+    //
+    // Read with get(..., false) so a token without the claim is false rather than
+    // an error — which is what makes this safe to deploy before a single claim
+    // exists: with none minted it is false everywhere, and isManagerForRead below
+    // reduces exactly to isManager().
+    function isManagerToken() {
+      return isAuthenticated() && request.auth.token.get('mgr', false) == true;
+    }
+
+    // The cheap manager test, for READS AND LISTS ONLY.
+    //
+    // Every isManager() evaluation costs a billed get() of the caller's own user
+    // document — on a list, once per document delivered. The claim is already on
+    // the token and costs nothing, so the claim arm is checked first and
+    // short-circuits the read for the common case.
+    //
+    // The trade being made explicitly: a custom claim lives on an ID token for up
+    // to an hour after a demotion, so this is weaker than isManager() for exactly
+    // that window. That is acceptable for reading a rider list and NOT acceptable
+    // for deleting a user, changing a privilege field, or reading
+    // settings/managerCode — all of which stay on isManager().
+    //
+    // The document arm is not a migration artefact to delete once claims are
+    // minted. Two things must change first: updateUserStatus and the Database
+    // Console's role editor are direct client writes with no claim sync, so the
+    // document remains the only thing that reflects reality.
+    function isManagerForRead() {
+      return isManagerToken() || isManager();
     }
 
     // Capability questions — the hierarchy applies, which is what the old
@@ -159,7 +196,7 @@ service cloud.firestore {
       // for minors as well as adults. Previously this was `isAuthenticated()`,
       // so any account that could sign up could read every family in the
       // database. Read is now self, or a manager.
-      allow read: if isOwner(userId) || isManager();
+      allow read: if isOwner(userId) || isManagerForRead();
 
       // Users create their own profile during registration, so role and
       // accountStatus are written by a client here — but only ever downward.
@@ -222,14 +259,14 @@ service cloud.firestore {
       // every ownership check above it, so any approved account could read
       // every ride in the database — a list of names, phone numbers and home
       // addresses. Read is now genuinely scoped.
-      allow read: if isManager()
+      allow read: if isManagerForRead()
                   || (resource.data.studentId != null && resource.data.studentId == request.auth.uid)
                   || (resource.data.assignedStudentIds != null && request.auth.uid in resource.data.assignedStudentIds)
                   || resource.data.driverId == request.auth.uid;
 
       // Managers and drivers list rides to run dispatch. Students read their
       // own by direct query, which `allow read` above covers per-document.
-      allow list: if isManager() || isDriver()
+      allow list: if isManagerForRead() || isDriver()
                   || (request.auth != null && resource.data.studentId == request.auth.uid);
 
       // A student may only create a ride for THEMSELVES, and only as a new
@@ -262,7 +299,7 @@ service cloud.firestore {
     match /statistics/{eventDate} {
       // Managers can read/write statistics
       // Others cannot access
-      allow read: if isManager();
+      allow read: if isManagerForRead();
       allow write: if isManager();
     }
     
@@ -299,7 +336,7 @@ service cloud.firestore {
     // collection below.
 
     match /auditLogs/{logId} {
-      allow read: if isManager();
+      allow read: if isManagerForRead();
 
       // APPEND-ONLY. The previous rule was `allow write: if isManager()`, and
       // `write` covers update and delete — so a manager could edit or remove any
@@ -384,7 +421,7 @@ service cloud.firestore {
 
       match /responses/{userId} {
         // Users can read and write their own response
-        allow read: if isOwner(userId) || isManager();
+        allow read: if isOwner(userId) || isManagerForRead();
         allow write: if isOwner(userId) || isManager();
       }
     }

@@ -14,6 +14,7 @@ interface AuthContextType {
   setActiveRole: (role: UserRole) => void;
   getAvailableRoles: () => UserRole[];
   refreshProfile: () => Promise<void>;
+  refreshClaims: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -134,6 +135,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
+   * Force a fresh ID token so a newly granted `mgr` claim takes effect now.
+   *
+   * Claims are attached when a token is minted, and the SDK refreshes roughly
+   * hourly on its own. Someone promoted to manager would otherwise wait that out.
+   * Their reads still work in the meantime — firestore.rules falls back to the
+   * user document — so this buys speed, not access, and a failure here is
+   * therefore not worth surfacing to the user.
+   */
+  const refreshClaims = async () => {
+    if (!auth.currentUser) return;
+    try {
+      await auth.currentUser.getIdToken(true);
+    } catch (error) {
+      console.error('Could not refresh auth claims:', error);
+    }
+  };
+
+  /**
    * Which roles the switcher offers.
    *
    * Was a switch on `registeredRole || role` with the hierarchy hardcoded here.
@@ -153,6 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setActiveRole,
       getAvailableRoles,
       refreshProfile,
+      refreshClaims,
       logout
     }}>
       {children}

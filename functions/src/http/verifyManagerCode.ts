@@ -26,6 +26,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { FOUNDING_CITY_ID } from '../constants/tenancy';
 
 /** Codes are compared case-insensitively and ignoring spaces, as they always were. */
 function normalise(code: string): string {
@@ -97,13 +98,29 @@ export const verifyManagerCode = functions.https.onCall(async (data, context) =>
         await db.collection('users').doc(userId).set({
             role: 'manager',
             registeredRole: 'manager',
-            roles: ['manager'],
+            // The GRANTED set, so one query answers "who can drive?" everywhere.
+            // This wrote ['manager'], and every driver in this congregation is a
+            // manager — so the dispatch pool and the driver picker matched nobody.
+            roles: ['manager', 'driver', 'student'],
             activeRole: 'manager',
             accountStatus: 'approved',
             email: context.auth.token.email ?? null,
             approvedAt: new Date().toISOString(),
             approvedVia: 'managerCode',
         }, { merge: true });
+
+        // Mint the read claim in the same operation as the promotion, so the two
+        // never drift. Best-effort on purpose: firestore.rules falls back to the
+        // user document, so a failure here costs a get() per read and nothing
+        // else. Failing the promotion over it would be the worse trade — the user
+        // would be told the code was wrong when it was not.
+        try {
+            await admin.auth().setCustomUserClaims(userId, {
+                mgr: true, sm: false, city: FOUNDING_CITY_ID,
+            });
+        } catch (claimErr) {
+            console.error('[verifyManagerCode] Could not set manager claim:', claimErr);
+        }
 
         console.log(`[verifyManagerCode] Approved ${userId} as manager`);
 

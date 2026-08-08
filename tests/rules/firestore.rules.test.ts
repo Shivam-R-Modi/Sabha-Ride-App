@@ -446,6 +446,73 @@ describe('server-owned documents', () => {
     });
 });
 
+describe('the manager claim', () => {
+    // A custom claim skips the billed get() of the caller's own user document on
+    // every manager read — on a list, once per document delivered. The cost of
+    // that speed is staleness: a claim lives on an ID token for up to an hour
+    // after a demotion. So it is honoured for READS ONLY, and every write,
+    // delete and secret-guarding read still reads the document.
+
+    /** A signed-in user with `mgr: true` and NO user document at all. */
+    const asClaimOnly = () =>
+        testEnv.authenticatedContext('claim_only', { mgr: true }).firestore();
+
+    /** Signed in with no claim and no document — the baseline. */
+    const asNobody = () => testEnv.authenticatedContext('nobody').firestore();
+
+    it('lets a claim-holder READ what a manager reads', async () => {
+        // No user document exists for this uid, so only the claim can be
+        // authorising it.
+        await assertSucceeds(getDoc(doc(asClaimOnly(), 'users', STUDENT)));
+        await assertSucceeds(getDocs(collection(asClaimOnly(), 'users')));
+        await assertSucceeds(getDoc(doc(asClaimOnly(), 'rides', 'ride_alice')));
+        await assertSucceeds(getDocs(collection(asClaimOnly(), 'auditLogs')));
+    });
+
+    it('does NOT let a claim-holder write, delete, or read the manager code', async () => {
+        // The staleness window must not reach anything destructive or secret.
+        await assertFails(deleteDoc(doc(asClaimOnly(), 'users', OTHER_STUDENT)));
+        await assertFails(updateDoc(doc(asClaimOnly(), 'users', STUDENT), { name: 'Hacked' }));
+        await assertFails(setDoc(doc(asClaimOnly(), 'settings', 'main'), { sabhaLocation: null }));
+        await assertFails(deleteDoc(doc(asClaimOnly(), 'rides', 'ride_alice')));
+        // Reading the code is equivalent to becoming a manager, so it stays on
+        // the document check even though it is a read.
+        await assertFails(getDoc(doc(asClaimOnly(), 'settings', 'managerCode')));
+    });
+
+    it('a forged or absent claim grants nothing', async () => {
+        await assertFails(getDoc(doc(asNobody(), 'users', STUDENT)));
+        await assertFails(getDocs(collection(asNobody(), 'users')));
+        // mgr present but false, and mgr as a string rather than a boolean.
+        const asFalse = testEnv.authenticatedContext('c_false', { mgr: false }).firestore();
+        const asString = testEnv.authenticatedContext('c_str', { mgr: 'true' }).firestore();
+        await assertFails(getDocs(collection(asFalse, 'users')));
+        await assertFails(getDocs(collection(asString, 'users')));
+    });
+
+    it('a real manager with NO claim still works, unchanged', async () => {
+        // The whole point of deploying the OR before minting anything: with zero
+        // claims in existence, behaviour is identical to before.
+        await assertSucceeds(getDocs(collection(asManager(), 'users')));
+        await assertSucceeds(getDoc(doc(asManager(), 'settings', 'managerCode')));
+        await assertSucceeds(deleteDoc(doc(asManager(), 'rides', 'ride_alice')));
+    });
+
+    it('a claim does not rescue a revoked manager on a destructive path', async () => {
+        // The scenario the split exists for: rejected in the console, but their
+        // token still carries mgr until it refreshes.
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'users', 'revoked'), {
+                name: 'Ex', role: 'manager', roles: ['manager'], accountStatus: 'rejected',
+            });
+        });
+        const asRevoked = testEnv.authenticatedContext('revoked', { mgr: true }).firestore();
+
+        await assertFails(deleteDoc(doc(asRevoked, 'users', STUDENT)));
+        await assertFails(getDoc(doc(asRevoked, 'settings', 'managerCode')));
+    });
+});
+
 describe('the audit log is append-only', () => {
     // `allow write: if isManager()` covered update and delete, so a manager could
     // edit or erase any row — including the record of their own deletion. An audit

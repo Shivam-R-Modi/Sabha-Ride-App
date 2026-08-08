@@ -61,6 +61,7 @@ exports.verifyManagerCode = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const rateLimiter_1 = require("../utils/rateLimiter");
+const tenancy_1 = require("../constants/tenancy");
 /** Codes are compared case-insensitively and ignoring spaces, as they always were. */
 function normalise(code) {
     return code.toLowerCase().replace(/\s+/g, '');
@@ -115,13 +116,29 @@ exports.verifyManagerCode = functions.https.onCall(async (data, context) => {
         await db.collection('users').doc(userId).set({
             role: 'manager',
             registeredRole: 'manager',
-            roles: ['manager'],
+            // The GRANTED set, so one query answers "who can drive?" everywhere.
+            // This wrote ['manager'], and every driver in this congregation is a
+            // manager — so the dispatch pool and the driver picker matched nobody.
+            roles: ['manager', 'driver', 'student'],
             activeRole: 'manager',
             accountStatus: 'approved',
             email: (_b = context.auth.token.email) !== null && _b !== void 0 ? _b : null,
             approvedAt: new Date().toISOString(),
             approvedVia: 'managerCode',
         }, { merge: true });
+        // Mint the read claim in the same operation as the promotion, so the two
+        // never drift. Best-effort on purpose: firestore.rules falls back to the
+        // user document, so a failure here costs a get() per read and nothing
+        // else. Failing the promotion over it would be the worse trade — the user
+        // would be told the code was wrong when it was not.
+        try {
+            await admin.auth().setCustomUserClaims(userId, {
+                mgr: true, sm: false, city: tenancy_1.FOUNDING_CITY_ID,
+            });
+        }
+        catch (claimErr) {
+            console.error('[verifyManagerCode] Could not set manager claim:', claimErr);
+        }
         console.log(`[verifyManagerCode] Approved ${userId} as manager`);
         return { valid: true };
     }
