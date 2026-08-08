@@ -3,6 +3,7 @@ import { ArrowLeft, MapPin, Users, Clock, Car, CheckCircle2, Loader2, Building2,
 import { startRide, releaseAssignment } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
 import { useConfirm } from '../shared/useConfirm';
+import { seatsOf } from '../../src/constants/seats';
 
 interface AssignmentPreviewProps {
     assignment: {
@@ -12,6 +13,10 @@ interface AssignmentPreviewProps {
             name: string;
             location: { lat: number; lng: number; address?: string };
             picked: boolean;
+            /** People at this stop. Absent means one. */
+            seats?: number;
+            /** Whole party size when this stop is one part of a group split across cars. */
+            groupSeats?: number;
         }>;
         route: Array<{
             lat: number;
@@ -49,8 +54,18 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
     const [error, setError] = useState<string | null>(null);
     const { ask, confirmDialog } = useConfirm();
 
-    const studentCount = assignment.students.length;
-    const capacity = assignment.car.capacity;
+    // People, not stops. This read `students.length` against the car's capacity,
+    // so a car carrying a family of three showed "1/4" and looked nearly empty.
+    // A stop is an address; the seats are what has to fit in the vehicle.
+    const seatsTaken = assignment.students.reduce((n, s) => n + seatsOf({ seatsRequested: s.seats }), 0);
+    // The driver's own seat is not one of them.
+    const passengerSeats = Math.max(1, assignment.car.capacity - 1);
+
+    // Stops where only part of the party is travelling with this driver. Nothing
+    // else on this screen would say so, and a driver who counts heads against a
+    // full car will pull away leaving the rest of a family on the pavement.
+    const splitStops = assignment.students.filter(
+        s => s.groupSeats && s.groupSeats > seatsOf({ seatsRequested: s.seats }));
 
     // Same source-then-fallback as ActiveRide. See buildGoogleMapsNavigationUrl
     // for why the URL carries no origin.
@@ -149,7 +164,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                         <div className="text-right">
                             <p className="text-xs text-gray-500 uppercase tracking-wider">Seats</p>
                             <p className="text-2xl font-bold text-saffron-800">
-                                {studentCount}<span className="text-gray-500 text-lg">/{capacity}</span>
+                                {seatsTaken}<span className="text-gray-500 text-lg">/{passengerSeats}</span>
                             </p>
                         </div>
                     </div>
@@ -189,10 +204,31 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                     </div>
                 </div>
 
+                {/* Part of a larger party is travelling with someone else.
+                    Stated once, up front, because the seat total below will look
+                    complete and there is nothing else on this screen to suggest
+                    people are being left behind. */}
+                {splitStops.length > 0 && (
+                    <div className="clay-card border-l-4 border-l-amber-500 bg-amber-50/60">
+                        <div className="flex items-start gap-3">
+                            <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                            <div className="text-sm text-coffee">
+                                <p className="font-bold">Another car is coming to {splitStops.length === 1 ? 'one of these stops' : 'some of these stops'}.</p>
+                                {splitStops.map(s => (
+                                    <p key={s.id} className="text-xs text-coffee-500 mt-1">
+                                        {s.name}: you are taking {seatsOf({ seatsRequested: s.seats })} of {s.groupSeats}.
+                                        The rest travel separately — please don't wait for them.
+                                    </p>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Students List */}
                 <div>
                     <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
-                        Students ({studentCount})
+                        Stops ({assignment.students.length}) &middot; {seatsTaken} {seatsTaken === 1 ? 'person' : 'people'}
                     </h3>
                     <div className="space-y-3">
                         {assignment.students.map((student, idx) => (
@@ -202,7 +238,19 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                                         {idx + 1}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <h4 className="font-bold text-coffee">{student.name}</h4>
+                                        <div className="flex items-center justify-between gap-2">
+                                            <h4 className="font-bold text-coffee truncate">{student.name}</h4>
+                                            {/* How many to expect at the door. Shown only when it
+                                                is more than one, so a single rider's card is
+                                                unchanged. */}
+                                            {seatsOf({ seatsRequested: student.seats }) > 1 && (
+                                                <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold bg-orange-100 text-orange-800 px-2 py-1 rounded-lg tabular-nums">
+                                                    <Users size={11} />
+                                                    {seatsOf({ seatsRequested: student.seats })}
+                                                    {student.groupSeats ? ` of ${student.groupSeats}` : ''}
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-sm text-gray-500 flex items-start gap-1 mt-1">
                                             <MapPin size={12} className="mt-0.5 shrink-0" />
                                             <span className="truncate">

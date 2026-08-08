@@ -430,6 +430,57 @@ describe('ride integrity', () => {
         await assertSucceeds(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), { status: 'cancelled' }));
     });
 
+    it('a student CAN ask for several seats', async () => {
+        await assertSucceeds(setDoc(doc(asStudent(), 'rides', 'family'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+            seatsRequested: 4,
+        }));
+    });
+
+    it('a ride with no seatsRequested is still allowed', async () => {
+        // Absent means one. Every ride written before seats existed looks like
+        // this, and so does any client that has not picked up the new bundle.
+        await assertSucceeds(setDoc(doc(asStudent(), 'rides', 'plain'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+        }));
+    });
+
+    it('a student cannot request more seats than the bound allows', async () => {
+        // The stepper in PickupForm stops at 8, but a stepper is a suggestion —
+        // this is the enforcement. A 99-seat request would monopolise every car
+        // that tapped Assign Me and split endlessly.
+        await assertFails(setDoc(doc(asStudent(), 'rides', 'greedy'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+            seatsRequested: 99,
+        }));
+    });
+
+    it('a student cannot request zero, a fraction or a word', async () => {
+        for (const seatsRequested of [0, -3, 2.5, 'four']) {
+            await assertFails(setDoc(doc(asStudent(), 'rides', 'bad'), {
+                studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+                seatsRequested,
+            }));
+        }
+    });
+
+    it('a student cannot inflate their seats after the fact', async () => {
+        // Raising the count on an already-queued request would take places from
+        // whoever was behind them, with nothing to show it had happened.
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            seatsRequested: 8,
+        }));
+    });
+
+    it('a student cannot attach themselves to a group split', async () => {
+        // groupId and groupSeatsTotal drive the leftover-first priority and the
+        // "all legs done" completion check. Forging them lets a rider jump the
+        // queue, or leaves their status frozen mid-journey.
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            groupId: 'someone-elses-group', groupSeatsTotal: 6,
+        }));
+    });
+
     it('a student cannot read another student ride', async () => {
         await testEnv.withSecurityRulesDisabled(async (ctx) => {
             await setDoc(doc(ctx.firestore(), 'rides', 'ride_bob'), {

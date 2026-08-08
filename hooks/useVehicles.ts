@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { Vehicle } from '../types';
+import { maxPassengerSeats } from '../src/constants/seats';
 
 // --- Vehicle Management ---
 
@@ -101,6 +102,21 @@ export const useVehicles = () => {
     }, []);
 
     return { vehicles, loading, error };
+};
+
+/**
+ * Passenger seats in the largest vehicle the fleet has — the threshold above
+ * which a party cannot travel in one car and has to be split across several.
+ *
+ * Every vehicle counts, not just the free ones: whether a family COULD ride
+ * together is a property of the fleet, and making it depend on what happens to be
+ * available would split them tonight and not next week, for no reason anyone
+ * could explain. `maxPassengerSeats` is shared with the server's copy, which is
+ * what dispatch actually decides on.
+ */
+export const useMaxFleetSeats = (): number => {
+    const { vehicles } = useVehicles();
+    return maxPassengerSeats(vehicles.map(v => v.capacity));
 };
 
 export const useAvailableVehicles = () => {

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { User, Driver } from '../types';
-import { MapPin, ChevronLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { MapPin, ChevronLeft, CheckCircle2, AlertCircle, Minus, Plus, Users } from 'lucide-react';
 import { createRideRequest } from '../hooks/useRides';
+import { MIN_SEATS, MAX_SEATS, DEFAULT_SEATS } from '../src/constants/seats';
 import { useSettings, formatTime } from '../hooks/useSettings';
 import { useCurrentEvent } from '../hooks/useCurrentEvent';
 import { LotusLoader, DiyaIcon } from '../constants';
@@ -35,6 +36,15 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // How many people are travelling. Until now a request WAS one seat, so a family
+  // arriving together was booked a single place and the driver turned up with room
+  // for one. Defaults to 1, which is what every existing rider means.
+  const [seats, setSeats] = useState(DEFAULT_SEATS);
+  // Some families would rather wait and travel in one car than be separated.
+  // Default is to allow splitting — getting people there usually beats waiting —
+  // but the choice belongs to them, not to the dispatcher.
+  const [keepTogether, setKeepTogether] = useState(false);
+
   /** The gathering's own date, formatted from its parts so no timezone shift. */
   const eventDateFormatted = () => {
     if (!eventId) return 'Not scheduled yet';
@@ -61,6 +71,8 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
         eventDate: eventId,
         time: arrivalTime,
         studentName: user.name,
+        seats,
+        allowSplit: !keepTogether,
         notes: ''
       };
 
@@ -93,8 +105,18 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
         </div>
         <h3 className="text-2xl font-header font-bold text-coffee mb-2">Seva Registered!</h3>
         <p className="text-gray-500 max-w-xs mx-auto">
-          Jai Swaminarayan! Your ride for the next sabha has been requested.
+          Jai Swaminarayan! {seats > 1
+            ? `Your ride for ${seats} people has been requested.`
+            : 'Your ride for the next sabha has been requested.'}
         </p>
+        {/* Said here rather than discovered at the kerb. With the current fleet a
+            party of four or more cannot travel in one car. */}
+        {seats > 1 && !keepTogether && (
+          <p className="text-xs text-coffee-500 max-w-xs mx-auto mt-3">
+            If no single car is big enough, we may send two — some of you will
+            travel in the first, the rest in the next one.
+          </p>
+        )}
       </div>
     );
   }
@@ -134,6 +156,70 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
               <p className="text-sm font-medium text-coffee leading-tight">{user.address}</p>
             </div>
           </div>
+        </div>
+
+        {/* How many seats. A stepper rather than a text field: the value is a
+            small count, and typing invites the 0 and the "two" that a number
+            input happily accepts. */}
+        <div className="bg-cream/50 rounded-2xl p-5 border border-orange-50 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-white rounded-lg shadow-sm">
+                <Users size={18} className="text-saffron" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">How many of you?</p>
+                <p className="text-sm font-medium text-coffee leading-tight">Include yourself</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSeats(s => Math.max(MIN_SEATS, s - 1))}
+                disabled={seats <= MIN_SEATS}
+                aria-label="One fewer person"
+                className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-coffee disabled:opacity-30 btn-feedback"
+              >
+                <Minus size={18} />
+              </button>
+              <span
+                className="w-8 text-center text-xl font-header font-bold text-coffee tabular-nums"
+                aria-live="polite"
+              >
+                {seats}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSeats(s => Math.min(MAX_SEATS, s + 1))}
+                disabled={seats >= MAX_SEATS}
+                aria-label="One more person"
+                className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-coffee disabled:opacity-30 btn-feedback"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Only offered when it can actually happen. Shown to a single rider it
+              would be a decision about nothing. */}
+          {seats > 1 && (
+            <label className="flex items-start gap-3 pt-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={keepTogether}
+                onChange={e => setKeepTogether(e.target.checked)}
+                className="mt-1 w-5 h-5 accent-saffron shrink-0"
+              />
+              <span className="text-sm text-coffee leading-snug">
+                Keep us in one car
+                <span className="block text-xs text-coffee-500">
+                  We may need to send two cars if no single car is big enough. Tick
+                  this to wait for one car instead — it can mean a longer wait.
+                </span>
+              </span>
+            </label>
+          )}
         </div>
 
         <div className="pt-4">

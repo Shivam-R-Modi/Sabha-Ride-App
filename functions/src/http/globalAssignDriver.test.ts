@@ -78,6 +78,12 @@ interface Fixture {
     /** Per-event venue override published on system/rideContext. */
     venue?: { lat: number; lng: number; address: string } | null;
     eventId?: string;
+    /**
+     * The whole fleet, which decides whether an oversized group waits for a
+     * bigger vehicle or gets split across several. Absent means the vehicles
+     * query comes back empty, which is the "fleet unknown" path.
+     */
+    vehicles?: Array<Record<string, unknown>>;
 }
 
 /** Records everything written through the batch so tests can assert on it. */
@@ -120,13 +126,20 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
         docs: docs.map(d => ({ id: d.id, data: () => d.data })),
     });
 
+    let generated = 0;
+
     const collection = (name: string) => {
         // where() records rather than discarding: the driver-pool query silently
         // matched nobody for months, and a filter nothing asserts on is exactly
         // how that survived.
         const clauses: Array<[string, string, unknown]> = [];
         const chain: any = {
-            doc: (id: string) => ({ id, path: `${name}/${id}`, get: async () => docFor(name, id) }),
+            // `.doc()` with no id mints one, the way Firestore does. That is how
+            // the remainder of a split group is created.
+            doc: (id?: string) => {
+                const docId = id ?? `generated-${++generated}`;
+                return { id: docId, path: `${name}/${docId}`, get: async () => docFor(name, docId) };
+            },
             where: (field: string, op: string, value: unknown) => {
                 clauses.push([field, op, value]);
                 recorder.queries.push({ collection: name, clauses: [...clauses] });
@@ -134,6 +147,9 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
             },
             get: async () => {
                 if (name === 'rides') return querySnap(fixture.rides);
+                if (name === 'vehicles') {
+                    return querySnap((fixture.vehicles ?? []).map((v, i) => ({ id: `veh-${i}`, data: v })));
+                }
                 // The "other available drivers" query. Only the tapping driver
                 // exists in these fixtures.
                 return querySnap([]);
@@ -398,6 +414,227 @@ describe('globalAssignDriver — one car, one driver', () => {
 
         expect(driverWrite.data.currentVehicleId).toBe('car-1');
         expect(driverWrite.data.currentCarId).toBeNull();
+    });
+});
+
+describe('globalAssignDriver — a request costs its seats', () => {
+    // The measured fleet: two vehicles, both capacity 4 — three passenger seats.
+    const FLEET = [{ capacity: 4 }, { capacity: 4 }];
+
+    const seatFixture = (
+        rides: Array<{ id: string; data: Record<string, unknown> }>,
+        vehicles = FLEET,
+    ): Fixture => ({ ...baseFixture('home-to-sabha'), rides, vehicles });
+
+    const ride = (id: string, studentId: string, data: Record<string, unknown> = {}) => ({
+        id,
+        data: {
+            studentId, studentName: studentId.toUpperCase(),
+            pickupLat: 42.35, pickupLng: -71.07, pickupAddress: '1 St',
+            status: 'requested', ...data,
+        },
+    });
+
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('treats a ride with no seatsRequested as one seat', async () => {
+        // Every ride written before this release. If the default ever moved, the
+        // whole existing queue would start being mis-booked with no error.
+        const { recorder } = await run(seatFixture([ride('r1', 'stu-a')]));
+
+        const update = recorder.updates.find(u => u.path === 'rides/r1')!;
+        expect(update.data.seatsRequested).toBe(1);
+    });
+
+    it('does not hand three seats to two two-person requests', async () => {
+        // The reported defect: a request WAS a seat, so a family of four was
+        // booked one place and the driver arrived with room for one.
+        // r1 is nearly on top of the driver (42.36, -71.06) and r2 is several
+        // miles out, so the distance ordering is unambiguous rather than a
+        // floating-point coin toss.
+        const { recorder } = await run(seatFixture([
+            ride('r1', 'stu-a', { seatsRequested: 2, pickupLat: 42.359, pickupLng: -71.059 }),
+            ride('r2', 'stu-b', { seatsRequested: 2, pickupLat: 42.450, pickupLng: -71.050 }),
+        ]));
+
+        const assigned = recorder.updates.filter(u => u.path.startsWith('rides/'));
+        expect(assigned.map(u => u.path)).toEqual(['rides/r1']);
+        expect(assigned[0].data.seatsRequested).toBe(2);
+    });
+
+    it('waits for a bigger vehicle rather than splitting, when one exists', async () => {
+        // A 7-seater is in the fleet, so the family can travel together later.
+        const { result, recorder } = await run(seatFixture(
+            [ride('r1', 'stu-a', { seatsRequested: 5 })],
+            [{ capacity: 4 }, { capacity: 7 }],
+        ));
+
+        expect(result.status).toBe('no_students');
+        expect(result.waiting).toEqual([
+            { reason: 'waiting-for-bigger-vehicle', groups: 1, seats: 5 },
+        ]);
+        expect(recorder.updates.filter(u => u.path.startsWith('rides/'))).toEqual([]);
+    });
+
+    it('reports a group nobody can serve rather than skipping it in silence', async () => {
+        // Bigger than any vehicle AND opted out of splitting. They can never be
+        // served as things stand; a manager has to see that, or the family waits
+        // all evening for a car that was never coming.
+        const { result } = await run(seatFixture(
+            [ride('r1', 'stu-a', { seatsRequested: 6, allowSplit: false })]));
+
+        expect(result.status).toBe('no_students');
+        expect(result.waiting).toEqual([
+            { reason: 'too-large-to-keep-together', groups: 1, seats: 6 },
+        ]);
+    });
+});
+
+describe('globalAssignDriver — splitting a group across cars', () => {
+    const FLEET = [{ capacity: 4 }, { capacity: 4 }];
+
+    const sixSeats = (): Fixture => ({
+        ...baseFixture('home-to-sabha'),
+        vehicles: FLEET,
+        rides: [{
+            id: 'r1',
+            data: {
+                studentId: 'stu-a', studentName: 'A', studentPhone: '555',
+                pickupLat: 42.35, pickupLng: -71.07, pickupAddress: '1 St',
+                status: 'requested', seatsRequested: 6, date: '2026-08-07',
+            },
+        }],
+    });
+
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('assigns only what fits and books the rest as a fresh request', async () => {
+        // No single tap can commit a second driver, so a group larger than any
+        // vehicle is served sequentially: this car takes three, the remaining
+        // three go back in the pool for whoever taps next.
+        const { recorder } = await run(sixSeats());
+
+        const assigned = recorder.updates.find(u => u.path === 'rides/r1')!;
+        expect(assigned.data.seatsRequested).toBe(3);
+        expect(assigned.data.groupSeatsTotal).toBe(6);
+        expect(assigned.data.status).toBe('assigned');
+
+        const remainder = recorder.sets.find(
+            s => s.path.startsWith('rides/') && s.data.status === 'requested')!;
+        expect(remainder).toBeDefined();
+        expect(remainder.data.seatsRequested).toBe(3);
+        expect(remainder.data.studentId).toBe('stu-a');
+        expect(remainder.data.splitFromRideId).toBe('r1');
+    });
+
+    it('loses no seats in the split', async () => {
+        const { recorder } = await run(sixSeats());
+
+        const assigned = recorder.updates.find(u => u.path === 'rides/r1')!;
+        const remainder = recorder.sets.find(
+            s => s.path.startsWith('rides/') && s.data.status === 'requested')!;
+
+        expect(assigned.data.seatsRequested + remainder.data.seatsRequested).toBe(6);
+    });
+
+    it('links both halves under one groupId', async () => {
+        // Without it the rider's screen cannot say "3 of your 6 are with Ravi",
+        // and completion would declare the family home while half are waiting.
+        const { recorder } = await run(sixSeats());
+
+        const assigned = recorder.updates.find(u => u.path === 'rides/r1')!;
+        const remainder = recorder.sets.find(
+            s => s.path.startsWith('rides/') && s.data.status === 'requested')!;
+
+        expect(assigned.data.groupId).toBeTruthy();
+        expect(remainder.data.groupId).toBe(assigned.data.groupId);
+        expect(remainder.data.groupSeatsTotal).toBe(6);
+    });
+
+    it('leaves exactly one waiting request for the rider, so the pool cannot drop it', async () => {
+        // The pool used to be keyed by studentId, keeping the FIRST request per
+        // person. Under that key the remainder of a split simply vanished — the
+        // family's other three seats stopped existing with no error anywhere.
+        const { recorder } = await run(sixSeats());
+
+        const stillWaiting = recorder.sets.filter(
+            s => s.path.startsWith('rides/') && s.data.status === 'requested');
+
+        expect(stillWaiting).toHaveLength(1);
+        expect(stillWaiting[0].data.studentId).toBe('stu-a');
+    });
+
+    it('stamps the remainder with tenancy and the gathering it belongs to', async () => {
+        // A ride created without cityId is exactly the document the tenancy
+        // verifier exists to catch, and it would be created on a Friday evening.
+        const { recorder } = await run(sixSeats());
+
+        const remainder = recorder.sets.find(
+            s => s.path.startsWith('rides/') && s.data.status === 'requested')!;
+
+        expect(remainder.data.cityId).toBe('boston');
+        expect(remainder.data.locationId).toBe('boston-huntington');
+        expect(remainder.data.eventDate).toBe('2026-08-07');
+    });
+
+    it('divides the remainder again without inventing people', async () => {
+        // A party of 8 against 3-seat cars splits more than once. The second car
+        // is dividing a 5-seat REMAINDER, and measuring that against the party's
+        // original 8 would book 8-3=5 more seats instead of 5-3=2 — three people
+        // who do not exist, and a car sent for them every round for ever.
+        const { recorder } = await run({
+            ...baseFixture('home-to-sabha'),
+            vehicles: FLEET,
+            rides: [{
+                id: 'r2',
+                data: {
+                    studentId: 'stu-a', studentName: 'A',
+                    pickupLat: 42.35, pickupLng: -71.07, pickupAddress: '1 St',
+                    status: 'requested',
+                    seatsRequested: 5, groupId: 'r1', groupSeatsTotal: 8,
+                },
+            }],
+        });
+
+        const assigned = recorder.updates.find(u => u.path === 'rides/r2')!;
+        const remainder = recorder.sets.find(
+            s => s.path.startsWith('rides/') && s.data.status === 'requested')!;
+
+        expect(assigned.data.seatsRequested).toBe(3);
+        expect(remainder.data.seatsRequested).toBe(2);
+        // The party is still 8, and the group key still points at the original.
+        expect(remainder.data.groupSeatsTotal).toBe(8);
+        expect(remainder.data.groupId).toBe('r1');
+    });
+
+    it('writes no undefined values anywhere, at any depth', async () => {
+        // The Admin SDK is not configured with ignoreUndefinedProperties, so a
+        // single undefined — including one nested in the students array — makes
+        // the whole batch throw. That would break EVERY assignment, split or not,
+        // and the fake Firestore in this file accepts it without complaint.
+        const hasUndefined = (v: unknown): boolean => {
+            if (v === undefined) return true;
+            if (Array.isArray(v)) return v.some(hasUndefined);
+            if (v && typeof v === 'object') return Object.values(v).some(hasUndefined);
+            return false;
+        };
+
+        for (const fixture of [sixSeats(), baseFixture('home-to-sabha')]) {
+            const { recorder } = await run(fixture);
+            for (const write of [...recorder.updates, ...recorder.sets]) {
+                expect(hasUndefined(write.data), `undefined in ${write.path}`).toBe(false);
+            }
+        }
+    });
+
+    it('writes rider state under the rider uid, not the ride id', async () => {
+        // The pool is keyed by ride document now. Carrying that id through to the
+        // profile write would have created users/<rideId> and left the real rider
+        // untouched.
+        const { recorder } = await run(sixSeats());
+
+        expect(recorder.sets.some(s => s.path === 'users/stu-a')).toBe(true);
+        expect(recorder.sets.some(s => s.path === 'users/r1')).toBe(false);
     });
 });
 

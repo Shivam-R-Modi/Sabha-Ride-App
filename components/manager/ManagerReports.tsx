@@ -16,6 +16,7 @@ import { collection, query, getDocs, where, orderBy, limit } from 'firebase/fire
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { downloadAttendanceCSV } from '../../hooks/useFirestore';
 import '../../claymorphism.css';
+import { seatsOnRide } from '../../src/constants/seats';
 
 interface WeeklyStats {
     weekId: string;
@@ -87,7 +88,9 @@ export const ManagerReports: React.FC = () => {
                 const data = doc.data();
                 totalRides++;
                 if (data.status === 'completed') completedRides++;
-                if (data.students) totalStudents += data.students.length;
+                // Seats, not roster rows — otherwise a sabha that moved forty
+                // people reports the number of ride documents instead.
+                totalStudents += seatsOnRide(data);
                 if (data.driverId) driverIds.add(data.driverId);
             });
 

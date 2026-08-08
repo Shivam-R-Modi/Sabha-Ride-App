@@ -98,6 +98,21 @@ export interface RideStudent {
     studentPhone?: string;
     location: GeoLocation;
     picked: boolean;
+    /** The ride document this stop came from. */
+    rideRequestId?: string;
+    status?: string;
+    /**
+     * People at this stop. Absent means one — every roster written before seats
+     * existed. A stop is one address, so this is what the car must have room for
+     * while `students.length` is only the number of pickups.
+     */
+    seats?: number;
+    /**
+     * Size of the whole party when this stop is part of a group split across
+     * cars. Present only then, so the driver's screen can say "3 of 6 here" and
+     * nobody pulls away leaving the rest on the pavement.
+     */
+    groupSeats?: number;
 }
 
 export interface Waypoint {

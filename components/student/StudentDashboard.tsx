@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { User, Driver, TabView } from '../../types';
 import { DiyaIcon, LotusIcon } from '../../constants';
 import { PickupForm } from '../PickupForm';
@@ -10,6 +10,7 @@ import { useNavigation } from '../../contexts/NavigationContext';
 import { useRideWindow } from '../../hooks/useRideWindow';
 import { studentReadyToLeave } from '../../src/utils/cloudFunctions';
 import { WeeklyAttendancePopup } from './WeeklyAttendancePopup';
+import { seatsOf } from '../../src/constants/seats';
 import { AttendanceBlockedScreen } from './AttendanceBlockedScreen';
 import { ProfileEditor } from '../shared/ProfileEditor';
 
@@ -31,7 +32,36 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
 
 
     // Use Firestore Hook
-    const { activeRide, loading } = useActiveRide(user.id);
+    const { activeRide, activeRides, loading } = useActiveRide(user.id);
+
+    /**
+     * Is this rider's party travelling in more than one car?
+     *
+     * A group too large for any vehicle is split, which leaves two live rides:
+     * one with a driver and one still waiting. The ride card below renders only
+     * the first and would read as "everyone is sorted", so the part still on the
+     * pavement would appear nowhere at all.
+     *
+     * Null whenever nothing is split, which is the ordinary case and leaves the
+     * screen exactly as it was.
+     */
+    const splitStatus = useMemo(() => {
+        const legs = (activeRides || []).filter(r => r.groupId);
+        if (legs.length < 2) return null;
+
+        const assigned = legs.filter(r => r.status !== 'requested');
+        const waiting = legs.filter(r => r.status === 'requested');
+        if (assigned.length === 0 || waiting.length === 0) return null;
+
+        const seats = (r: typeof legs[number]) => seatsOf(r);
+        return {
+            totalSeats: legs[0].groupSeatsTotal
+                ?? legs.reduce((n, r) => n + seats(r), 0),
+            assignedSeats: assigned.reduce((n, r) => n + seats(r), 0),
+            waitingSeats: waiting.reduce((n, r) => n + seats(r), 0),
+            driverName: assigned[0].driverName || assigned[0].driver?.name || '',
+        };
+    }, [activeRides]);
 
     // Check for dismissed request
     const { dismissedRequest, loading: dismissedLoading } = useStudentRequestStatus(user.id);
@@ -169,7 +199,24 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {activeRide ? (
-                        <div className="relative group md:col-span-2">
+                        <div className="relative group md:col-span-2 space-y-3">
+                            {/* Your party is travelling in more than one car.
+                                The card below shows the leg that has a driver, and on
+                                its own it reads as "everyone is sorted" — which for a
+                                family still standing outside is simply untrue. */}
+                            {splitStatus && (
+                                <div className="clay-card border-l-4 border-l-amber-500 bg-amber-50/60 relative z-10">
+                                    <p className="font-bold text-coffee text-sm">
+                                        {splitStatus.assignedSeats} of your {splitStatus.totalSeats} seats
+                                        {splitStatus.driverName ? ` are with ${splitStatus.driverName}` : ' have a car'}.
+                                    </p>
+                                    <p className="text-xs text-coffee-500 mt-1">
+                                        The other {splitStatus.waitingSeats} {splitStatus.waitingSeats === 1 ? 'is' : 'are'} still
+                                        waiting for the next car — no car is big enough to take you all at once.
+                                        Please decide between you who travels first.
+                                    </p>
+                                </div>
+                            )}
                             <div className="absolute -inset-0.5 bg-gradient-to-r from-saffron to-gold rounded-3xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
                             <RideStatusCard ride={activeRide} />
                         </div>

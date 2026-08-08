@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { StudentRequest, RideStatus } from '../../types';
 import {
   Search, CheckCircle, ChevronDown, ChevronUp, MapPin, Clock, ArrowUpDown,
-  Check, Trash2, UserPlus, AlertCircle
+  Check, Trash2, UserPlus, AlertCircle, Users
 } from 'lucide-react';
+import { useMaxFleetSeats } from '../../hooks/useVehicles';
 
 interface RequestTableProps {
   requests: StudentRequest[];
@@ -13,9 +14,60 @@ interface RequestTableProps {
   onBulkAssign: (ids: string[]) => void;
 }
 
-export const RequestTable: React.FC<RequestTableProps> = ({ 
-  requests, loading, onAssign, onDismiss, onBulkAssign 
+/**
+ * Seats, and anything about them a manager has to know.
+ *
+ * Without this the queue reads "7 waiting" when it is 7 requests and 14 people,
+ * and a party no vehicle can carry looks exactly like a rider who has merely not
+ * been picked up yet. That silence is how a large family gets passed over by
+ * every driver, all evening, with nothing on any screen to show it.
+ */
+const SeatBadges: React.FC<{ req: StudentRequest; maxFleetSeats: number }> = ({ req, maxFleetSeats }) => {
+  const seats = req.seats ?? 1;
+  const needsSeveralCars = maxFleetSeats > 0 && seats > maxFleetSeats;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg tabular-nums ${
+        seats > 1 ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-600'
+      }`}>
+        <Users size={11} /> {seats}
+      </span>
+
+      {req.isRemainder && req.groupSeatsTotal && (
+        <span
+          className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg"
+          title={`Part of a group of ${req.groupSeatsTotal}; the rest are already with a driver.`}
+        >
+          {seats} of {req.groupSeatsTotal} left
+        </span>
+      )}
+
+      {needsSeveralCars && req.keepTogether && (
+        <span
+          className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 text-red-700 px-2 py-1 rounded-lg"
+          title="No vehicle seats this many and the rider asked not to be split. Nobody can pick them up until a larger vehicle is registered, or they agree to travel separately."
+        >
+          <AlertCircle size={11} /> No car this big
+        </span>
+      )}
+
+      {needsSeveralCars && !req.keepTogether && !req.isRemainder && (
+        <span
+          className="text-[10px] font-bold bg-amber-50 text-amber-800 px-2 py-1 rounded-lg"
+          title={`Larger than any vehicle in the fleet (${maxFleetSeats} passenger seats), so they will travel in more than one car.`}
+        >
+          Needs 2 cars
+        </span>
+      )}
+    </div>
+  );
+};
+
+export const RequestTable: React.FC<RequestTableProps> = ({
+  requests, loading, onAssign, onDismiss, onBulkAssign
 }) => {
+  const maxFleetSeats = useMaxFleetSeats();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
   const [sortField, setSortField] = useState<'name' | 'time' | 'wait'>('wait');
@@ -134,6 +186,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                 <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('name')}>
                   <div className="flex items-center gap-1">Student <SortArrow field="name" /></div>
                 </th>
+                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Seats</th>
                 <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest hidden lg:table-cell">Pickup Address</th>
                 <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('time')}>
                   <div className="flex items-center gap-1">Time <SortArrow field="time" /></div>
@@ -164,6 +217,9 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                         <img src={req.avatarUrl} className="w-8 h-8 rounded-full shadow-sm" alt="" />
                         <span className="text-sm font-bold text-coffee">{req.name}</span>
                       </div>
+                    </td>
+                    <td className="p-4">
+                      <SeatBadges req={req} maxFleetSeats={maxFleetSeats} />
                     </td>
                     <td className="p-4 hidden lg:table-cell text-xs text-gray-500 max-w-xs truncate">
                       {req.address}
@@ -198,7 +254,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                   {/* Tablet Expanded Address (Hidden on large desktop) */}
                   {expandedRow === req.id && (
                     <tr className="lg:hidden bg-gray-50/50">
-                        <td colSpan={6} className="px-16 py-3">
+                        <td colSpan={7} className="px-16 py-3">
                             <p className="text-xs text-gray-500 flex items-center gap-2">
                                 <MapPin size={12} className="text-saffron" /> {req.address}
                             </p>
@@ -227,11 +283,14 @@ export const RequestTable: React.FC<RequestTableProps> = ({
   );
 };
 
-const SwipeableCard: React.FC<{ 
-    request: StudentRequest, 
-    onAssign: () => void, 
-    onDismiss: () => void 
+const SwipeableCard: React.FC<{
+    request: StudentRequest,
+    onAssign: () => void,
+    onDismiss: () => void
 }> = ({ request, onAssign, onDismiss }) => {
+    // Same fleet threshold the desktop table uses. A manager triaging on a phone
+    // on a Friday evening is exactly who needs to see that a party cannot fit.
+    const maxFleetSeats = useMaxFleetSeats();
     const [offset, setOffset] = useState(0);
     const [startX, setStartX] = useState(0);
 
@@ -279,10 +338,11 @@ const SwipeableCard: React.FC<{
                         </span>
                     </div>
                     <p className="text-xs text-gray-500 truncate mb-1">{request.address}</p>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                          <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold uppercase">
                             <Clock size={12} /> {request.requestedTimeSlot}
                          </div>
+                         <SeatBadges req={request} maxFleetSeats={maxFleetSeats} />
                     </div>
                 </div>
                 <div className="flex flex-col gap-2">

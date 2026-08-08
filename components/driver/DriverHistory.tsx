@@ -4,6 +4,7 @@ import { CheckCircle2, Calendar, Users, Navigation, Clock, Loader2, Car } from '
 import { db } from '../../firebase/config';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
+import { seatsOnRide } from '../../src/constants/seats';
 
 export const DriverHistory: React.FC = () => {
     const { currentUser } = useAuth();
@@ -39,7 +40,9 @@ export const DriverHistory: React.FC = () => {
         return unsubscribe;
     }, [currentUser]);
 
-    const totalStudents = rides.reduce((acc, r) => acc + (r.students?.length || (r.peers?.length ? r.peers.length + 1 : 1)), 0);
+    // Seats, not rows. This counted roster entries, so a driver who spent the
+    // evening moving families saw a total far below what they actually carried.
+    const totalStudents = rides.reduce((acc, r) => acc + seatsOnRide(r), 0);
     const totalDistance = rides.reduce((acc, r) => acc + (r.estimatedDistance || 0), 0);
 
     if (loading) {
@@ -77,7 +80,7 @@ export const DriverHistory: React.FC = () => {
             {/* Ride List */}
             <div className="space-y-3">
                 {rides.map((ride) => {
-                    const studentCount = ride.students?.length || (ride.peers?.length ? ride.peers.length + 1 : 1);
+                    const studentCount = seatsOnRide(ride);
                     const rideDate = ride.completedAt
                         ? new Date(ride.completedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
                         : new Date(ride.date).toLocaleDateString();

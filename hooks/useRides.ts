@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../src/constants/tenancy';
+import { seatsOf } from '../src/constants/seats';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, getDoc, getDocs, orderBy, limit, startAfter, DocumentSnapshot } from 'firebase/firestore';
 import { Ride, RideStatus, Driver } from '../types';
 import { handleSnapshotError } from '../src/utils/firestoreErrors';
@@ -10,6 +11,13 @@ import { handleSnapshotError } from '../src/utils/firestoreErrors';
 
 export const useActiveRide = (userId: string) => {
     const [activeRide, setActiveRide] = useState<Ride | null>(null);
+    // Every in-flight ride, not just the newest.
+    //
+    // A party too large for one car is split across cars, which leaves the rider
+    // holding two live rides at once: one assigned to a driver and one still
+    // waiting. Returning only the newest showed a single card that looked like
+    // everyone was sorted, while half the family had no car and nothing said so.
+    const [activeRides, setActiveRides] = useState<Ride[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -41,15 +49,12 @@ export const useActiveRide = (userId: string) => {
             // Most recent in-flight ride. Once the return leg is created by
             // studentReadyToLeave it is 'requested', so it becomes the active
             // ride here and drives the drop-off confirmation state.
-            const active = snapshot.docs
+            const all = snapshot.docs
                 .map(d => ({ id: d.id, ...d.data() } as Ride))
-                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-            if (active) {
-                setActiveRide(active);
-            } else {
-                setActiveRide(null);
-            }
+            setActiveRides(all);
+            setActiveRide(all[0] ?? null);
             setLoading(false);
         }, (error) => {
             console.error("Error fetching active ride:", error);
@@ -59,7 +64,7 @@ export const useActiveRide = (userId: string) => {
         return unsubscribe;
     }, [userId]);
 
-    return { activeRide, loading };
+    return { activeRide, activeRides, loading };
 };
 
 export const useAllActiveRides = () => {
@@ -133,6 +138,15 @@ export const createRideRequest = async (userId: string, details: any) => {
             pickupLng,
             notes: details.notes || '',
             status: 'requested',
+            // How many people are travelling. A request used to BE a seat, so a
+            // family of four was booked one place and the driver arrived with room
+            // for one. Normalised here as well as in the rules, because a stray
+            // 0 or NaN would look like a valid tiny request rather than an error.
+            seatsRequested: seatsOf({ seatsRequested: details.seats }),
+            // Rider asked to travel together even if that means waiting. Only
+            // written when they actually chose it — absent means the ordinary
+            // "split us if you have to" behaviour.
+            ...(details.allowSplit === false ? { allowSplit: false } : {}),
             createdAt: new Date().toISOString(),
             peers: [],
             isReadyToLeave: false,

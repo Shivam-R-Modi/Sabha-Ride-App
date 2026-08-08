@@ -152,6 +152,12 @@ export interface RideStudent {
   studentPhone?: string;
   location: GeoLocation;
   picked: boolean;
+  rideRequestId?: string;
+  status?: string;
+  /** People at this stop. Absent means one — every roster written before seats existed. */
+  seats?: number;
+  /** Size of the whole party when this stop is one part of a group split across cars. */
+  groupSeats?: number;
 }
 
 export interface Waypoint {
@@ -172,6 +178,23 @@ export interface Ride {
    */
   cityId?: string;
   locationId?: string;
+  /**
+   * People this request is for. **Absent means one** — that default is the whole
+   * migration for the seats change: every ride written before it, and every ride
+   * from a client that has not updated, keeps behaving exactly as it did. Read it
+   * through `seatsOf()` in src/constants/seats.ts rather than defaulting by hand.
+   */
+  seatsRequested?: number;
+  /** Rider asked not to be split across cars. Absent means splitting is allowed. */
+  allowSplit?: boolean;
+  /**
+   * Set on both halves when a group too large for any vehicle is split across
+   * cars. Present on a ride means "this is part of a bigger party".
+   */
+  groupId?: string | null;
+  groupSeatsTotal?: number | null;
+  /** On a remainder: the assigned ride it was split out of. */
+  splitFromRideId?: string;
   id: string;
   eventDate?: string;
   date?: string;
@@ -316,6 +339,14 @@ export interface StudentRequest {
   requestTime: string;
   requestedTimeSlot: string;
   status: 'pending' | 'grouped' | 'assigned';
+  /** People this request is for. Always resolved through seatsOf, so never absent here. */
+  seats?: number;
+  /** Rider asked to travel in one car even if that means waiting longer. */
+  keepTogether?: boolean;
+  /** Set on both halves once a party too large for any car has been split. */
+  groupSeatsTotal?: number;
+  /** This row is the leftover of an already part-served group. */
+  isRemainder?: boolean;
   // pickupLat/pickupLng were here for the dashboard map. Nothing renders a
   // request's coordinates now that it is gone. The same field names stay live on
   // the ride document, which is what the driver's route is built from.

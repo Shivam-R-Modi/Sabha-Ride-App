@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useConfirm } from '../shared/useConfirm';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
+import { seatsOnRide } from '../../src/constants/seats';
 
 interface ActiveRideProps {
     ride: {
@@ -129,7 +130,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
             const result: CompleteRideResult = await completeRide(ride.id);
             onComplete(
                 {
-                    students: ride.students.length,
+                    students: seatsOnRide(ride),
                     distance: ride.estimatedDistance,
                     time: ride.estimatedTime,
                 },
@@ -187,7 +188,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                         <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
                             <div className="flex items-center gap-1">
                                 <Users size={14} />
-                                <span>{ride.students.length} students</span>
+                                <span>{seatsOnRide(ride)} {seatsOnRide(ride) === 1 ? 'person' : 'people'}</span>
                             </div>
                             <div className="flex items-center gap-1">
                                 <Navigation size={14} />

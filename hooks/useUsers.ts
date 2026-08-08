@@ -4,6 +4,7 @@ import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { Driver, StudentRequest, User } from '../types';
 import { handleSnapshotError } from '../src/utils/firestoreErrors';
+import { seatsOf } from '../src/constants/seats';
 
 /** Same generated avatar the assignment function builds for ride peers. */
 const avatarUrlFor = (name: string) =>
@@ -106,6 +107,16 @@ export const usePendingRequests = () => {
                     requestTime: data.createdAt,
                     requestedTimeSlot: data.timeSlot,
                     status: 'pending',
+                    // How many people this row is for. Without it the queue reads
+                    // as "7 waiting" when it is 7 requests and 14 people, and a
+                    // large group that no car can take looks identical to a single
+                    // rider who has simply not been picked up yet.
+                    seats: seatsOf(data),
+                    keepTogether: data.allowSplit === false,
+                    // Set on both halves of a group that has been split across
+                    // cars, so a part-served family is not mistaken for a new one.
+                    groupSeatsTotal: data.groupSeatsTotal ?? undefined,
+                    isRemainder: !!data.groupId,
                     // pickupLat/pickupLng were carried here for the dashboard
                     // map to plot. The map is gone and RequestTable never read
                     // them, so they were being copied onto every request row for

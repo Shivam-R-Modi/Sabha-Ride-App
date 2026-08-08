@@ -177,8 +177,27 @@ service cloud.firestore {
         'driverId', 'driver', 'driverName', 'carId', 'carModel', 'carColor',
         'carLicensePlate', 'route', 'peers', 'students', 'assignedStudentIds',
         'estimatedDistance', 'estimatedTime', 'assignedAt', 'startedAt',
-        'completedAt', 'rideType'
+        'completedAt', 'rideType',
+        // Seats are set once, at create, and belong to the server from then on.
+        // A rider able to raise seatsRequested after assignment would take places
+        // from whoever was behind them; one able to write groupId or
+        // groupSeatsTotal could attach themselves to another party's split, or
+        // make their own request look half-served and inherit the priority that
+        // real leftovers get. Editing while still waiting is lost with this — the
+        // rider cancels and re-requests, which is worth avoiding a rule with a
+        // status-dependent branch to get wrong.
+        'seatsRequested', 'allowSplit', 'groupId', 'groupSeatsTotal', 'splitFromRideId'
       ]);
+    }
+
+    // Seats are optional, and absent means one — every ride written before seats
+    // existed. Present, they must be a whole number in range. The stepper in
+    // PickupForm already bounds this; a client-side bound is a suggestion.
+    function hasValidSeats() {
+      return !('seatsRequested' in request.resource.data)
+             || (request.resource.data.seatsRequested is int
+                 && request.resource.data.seatsRequested >= 1
+                 && request.resource.data.seatsRequested <= 8);
     }
 
     // Statuses a student may set on their own ride. Everything else is the
@@ -294,7 +313,8 @@ service cloud.firestore {
                     || isDriver()
                     || (isStudent()
                         && request.resource.data.studentId == request.auth.uid
-                        && request.resource.data.status == 'requested');
+                        && request.resource.data.status == 'requested'
+                        && hasValidSeats());
 
       // Students may cancel their own ride, but must not touch the fields the
       // assignment pipeline owns, nor set a status the server is responsible

@@ -10,6 +10,7 @@ import { optimizeRoute, calculateRouteStats } from '../utils/routing';
 import { notifyStudentDriverAssigned } from '../utils/notifications';
 import { getSabhaLocation, resolveVenue } from '../utils/settings';
 import { assertApprovedManager } from '../utils/authz';
+import { seatsOf } from '../constants/seats';
 
 /**
  * HTTP Callable: Manually assign student to a driver's active ride
@@ -84,13 +85,35 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
             }
         }
 
-        // Check capacity (capacity - 1 for driver seat)
+        // How many people is this rider bringing?
+        //
+        // Deliberately a single-field query filtered in memory, matching
+        // studentReadyToLeave: adding `status` to the query would need a
+        // rides(studentId, status) composite and this is a handful of documents.
+        const myRidesSnap = await db.collection('rides')
+            .where('studentId', '==', studentId)
+            .get();
+        const waitingRequest = myRidesSnap.docs
+            .map(d => d.data())
+            .find(r => r.status === 'requested');
+        const seatsNeeded = seatsOf(waitingRequest);
+
+        // Check capacity (capacity - 1 for driver seat).
+        //
+        // This counted ENTRIES — `existingStudents.length >= availableSeats` —
+        // so a car already carrying a family of three looked like it held one
+        // passenger, and a manager could keep adding riders to a full vehicle.
         const availableSeats = Math.max(1, capacity - 1);
         const existingStudents = ride.students || [];
-        if (existingStudents.length >= availableSeats) {
+        const seatsTaken = existingStudents.reduce((n, s) => n + seatsOf({ seatsRequested: s.seats }), 0);
+        const seatsFree = availableSeats - seatsTaken;
+
+        if (seatsNeeded > seatsFree) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
-                `Vehicle is at full capacity (${availableSeats} seats available, driver takes 1)`
+                seatsFree <= 0
+                    ? `Vehicle is full (${availableSeats} seats, driver takes 1).`
+                    : `Not enough room: this rider needs ${seatsNeeded} seat${seatsNeeded === 1 ? '' : 's'} and ${seatsFree} ${seatsFree === 1 ? 'is' : 'are'} free.`
             );
         }
 
@@ -100,6 +123,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
             name: student.name,
             phone: student.phone || '',
             location: student.location,
+            seats: seatsNeeded,
             picked: false
         };
 
