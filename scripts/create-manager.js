@@ -8,15 +8,48 @@
  * 4. Run: node scripts/create-manager.js
  */
 
-const admin = require('firebase-admin');
+const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
-// Initialize Firebase Admin
-const serviceAccount = require(path.join(__dirname, '../serviceAccountKey.json'));
+// firebase-admin is a dependency of functions/, not of the root package.
+const admin = (() => {
+    try {
+        return require('firebase-admin');
+    } catch (err) {
+        if (err.code !== 'MODULE_NOT_FOUND') throw err;
+        return require(require.resolve('firebase-admin', {
+            paths: [path.join(__dirname, '..', 'functions', 'node_modules')],
+        }));
+    }
+})();
 
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-});
+// Find the key by pattern. This required a file literally named
+// serviceAccountKey.json; Firebase names a downloaded key
+// <project>-firebase-adminsdk-<random>.json, and the random part changes on every
+// rotation — so this script failed on a real checkout, which matters now that it
+// is the last remaining way to create a manager if the invite flow ever breaks.
+function findKeyPath() {
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    const dirs = [path.join(__dirname, '..'), process.cwd()];
+    try {
+        const main = execSync('git worktree list --porcelain', { cwd: __dirname })
+            .toString().split('\n').find(l => l.startsWith('worktree '));
+        if (main) dirs.push(main.slice('worktree '.length).trim());
+    } catch { /* not a worktree */ }
+    for (const dir of dirs) {
+        let entries = [];
+        try { entries = fs.readdirSync(dir); } catch { continue; }
+        const match = entries.find(f =>
+            f === 'serviceAccountKey.json' || /-firebase-adminsdk-.*\.json$/.test(f));
+        if (match) return path.join(dir, match);
+    }
+    console.error('No Admin SDK key found. Searched:');
+    dirs.forEach(d => console.error('  ' + d));
+    process.exit(1);
+}
+
+admin.initializeApp({ credential: admin.credential.cert(require(findKeyPath())) });
 
 const db = admin.firestore();
 const auth = admin.auth();
@@ -42,13 +75,33 @@ async function createManager(email, password, name, phone = '', address = '') {
             phone: phone,
             address: address,
             role: 'manager',
+            registeredRole: 'manager',
+            // The GRANTED set. This wrote `role` alone, so a manager created here
+            // was invisible to every query asking who can drive — which is the
+            // whole dispatch pool, since the drivers here are managers.
+            roles: ['manager', 'driver', 'student'],
+            activeRole: 'manager',
             accountStatus: 'approved',
+            cityId: 'boston',
+            locationId: 'boston-huntington',
             avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FF6B35&color=fff`,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         });
 
         console.log('✅ Firestore document created');
+
+        // The read claim, so this manager is not stuck on the slower document
+        // path. Best-effort: firestore.rules falls back to the document, so a
+        // failure costs a lookup per read and nothing else.
+        try {
+            await auth.setCustomUserClaims(userRecord.uid, {
+                mgr: true, sm: false, city: 'boston',
+            });
+            console.log('✅ Manager claim set');
+        } catch (claimErr) {
+            console.warn('⚠️  Could not set manager claim:', claimErr.message);
+        }
         console.log('\n🎉 Manager account created successfully!');
         console.log('UID:', userRecord.uid);
         console.log('Email:', email);

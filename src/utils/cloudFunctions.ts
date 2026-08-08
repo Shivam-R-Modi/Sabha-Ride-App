@@ -189,17 +189,9 @@ export async function generateEventCSV(eventDate: string): Promise<GenerateCSVRe
 // MANAGER AUTH FUNCTIONS
 // ============================================
 
-export interface VerifyManagerCodeResult {
-    valid: boolean;
-}
-
-/**
- * @deprecated The one shared, never-expiring access code. Replaced by
- * redeemManagerInvite. Kept only until no cached bundle can still call it.
- */
-export async function verifyManagerCode(code: string): Promise<VerifyManagerCodeResult> {
-    return callFunction<VerifyManagerCodeResult>('verifyManagerCode', { code });
-}
+// verifyManagerCode lived here — one shared code, no expiry, no single use, and
+// readable in plaintext by any approved manager. Replaced by the invite pair
+// below; the callable itself is deleted.
 
 export interface CreateInviteResult {
     /** The plaintext. Returned once and never retrievable again. */

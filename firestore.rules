@@ -487,7 +487,14 @@ service cloud.firestore {
       // manager: the signup flow accepts the code and self-approves. It was
       // world-readable to any signed-in account, and rendered as plain text in
       // the Database Console.
-      allow read: if isManager() || (isAuthenticated() && settingId != 'managerCode');
+      // settings/managerCode is gone, and its rule with it. It held one shared,
+      // never-expiring access code that any approved manager could read in
+      // plaintext and hand out indefinitely, with nothing recording that they
+      // had. Replaced by managerInvites, which no client can read at all.
+      //
+      // Everything else under settings/ is the venue and schedule, which every
+      // signed-in user needs in order to see where and when sabha is.
+      allow read: if isAuthenticated();
 
       // Only managers can update settings
       allow write: if isManager();

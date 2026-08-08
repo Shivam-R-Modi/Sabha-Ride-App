@@ -60,7 +60,6 @@ beforeEach(async () => {
             name: 'Mira', role: 'manager', registeredRole: 'manager', roles: ['manager'],
             accountStatus: 'approved',
         });
-        await setDoc(doc(db, 'settings', 'managerCode'), { code: 'top-secret-code' });
         await setDoc(doc(db, 'settings', 'main'), { sabhaLocation: { lat: 42, lng: -71 } });
         await setDoc(doc(db, 'rides', 'ride_alice'), {
             studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
@@ -91,7 +90,9 @@ describe('a role counts however it is recorded', () => {
     // field on its own BEFORE the helpers are collapsed onto a shared one, so the
     // refactor is guarded cell by cell rather than by "the suite still passes".
     //
-    // settings/managerCode is the probe: manager-only read, one getUserData().
+    // The probe is a manager-only WRITE (settings/main). It has to be a write:
+    // manager reads now also accept a custom claim, so a read cannot isolate the
+    // document path, and these tests are about what the DOCUMENT records.
 
     const asUid = (uid: string) => testEnv.authenticatedContext(uid).firestore();
 
@@ -103,17 +104,17 @@ describe('a role counts however it is recorded', () => {
 
     it('manager recorded in `role` alone is a manager', async () => {
         await seedUser('m_role', { role: 'manager', accountStatus: 'approved' });
-        await assertSucceeds(getDoc(doc(asUid('m_role'), 'settings', 'managerCode')));
+        await assertSucceeds(updateDoc(doc(asUid('m_role'), 'settings', 'main'), { sabhaStartTime: '19:00' }));
     });
 
     it('manager recorded in `registeredRole` alone is a manager', async () => {
         await seedUser('m_reg', { registeredRole: 'manager', accountStatus: 'approved' });
-        await assertSucceeds(getDoc(doc(asUid('m_reg'), 'settings', 'managerCode')));
+        await assertSucceeds(updateDoc(doc(asUid('m_reg'), 'settings', 'main'), { sabhaStartTime: '19:00' }));
     });
 
     it('manager recorded in `roles[]` alone is a manager', async () => {
         await seedUser('m_arr', { roles: ['manager'], accountStatus: 'approved' });
-        await assertSucceeds(getDoc(doc(asUid('m_arr'), 'settings', 'managerCode')));
+        await assertSucceeds(updateDoc(doc(asUid('m_arr'), 'settings', 'main'), { sabhaStartTime: '19:00' }));
     });
 
     it('manager in `activeRole` alone is NOT a manager', async () => {
@@ -121,7 +122,7 @@ describe('a role counts however it is recorded', () => {
         // it — touchesPrivilegeFields() denies it — so treating it as a grant
         // would be trusting a field the app cannot keep current.
         await seedUser('m_active', { activeRole: 'manager', accountStatus: 'approved' });
-        await assertFails(getDoc(doc(asUid('m_active'), 'settings', 'managerCode')));
+        await assertFails(updateDoc(doc(asUid('m_active'), 'settings', 'main'), { sabhaStartTime: '19:00' }));
     });
 
     it('none of the four grants manager without approval', async () => {
@@ -129,7 +130,7 @@ describe('a role counts however it is recorded', () => {
             role: 'manager', registeredRole: 'manager', roles: ['manager'],
             accountStatus: 'pending',
         });
-        await assertFails(getDoc(doc(asUid('m_pending'), 'settings', 'managerCode')));
+        await assertFails(updateDoc(doc(asUid('m_pending'), 'settings', 'main'), { sabhaStartTime: '19:00' }));
     });
 
     it('a driver is not a manager, however it is recorded', async () => {
@@ -138,7 +139,7 @@ describe('a role counts however it is recorded', () => {
             role: 'driver', registeredRole: 'driver', roles: ['driver'],
             accountStatus: 'approved',
         });
-        await assertFails(getDoc(doc(asUid('d_all'), 'settings', 'managerCode')));
+        await assertFails(updateDoc(doc(asUid('d_all'), 'settings', 'main'), { sabhaStartTime: '19:00' }));
     });
 });
 
@@ -355,11 +356,39 @@ describe('the legacy students/ and drivers/ mirrors are closed', () => {
     });
 });
 
-describe('the manager access code', () => {
-    it('a student cannot read settings/managerCode', async () => {
-        // Reading it is equivalent to becoming a manager: the signup flow
-        // accepts the code and self-approves.
-        await assertFails(getDoc(doc(asStudent(), 'settings', 'managerCode')));
+describe('manager invites are server-only', () => {
+    // settings/managerCode is gone. It was one shared, never-expiring code that
+    // any approved manager could read in plaintext and pass on indefinitely, with
+    // nothing recording that they had. Invites replace it, and NOBODY reads them:
+    // the stored salt and hash are as sensitive as the code was.
+
+    const seedInvite = async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'managerInvites', 'ABC123'), {
+                codeHash: 'deadbeef', salt: 'cafe', usedBy: null, revokedAt: null,
+                expiresAt: '2099-01-01T00:00:00.000Z',
+            });
+        });
+    };
+
+    it('nobody can read an invite, manager included', async () => {
+        await seedInvite();
+        await assertFails(getDoc(doc(asManager(), 'managerInvites', 'ABC123')));
+        await assertFails(getDoc(doc(asStudent(), 'managerInvites', 'ABC123')));
+        await assertFails(getDoc(doc(asDriver(), 'managerInvites', 'ABC123')));
+        await assertFails(getDoc(doc(asAnon(), 'managerInvites', 'ABC123')));
+        await assertFails(getDocs(collection(asManager(), 'managerInvites')));
+    });
+
+    it('nobody can forge, revive or delete an invite', async () => {
+        await seedInvite();
+        // Forging one as somebody else, and clearing usedBy to make a spent code
+        // live again, are the two writes worth naming.
+        await assertFails(setDoc(doc(asManager(), 'managerInvites', 'FORGED'), {
+            codeHash: 'x', salt: 'y', expiresAt: '2099-01-01T00:00:00.000Z',
+        }));
+        await assertFails(updateDoc(doc(asManager(), 'managerInvites', 'ABC123'), { usedBy: null }));
+        await assertFails(deleteDoc(doc(asManager(), 'managerInvites', 'ABC123')));
     });
 
     it('a student CAN still read the venue settings', async () => {
@@ -475,9 +504,9 @@ describe('the manager claim', () => {
         await assertFails(updateDoc(doc(asClaimOnly(), 'users', STUDENT), { name: 'Hacked' }));
         await assertFails(setDoc(doc(asClaimOnly(), 'settings', 'main'), { sabhaLocation: null }));
         await assertFails(deleteDoc(doc(asClaimOnly(), 'rides', 'ride_alice')));
-        // Reading the code is equivalent to becoming a manager, so it stays on
-        // the document check even though it is a read.
-        await assertFails(getDoc(doc(asClaimOnly(), 'settings', 'managerCode')));
+        // Invites are the successor to the shared manager code, and no claim
+        // reaches them: minting managers must not run on an hour-stale token.
+        await assertFails(getDoc(doc(asClaimOnly(), 'managerInvites', 'ABC123')));
     });
 
     it('a forged or absent claim grants nothing', async () => {
@@ -494,7 +523,7 @@ describe('the manager claim', () => {
         // The whole point of deploying the OR before minting anything: with zero
         // claims in existence, behaviour is identical to before.
         await assertSucceeds(getDocs(collection(asManager(), 'users')));
-        await assertSucceeds(getDoc(doc(asManager(), 'settings', 'managerCode')));
+        await assertSucceeds(updateDoc(doc(asManager(), 'settings', 'main'), { sabhaStartTime: '19:00' }));
         await assertSucceeds(deleteDoc(doc(asManager(), 'rides', 'ride_alice')));
     });
 
@@ -509,7 +538,8 @@ describe('the manager claim', () => {
         const asRevoked = testEnv.authenticatedContext('revoked', { mgr: true }).firestore();
 
         await assertFails(deleteDoc(doc(asRevoked, 'users', STUDENT)));
-        await assertFails(getDoc(doc(asRevoked, 'settings', 'managerCode')));
+        await assertFails(updateDoc(doc(asRevoked, 'settings', 'main'), { sabhaStartTime: '19:00' }));
+        await assertFails(setDoc(doc(asRevoked, 'managerInvites', 'FORGED'), { codeHash: 'x' }));
     });
 });
 

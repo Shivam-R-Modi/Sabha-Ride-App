@@ -98,7 +98,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                     return;
                 }
 
-                // verifyManagerCode has already created the approved manager
+                // redeemManagerInvite has already created the approved manager
                 // profile. Writing it again from here would be denied, and
                 // would be the very thing this change removes.
                 //
@@ -129,10 +129,10 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
             onSelectRole();
         } catch (err: unknown) {
             console.error('Error saving role:', err);
-            // verifyManagerCode throws for "code not configured" and for rate
-            // limiting, and those messages are the actionable part. A blanket
-            // "Failed to save role" hid them and left the user retyping a
-            // correct code.
+            // redeemManagerInvite throws for rate limiting, and that message is
+            // the actionable part. A blanket "Failed to save role" hid it and left
+            // the user retyping a correct code. Bad codes do not come through
+            // here — they resolve with a reason, handled above.
             const message = err instanceof Error ? err.message : '';
             setError(message || 'Failed to save role. Please try again.');
             setLoading(false);
