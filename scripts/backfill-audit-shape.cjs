@@ -28,24 +28,79 @@
  *   node scripts/backfill-audit-shape.cjs --apply     # writes
  */
 
+const fs = require('fs');
 const path = require('path');
-const admin = require('firebase-admin');
+const { execSync } = require('child_process');
+
+/**
+ * firebase-admin is a dependency of functions/, not of the root package, so a
+ * plain require() from scripts/ fails with MODULE_NOT_FOUND. Resolve it from
+ * functions/node_modules rather than asking anyone to install it twice.
+ */
+const admin = (() => {
+    try {
+        return require('firebase-admin');
+    } catch (err) {
+        if (err.code !== 'MODULE_NOT_FOUND') throw err;
+        try {
+            return require(require.resolve('firebase-admin', {
+                paths: [path.join(__dirname, '..', 'functions', 'node_modules')],
+            }));
+        } catch {
+            console.error('firebase-admin not found. Run `npm install` inside functions/ first.');
+            process.exit(1);
+        }
+    }
+})();
 
 const APPLY = process.argv.includes('--apply');
 
-function loadCredential() {
-    const candidates = ['../serviceAccountKey.json', '../sabha-ride-app-firebase-adminsdk-fbsvc-24095ed3d5.json'];
-    for (const rel of candidates) {
+/**
+ * Find an Admin SDK key without being told its exact name.
+ *
+ * Firebase names a downloaded key `<project>-firebase-adminsdk-<random>.json`, and
+ * the random part changes with every key you generate — so hardcoding a filename
+ * (as scripts/setRideContext.cjs still does) breaks the moment a key is rotated.
+ * Search by pattern instead.
+ *
+ * Also searches the main worktree: this repo uses git worktrees, and the key
+ * lives once in the primary checkout rather than being copied into each one.
+ */
+function findKeyPath() {
+    const explicit = process.argv.indexOf('--key');
+    if (explicit !== -1 && process.argv[explicit + 1]) return process.argv[explicit + 1];
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+    const dirs = [path.join(__dirname, '..'), process.cwd()];
+    try {
+        // The primary worktree, when this is running from a linked one.
+        const main = execSync('git worktree list --porcelain', { cwd: __dirname })
+            .toString().split('\n').find(l => l.startsWith('worktree '));
+        if (main) dirs.push(main.slice('worktree '.length).trim());
+    } catch { /* not a worktree, or no git; the other paths still apply */ }
+
+    for (const dir of dirs) {
+        let entries = [];
         try {
-            return require(path.join(__dirname, rel));
-        } catch (err) {
-            if (err.code !== 'MODULE_NOT_FOUND') throw err;
-        }
+            entries = fs.readdirSync(dir);
+        } catch { continue; }
+
+        const match = entries.find(f =>
+            f === 'serviceAccountKey.json' || /-firebase-adminsdk-.*\.json$/.test(f));
+        if (match) return path.join(dir, match);
     }
-    console.error('No service account key found. Looked for, in the repo root:');
-    candidates.forEach(c => console.error('  ' + path.basename(c)));
+
+    console.error('No Admin SDK key found. Searched:');
+    dirs.forEach(d => console.error('  ' + d));
     console.error('\nFirebase console → Project Settings → Service Accounts → Generate new private key.');
+    console.error('Or pass one explicitly:  --key /path/to/key.json');
     process.exit(1);
+}
+
+function loadCredential() {
+    const keyPath = findKeyPath();
+    console.log('Using credentials: ' + path.basename(keyPath) + '\n');
+    return require(keyPath);
 }
 
 admin.initializeApp({ credential: admin.credential.cert(loadCredential()) });
