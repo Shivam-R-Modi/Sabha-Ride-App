@@ -634,10 +634,50 @@ point and is otherwise the first thing to erode.
 *Gate met:* client **350** · functions **245** · rules **81** — **676 total**.
 Typecheck **58 / 22**, unchanged.
 
-### Phase 4 — driver
+### Phase 4 — driver ✅ **done 2026-08-12**
 
-Shift card, car choice folded into going on shift, empty-state duplicates removed,
-`ActiveRide` focus mode, accessible availability switch.
+**Nine competing blocks became one card and one secondary button.** The old
+screen carried a status card with a nested toggle, a stats row, a ride-type card,
+an error banner, a grey "Assign Me", an unconditional empty-state card, a "Done
+for Today" button, and — when offline — a *second* card saying the same thing as
+the first in different words.
+
+**The dead-button defect is fixed at the root** (finding 11). "Assign Me" was
+`disabled` whenever no car was chosen, so its click handler never ran, so its
+`alert('Please select a vehicle first')` was **unreachable code**: a grey button
+and no reason, ever. There is now no disabled primary button on this screen. With
+no car it reads **"Pick a car to start"** and pressing it does exactly that.
+
+**Choosing a car is step one of going on shift**, not a separate concern. You
+cannot drive without one, so modelling them as independent is what produced the
+dead end in the first place.
+
+**No empty state.** The button *is* the empty state. A card explaining you have no
+assignment, sitting directly beneath a button that gets you one, is noise.
+
+**`ActiveRide` is now focus mode.** It drew its own sticky header underneath the
+shell's — two stacked bars, ~120px, on a list of stops read at arm's length in a
+car — and the bottom nav sat there offering History and Profile mid-run, a
+thumb-width from the tick-off buttons. `NavigationContext` gained
+`isFocusMode`; the shell renders children alone when it is set. Its
+"Leave Ride?" modal moved onto `Sheet`.
+
+**Both driver screens are fully tokenised** and were checked in dark, which is
+the condition that matters here — this is the screen used in a car at night.
+Worst measured ratio across the shift card is **6.5:1**, at the darkest stop of
+the button gradient.
+
+**Typecheck client errors fell 22 → 19.** The three in `DriverDashboard` were all
+`catch (e: unknown)` then `e.message`, and went with the code that held them.
+
+**New tests: 24.** The first block is entirely about the dead button not coming
+back: the primary is never disabled, it says what is missing *on itself*, and
+pressing it opens the picker rather than doing nothing. One test asserts there is
+no second card repeating the offline state — and it caught a live duplication
+between the header and the card while it was being written.
+
+*Gate met:* client **374** · functions **245** · rules **81** — **700 total**.
+Typecheck **55 / 19**, down from 58 / 22. Build clean.
 
 ### Phase 5 — manager
 
@@ -659,7 +699,7 @@ re-verified.
 | A hook's data contract changes | Not touched. This is presentation only; every `useFirestore` / `useRides` / `useVehicles` signature stays as it is. |
 | A Cloud Function call is dropped in a rewrite | Phase 0 smoke tests assert each screen still calls its callable. `src/utils/cloudFunctions.ts` is unchanged. |
 | Firestore rules drift | No rules change. `npm run test:rules` stays at 81. |
-| Typecheck count moves | Tracked per phase; may only fall. CLAUDE.md updated when it does. |
+| Typecheck count moves | Tracked per phase; may only fall. Now **55 total / 19 client**, down from 58 / 22 — Phase 4 removed three. |
 | A dead control ships — the repo's recurring bug class | Every control gets a test that asserts its effect, not its presence. A disabled control must state its reason on screen (finding 11 is exactly this bug). |
 | Contrast regresses | Measured each phase against the 111 → 1 baseline. Glass never sits behind text. |
 | The e2e spec breaks | It asserts only `text=Sabha Ride Seva` and `input[type="email"]`. Both survive. |

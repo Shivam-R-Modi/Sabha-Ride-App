@@ -17,13 +17,14 @@ undeployed** — see "In flight" below.
 | Cloud Functions | ✅ | all 16 updated |
 | Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
 
-**Test suites, all green:** `functions` **245** · client **350** · rules **81** —
-**676 total**.
+**Test suites, all green:** `functions` **245** · client **374** · rules **81** —
+**700 total**.
 
-`npm run typecheck` reports **58** errors total, of which **22** are outside
-`functions/`. That is the clean baseline, not a regression. The "22" this note
-used to quote was the client-only figure; both numbers are recorded now so the
-next session does not think 36 errors appeared overnight.
+`npm run typecheck` reports **55** errors total, of which **19** are outside
+`functions/`. That is the clean baseline, not a regression. It was 58 / 22 before
+this branch; Phase 4 removed three by deleting the code that held them. The
+figure quoted historically in CLAUDE.md was the client-only one, so both are
+recorded here to stop the next session thinking 36 errors appeared overnight.
 
 `node scripts/tenancy.cjs verify` reads **0 unstamped** (owner's Mac only — needs
 the Admin SDK key).
@@ -45,7 +46,7 @@ A full redesign — modern minimalism, liquid glass, a manual day/night switch, 
 flows rebuilt around one question per screen. Same brand colours. **Presentation
 only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
 
-**Phases 0 to 3 are done.** Client tests went **70 → 350**.
+**Phases 0 to 4 are done.** Client tests went **70 → 374**.
 
 - **Phase 0 — safety net.** Added component rendering to the test suite, which
   the repo did not have: all 70 client tests were pure logic, so nothing
@@ -80,23 +81,30 @@ only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
   driver's name truncated to "Ra…" at phone width, and the ride card's status
   band did not follow the theme. Both fixed.
 
+- **Phase 4 — the driver's screens.** Nine competing blocks became one card and
+  one button. The grey "Assign Me" that could never explain itself is gone: with
+  no car chosen the button now reads "Pick a car to start" and does that.
+  Choosing a car is part of going on shift rather than a separate step. During a
+  run the screen takes over the whole display — no nav to tap by accident, and
+  no two stacked headers eating the top of the screen.
+
 **New: `preview/`.** A way to render real screens with real stylesheets without
 signing in — see `preview/vite.config.ts`. This exists because of the note lower
 down that has stood for months: screens go unlooked-at *because reaching them
-needs an account*. Both faults above turned up within a minute of using it.
+needs an account*. The two Phase 3 faults above turned up within a minute of
+using it. Pages exist for the rider and the driver.
 
 ```
 npx vite build --config preview/vite.config.ts
-npx vite preview --outDir preview-dist      # then open /preview/rider.html
+npx vite preview --outDir preview-dist   # /preview/rider.html · /preview/driver.html
 ```
 
-**Still to come:** driver and manager screens, then the dark-mode polish pass.
+**Still to come:** the manager's screens, then the dark-mode polish pass.
 Two things are deliberately unfinished until then:
 
-- Hardcoded `bg-white` / `text-gray-*` utilities remain in the driver and manager
-  screens, so expect light-coloured patches there in dark mode. The rider's
-  screens are done.
-- 10 screens still have their own hand-rolled modal. Each is migrated onto
+- Hardcoded `bg-white` / `text-gray-*` utilities remain in the manager's screens,
+  so expect light-coloured patches there in dark mode. Rider and driver are done.
+- 8 screens still have their own hand-rolled modal. Each is migrated onto
   `Sheet` by the phase that rewrites it; a ratchet test stops the count rising.
 
 Decisions taken with the owner, recorded because they went against the

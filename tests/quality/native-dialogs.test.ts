@@ -123,7 +123,7 @@ describe('native dialogs', () => {
  * leaving its bespoke overlay behind should fail the build.
  */
 describe('hand-rolled overlays', () => {
-    const OVERLAY_BUDGET = 10;
+    const OVERLAY_BUDGET = 8;
 
     /**
      * Full-bleed layers that are not dialogs and should never become Sheets:

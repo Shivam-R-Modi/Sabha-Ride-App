@@ -24,7 +24,13 @@ interface LayoutProps {
 
 export const ResponsiveLayout: React.FC<LayoutProps> = ({ children, role }) => {
   const { userProfile } = useAuth();
-  const { isSidebarCollapsed } = useNavigation();
+  const { isSidebarCollapsed, isFocusMode } = useNavigation();
+
+  // A focus-mode screen owns the viewport: no sidebar, no header, no bottom
+  // nav, and no bottom padding reserved for one.
+  if (isFocusMode) {
+    return <div className="min-h-screen bg-cream">{children}</div>;
+  }
 
   return (
     <div className="min-h-screen bg-cream flex flex-col lg:flex-row">

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Driver, AssignmentType, RideStudent, Waypoint, Vehicle } from '../../types';
-import { MapPin, Users, ChevronRight, ToggleLeft, ToggleRight, Navigation, Car, RefreshCw, LogOut, Loader2, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AssignmentPreview } from './AssignmentPreview';
 import { ActiveRide } from './ActiveRide';
+import { DriverShift } from './DriverShift';
 import { CompletionScreen } from './CompletionScreen';
 import { releaseVehicle, setDriverAvailability, useAvailableVehicles, assignVehicleToDriver } from '../../hooks/useFirestore';
 import { collection, doc, query, where, onSnapshot } from 'firebase/firestore';
@@ -28,7 +28,6 @@ type DriverViewState =
 
 export const DriverDashboard: React.FC = () => {
     const { userProfile, currentUser, refreshProfile, activeRole } = useAuth();
-    const [switchingCar, setSwitchingCar] = useState(false);
     const [isAssigning, setIsAssigning] = useState(false);
     const [rideContext, setRideContext] = useState<{ rideType: 'home-to-sabha' | 'sabha-to-home' | null; displayText: string } | null>(null);
     const [viewState, setViewState] = useState<DriverViewState>('dashboard');
@@ -47,7 +46,7 @@ export const DriverDashboard: React.FC = () => {
         stats: { students: number; distance: number; time: number };
         driverStats: { ridesCompletedToday: number; totalStudentsToday: number; totalDistanceToday: number };
     } | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [startingShift, setStartingShift] = useState(false);
     const [showVehicleSelector, setShowVehicleSelector] = useState(false);
     const [selectingVehicle, setSelectingVehicle] = useState(false);
     const { ask, confirmDialog } = useConfirm();
@@ -180,38 +179,47 @@ export const DriverDashboard: React.FC = () => {
         return unsubscribe;
     }, []);
 
-    const toggleAvailability = async () => {
+    /**
+     * Going on shift and choosing a car are one flow, not two.
+     *
+     * They used to be independent, which is what produced the dead end: online
+     * with no car meant a permanently grey "Assign Me" whose only explanation
+     * lived in an unreachable alert.
+     */
+    const handleGoOnShift = async () => {
         if (!currentUser) return;
-
-        const newStatus = isAvailable ? 'offline' : 'available';
-        console.log(`Toggling availability to ${newStatus} for user ${currentUser.uid}`);
+        setStartingShift(true);
         try {
-            if (newStatus === 'offline') {
-                const ok = await ask({
-                    title: 'Go offline?',
-                    message: 'Your vehicle goes back to the fleet and today\'s stats reset.',
-                    confirmLabel: 'Go offline',
-                    cancelLabel: 'Stay online',
-                    destructive: true,
-                });
-                if (!ok) return;
-                await driverDoneForToday(currentUser.uid);
-            } else {
-                await setDriverAvailability(currentUser.uid, 'available');
-                if (!userProfile?.currentVehicleId) {
-                    setShowVehicleSelector(true);
-                }
-            }
+            await setDriverAvailability(currentUser.uid, 'available');
+            await refreshProfile();
+            if (!userProfile?.currentVehicleId) setShowVehicleSelector(true);
         } catch (error) {
-            console.error("Failed to toggle availability:", error);
-            toast.error('Could not change your availability. Please try again.');
+            console.error('Failed to go on shift:', error);
+            toast.error('Could not start your shift. Please try again.');
+        } finally {
+            setStartingShift(false);
         }
-        await refreshProfile();
     };
 
-    const handleReleaseVehicle = async () => {
-        // Show vehicle selector instead of just releasing
-        setShowVehicleSelector(true);
+    const handleEndShift = async () => {
+        if (!currentUser) return;
+        const ok = await ask({
+            title: 'End your shift?',
+            message: 'Your car goes back to the fleet and today\'s tally resets.',
+            confirmLabel: 'End shift',
+            cancelLabel: 'Keep driving',
+            destructive: true,
+        });
+        if (!ok) return;
+
+        try {
+            await driverDoneForToday(currentUser.uid);
+            await refreshProfile();
+            toast.success('Shift ended. Thank you for driving.');
+        } catch (error: unknown) {
+            console.error('Failed to end shift:', error);
+            toast.error(error instanceof Error ? error.message : 'Could not end your shift.');
+        }
     };
 
     const handleSelectVehicle = async (vehicle: any) => {
@@ -251,7 +259,6 @@ export const DriverDashboard: React.FC = () => {
         }
 
         setIsAssigning(true);
-        setError(null);
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
@@ -264,17 +271,18 @@ export const DriverDashboard: React.FC = () => {
                 if (result.status === 'locked') {
                     // Another driver is being assigned — retry
                     if (attempt < MAX_RETRIES) {
-                        setError('Another driver is being assigned, retrying...');
                         await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
                         continue;
                     }
-                    setError('System is busy. Please tap Assign Me again in a few seconds.');
+                    toast.error('Another driver is being assigned right now. Try again in a moment.');
                     setIsAssigning(false);
                     return;
                 }
 
                 if (result.status === 'no_students') {
-                    setError('All students have already been assigned. Check back later.');
+                    // Information, not a failure — everyone waiting already has
+                    // a car. The button stays available for when that changes.
+                    toast.info('Nobody is waiting right now. Check back in a few minutes.');
                     setIsAssigning(false);
                     return;
                 }
@@ -297,7 +305,7 @@ export const DriverDashboard: React.FC = () => {
 
             } catch (error: unknown) {
                 console.error('Error getting assignment:', error);
-                setError(error.message || 'Failed to get assignment. Please try again.');
+                toast.error(error instanceof Error ? error.message : 'Could not find riders. Please try again.');
                 setIsAssigning(false);
                 return;
             }
@@ -314,7 +322,7 @@ export const DriverDashboard: React.FC = () => {
         // 'home-to-sabha'`, which silently turned a closed window into a pickup
         // run — the driver would set off towards the venue on a drop-off night.
         if (!rideContext?.rideType) {
-            setError('The ride window has closed. Please refresh before starting a ride.');
+            toast.error('The ride window has closed. Refresh before starting a run.');
             return;
         }
 
@@ -370,7 +378,7 @@ export const DriverDashboard: React.FC = () => {
             setViewState('dashboard');
         } catch (error: unknown) {
             console.error('Error marking done:', error);
-            toast.error(error.message || 'Could not finish your shift. Please try again.');
+            toast.error(error instanceof Error ? error.message : 'Could not finish your shift.');
         }
     };
 
@@ -420,140 +428,29 @@ export const DriverDashboard: React.FC = () => {
             case 'dashboard':
             default:
                 return (
-                    <div className="pb-6 px-4 pt-6 space-y-6">
-                        {/* Driver Status Header */}
-                        <div className="clay-card space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-orange-100">
-                                        <img src={userProfile?.avatarUrl} alt="Driver" className="w-full h-full object-cover" />
-                                    </div>
-                                    <div>
-                                        <h2 className="font-header font-bold text-coffee leading-tight">{userProfile?.name}</h2>
-                                        <p className={`text-xs font-medium ${isAvailable ? 'text-green-700' : 'text-gray-500'}`}>
-                                            {isAvailable ? '● Online' : '○ Offline'}
-                                        </p>
-                                    </div>
-                                </div>
-                                <button onClick={toggleAvailability} className="clay-toggle">
-                                    {isAvailable ? <ToggleRight size={32} className="fill-saffron/20" /> : <ToggleLeft size={32} className="text-gray-300" />}
-                                </button>
-                            </div>
-
-                            <div className="bg-gray-50 p-3 rounded-lg flex items-center justify-between gap-3 border border-gray-100">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className="bg-white p-2 rounded-md text-coffee shadow-sm shrink-0">
-                                        <Car size={18} />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-xs font-bold text-gray-500 uppercase">Current Vehicle</p>
-                                        <p className="text-sm font-bold text-coffee truncate">
-                                            {isAvailable ? (userProfile?.currentVehicleName || "No Vehicle Selected") : "No Vehicle Selected"}
-                                        </p>
-                                        {isAvailable && userProfile?.currentVehiclePlate && (
-                                            <p className="text-[10px] text-gray-500 font-mono">{userProfile.currentVehiclePlate}</p>
-                                        )}
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={handleReleaseVehicle}
-                                    disabled={switchingCar}
-                                    className="clay-button-secondary text-xs shrink-0 whitespace-nowrap"
-                                >
-                                    {switchingCar ? <RefreshCw className="animate-spin" size={14} /> : (isAvailable && userProfile?.currentVehicleId ? 'Change Car' : 'Select Car')}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Stats Summary */}
-                        <div className="flex justify-between items-center px-2">
-                            <div>
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Today's Seva</p>
-                                <p className="text-sm font-medium text-coffee">
-                                    {(userProfile as any)?.totalStudentsToday || 0} Students • {((userProfile as any)?.totalDistanceToday || 0).toFixed(0)} mi
-                                </p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Assignments</p>
-                                <p className="text-sm font-medium text-coffee">{(userProfile as any)?.ridesCompletedToday || 0} Rides Completed</p>
-                            </div>
-                        </div>
-
-                        {/* Ride Type Context Display */}
-                        {rideContext && (
-                            <div className="clay-card bg-gradient-to-r from-orange-50 to-amber-50 border-orange-100">
-                                <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1">Current Ride Type</p>
-                                <p className="text-lg font-bold text-coffee">{rideContext.displayText}</p>
-                            </div>
-                        )}
-
-                        {/* Error Display */}
-                        {error && (
-                            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                                <p className="text-red-600 text-sm">{error}</p>
-                            </div>
-                        )}
-
-                        {/* Assign Me Button */}
-                        {isAvailable && (
-                            <button
-                                onClick={handleAssignMe}
-                                disabled={isAssigning || !userProfile?.currentVehicleId}
-                                className={`w-full py-4 text-lg ${userProfile?.currentVehicleId ? 'clay-btn-cta-large' : 'bg-gray-200 text-gray-500 rounded-2xl cursor-not-allowed'}`}
-                            >
-                                {isAssigning ? (
-                                    <span className="flex items-center justify-center gap-2">
-                                        <Loader2 className="animate-spin" size={20} />
-                                        Finding Students...
-                                    </span>
-                                ) : (
-                                    'Assign Me'
-                                )}
-                            </button>
-                        )}
-
-                        {/* Empty State */}
-                        <div className="clay-card text-center py-12">
-                            <p className="text-muted font-medium text-sm">No assignments yet.</p>
-                            <p className="text-xs text-muted mt-1">
-                                {isAvailable
-                                    ? 'Click "Assign Me" to get students assigned to you.'
-                                    : 'Go online to receive assignments.'}
-                            </p>
-                        </div>
-
-                        {/* Done for Today Button */}
-                        {isAvailable && (
-                            <button
-                                onClick={async () => {
-                                    if (!currentUser) return;
-                                    if (!await ask({
-                                        title: 'Finish for today?',
-                                        message: 'Your vehicle will be released back to the fleet.',
-                                        confirmLabel: 'Finish',
-                                        cancelLabel: 'Keep driving',
-                                        destructive: true,
-                                    })) return;
-                                    try {
-                                        await driverDoneForToday(currentUser.uid);
-                                        await refreshProfile();
-                                    } catch (error: unknown) {
-                                        toast.error(error.message || 'Could not finish your shift.');
-                                    }
-                                }}
-                                className="w-full clay-button-secondary py-3 mt-4"
-                            >
-                                I'm Done for Today
-                            </button>
-                        )}
-
-                        {!isAvailable && (
-                            <div className="clay-card text-center p-6 mt-8">
-                                <p className="text-muted text-sm">You are currently offline.</p>
-                                <p className="text-xs text-muted mt-2">Toggle online to receive assignments.</p>
-                            </div>
-                        )}
-                    </div>
+                    <DriverShift
+                        driverName={userProfile?.name || 'Driver'}
+                        avatarUrl={userProfile?.avatarUrl}
+                        onShift={isAvailable}
+                        vehicleName={isAvailable ? userProfile?.currentVehicleName : undefined}
+                        vehiclePlate={isAvailable ? userProfile?.currentVehiclePlate : undefined}
+                        rideContextText={rideContext?.displayText}
+                        ridesToday={(userProfile as any)?.ridesCompletedToday || 0}
+                        peopleToday={(userProfile as any)?.totalStudentsToday || 0}
+                        milesToday={(userProfile as any)?.totalDistanceToday || 0}
+                        isAssigning={isAssigning}
+                        isStartingShift={startingShift}
+                        vehicles={availableVehicles}
+                        vehiclesLoading={vehiclesLoading}
+                        vehiclePickerOpen={showVehicleSelector}
+                        selectingVehicle={selectingVehicle}
+                        onGoOnShift={handleGoOnShift}
+                        onEndShift={handleEndShift}
+                        onFindRiders={handleAssignMe}
+                        onOpenVehiclePicker={() => setShowVehicleSelector(true)}
+                        onCloseVehiclePicker={() => setShowVehicleSelector(false)}
+                        onSelectVehicle={handleSelectVehicle}
+                    />
                 );
         }
     };
@@ -561,78 +458,7 @@ export const DriverDashboard: React.FC = () => {
     return (
         <>
             {renderContent()}
-
-            {/* Vehicle Selector Modal */}
-            {showVehicleSelector && (
-                <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-modal p-4">
-                    <div className="bg-white sm:rounded-2xl w-full max-w-md max-h-[80vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
-                        {/* Header */}
-                        <div className="sticky top-0 bg-white border-b border-cream-dark p-4 flex items-center justify-between">
-                            <h3 className="font-header font-bold text-lg text-coffee">Select Vehicle</h3>
-                            <button
-                                onClick={() => setShowVehicleSelector(false)}
-                                className="p-2 hover:bg-cream rounded-full transition-colors"
-                            >
-                                <X size={20} className="text-mocha" />
-                            </button>
-                        </div>
-
-                        {/* Vehicle List */}
-                        <div className="p-4 space-y-3">
-                            {vehiclesLoading ? (
-                                <div className="flex flex-col items-center justify-center py-8">
-                                    <Loader2 className="animate-spin w-8 h-8 text-saffron" />
-                                    <p className="text-sm text-coffee-500 mt-2">Loading vehicles...</p>
-                                </div>
-                            ) : availableVehicles.length === 0 ? (
-                                <div className="text-center py-8">
-                                    <Car size={40} className="mx-auto text-coffee-500 mb-3" />
-                                    <p className="text-coffee-500">No vehicles available</p>
-                                    <p className="text-xs text-coffee-500 mt-1">Contact a manager to add vehicles</p>
-                                </div>
-                            ) : (
-                                availableVehicles.map((vehicle) => (
-                                    <button
-                                        key={vehicle.id}
-                                        onClick={() => handleSelectVehicle(vehicle)}
-                                        disabled={selectingVehicle}
-                                        className="w-full clay-card p-4 flex items-center gap-4 hover:shadow-md transition-all disabled:opacity-50"
-                                    >
-                                        <div
-                                            className="w-12 h-12 rounded-xl flex items-center justify-center text-white"
-                                            style={{ backgroundColor: vehicle.color || '#888' }}
-                                        >
-                                            <Car size={22} className="text-white/90" />
-                                        </div>
-                                        <div className="flex-1 text-left">
-                                            <p className="font-bold text-coffee">
-                                                {vehicle.name}
-                                            </p>
-                                            <p className="text-sm text-coffee-500 font-mono">{vehicle.licensePlate}</p>
-                                            <p className="text-xs text-coffee-500 flex items-center gap-1 mt-1">
-                                                <Users size={12} />
-                                                {vehicle.capacity} seats
-                                            </p>
-                                        </div>
-                                        {selectingVehicle ? (
-                                            <Loader2 className="animate-spin text-saffron" size={20} />
-                                        ) : (
-                                            <ChevronRight size={20} className="text-coffee-500" />
-                                        )}
-                                    </button>
-                                ))
-                            )}
-                        </div>
-
-                        {/* Footer */}
-                        <div className="sticky bottom-0 bg-white border-t border-cream-dark p-4">
-                            <p className="text-xs text-coffee-500 text-center">
-                                {availableVehicles.length} vehicle{availableVehicles.length !== 1 ? 's' : ''} available
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {confirmDialog}
         </>
     );
 };
