@@ -81,7 +81,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
         <div className="space-y-1.5">
             {label && (
                 <label className="block text-sm font-medium text-coffee">
-                    {label} {required && <span className="text-red-600">*</span>}
+                    {label} {required && <span className="text-[rgb(var(--danger-text))]">*</span>}
                 </label>
             )}
 
@@ -92,7 +92,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
                         value={selectedCountry.code}
                         onChange={handleCountryChange}
                         disabled={disabled}
-                        className="appearance-none bg-orange-50/60 hover:bg-orange-100/70 border-2 border-r-0 border-mocha/20 rounded-l-xl px-3 py-3 pr-7 text-sm font-medium text-coffee focus:outline-none focus:border-saffron transition-colors cursor-pointer disabled:opacity-50"
+                        className="appearance-none bg-cream-300/60 hover:bg-cream-300/70 border-2 border-r-0 border-mocha/20 rounded-l-xl px-3 py-3 pr-7 text-sm font-medium text-coffee focus:outline-none focus:border-saffron transition-colors cursor-pointer disabled:opacity-50"
                         title="Select Country Code"
                     >
                         {SUPPORTED_COUNTRIES.map((c) => (
@@ -123,7 +123,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
 
                     {/* Valid Checkmark Indicator */}
                     {validation.isValid && (
-                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-green-700">
+                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-[rgb(var(--success-text))]">
                             <CheckCircle2 size={18} />
                         </div>
                     )}
@@ -132,11 +132,11 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
 
             {/* Validation / Custom Error */}
             {error ? (
-                <p className="text-xs text-red-600 font-medium">{error}</p>
+                <p className="text-xs text-[rgb(var(--danger-text))] font-medium">{error}</p>
             ) : !validation.isValid && rawDigits.length > 0 ? (
                 <p className="text-xs text-coffee-500">{validation.error}</p>
             ) : validation.isValid ? (
-                <p className="text-xs text-green-700 font-medium flex items-center gap-1">
+                <p className="text-xs text-[rgb(var(--success-text))] font-medium flex items-center gap-1">
                     ✓ Valid phone number ({selectedCountry.dialCode} {validation.e164})
                 </p>
             ) : null}

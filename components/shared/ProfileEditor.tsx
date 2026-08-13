@@ -155,14 +155,14 @@ export const ProfileEditor: React.FC = () => {
             <div className="p-8 md:p-12 text-center animate-in fade-in duration-500">
                 <img
                     src={userProfile?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(userProfile?.name || 'U')}&background=FF6B35&color=fff&size=200`}
-                    className="w-28 h-28 rounded-3xl mx-auto mb-5 border-4 border-white shadow-xl"
+                    className="w-28 h-28 rounded-3xl mx-auto mb-5 border-4 border-surface shadow-xl"
                     alt="Profile"
                 />
                 <h2 className="text-3xl font-header font-bold text-coffee">{userProfile?.name}</h2>
                 <p className="text-gold-700 font-bold uppercase tracking-widest mt-1">{roleLabel}</p>
 
                 {success && (
-                    <div className="mt-4 mx-auto max-w-sm flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl p-3 animate-in fade-in">
+                    <div className="mt-4 mx-auto max-w-sm flex items-center gap-2 bg-[rgb(var(--success-bg))] border border-[rgb(var(--success))]/40 text-[rgb(var(--success-text))] text-sm rounded-xl p-3 animate-in fade-in">
                         <CheckCircle size={16} />
                         Profile updated successfully!
                     </div>
@@ -172,7 +172,7 @@ export const ProfileEditor: React.FC = () => {
                 <div className="mt-6 max-w-sm mx-auto space-y-3">
                     {userProfile?.email && (
                         <div className="clay-card flex items-center gap-4 text-left p-4">
-                            <div className="bg-orange-50 p-2 rounded-xl text-saffron">
+                            <div className="bg-cream-300 p-2 rounded-xl text-saffron">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
                             </div>
                             <p className="text-sm text-coffee-700">{userProfile.email}</p>
@@ -181,7 +181,7 @@ export const ProfileEditor: React.FC = () => {
 
                     {(userProfile as any)?.phone && (
                         <div className="clay-card flex items-center gap-4 text-left p-4">
-                            <div className="bg-orange-50 p-2 rounded-xl text-saffron">
+                            <div className="bg-cream-300 p-2 rounded-xl text-saffron">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
                             </div>
                             <p className="text-sm text-coffee-700">{(userProfile as any).phone}</p>
@@ -190,7 +190,7 @@ export const ProfileEditor: React.FC = () => {
 
                     {userProfile?.address && (
                         <div className="clay-card flex items-center gap-4 text-left p-4">
-                            <div className="bg-orange-50 p-2 rounded-xl text-saffron">
+                            <div className="bg-cream-300 p-2 rounded-xl text-saffron">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
                             </div>
                             <p className="text-sm text-coffee-700 line-clamp-2">{userProfile.address}</p>
@@ -216,7 +216,7 @@ export const ProfileEditor: React.FC = () => {
                     </button>
                     <button
                         onClick={logout}
-                        className="clay-button w-full py-3 text-white bg-gradient-to-r from-red-400 to-red-500 rounded-xl font-bold shadow-lg"
+                        className="clay-button w-full py-3 text-white bg-gradient-to-r from-[rgb(var(--danger))] to-[rgb(var(--danger))] rounded-xl font-bold shadow-lg"
                     >
                         Sign Out
                     </button>
@@ -234,7 +234,7 @@ export const ProfileEditor: React.FC = () => {
                 {/* Name */}
                 <div>
                     <label className="block text-sm font-medium text-coffee mb-2">
-                        Full Name <span className="text-red-600">*</span>
+                        Full Name <span className="text-[rgb(var(--danger-text))]">*</span>
                     </label>
                     <input
                         type="text"
@@ -263,7 +263,7 @@ export const ProfileEditor: React.FC = () => {
                 {/* Address */}
                 <div>
                     <label className="block text-sm font-medium text-coffee mb-2">
-                        Address <span className="text-red-600">*</span>
+                        Address <span className="text-[rgb(var(--danger-text))]">*</span>
                     </label>
                     <AddressAutocomplete
                         value={address}
@@ -278,7 +278,7 @@ export const ProfileEditor: React.FC = () => {
                         placeholder="Start typing your address…"
                     />
                     {selectedPlace && (
-                        <p className="text-sm text-green-700 mt-1">✓ New address selected</p>
+                        <p className="text-sm text-[rgb(var(--success-text))] mt-1">✓ New address selected</p>
                     )}
                     {!selectedPlace && address !== (userProfile?.address || '') && address.length >= 3 && (
                         <p className="text-sm text-coffee-500 mt-1">Please select an address from suggestions</p>
@@ -290,7 +290,7 @@ export const ProfileEditor: React.FC = () => {
 
                 {/* Error */}
                 {error && (
-                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">
+                    <div className="flex items-center gap-2 bg-[rgb(var(--danger-bg))] border border-[rgb(var(--danger))]/40 text-[rgb(var(--danger-text))] text-sm rounded-xl p-3">
                         <AlertCircle size={16} />
                         {error}
                     </div>

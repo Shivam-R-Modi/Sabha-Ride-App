@@ -187,11 +187,11 @@ const EventRow: React.FC<{
     };
 
     return (
-        <div className="px-3 py-2.5 border-b border-gray-100 last:border-0">
+        <div className="px-3 py-2.5 border-b border-hairline/10 last:border-0">
             <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-gray-800">
+                        <span className="text-sm font-bold text-coffee">
                             {formatDate(event.date)}
                         </span>
                         {isNext && (
@@ -202,7 +202,7 @@ const EventRow: React.FC<{
                     </div>
                     {!editing && (
                         <>
-                            <p className="text-xs text-gray-500 mt-0.5">
+                            <p className="text-xs text-coffee-500 mt-0.5">
                                 {formatTime(event.startTime)} – {formatTime(event.endTime)}
                                 {event.agenda ? ` · ${event.agenda}` : ''}
                             </p>
@@ -211,7 +211,7 @@ const EventRow: React.FC<{
                                     at {event.venue.address}
                                 </p>
                             )}
-                            <p className="text-[10px] text-gray-400 mt-0.5">
+                            <p className="text-[10px] text-coffee-500 mt-0.5">
                                 {windowSummary(event)}
                             </p>
                         </>
@@ -223,7 +223,7 @@ const EventRow: React.FC<{
                         <button
                             onClick={() => setEditing(true)}
                             disabled={busy}
-                            className="text-xs font-semibold text-saffron-800 px-2 py-1 rounded hover:bg-orange-50 disabled:opacity-50"
+                            className="text-xs font-semibold text-saffron-800 px-2 py-1 rounded hover:bg-cream-300 disabled:opacity-50"
                         >
                             Edit
                         </button>
@@ -232,7 +232,7 @@ const EventRow: React.FC<{
                         onClick={remove}
                         disabled={busy}
                         title="Delete this sabha"
-                        className="p-1.5 rounded transition-colors disabled:opacity-50 text-red-600 hover:bg-red-50"
+                        className="p-1.5 rounded transition-colors disabled:opacity-50 text-[rgb(var(--danger-text))] hover:bg-[rgb(var(--danger-bg))]"
                     >
                         {busy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                     </button>
@@ -245,18 +245,18 @@ const EventRow: React.FC<{
                         <input
                             type="time" value={start} onChange={(e) => { setStart(e.target.value); setError(null); }}
                             disabled={busy}
-                            className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron"
+                            className="px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                         />
                         <input
                             type="time" value={end} onChange={(e) => { setEnd(e.target.value); setError(null); }}
                             disabled={busy}
-                            className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron"
+                            className="px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                         />
                     </div>
                     <input
                         type="text" value={agenda} onChange={(e) => setAgenda(e.target.value)}
                         placeholder="Agenda (optional)" disabled={busy}
-                        className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron"
+                        className="w-full px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                     />
                     <div>
                         <AddressAutocomplete
@@ -274,7 +274,7 @@ const EventRow: React.FC<{
                             disabled={busy}
                             placeholder="Venue — leave blank for the default"
                         />
-                        <p className="text-[10px] text-gray-400 mt-0.5">
+                        <p className="text-[10px] text-coffee-500 mt-0.5">
                             {venuePlace
                                 ? `Selected — ${venuePlace.latitude.toFixed(5)}, ${venuePlace.longitude.toFixed(5)}`
                                 : venueText.trim() === ''
@@ -296,7 +296,7 @@ const EventRow: React.FC<{
                                 setError(null);
                             }}
                             disabled={busy}
-                            className="flex-1 px-2 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-bold"
+                            className="flex-1 px-2 py-1.5 border border-hairline/20 text-coffee-700 rounded-lg text-xs font-bold"
                         >
                             Discard
                         </button>
@@ -305,7 +305,7 @@ const EventRow: React.FC<{
             )}
 
             {error && (
-                <p className="text-xs text-red-600 font-semibold mt-1.5">{error}</p>
+                <p className="text-xs text-[rgb(var(--danger-text))] font-semibold mt-1.5">{error}</p>
             )}
 
             {confirmDialog}
@@ -361,13 +361,13 @@ export const SabhaCalendar: React.FC = () => {
     };
 
     return (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-4">
-            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+        <div className="bg-surface rounded-xl border border-hairline/20 shadow-sm overflow-hidden mb-4">
+            <div className="px-4 py-3 border-b border-hairline/10 bg-cream-200">
                 <div className="flex items-center gap-2">
                     <CalendarDays size={18} className="text-saffron" />
-                    <h3 className="text-sm font-bold text-gray-800">Sabha Calendar</h3>
+                    <h3 className="text-sm font-bold text-coffee">Sabha Calendar</h3>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-coffee-500 mt-1">
                     The calendar is yours. Add each sabha, change its time or venue, or
                     delete one.
                 </p>
@@ -380,14 +380,14 @@ export const SabhaCalendar: React.FC = () => {
             )}
 
             {error && (
-                <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 m-3 rounded-lg">
+                <div className="flex items-center gap-2 text-[rgb(var(--danger-text))] bg-[rgb(var(--danger-bg))] px-3 py-2 m-3 rounded-lg">
                     <AlertCircle size={14} />
                     <span className="text-xs">{error}</span>
                 </div>
             )}
 
             {calendarStatus === 'no-scheduled-event' && (
-                <div className="flex items-start gap-2 text-red-800 bg-red-50 border border-red-200 px-3 py-2 m-3 rounded-lg">
+                <div className="flex items-start gap-2 text-[rgb(var(--danger-text))] bg-[rgb(var(--danger-bg))] border border-[rgb(var(--danger))]/40 px-3 py-2 m-3 rounded-lg">
                     <AlertCircle size={14} className="mt-0.5 shrink-0" />
                     <span className="text-xs">
                         <span className="font-bold">Rides are closed.</span> There is no sabha
@@ -397,7 +397,7 @@ export const SabhaCalendar: React.FC = () => {
             )}
 
             {!loading && !error && events.length === 0 && (
-                <p className="px-4 py-6 text-center text-xs text-gray-500">
+                <p className="px-4 py-6 text-center text-xs text-coffee-500">
                     No sabhas scheduled. Add one below — rides cannot open without it.
                 </p>
             )}
@@ -410,11 +410,11 @@ export const SabhaCalendar: React.FC = () => {
                 />
             ))}
 
-            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/60">
+            <div className="px-4 py-3 border-t border-hairline/10 bg-cream-200/60">
                 {!adding ? (
                     <button
                         onClick={() => setAdding(true)}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg text-xs font-bold hover:border-saffron hover:text-saffron-800 transition-colors"
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 border-2 border-dashed border-hairline/20 text-coffee-700 rounded-lg text-xs font-bold hover:border-saffron hover:text-saffron-800 transition-colors"
                     >
                         <Plus size={14} /> Add a sabha
                     </button>
@@ -424,24 +424,24 @@ export const SabhaCalendar: React.FC = () => {
                             type="date" value={date}
                             onChange={(e) => { setDate(e.target.value); setAddError(null); }}
                             disabled={busy}
-                            className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron"
+                            className="w-full px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                         />
                         <div className="grid grid-cols-2 gap-2">
                             <input
                                 type="time" value={start} onChange={(e) => { setStart(e.target.value); setAddError(null); }}
                                 disabled={busy}
-                                className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron"
+                                className="px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                             />
                             <input
                                 type="time" value={end} onChange={(e) => { setEnd(e.target.value); setAddError(null); }}
                                 disabled={busy}
-                                className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron"
+                                className="px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                             />
                         </div>
                         <input
                             type="text" value={agenda} onChange={(e) => setAgenda(e.target.value)}
                             placeholder="Agenda (optional)" disabled={busy}
-                            className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-saffron"
+                            className="w-full px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                         />
                         <div>
                             <AddressAutocomplete
@@ -459,13 +459,13 @@ export const SabhaCalendar: React.FC = () => {
                                 disabled={busy}
                                 placeholder="Venue — leave blank for the default"
                             />
-                            <p className="text-[10px] text-gray-400 mt-0.5">
+                            <p className="text-[10px] text-coffee-500 mt-0.5">
                                 {newVenuePlace
                                     ? `Selected — ${newVenuePlace.latitude.toFixed(5)}, ${newVenuePlace.longitude.toFixed(5)}`
                                     : `Default: ${sabhaLocation.address}`}
                             </p>
                         </div>
-                        {addError && <p className="text-xs text-red-600 font-semibold">{addError}</p>}
+                        {addError && <p className="text-xs text-[rgb(var(--danger-text))] font-semibold">{addError}</p>}
                         <div className="flex gap-2">
                             <button
                                 onClick={add} disabled={busy}
@@ -476,7 +476,7 @@ export const SabhaCalendar: React.FC = () => {
                             <button
                                 onClick={() => { setAdding(false); setAddError(null); }}
                                 disabled={busy}
-                                className="flex-1 px-2 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-bold"
+                                className="flex-1 px-2 py-1.5 border border-hairline/20 text-coffee-700 rounded-lg text-xs font-bold"
                             >
                                 Cancel
                             </button>

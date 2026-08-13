@@ -679,10 +679,59 @@ between the header and the card while it was being written.
 *Gate met:* client **374** · functions **245** · rules **81** — **700 total**.
 Typecheck **55 / 19**, down from 58 / 22. Build clean.
 
-### Phase 5 — manager
+### Phase 5 — manager ✅ **done 2026-08-12**
 
-Nav unified, Tonight merged, driver picker, mobile bulk select, Setup sectioned,
-Database Console relocated.
+**Three navigation systems became two**, as agreed. The four unlabelled toolbar
+icons are gone — among them a 🚗 meaning "fleet" and a 📍 meaning "settings"
+(finding 12). They were never controls; they were destinations, and they are now
+in the nav: **Dispatch · People · Reports · Setup · Profile**. The Request Center
+/ Live Operations segmented control **stays**, per the decision, and gains live
+counts in its labels so the number you would switch tabs to read is visible
+without switching.
+
+**"Assign" stops choosing for you** (finding 13). It ran
+`availableDrivers.find(d => d.status === 'available')` — whoever was *first in
+the array* — and never said who got the rider. A manager assigning by hand is
+doing it because they know something dispatch does not: this driver lives near
+that family, that one is about to finish. `DriverPicker` shows who is on shift,
+their car, **passenger seats free**, and runs done today, and flags a car too
+small for the party as a warning rather than a block.
+
+**Bulk select works on a phone** (finding 14, a known gap in STATUS.md since
+before this branch). Long-press a card to start selecting; swipe actions suspend
+while selecting so a sloppy tap cannot dismiss somebody.
+
+**Approvals got a screen** (finding 10). A bell icon opened a modal mixing four
+different decisions, including ride requests that duplicated the screen behind
+it. Approving someone gates access to an app holding children's names, phone
+numbers and home addresses — that is not a notification. Ride requests belong to
+Dispatch and are only there now.
+
+**Setup is five named sections** (finding 8), one open at a time, replacing a
+modal that stacked the sabha calendar, the ride window and the venue into one
+scrolling column. **The Database Console moved into it** behind a plain warning:
+it edits live records with none of the app's checks, and had no business being a
+peer tab of Friday-evening dispatch.
+
+**The colour sweep finished.** Roughly **200 hardcoded Tailwind utilities** —
+`bg-white`, `text-gray-500`, `bg-blue-100` — are gone from every component. Each
+was a fixed light value that could not follow the theme, which is what produced
+the white-box-on-dark artefacts found in Phase 3. A ratchet test now fails the
+build if a numbered palette class reappears in a `className`.
+
+`text-white` and `bg-black` are deliberately **not** covered by that ratchet:
+they sit on saturated fills and scrims where they are often correct in both
+themes, and a pattern match cannot tell a white label on a saffron button from a
+white label on a surface. Those are measured, not grepped — Phase 6.
+
+**New tests: 29.** `DriverPicker` (16), `ManagerPeople` (13), plus five for
+mobile bulk select. The old "known gap" test inverted: it used to assert that
+mobile selection did *not* exist.
+
+Hand-rolled overlays fell **8 → 5**.
+
+*Gate met:* client **407** · functions **245** · rules **81** — **733 total**.
+Typecheck **55 / 19**. Build clean.
 
 ### Phase 6 — dark pass + polish
 

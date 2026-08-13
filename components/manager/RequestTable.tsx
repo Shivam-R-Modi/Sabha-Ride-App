@@ -29,14 +29,14 @@ const SeatBadges: React.FC<{ req: StudentRequest; maxFleetSeats: number }> = ({ 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg tabular-nums ${
-        seats > 1 ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-600'
+        seats > 1 ? 'bg-cream-300 text-saffron-800' : 'bg-cream-300 text-coffee-700'
       }`}>
         <Users size={11} /> {seats}
       </span>
 
       {req.isRemainder && req.groupSeatsTotal && (
         <span
-          className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg"
+          className="text-[10px] font-bold bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))] px-2 py-1 rounded-lg"
           title={`Part of a group of ${req.groupSeatsTotal}; the rest are already with a driver.`}
         >
           {seats} of {req.groupSeatsTotal} left
@@ -45,7 +45,7 @@ const SeatBadges: React.FC<{ req: StudentRequest; maxFleetSeats: number }> = ({ 
 
       {needsSeveralCars && req.keepTogether && (
         <span
-          className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 text-red-700 px-2 py-1 rounded-lg"
+          className="inline-flex items-center gap-1 text-[10px] font-bold bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))] px-2 py-1 rounded-lg"
           title="No vehicle seats this many and the rider asked not to be split. Nobody can pick them up until a larger vehicle is registered, or they agree to travel separately."
         >
           <AlertCircle size={11} /> No car this big
@@ -54,7 +54,7 @@ const SeatBadges: React.FC<{ req: StudentRequest; maxFleetSeats: number }> = ({ 
 
       {needsSeveralCars && !req.keepTogether && !req.isRemainder && (
         <span
-          className="text-[10px] font-bold bg-amber-50 text-amber-800 px-2 py-1 rounded-lg"
+          className="text-[10px] font-bold bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))] px-2 py-1 rounded-lg"
           title={`Larger than any vehicle in the fleet (${maxFleetSeats} passenger seats), so they will travel in more than one car.`}
         >
           Needs 2 cars
@@ -118,18 +118,18 @@ export const RequestTable: React.FC<RequestTableProps> = ({
   if (requests.length === 0) return <EmptyState />;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-white">
+    <div className="flex flex-col h-full overflow-hidden bg-surface">
       {/* Sticky Filter Bar */}
-      <div className="sticky top-0 z-sticky bg-white/90 backdrop-blur-md border-b border-gray-100 p-4">
+      <div className="sticky top-0 z-sticky bg-surface/90 backdrop-blur-md border-b border-hairline/10 p-4">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative w-full sm:max-w-xs">
-            <Search className="absolute left-3 top-2.5 text-gray-500" size={18} />
+            <Search className="absolute left-3 top-2.5 text-coffee-500" size={18} />
             <input 
               type="text" 
               placeholder="Search students or locations..." 
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-saffron/20 focus:outline-none transition-all"
+              className="w-full pl-10 pr-4 py-2 bg-cream-200 border border-hairline/20 rounded-xl text-sm focus:ring-2 focus:ring-saffron/20 focus:outline-none transition-all"
             />
           </div>
           
@@ -139,7 +139,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                     <span className="text-xs font-bold text-coffee mr-2">{selectedIds.length} Selected</span>
                     <button 
                         onClick={() => onBulkAssign(selectedIds)}
-                        className="flex items-center gap-2 bg-saffron text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-orange-100 btn-feedback"
+                        className="flex items-center gap-2 bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] px-4 py-2 rounded-xl text-xs font-bold min-h-11 btn-feedback"
                     >
                         <UserPlus size={14} /> Assign Bulk
                     </button>
@@ -150,15 +150,15 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                 And it never needed to: this list comes from an onSnapshot
                 subscription, so it is already live. A refresh control implies
                 the opposite, which is worse than not having one. */}
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-green-700 uppercase tracking-widest px-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-[rgb(var(--success-text))] uppercase tracking-widest px-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--success))] animate-pulse" />
                 Live
             </div>
             <div className="md:hidden">
                 <select 
                     value={sortField}
                     onChange={(e) => setSortField(e.target.value as any)}
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-coffee focus:outline-none"
+                    className="bg-cream-200 border border-hairline/20 rounded-xl px-3 py-2 text-xs font-bold text-coffee focus:outline-none"
                 >
                     <option value="wait">Sort: Wait Time</option>
                     <option value="name">Sort: Name</option>
@@ -173,28 +173,28 @@ export const RequestTable: React.FC<RequestTableProps> = ({
         {/* Desktop View (Table) */}
         <div className="hidden md:block">
           <table className="w-full border-collapse text-left">
-            <thead className="sticky top-0 bg-gray-50 z-raised">
-              <tr className="border-b border-gray-100">
+            <thead className="sticky top-0 bg-cream-200 z-raised">
+              <tr className="border-b border-hairline/10">
                 <th className="p-4 w-12">
                   <input 
                     type="checkbox" 
                     checked={selectedIds.length === sortedRequests.length && sortedRequests.length > 0}
                     onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded border-gray-300 text-saffron focus:ring-saffron cursor-pointer" 
+                    className="w-4 h-4 rounded border-hairline/20 text-saffron focus:ring-saffron cursor-pointer" 
                   />
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('name')}>
+                <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('name')}>
                   <div className="flex items-center gap-1">Student <SortArrow field="name" /></div>
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Seats</th>
-                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest hidden lg:table-cell">Pickup Address</th>
-                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('time')}>
+                <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest">Seats</th>
+                <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest hidden lg:table-cell">Pickup Address</th>
+                <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('time')}>
                   <div className="flex items-center gap-1">Time <SortArrow field="time" /></div>
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('wait')}>
+                <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('wait')}>
                   <div className="flex items-center gap-1">Status <SortArrow field="wait" /></div>
                 </th>
-                <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-widest text-right">Actions</th>
+                <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -202,14 +202,14 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                 <React.Fragment key={req.id}>
                   <tr 
                     onClick={() => setExpandedRow(expandedRow === req.id ? null : req.id)}
-                    className={`border-b border-gray-50 hover:bg-orange-50/30 transition-colors cursor-pointer group ${selectedIds.includes(req.id) ? 'bg-orange-50/50' : ''}`}
+                    className={`border-b border-hairline/10 hover:bg-cream-300/30 transition-colors cursor-pointer group ${selectedIds.includes(req.id) ? 'bg-cream-300/50' : ''}`}
                   >
                     <td className="p-4" onClick={(e) => e.stopPropagation()}>
                        <input 
                         type="checkbox" 
                         checked={selectedIds.includes(req.id)}
                         onChange={() => toggleSelect(req.id)}
-                        className="w-4 h-4 rounded border-gray-300 text-saffron focus:ring-saffron cursor-pointer" 
+                        className="w-4 h-4 rounded border-hairline/20 text-saffron focus:ring-saffron cursor-pointer" 
                       />
                     </td>
                     <td className="p-4">
@@ -221,11 +221,11 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                     <td className="p-4">
                       <SeatBadges req={req} maxFleetSeats={maxFleetSeats} />
                     </td>
-                    <td className="p-4 hidden lg:table-cell text-xs text-gray-500 max-w-xs truncate">
+                    <td className="p-4 hidden lg:table-cell text-xs text-coffee-500 max-w-xs truncate">
                       {req.address}
                     </td>
                     <td className="p-4">
-                      <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-lg uppercase tracking-tighter">
+                      <span className="text-[10px] font-bold bg-cream-300 text-coffee-700 px-2 py-1 rounded-lg uppercase tracking-tighter">
                         {req.requestedTimeSlot}
                       </span>
                     </td>
@@ -236,14 +236,14 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                             onClick={() => onAssign(req.id)}
-                            className="p-2 bg-green-50 text-green-800 hover:bg-green-100 rounded-lg transition-colors"
+                            className="p-2 bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] hover:bg-[rgb(var(--success-bg))] rounded-lg transition-colors"
                             title="Assign to Driver"
                         >
                           <Check size={18} />
                         </button>
                         <button 
                             onClick={() => onDismiss(req.id)}
-                            className="p-2 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg transition-colors"
+                            className="p-2 bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))] hover:bg-[rgb(var(--danger-bg))] rounded-lg transition-colors"
                             title="Dismiss Request"
                         >
                           <Trash2 size={18} />
@@ -253,9 +253,9 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                   </tr>
                   {/* Tablet Expanded Address (Hidden on large desktop) */}
                   {expandedRow === req.id && (
-                    <tr className="lg:hidden bg-gray-50/50">
+                    <tr className="lg:hidden bg-cream-200/50">
                         <td colSpan={7} className="px-16 py-3">
-                            <p className="text-xs text-gray-500 flex items-center gap-2">
+                            <p className="text-xs text-coffee-500 flex items-center gap-2">
                                 <MapPin size={12} className="text-saffron" /> {req.address}
                             </p>
                         </td>
@@ -267,13 +267,21 @@ export const RequestTable: React.FC<RequestTableProps> = ({
           </table>
         </div>
 
-        {/* Mobile View (Cards) */}
+        {/* Mobile View (Cards).
+            Selection used to exist only in the desktop table above, so on a
+            phone the checkboxes and "Assign Bulk" were simply unreachable —
+            recorded as a known gap in STATUS.md. A manager triaging on a phone
+            on a Friday evening is exactly who needs to move six requests at
+            once. */}
         <div className="md:hidden p-4 space-y-4">
           {sortedRequests.map((req) => (
-             <SwipeableCard 
-                key={req.id} 
-                request={req} 
-                onAssign={() => onAssign(req.id)} 
+             <SwipeableCard
+                key={req.id}
+                request={req}
+                selected={selectedIds.includes(req.id)}
+                selectionMode={selectedIds.length > 0}
+                onToggleSelect={() => toggleSelect(req.id)}
+                onAssign={() => onAssign(req.id)}
                 onDismiss={() => onDismiss(req.id)}
              />
           ))}
@@ -285,38 +293,62 @@ export const RequestTable: React.FC<RequestTableProps> = ({
 
 const SwipeableCard: React.FC<{
     request: StudentRequest,
+    selected: boolean,
+    selectionMode: boolean,
+    onToggleSelect: () => void,
     onAssign: () => void,
     onDismiss: () => void
-}> = ({ request, onAssign, onDismiss }) => {
+}> = ({ request, selected, selectionMode, onToggleSelect, onAssign, onDismiss }) => {
     // Same fleet threshold the desktop table uses. A manager triaging on a phone
     // on a Friday evening is exactly who needs to see that a party cannot fit.
     const maxFleetSeats = useMaxFleetSeats();
     const [offset, setOffset] = useState(0);
     const [startX, setStartX] = useState(0);
 
-    const handleTouchStart = (e: React.TouchEvent) => setStartX(e.touches[0].clientX);
+    const handleTouchStart = (e: React.TouchEvent) => {
+        setStartX(e.touches[0].clientX);
+        holdTimer.current = setTimeout(onToggleSelect, 450);
+    };
     const handleTouchMove = (e: React.TouchEvent) => {
         const currentX = e.touches[0].clientX;
         const diff = currentX - startX;
+        // Any real movement means this is a swipe, not a hold.
+        if (Math.abs(diff) > 8) cancelHold();
         if (Math.abs(diff) > 20) setOffset(diff);
     };
     const handleTouchEnd = () => {
-        if (offset > 120) onAssign();
-        if (offset < -120) onDismiss();
+        cancelHold();
+        // Swipe actions are suspended while selecting — otherwise a sloppy
+        // tap-to-select dismisses somebody.
+        if (!selectionMode) {
+            if (offset > 120) onAssign();
+            if (offset < -120) onDismiss();
+        }
         setOffset(0);
     };
 
     const waitMinutes = Math.floor((Date.now() - new Date(request.requestTime).getTime()) / 60000);
     const isUrgent = waitMinutes > 30;
 
+    /**
+     * Long-press enters selection mode. Deliberately not a permanent row of
+     * checkboxes: triage is one-at-a-time most of the time, and a checkbox on
+     * every card would cost width on the screen where width is scarcest.
+     */
+    const holdTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const cancelHold = () => {
+        if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; }
+    };
+    React.useEffect(() => cancelHold, []);
+
     return (
         <div className="relative group overflow-hidden rounded-2xl">
             {/* Background Actions */}
             <div className="absolute inset-0 flex items-center justify-between px-6">
-                <div className="flex items-center gap-2 text-green-700 font-bold">
+                <div className="flex items-center gap-2 text-[rgb(var(--success-text))] font-bold">
                     <UserPlus size={24} /> <span className="text-xs">ASSIGN</span>
                 </div>
-                <div className="flex items-center gap-2 text-red-600 font-bold">
+                <div className="flex items-center gap-2 text-[rgb(var(--danger-text))] font-bold">
                     <span className="text-xs">DISMISS</span> <Trash2 size={24} />
                 </div>
             </div>
@@ -326,27 +358,41 @@ const SwipeableCard: React.FC<{
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
+                onClick={() => { if (selectionMode) onToggleSelect(); }}
                 style={{ transform: `translateX(${offset}px)` }}
-                className={`relative z-raised bg-white p-4 rounded-2xl border border-gray-100 shadow-sm transition-transform duration-200 flex items-center gap-4 ${isUrgent ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-saffron'}`}
+                className={`relative z-raised p-4 rounded-2xl border shadow-sm transition-transform
+                    duration-200 flex items-center gap-4 border-l-4
+                    ${selected ? 'bg-[rgb(var(--accent-tint-1))] border-saffron' : 'bg-surface border-hairline/10'}
+                    ${isUrgent ? 'border-l-[rgb(var(--danger))]' : 'border-l-saffron'}`}
             >
+                {selectionMode && (
+                    <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={onToggleSelect}
+                        onClick={e => e.stopPropagation()}
+                        aria-label={`Select ${request.name}`}
+                        className="w-5 h-5 shrink-0 accent-saffron"
+                    />
+                )}
                 <img src={request.avatarUrl} className="w-12 h-12 rounded-full shrink-0" alt="" />
                 <div className="min-w-0 flex-1">
                     <div className="flex justify-between items-start">
                         <h4 className="font-bold text-coffee truncate pr-2">{request.name}</h4>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isUrgent ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-800'}`}>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isUrgent ? 'bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))]' : 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]'}`}>
                             {waitMinutes}m
                         </span>
                     </div>
-                    <p className="text-xs text-gray-500 truncate mb-1">{request.address}</p>
+                    <p className="text-xs text-coffee-500 truncate mb-1">{request.address}</p>
                     <div className="flex items-center gap-3 flex-wrap">
-                         <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold uppercase">
+                         <div className="flex items-center gap-1 text-[10px] text-coffee-500 font-bold uppercase">
                             <Clock size={12} /> {request.requestedTimeSlot}
                          </div>
                          <SeatBadges req={request} maxFleetSeats={maxFleetSeats} />
                     </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                     <button onClick={onAssign} className="w-8 h-8 rounded-full bg-orange-50 text-saffron flex items-center justify-center">
+                <div className={`flex flex-col gap-2 ${selectionMode ? 'hidden' : ''}`}>
+                     <button onClick={onAssign} aria-label={`Assign ${request.name}`} className="w-8 h-8 rounded-full bg-cream-300 text-saffron-800 flex items-center justify-center">
                         <UserPlus size={16} />
                      </button>
                      {/* Was a MoreVertical (⋮) icon — the universal "open a
@@ -355,7 +401,7 @@ const SwipeableCard: React.FC<{
                      <button
                         onClick={onDismiss}
                         title="Dismiss Request"
-                        className="w-8 h-8 rounded-full bg-red-50 text-red-600 flex items-center justify-center"
+                        className="w-8 h-8 rounded-full bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))] flex items-center justify-center"
                      >
                         <Trash2 size={16} />
                      </button>
@@ -368,12 +414,12 @@ const SwipeableCard: React.FC<{
 const getWaitBadge = (time: string) => {
     const minutes = Math.floor((Date.now() - new Date(time).getTime()) / 60000);
     if (minutes > 30) return (
-        <span className="flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 px-2 py-1 rounded-full animate-pulse">
+        <span className="flex items-center gap-1 text-[10px] font-bold text-[rgb(var(--danger-text))] bg-[rgb(var(--danger-bg))] px-2 py-1 rounded-full animate-pulse">
             <AlertCircle size={12} /> {minutes}m wait
         </span>
     );
     return (
-        <span className="text-[10px] font-bold text-green-800 bg-green-50 px-2 py-1 rounded-full">
+        <span className="text-[10px] font-bold text-[rgb(var(--success-text))] bg-[rgb(var(--success-bg))] px-2 py-1 rounded-full">
             {minutes}m wait
         </span>
     );
@@ -382,18 +428,18 @@ const getWaitBadge = (time: string) => {
 const LoadingSkeleton = () => (
     <div className="p-4 space-y-4">
         {[1,2,3,4,5].map(i => (
-            <div key={i} className="h-16 bg-gray-50 rounded-2xl animate-pulse"></div>
+            <div key={i} className="h-16 bg-cream-200 rounded-2xl animate-pulse"></div>
         ))}
     </div>
 );
 
 const EmptyState = () => (
     <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-        <div className="w-24 h-24 bg-orange-50 rounded-full flex items-center justify-center mb-6 text-saffron relative">
+        <div className="w-24 h-24 bg-cream-300 rounded-full flex items-center justify-center mb-6 text-saffron relative">
             <CheckCircle size={40} className="animate-float" />
             <div className="absolute inset-0 border-4 border-dashed border-gold/20 rounded-full"></div>
         </div>
         <h3 className="text-2xl font-header font-bold text-coffee mb-2">All Caught Up!</h3>
-        <p className="text-gray-500 max-w-xs mx-auto text-sm">Every student has been assigned a ride for this week's sabha. Great job coordination!</p>
+        <p className="text-coffee-500 max-w-xs mx-auto text-sm">Every student has been assigned a ride for this week's sabha. Great job coordination!</p>
     </div>
 );

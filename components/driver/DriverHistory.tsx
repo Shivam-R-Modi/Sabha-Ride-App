@@ -64,16 +64,16 @@ export const DriverHistory: React.FC = () => {
             {/* Stats Overview Grid */}
             <div className="grid grid-cols-3 gap-3 mb-6">
                 <div className="clay-card p-4 border-l-4 border-l-saffron">
-                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Total Rides</p>
+                    <p className="text-[10px] text-coffee-500 uppercase font-bold tracking-wider">Total Rides</p>
                     <p className="text-2xl font-bold text-saffron-800">{rides.length}</p>
                 </div>
                 <div className="clay-card p-4 border-l-4 border-l-blue-500">
-                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Students Moved</p>
-                    <p className="text-2xl font-bold text-blue-600">{totalStudents}</p>
+                    <p className="text-[10px] text-coffee-500 uppercase font-bold tracking-wider">Students Moved</p>
+                    <p className="text-2xl font-bold text-[rgb(var(--info-text))]">{totalStudents}</p>
                 </div>
                 <div className="clay-card p-4 border-l-4 border-l-green-500">
-                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Total Miles</p>
-                    <p className="text-2xl font-bold text-green-700">{totalDistance.toFixed(0)}</p>
+                    <p className="text-[10px] text-coffee-500 uppercase font-bold tracking-wider">Total Miles</p>
+                    <p className="text-2xl font-bold text-[rgb(var(--success-text))]">{totalDistance.toFixed(0)}</p>
                 </div>
             </div>
 
@@ -102,25 +102,25 @@ export const DriverHistory: React.FC = () => {
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1 text-green-800 text-xs font-bold bg-green-50 px-2.5 py-1 rounded-full border border-green-100">
+                                <div className="flex items-center gap-1 text-[rgb(var(--success-text))] text-xs font-bold bg-[rgb(var(--success-bg))] px-2.5 py-1 rounded-full border border-[rgb(var(--success))]/25">
                                     <CheckCircle2 size={12} />
                                     Completed
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-4 pt-2 border-t border-gray-100 text-xs text-gray-600 mt-2">
+                            <div className="flex items-center gap-4 pt-2 border-t border-hairline/10 text-xs text-coffee-700 mt-2">
                                 <div className="flex items-center gap-1">
                                     <Users size={14} className="text-saffron" />
                                     <span>{studentCount} {studentCount === 1 ? 'student' : 'students'}</span>
                                 </div>
                                 {ride.estimatedDistance > 0 && (
                                     <div className="flex items-center gap-1">
-                                        <Navigation size={14} className="text-blue-500" />
+                                        <Navigation size={14} className="text-[rgb(var(--info-text))]" />
                                         <span>{ride.estimatedDistance.toFixed(1)} mi</span>
                                     </div>
                                 )}
                                 {ride.carModel && (
-                                    <div className="flex items-center gap-1 ml-auto text-gray-500 font-mono">
+                                    <div className="flex items-center gap-1 ml-auto text-coffee-500 font-mono">
                                         <span>{ride.carColor} {ride.carModel}</span>
                                     </div>
                                 )}

@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
 import { RequestTable } from './RequestTable';
-import { FleetManagement } from './FleetManagement';
-import { LocationSettings } from './LocationSettings';
-import { RideWindowControl } from './RideWindowControl';
-import { SabhaCalendar } from './SabhaCalendar';
 import {
   Bell,
   Car,
@@ -27,6 +23,7 @@ import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { useConfirm } from '../shared/useConfirm';
 import { useToast } from '../../contexts/ToastContext';
 import { seatsOnRide } from '../../src/constants/seats';
+import { DriverPicker } from './DriverPicker';
 
 // Grouped Ride Card Component
 const RideAssignmentCard: React.FC<{
@@ -38,16 +35,16 @@ const RideAssignmentCard: React.FC<{
   // People this driver is carrying, across all their ride documents.
   const ridePassengers = rides.reduce((n, r) => n + seatsOnRide(r), 0);
   return (
-    <div className="clay-card bg-white overflow-hidden flex flex-col h-full">
+    <div className="clay-card bg-surface overflow-hidden flex flex-col h-full">
       {/* Driver Header */}
-      <div className="p-4 bg-gradient-to-br from-cream to-white border-b border-cream-dark flex items-center gap-4">
+      <div className="p-4 bg-gradient-to-br from-cream to-white border-b border-hairline/10 flex items-center gap-4">
         <div className="relative">
           <img
             src={driver?.avatarUrl || `https://ui-avatars.com/api/?name=${driver?.name || 'Driver'}&background=FF6B35&color=fff`}
-            className="w-12 h-12 rounded-xl shadow-md border-2 border-white"
+            className="w-12 h-12 rounded-xl shadow-md border-2 border-surface"
             alt={driver?.name || 'Driver'}
           />
-          <div className="absolute -bottom-1 -right-1 bg-green-500 p-1 rounded-full border-2 border-white">
+          <div className="absolute -bottom-1 -right-1 bg-[rgb(var(--success))] p-1 rounded-full border-2 border-surface">
             <Car size={10} className="text-white" />
           </div>
         </div>
@@ -66,14 +63,14 @@ const RideAssignmentCard: React.FC<{
         {/* Action Buttons */}
         <div className="flex items-center gap-2 shrink-0 ml-auto">
           {/* Call Driver */}
-          <a href={`tel:${driver?.phone || ''}`} className="p-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors shadow-sm" title="Call Driver">
+          <a href={`tel:${driver?.phone || ''}`} className="p-2 bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] rounded-lg hover:opacity-90 transition-colors shadow-sm" title="Call Driver">
             <Phone size={18} />
           </a>
           {/* Release Driver */}
           {onRelease && (
             <button
               onClick={() => onRelease(driver.id, rides.map(r => r.id))}
-              className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors shadow-sm"
+              className="p-2 bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))] rounded-lg hover:opacity-90 transition-colors shadow-sm"
               title="Release Driver & Unassign Students"
             >
               <LogOut size={18} />
@@ -83,7 +80,7 @@ const RideAssignmentCard: React.FC<{
       </div>
 
       {/* Student List */}
-      <div className="flex-1 divide-y divide-cream-dark overflow-y-auto max-h-[400px]">
+      <div className="flex-1 divide-y divide-hairline/10 overflow-y-auto max-h-[400px]">
         {rides.map((ride, index) => (
           <div key={ride.id} className="p-3 hover:bg-cream/30 transition-colors">
             {/* Row 1: Name + Actions */}
@@ -98,11 +95,11 @@ const RideAssignmentCard: React.FC<{
               <div className="flex items-center gap-1 shrink-0">
                 {/* Call Button */}
                 {(ride.studentPhone || (ride as any).phone || (ride as any).studentContact) ? (
-                  <a href={`tel:${ride.studentPhone || (ride as any).phone || (ride as any).studentContact}`} className="p-1.5 text-green-800 hover:bg-green-50 rounded-md transition-colors" title="Call Student">
+                  <a href={`tel:${ride.studentPhone || (ride as any).phone || (ride as any).studentContact}`} className="p-1.5 text-[rgb(var(--success-text))] hover:bg-[rgb(var(--success-bg))] rounded-md transition-colors" title="Call Student">
                     <Phone size={14} />
                   </a>
                 ) : (
-                  <span className="p-1.5 text-gray-300" title="No phone number">
+                  <span className="p-1.5 text-coffee-400" title="No phone number">
                     <Phone size={14} />
                   </span>
                 )}
@@ -111,7 +108,7 @@ const RideAssignmentCard: React.FC<{
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ride.pickupAddress || '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                  className="p-1.5 text-[rgb(var(--info-text))] hover:bg-[rgb(var(--info-bg))] rounded-md transition-colors"
                   title="Navigate to Student"
                 >
                   <Navigation size={14} />
@@ -120,7 +117,7 @@ const RideAssignmentCard: React.FC<{
                 {onUnassign && (
                   <button
                     onClick={() => onUnassign(ride.id)}
-                    className="p-1.5 text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                    className="p-1.5 text-[rgb(var(--danger-text))] hover:bg-[rgb(var(--danger-bg))] rounded-md transition-colors"
                     title="Unassign Student"
                   >
                     <UserMinus size={14} />
@@ -145,7 +142,7 @@ const RideAssignmentCard: React.FC<{
       </div>
 
       {/* Footer Stats */}
-      <div className="bg-cream/50 p-2 border-t border-cream-dark flex justify-between items-center text-xs text-coffee-500">
+      <div className="bg-cream/50 p-2 border-t border-hairline/10 flex justify-between items-center text-xs text-coffee-500">
         <div className="flex items-center gap-1">
           <Users size={12} />
           {/* Seats, not ride documents. This read `rides.length`, so a driver
@@ -163,7 +160,6 @@ const RideAssignmentCard: React.FC<{
   );
 };
 
-import { DatabaseConsole } from './DatabaseConsole';
 
 // Empty State Component
 const EmptyState: React.FC<{ title: string; message: string }> = ({ title, message }) => (
@@ -178,10 +174,14 @@ const EmptyState: React.FC<{ title: string; message: string }> = ({ title, messa
 
 export const ManagerDashboard: React.FC = () => {
   const { currentUser, userProfile, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'planning' | 'dropoff' | 'database'>('planning');
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showFleetManagement, setShowFleetManagement] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  // Two tabs, not three. The Database Console moved to Setup → Raw records: it
+  // edits live documents with none of the app's checks, and had no business
+  // being a peer of Friday-evening dispatch.
+  const [activeTab, setActiveTab] = useState<'planning' | 'dropoff'>('planning');
+
+  /** The request awaiting a driver, or null. */
+  const [assigning, setAssigning] = useState<{ id: string; name: string; seats: number } | null>(null);
+  const [assigningDriverId, setAssigningDriverId] = useState<string | null>(null);
 
   // Release modal state
   const [showReleaseModal, setShowReleaseModal] = useState(false);
@@ -247,6 +247,13 @@ export const ManagerDashboard: React.FC = () => {
     return Object.values(groups);
   }, [activeRides]);
 
+  /** Seats waiting, not requests. A tab reading "7" when it is 14 people is
+      the same head-count-as-row-count mistake the seat work removed elsewhere. */
+  const waitingPeople = React.useMemo(
+    () => pendingRequests.reduce((n, r) => n + (r.seats ?? 1), 0),
+    [pendingRequests],
+  );
+
   // Weekly attendance count for download badge
   const { yesCount: attendanceYesCount, loading: attendanceCountLoading } = useWeeklyAttendanceCount();
   const [isDownloading, setIsDownloading] = useState(false);
@@ -264,12 +271,31 @@ export const ManagerDashboard: React.FC = () => {
     }
   };
 
-  const handleAssignToAnyDriver = async (requestId: string) => {
-    const available = availableDrivers.find(d => d.status === 'available');
-    if (available) {
-      await assignRideToDriver(requestId, available);
-    } else {
-      toast.error('No driver is available right now. Ask someone to go on shift.');
+  /**
+   * Opens the picker. It used to take `availableDrivers.find(...)` — whoever
+   * was first in the array — and never say who got the rider.
+   */
+  const handleAssignRequest = (requestId: string) => {
+    const request = pendingRequests.find(r => r.id === requestId);
+    setAssigning({
+      id: requestId,
+      name: request?.name ?? 'this rider',
+      seats: request?.seats ?? 1,
+    });
+  };
+
+  const handlePickDriver = async (driver: Driver) => {
+    if (!assigning) return;
+    setAssigningDriverId(driver.id);
+    try {
+      await assignRideToDriver(assigning.id, driver);
+      toast.success(`${assigning.name} assigned to ${driver.name}.`);
+      setAssigning(null);
+    } catch (error) {
+      console.error('Failed to assign:', error);
+      toast.error(error instanceof Error ? error.message : 'Could not assign that rider.');
+    } finally {
+      setAssigningDriverId(null);
     }
   };
 
@@ -447,76 +473,34 @@ export const ManagerDashboard: React.FC = () => {
   };
 
   return (
-    <div className="app-panel flex flex-col bg-gray-50 relative overflow-hidden">
-      {/* Top Control Bar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shadow-sm z-sticky shrink-0 pt-safe lg:pt-2">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="bg-gray-100 p-1 rounded-lg flex gap-1 min-w-0 overflow-x-auto no-scrollbar">
-            <button
-              onClick={() => setActiveTab('planning')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'planning' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600 hover:text-coffee'}`}
-            >
-              Request Center
-            </button>
-            <button
-              onClick={() => setActiveTab('dropoff')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'dropoff' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600 hover:text-coffee'}`}
-            >
-              Live Operations
-            </button>
-            <button
-              onClick={() => setActiveTab('database')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all shrink-0 whitespace-nowrap ${activeTab === 'database' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600 hover:text-coffee'}`}
-            >
-              Database Console
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
+    <div className="app-panel flex flex-col bg-cream relative overflow-hidden">
+      {/* Two tabs, and the counts you would otherwise switch tabs to read.
+          The merge into a single "Tonight" screen was declined deliberately —
+          this is the cheap way to cut the toggling. */}
+      <div className="glass-chrome border-b border-hairline/10 px-4 py-2 shrink-0 pt-safe lg:pt-2 z-sticky">
+        <div className="bg-cream-300/60 p-1 rounded-xl flex gap-1 max-w-md">
           <button
-            onClick={() => setShowFleetManagement(true)}
-            className="tap-target p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
-            title="Fleet Management"
+            onClick={() => setActiveTab('planning')}
+            aria-current={activeTab === 'planning' ? 'page' : undefined}
+            className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold transition-all min-h-11
+              ${activeTab === 'planning'
+                ? 'bg-surface text-coffee shadow-sm'
+                : 'text-coffee-500 hover:text-coffee'}`}
           >
-            <Car size={20} />
-          </button>
-
-          {/* Settings Button */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="tap-target p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors border border-transparent hover:border-gray-200"
-            title="Settings"
-          >
-            <MapPin size={20} />
-          </button>
-
-          {/* Weekly Attendance Download Button */}
-          <button
-            onClick={handleDownloadAttendance}
-            disabled={isDownloading}
-            className={`tap-target p-2 rounded-lg relative transition-colors ${isDownloading ? 'bg-gray-100 cursor-wait' : 'text-gray-500 hover:bg-gray-100'} border border-transparent hover:border-gray-200`}
-            title="Download Weekly Attendance CSV"
-          >
-            <Download size={20} className={isDownloading ? 'animate-pulse' : ''} />
-            {!attendanceCountLoading && attendanceYesCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-700 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold">
-                {attendanceYesCount > 99 ? '99+' : attendanceYesCount}
-              </span>
+            Waiting · {pendingRequests.length}
+            {waitingPeople !== pendingRequests.length && (
+              <span className="font-medium"> ({waitingPeople} people)</span>
             )}
           </button>
-
           <button
-            onClick={() => setShowNotifications(true)}
-            className={`tap-target p-2 rounded-lg relative transition-colors ${showNotifications ? 'bg-orange-100 text-saffron' : 'text-gray-500 hover:bg-gray-100'}`}
-            title="Notifications"
+            onClick={() => setActiveTab('dropoff')}
+            aria-current={activeTab === 'dropoff' ? 'page' : undefined}
+            className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold transition-all min-h-11
+              ${activeTab === 'dropoff'
+                ? 'bg-surface text-coffee shadow-sm'
+                : 'text-coffee-500 hover:text-coffee'}`}
           >
-            <Bell size={20} />
-            {(pendingDrivers.length > 0 || pendingRiders.length > 0 || pendingRequests.length > 0) && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold animate-pulse">
-                {pendingDrivers.length + pendingRiders.length + pendingRequests.length}
-              </span>
-            )}
+            Out now · {groupedRides.length} {groupedRides.length === 1 ? 'car' : 'cars'}
           </button>
         </div>
       </div>
@@ -529,17 +513,10 @@ export const ManagerDashboard: React.FC = () => {
             <RequestTable
               requests={pendingRequests}
               loading={requestsLoading}
-              onAssign={handleAssignToAnyDriver}
+              onAssign={handleAssignRequest}
               onDismiss={handleDismiss}
               onBulkAssign={handleBulkAssign}
             />
-          </div>
-        ) : activeTab === 'database' ? (
-          /* Database Management Console View */
-          <div className="h-full overflow-y-auto p-4 sm:p-6">
-            <div className="max-w-7xl mx-auto">
-              <DatabaseConsole />
-            </div>
           </div>
         ) : (
           /* Live Operations View */
@@ -548,7 +525,7 @@ export const ManagerDashboard: React.FC = () => {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="font-header font-bold text-2xl text-coffee">Active Rides</h2>
-                  <p className="text-gray-500 text-sm">Who is driving whom, and where each ride has got to</p>
+                  <p className="text-coffee-500 text-sm">Who is driving whom, and where each ride has got to</p>
                 </div>
                 {/* Said "Auto-Dispatch Active", with a pulsing green dot, while
                     the browser dispatcher it referred to has been disabled
@@ -556,9 +533,9 @@ export const ManagerDashboard: React.FC = () => {
                     work, and repairing it would have been worse than removing
                     it). Assignment is driver-pull today; server-side dispatch
                     is Phase 4. The badge now says what is true. */}
-                <div className="bg-white border border-blue-200 text-blue-700 inline-flex items-center gap-2 px-3 py-1.5 rounded-full shadow-sm">
+                <div className="bg-surface border border-[rgb(var(--info))]/40 text-[rgb(var(--info-text))] inline-flex items-center gap-2 px-3 py-1.5 rounded-full shadow-sm">
                   <span className="relative flex h-2.5 w-2.5">
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[rgb(var(--info))]"></span>
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-widest">Drivers Self-Assign</span>
                 </div>
@@ -605,207 +582,10 @@ export const ManagerDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Notifications Panel */}
-      {showNotifications && (
-        <div className="fixed inset-0 bg-black/50 z-modal flex items-end sm:items-center justify-center p-4">
-          <div className="bg-white sm:rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden animate-in slide-in-from-bottom duration-300">
-            {/* Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-              <h3 className="font-header font-bold text-lg text-coffee">
-                Pending Approvals
-              </h3>
-              <button
-                onClick={() => setShowNotifications(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-
-            {/* Notifications List */}
-            <div className="overflow-y-auto max-h-[calc(80vh-80px)] p-4 space-y-4">
-              {/* Pending Drivers Section */}
-              {pendingDrivers.length > 0 && (
-                <>
-                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                    Driver Approvals ({pendingDrivers.length})
-                  </h4>
-                  {pendingDrivers.map((driver) => (
-                    <div key={driver.id} className="flex items-center gap-4 p-4 bg-cream rounded-xl border border-mocha/10">
-                      <img
-                        src={driver.avatarUrl || `https://ui-avatars.com/api/?name=${driver.name}&background=random`}
-                        alt={driver.name}
-                        className="w-12 h-12 rounded-xl"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-coffee">{driver.name}</h4>
-                        <p className="text-sm text-coffee-500 truncate">{driver.phone || 'No phone'}</p>
-                        <p className="text-xs text-coffee-500 mt-1">
-                          {driver.carModel || 'No vehicle'}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleDenyDriver(driver.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
-                        >
-                          <X size={14} />
-                          Deny
-                        </button>
-                        <button
-                          onClick={() => handleApproveDriver(driver.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors"
-                        >
-                          <CheckCircle2 size={14} />
-                          Approve
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* Pending Riders Section */}
-              {pendingRiders.length > 0 && (
-                <>
-                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                    Rider Approvals ({pendingRiders.length})
-                  </h4>
-                  {pendingRiders.map((rider) => (
-                    <div key={rider.id} className="flex items-center gap-4 p-4 bg-cream rounded-xl border border-mocha/10">
-                      <img
-                        src={rider.avatarUrl || `https://ui-avatars.com/api/?name=${rider.name}&background=random`}
-                        alt={rider.name}
-                        className="w-12 h-12 rounded-xl"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-coffee">{rider.name}</h4>
-                        <p className="text-sm text-coffee-500 truncate">{rider.phone || rider.email || 'No contact info'}</p>
-                        <p className="text-xs text-coffee-500 mt-1 truncate">
-                          {rider.address || 'No address set'}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleDenyRider(rider.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
-                        >
-                          <X size={14} />
-                          Deny
-                        </button>
-                        <button
-                          onClick={() => handleApproveRider(rider.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors"
-                        >
-                          <CheckCircle2 size={14} />
-                          Approve
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* Pending Student Requests Section */}
-              {pendingRequests.length > 0 && (
-                <>
-                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                    Ride Requests ({pendingRequests.length})
-                  </h4>
-                  {pendingRequests.map((request) => (
-                    <div key={request.id} className="flex items-center gap-4 p-4 bg-cream rounded-xl border border-mocha/10">
-                      <img
-                        src={request.avatarUrl || `https://ui-avatars.com/api/?name=${request.name}&background=random`}
-                        alt={request.name}
-                        className="w-12 h-12 rounded-xl"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-coffee">{request.name}</h4>
-                        <p className="text-sm text-coffee-500 truncate">{request.address || 'Loading...'}</p>
-                        <p className="text-xs text-coffee-500 mt-1 flex items-center gap-1">
-                          <Clock size={12} />
-                          {request.requestedTimeSlot || 'Time TBD'}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleDismiss(request.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 border border-red-200 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-50 transition-colors"
-                        >
-                          <X size={14} />
-                          Dismiss
-                        </button>
-                        <button
-                          onClick={() => handleAssignToAnyDriver(request.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-saffron text-white rounded-lg text-xs font-semibold hover:bg-saffron/90 transition-colors"
-                        >
-                          <Car size={14} />
-                          Assign
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* Empty State */}
-              {pendingDrivers.length === 0 && pendingRiders.length === 0 && pendingRequests.length === 0 && (
-                <div className="text-center py-8">
-                  <CheckCircle2 size={40} className="mx-auto text-green-500 mb-3" />
-                  <p className="text-coffee-500">No pending approvals</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Fleet Management Modal */}
-      {showFleetManagement && (
-        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in zoom-in duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="font-header font-bold text-xl text-coffee">Fleet Management</h2>
-              <button
-                onClick={() => setShowFleetManagement(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-            <div className="overflow-y-auto max-h-[calc(90vh-80px)]">
-              <FleetManagement />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Location Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden animate-in zoom-in duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="font-header font-bold text-xl text-coffee">Settings</h2>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-            <div className="overflow-y-auto max-h-[calc(90vh-80px)] p-4">
-              <SabhaCalendar />
-              <RideWindowControl />
-              <LocationSettings />
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Release Driver Choice Modal */}
       {showReleaseModal && pendingReleaseDriver && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in duration-200">
+          <div className="bg-surface rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in duration-200">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-header font-bold text-xl text-coffee">Release Driver</h2>
@@ -814,10 +594,10 @@ export const ManagerDashboard: React.FC = () => {
                     setShowReleaseModal(false);
                     setPendingReleaseDriver(null);
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 hover:bg-cream-300 rounded-full transition-colors"
                   disabled={releaseLoading}
                 >
-                  <X size={20} className="text-gray-500" />
+                  <X size={20} className="text-coffee-500" />
                 </button>
               </div>
 
@@ -830,15 +610,15 @@ export const ManagerDashboard: React.FC = () => {
                 <button
                   onClick={handleSoftRelease}
                   disabled={releaseLoading}
-                  className="w-full p-4 bg-blue-50 hover:bg-blue-100 border-2 border-blue-200 rounded-xl text-left transition-all disabled:opacity-50"
+                  className="w-full p-4 bg-[rgb(var(--info-bg))] hover:bg-[rgb(var(--info-bg))] border-2 border-[rgb(var(--info))]/40 rounded-xl text-left transition-all disabled:opacity-50"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Users size={20} className="text-blue-600" />
+                    <div className="p-2 bg-[rgb(var(--info-bg))] rounded-lg">
+                      <Users size={20} className="text-[rgb(var(--info-text))]" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-blue-900">Clear Students (Keep Online)</h3>
-                      <p className="text-sm text-blue-700/70">Returns students to pool. Driver stays available for new assignments.</p>
+                      <h3 className="font-bold text-[rgb(var(--info-text))]">Clear Students (Keep Online)</h3>
+                      <p className="text-sm text-[rgb(var(--info-text))]/70">Returns students to pool. Driver stays available for new assignments.</p>
                     </div>
                   </div>
                 </button>
@@ -847,15 +627,15 @@ export const ManagerDashboard: React.FC = () => {
                 <button
                   onClick={handleHardRelease}
                   disabled={releaseLoading}
-                  className="w-full p-4 bg-red-50 hover:bg-red-100 border-2 border-red-200 rounded-xl text-left transition-all disabled:opacity-50"
+                  className="w-full p-4 bg-[rgb(var(--danger-bg))] hover:bg-[rgb(var(--danger-bg))] border-2 border-[rgb(var(--danger))]/40 rounded-xl text-left transition-all disabled:opacity-50"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-red-100 rounded-lg">
-                      <LogOut size={20} className="text-red-600" />
+                    <div className="p-2 bg-[rgb(var(--danger-bg))] rounded-lg">
+                      <LogOut size={20} className="text-[rgb(var(--danger-text))]" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-red-900">Full Checkout (Go Offline)</h3>
-                      <p className="text-sm text-red-700/70">Returns students, releases vehicle, sets driver offline.</p>
+                      <h3 className="font-bold text-[rgb(var(--danger-text))]">Full Checkout (Go Offline)</h3>
+                      <p className="text-sm text-[rgb(var(--danger-text))]/70">Returns students, releases vehicle, sets driver offline.</p>
                     </div>
                   </div>
                 </button>
@@ -871,6 +651,17 @@ export const ManagerDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      <DriverPicker
+        open={assigning !== null}
+        onClose={() => setAssigning(null)}
+        riderName={assigning?.name}
+        seats={assigning?.seats ?? 1}
+        drivers={availableDrivers}
+        loading={driversLoading}
+        assigningId={assigningDriverId}
+        onPick={handlePickDriver}
+      />
 
       {confirmDialog}
     </div>

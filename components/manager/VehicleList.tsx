@@ -11,19 +11,19 @@ interface VehicleListProps {
 
 const statusColors: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
     'available': {
-        bg: 'bg-green-50',
-        text: 'text-green-700',
-        icon: <CheckCircle2 size={14} className="text-green-500" />
+        bg: 'bg-[rgb(var(--success-bg))]',
+        text: 'text-[rgb(var(--success-text))]',
+        icon: <CheckCircle2 size={14} className="text-[rgb(var(--success-text))]" />
     },
     'in_use': {
-        bg: 'bg-blue-50',
-        text: 'text-blue-700',
-        icon: <Car size={14} className="text-blue-500" />
+        bg: 'bg-[rgb(var(--info-bg))]',
+        text: 'text-[rgb(var(--info-text))]',
+        icon: <Car size={14} className="text-[rgb(var(--info-text))]" />
     },
     'maintenance': {
-        bg: 'bg-red-50',
-        text: 'text-red-700',
-        icon: <AlertCircle size={14} className="text-red-600" />
+        bg: 'bg-[rgb(var(--danger-bg))]',
+        text: 'text-[rgb(var(--danger-text))]',
+        icon: <AlertCircle size={14} className="text-[rgb(var(--danger-text))]" />
     }
 };
 
@@ -108,7 +108,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, loading, onE
                                     </div>
 
                                     {vehicle.currentDriverName && (
-                                        <p className="text-xs text-blue-600 mt-1">
+                                        <p className="text-xs text-[rgb(var(--info-text))] mt-1">
                                             Assigned to: {vehicle.currentDriverName}
                                         </p>
                                     )}
@@ -126,7 +126,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({ vehicles, loading, onE
                                 </button>
                                 <button
                                     onClick={() => onDelete(vehicle)}
-                                    className="p-2 hover:bg-red-50 rounded-lg transition-colors text-mocha hover:text-red-700"
+                                    className="p-2 hover:bg-[rgb(var(--danger-bg))] rounded-lg transition-colors text-mocha hover:text-[rgb(var(--danger-text))]"
                                     title="Delete vehicle"
                                 >
                                     <Trash2 size={18} />

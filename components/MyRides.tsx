@@ -21,32 +21,32 @@ const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHisto
   <div className="clay-card flex flex-col gap-3">
     <div className="flex justify-between items-start">
       <div className="flex gap-3">
-        <div className="bg-orange-50 w-12 h-12 rounded-lg flex flex-col items-center justify-center text-saffron-800 shrink-0">
+        <div className="bg-cream-300 w-12 h-12 rounded-lg flex flex-col items-center justify-center text-saffron-800 shrink-0">
           <span className="text-xs font-bold uppercase">{new Date(ride.date).toLocaleDateString('en-US', { month: 'short' })}</span>
           <span className="text-lg font-bold leading-none">{new Date(ride.date).getDate()}</span>
         </div>
         <div>
           <h4 className="font-medium text-coffee">Weekly Sabha</h4>
-          <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+          <div className="flex items-center gap-1 text-xs text-coffee-500 mt-0.5">
             <Clock size={12} />
             <span>{ride.timeSlot}</span>
           </div>
         </div>
       </div>
-      <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${ride.status === 'completed' ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-green-700'
+      <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${ride.status === 'completed' ? 'bg-cream-300 text-coffee-500' : 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]'
         }`}>
         {ride.status.replace('_', ' ')}
       </div>
     </div>
 
-    <div className="w-full h-px bg-gray-100"></div>
+    <div className="w-full h-px bg-cream-300"></div>
 
     <div className="flex justify-between items-center">
       <div className="flex items-center gap-2">
         {ride.driver && (
           <>
             <img src={ride.driver.avatarUrl} className="w-6 h-6 rounded-full" alt="Driver" />
-            <span className="text-xs text-gray-600">{ride.driver.name}</span>
+            <span className="text-xs text-coffee-700">{ride.driver.name}</span>
           </>
         )}
       </div>
@@ -60,7 +60,7 @@ const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHisto
     </div>
 
     {expanded && (
-      <div className="border-t border-gray-100 pt-3 space-y-2 text-xs text-gray-600">
+      <div className="border-t border-hairline/10 pt-3 space-y-2 text-xs text-coffee-700">
         <div className="flex items-start gap-2">
           <MapPin size={12} className="mt-0.5 shrink-0 text-saffron" />
           <span>{ride.pickupAddress || 'No pickup address recorded'}</span>
@@ -95,17 +95,17 @@ export const MyRides: React.FC<MyRidesProps> = ({
 
       {/* Tabs */}
       <div className="px-4">
-        <div className="bg-gray-100 p-1 rounded-xl flex">
+        <div className="bg-cream-300 p-1 rounded-xl flex">
           <button
             onClick={() => setActiveTab('upcoming')}
-            className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all ${activeTab === 'upcoming' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600'
+            className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all ${activeTab === 'upcoming' ? 'bg-surface text-coffee shadow-sm' : 'text-coffee-700'
               }`}
           >
             Upcoming
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all ${activeTab === 'history' ? 'bg-white text-coffee shadow-sm' : 'text-gray-600'
+            className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all ${activeTab === 'history' ? 'bg-surface text-coffee shadow-sm' : 'text-coffee-700'
               }`}
           >
             History
@@ -119,12 +119,12 @@ export const MyRides: React.FC<MyRidesProps> = ({
           upcoming.length > 0 ? (
             upcoming.map(ride => <RideCard key={ride.id} ride={ride} />)
           ) : (
-            <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-200">
-              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-300">
+            <div className="text-center py-12 bg-surface rounded-xl border border-dashed border-hairline/20">
+              <div className="w-12 h-12 bg-cream-200 rounded-full flex items-center justify-center mx-auto mb-3 text-coffee-400">
                 <Calendar size={24} />
               </div>
-              <p className="text-gray-500 font-medium">No upcoming rides</p>
-              <p className="text-xs text-gray-500 mt-1">Request a pickup from the home screen</p>
+              <p className="text-coffee-500 font-medium">No upcoming rides</p>
+              <p className="text-xs text-coffee-500 mt-1">Request a pickup from the home screen</p>
             </div>
           )
         ) : (
@@ -138,7 +138,7 @@ export const MyRides: React.FC<MyRidesProps> = ({
                   <button
                     onClick={onLoadMore}
                     disabled={loadingMore}
-                    className="w-full py-3 bg-white border border-gray-200 rounded-xl text-sm font-medium text-coffee hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-surface border border-hairline/20 rounded-xl text-sm font-medium text-coffee hover:bg-cream-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {loadingMore ? (
                       <>
@@ -152,12 +152,12 @@ export const MyRides: React.FC<MyRidesProps> = ({
                 )}
               </>
             ) : (
-              <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-200">
-                <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-300">
+              <div className="text-center py-12 bg-surface rounded-xl border border-dashed border-hairline/20">
+                <div className="w-12 h-12 bg-cream-200 rounded-full flex items-center justify-center mx-auto mb-3 text-coffee-400">
                   <Calendar size={24} />
                 </div>
-                <p className="text-gray-500 font-medium">No ride history</p>
-                <p className="text-xs text-gray-500 mt-1">Your completed rides will appear here</p>
+                <p className="text-coffee-500 font-medium">No ride history</p>
+                <p className="text-xs text-coffee-500 mt-1">Your completed rides will appear here</p>
               </div>
             )}
           </>

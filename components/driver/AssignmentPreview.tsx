@@ -114,7 +114,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
     return (
         <div className="min-h-screen pb-safe bg-gradient-to-br from-[#FAF9F6] to-[#F5F0E8]">
             {/* Header */}
-            <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-orange-100 sticky top-0 z-sticky">
+            <div className="bg-[rgb(var(--surface)/0.8)] backdrop-blur-md shadow-sm border-b border-hairline/10 sticky top-0 z-sticky">
                 <div className="p-4">
                     <button
                         onClick={onBack}
@@ -124,7 +124,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                     </button>
 
                     <div className="text-center">
-                        <span className="inline-block px-3 py-1 bg-orange-100 text-orange-700 text-xs font-bold uppercase tracking-wider rounded-full mb-2">
+                        <span className="inline-block px-3 py-1 bg-cream-300 text-saffron-800 text-xs font-bold uppercase tracking-wider rounded-full mb-2">
                             Assignment Preview
                         </span>
                         <h1 className="text-3xl font-bold text-coffee">
@@ -137,14 +137,14 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
             <div className="px-4 py-6 space-y-6 max-w-lg mx-auto">
                 {/* Error Display */}
                 {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-                        <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={18} />
-                        <p className="text-red-600 text-sm">{error}</p>
+                    <div className="bg-[rgb(var(--danger-bg))] border border-[rgb(var(--danger))]/40 rounded-xl p-4 flex items-start gap-3">
+                        <AlertCircle className="text-[rgb(var(--danger-text))] shrink-0 mt-0.5" size={18} />
+                        <p className="text-[rgb(var(--danger-text))] text-sm">{error}</p>
                     </div>
                 )}
 
                 {/* Route Type Card */}
-                <div className="clay-card bg-gradient-to-r from-orange-50 to-amber-50 border-orange-100">
+                <div className="clay-card bg-gradient-to-r from-cream-300 to-cream-300 border-hairline/10">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-full bg-saffron/20 flex items-center justify-center">
@@ -155,32 +155,32 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                                 )}
                             </div>
                             <div>
-                                <p className="text-xs text-gray-500 uppercase tracking-wider">Route Type</p>
+                                <p className="text-xs text-coffee-500 uppercase tracking-wider">Route Type</p>
                                 <p className="text-lg font-bold text-coffee">
                                     {rideType === 'home-to-sabha' ? 'Home → Sabha' : 'Sabha → Home'}
                                 </p>
                             </div>
                         </div>
                         <div className="text-right">
-                            <p className="text-xs text-gray-500 uppercase tracking-wider">Seats</p>
+                            <p className="text-xs text-coffee-500 uppercase tracking-wider">Seats</p>
                             <p className="text-2xl font-bold text-saffron-800">
-                                {seatsTaken}<span className="text-gray-500 text-lg">/{passengerSeats}</span>
+                                {seatsTaken}<span className="text-coffee-500 text-lg">/{passengerSeats}</span>
                             </p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-orange-200/50">
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-hairline/20/50">
                         <div className="flex items-center gap-2">
                             <Navigation size={16} className="text-saffron" />
                             <div>
-                                <p className="text-xs text-gray-500">Distance</p>
+                                <p className="text-xs text-coffee-500">Distance</p>
                                 <p className="font-bold text-coffee">{assignment.estimatedDistance.toFixed(1)} mi</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <Clock size={16} className="text-saffron" />
                             <div>
-                                <p className="text-xs text-gray-500">Est. Time</p>
+                                <p className="text-xs text-coffee-500">Est. Time</p>
                                 <p className="font-bold text-coffee">{assignment.estimatedTime} min</p>
                             </div>
                         </div>
@@ -190,15 +190,15 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                 {/* Vehicle Card */}
                 <div className="clay-card">
                     <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                            <Car size={20} className="text-blue-600" />
+                        <div className="w-10 h-10 rounded-full bg-[rgb(var(--info-bg))] flex items-center justify-center">
+                            <Car size={20} className="text-[rgb(var(--info-text))]" />
                         </div>
                         <div>
-                            <p className="text-xs text-gray-500 uppercase tracking-wider">Assigned Vehicle</p>
+                            <p className="text-xs text-coffee-500 uppercase tracking-wider">Assigned Vehicle</p>
                             <p className="font-bold text-coffee">{assignment.car.model} ({assignment.car.color})</p>
                         </div>
                     </div>
-                    <div className="flex items-center justify-between text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between text-sm text-coffee-700 bg-cream-200 rounded-lg p-3">
                         <span>License Plate</span>
                         <span className="font-mono font-bold text-coffee">{assignment.car.licensePlate}</span>
                     </div>
@@ -209,9 +209,9 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                     complete and there is nothing else on this screen to suggest
                     people are being left behind. */}
                 {splitStops.length > 0 && (
-                    <div className="clay-card border-l-4 border-l-amber-500 bg-amber-50/60">
+                    <div className="clay-card border-l-4 border-l-[rgb(var(--warning))] bg-[rgb(var(--warning-bg))]/60">
                         <div className="flex items-start gap-3">
-                            <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                            <AlertCircle size={20} className="text-[rgb(var(--warning-text))] shrink-0 mt-0.5" />
                             <div className="text-sm text-coffee">
                                 <p className="font-bold">Another car is coming to {splitStops.length === 1 ? 'one of these stops' : 'some of these stops'}.</p>
                                 {splitStops.map(s => (
@@ -227,14 +227,14 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
 
                 {/* Students List */}
                 <div>
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    <h3 className="text-sm font-bold text-coffee-500 uppercase tracking-wider mb-3">
                         Stops ({assignment.students.length}) &middot; {seatsTaken} {seatsTaken === 1 ? 'person' : 'people'}
                     </h3>
                     <div className="space-y-3">
                         {assignment.students.map((student, idx) => (
                             <div key={student.id} className="clay-card p-4">
                                 <div className="flex items-start gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-saffron to-orange-400 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-saffron to-saffron-light flex items-center justify-center text-white font-bold text-sm shrink-0">
                                         {idx + 1}
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -244,14 +244,14 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                                                 is more than one, so a single rider's card is
                                                 unchanged. */}
                                             {seatsOf({ seatsRequested: student.seats }) > 1 && (
-                                                <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold bg-orange-100 text-orange-800 px-2 py-1 rounded-lg tabular-nums">
+                                                <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold bg-cream-300 text-saffron-800 px-2 py-1 rounded-lg tabular-nums">
                                                     <Users size={11} />
                                                     {seatsOf({ seatsRequested: student.seats })}
                                                     {student.groupSeats ? ` of ${student.groupSeats}` : ''}
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-sm text-gray-500 flex items-start gap-1 mt-1">
+                                        <p className="text-sm text-coffee-500 flex items-start gap-1 mt-1">
                                             <MapPin size={12} className="mt-0.5 shrink-0" />
                                             <span className="truncate">
                                                 {student.location?.address || 'Address not available'}
@@ -266,19 +266,19 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
 
                 {/* Route Preview */}
                 <div className="clay-card p-4">
-                    <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Route Preview</h4>
+                    <h4 className="text-sm font-bold text-coffee-500 uppercase tracking-wider mb-3">Route Preview</h4>
                     <div className="space-y-2">
                         {assignment.route.map((waypoint, idx) => (
                             <div key={`${waypoint.type}-${idx}`} className="flex items-center gap-3">
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${waypoint.type === 'start' ? 'bg-gray-200 text-gray-600' :
-                                    waypoint.type === 'end' ? 'bg-gray-200 text-gray-600' :
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${waypoint.type === 'start' ? 'bg-cream-400 text-coffee-700' :
+                                    waypoint.type === 'end' ? 'bg-cream-400 text-coffee-700' :
                                         'bg-saffron/20 text-saffron'
                                     }`}>
                                     {waypoint.type === 'start' ? 'S' :
                                         waypoint.type === 'end' ? 'E' :
                                             idx}
                                 </div>
-                                <span className={`flex-1 text-sm truncate ${waypoint.type === 'start' || waypoint.type === 'end' ? 'text-gray-500' : 'text-coffee'
+                                <span className={`flex-1 text-sm truncate ${waypoint.type === 'start' || waypoint.type === 'end' ? 'text-coffee-500' : 'text-coffee'
                                     }`}>
                                     {waypoint.name}
                                 </span>
@@ -289,8 +289,8 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                         onClick={() => openGoogleMaps(mapsUrl)}
                         disabled={!mapsUrl}
                         className={`w-full mt-4 py-2 text-sm font-medium flex items-center justify-center gap-2 rounded-lg transition-colors ${mapsUrl
-                            ? 'text-saffron-800 hover:bg-orange-50'
-                            : 'text-gray-400 cursor-not-allowed'
+                            ? 'text-saffron-800 hover:bg-cream-300'
+                            : 'text-coffee-500 cursor-not-allowed'
                             }`}
                     >
                         <Navigation size={14} />

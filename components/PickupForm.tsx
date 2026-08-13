@@ -100,7 +100,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[50vh] p-8 text-center animate-in zoom-in duration-300">
         <div className="relative mb-6">
-          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center text-green-700">
+          <div className="w-24 h-24 bg-[rgb(var(--success-bg))] rounded-full flex items-center justify-center text-[rgb(var(--success-text))]">
             <svg className="w-16 h-16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
               <path className="success-draw" d="M5 13l4 4L19 7" />
             </svg>
@@ -110,7 +110,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
           </div>
         </div>
         <h3 className="text-2xl font-header font-bold text-coffee mb-2">Seva Registered!</h3>
-        <p className="text-gray-500 max-w-xs mx-auto">
+        <p className="text-coffee-500 max-w-xs mx-auto">
           Jai Swaminarayan! {seats > 1
             ? `Your ride for ${seats} people has been requested.`
             : 'Your ride for the next sabha has been requested.'}
@@ -130,7 +130,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
   const body = (
     <div className={embedded ? 'space-y-6' : 'p-8 space-y-6'}>
         {error && (
-          <div className="bg-red-50 text-red-700 p-4 rounded-2xl text-sm flex items-center gap-3 border border-red-100">
+          <div className="bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))] p-4 rounded-2xl text-sm flex items-center gap-3 border border-[rgb(var(--danger))]/25">
             <AlertCircle size={20} /> {error}
           </div>
         )}
@@ -143,13 +143,13 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
           <p className="text-xs text-coffee-500">{venueAddress}</p>
         </div>
 
-        <div className="bg-cream/50 rounded-2xl p-5 border border-orange-50 space-y-3">
+        <div className="bg-cream/50 rounded-2xl p-5 border border-hairline/10 space-y-3">
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-white rounded-lg shadow-sm">
+            <div className="p-2 bg-surface rounded-lg shadow-sm">
               <MapPin size={18} className="text-saffron" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Pickup From</p>
+              <p className="text-[10px] font-bold text-coffee-500 uppercase tracking-wider">Pickup From</p>
               <p className="text-sm font-medium text-coffee leading-tight">{user.address}</p>
             </div>
           </div>
@@ -158,14 +158,14 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
         {/* How many seats. A stepper rather than a text field: the value is a
             small count, and typing invites the 0 and the "two" that a number
             input happily accepts. */}
-        <div className="bg-cream/50 rounded-2xl p-5 border border-orange-50 space-y-4">
+        <div className="bg-cream/50 rounded-2xl p-5 border border-hairline/10 space-y-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-white rounded-lg shadow-sm">
+              <div className="p-2 bg-surface rounded-lg shadow-sm">
                 <Users size={18} className="text-saffron" />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">How many of you?</p>
+                <p className="text-[10px] font-bold text-coffee-500 uppercase tracking-wider">How many of you?</p>
                 <p className="text-sm font-medium text-coffee leading-tight">Include yourself</p>
               </div>
             </div>
@@ -176,7 +176,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
                 onClick={() => setSeats(s => Math.max(MIN_SEATS, s - 1))}
                 disabled={seats <= MIN_SEATS}
                 aria-label="One fewer person"
-                className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-coffee disabled:opacity-30 btn-feedback"
+                className="w-11 h-11 rounded-full bg-surface shadow-sm flex items-center justify-center text-coffee disabled:opacity-30 btn-feedback"
               >
                 <Minus size={18} />
               </button>
@@ -191,7 +191,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
                 onClick={() => setSeats(s => Math.min(MAX_SEATS, s + 1))}
                 disabled={seats >= MAX_SEATS}
                 aria-label="One more person"
-                className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-coffee disabled:opacity-30 btn-feedback"
+                className="w-11 h-11 rounded-full bg-surface shadow-sm flex items-center justify-center text-coffee disabled:opacity-30 btn-feedback"
               >
                 <Plus size={18} />
               </button>
@@ -244,8 +244,8 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
 
   return (
     <div className="clay-card clay-card-lg overflow-hidden mx-4 mt-8">
-      <div className="bg-gradient-to-r from-orange-50 to-cream p-4 border-b border-orange-100 flex items-center justify-between">
-        <button onClick={onClose} className="p-2 hover:bg-orange-100/50 rounded-full transition-colors text-coffee btn-feedback">
+      <div className="bg-gradient-to-r from-cream-300 to-cream p-4 border-b border-hairline/10 flex items-center justify-between">
+        <button onClick={onClose} className="p-2 hover:bg-cream-300/50 rounded-full transition-colors text-coffee btn-feedback">
           <ChevronLeft size={20} />
         </button>
         <h2 className="font-header font-bold text-coffee gold-shimmer">Confirm Ride</h2>

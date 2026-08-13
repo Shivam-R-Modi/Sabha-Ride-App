@@ -11,6 +11,8 @@ import { DriverDashboard } from './components/driver/DriverDashboard';
 import { DriverHistory } from './components/driver/DriverHistory';
 import { ManagerDashboard } from './components/manager/ManagerDashboard';
 import { ManagerReports } from './components/manager/ManagerReports';
+import { ManagerPeople } from './components/manager/ManagerPeople';
+import { ManagerSetup } from './components/manager/ManagerSetup';
 // import { CleanupUtility } from './components/admin/CleanupUtility'; // removed — component does not exist
 import { ResponsiveLayout } from './components/Layout';
 import { ProfileEditor } from './components/shared/ProfileEditor';
@@ -78,8 +80,12 @@ export default function App() {
       switch (currentTab) {
         case 'home':
           return <ManagerDashboard />;
+        case 'people':
+          return <ManagerPeople />;
         case 'history':
           return <ManagerReports />;
+        case 'setup':
+          return <ManagerSetup />;
         case 'profile':
           return <ProfileEditor />;
         default:

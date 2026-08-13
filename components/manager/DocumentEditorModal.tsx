@@ -89,25 +89,25 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-modal animate-in fade-in duration-200">
-      <div className="clay-card max-w-xl w-full bg-white rounded-3xl p-6 shadow-2xl border border-orange-100 max-h-[90vh] overflow-y-auto space-y-6">
+      <div className="clay-card max-w-xl w-full bg-surface rounded-3xl p-6 shadow-2xl border border-hairline/10 max-h-[90vh] overflow-y-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+        <div className="flex items-center justify-between border-b border-hairline/10 pb-4">
           <div>
             <h3 className="text-xl font-bold text-coffee font-header">
               {isEditing ? `Edit Record: ${docId}` : `Add New Record to ${collectionName}`}
             </h3>
-            <p className="text-xs text-gray-500">Collection: <span className="font-mono text-orange-600 font-bold">{collectionName}</span></p>
+            <p className="text-xs text-coffee-500">Collection: <span className="font-mono text-saffron-800 font-bold">{collectionName}</span></p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-500 hover:text-coffee rounded-full hover:bg-orange-50 transition-colors"
+            className="p-2 text-coffee-500 hover:text-coffee rounded-full hover:bg-cream-300 transition-colors"
           >
             <X size={20} />
           </button>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-red-700 text-xs">
+          <div className="bg-[rgb(var(--danger-bg))] border border-[rgb(var(--danger))]/40 rounded-xl p-3 flex items-center gap-2 text-[rgb(var(--danger-text))] text-xs">
             <AlertTriangle size={16} className="shrink-0" />
             <span>{error}</span>
           </div>
@@ -116,7 +116,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isEditing && (
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-bold text-coffee-500 uppercase tracking-wider mb-1">
                 Custom Document ID (Optional)
               </label>
               <input
@@ -124,7 +124,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                 value={customId}
                 onChange={(e) => setCustomId(e.target.value)}
                 placeholder="Auto-generated if left empty"
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 font-mono"
+                className="w-full px-4 py-2.5 rounded-xl border border-hairline/20 text-sm focus:outline-none focus:ring-2 focus:ring-saffron font-mono"
               />
             </div>
           )}
@@ -137,11 +137,11 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             if (key === 'role' || key === 'registeredRole' || key === 'activeRole') {
               return (
                 <div key={key}>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{key}</label>
+                  <label className="block text-xs font-bold text-coffee-500 uppercase tracking-wider mb-1">{key}</label>
                   <select
                     value={val || 'student'}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline/20 text-sm focus:outline-none focus:ring-2 focus:ring-saffron bg-surface"
                   >
                     <option value="student">Student</option>
                     <option value="driver">Driver</option>
@@ -154,11 +154,11 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             if (key === 'accountStatus') {
               return (
                 <div key={key}>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{key}</label>
+                  <label className="block text-xs font-bold text-coffee-500 uppercase tracking-wider mb-1">{key}</label>
                   <select
                     value={val || 'approved'}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline/20 text-sm focus:outline-none focus:ring-2 focus:ring-saffron bg-surface"
                   >
                     <option value="approved">Approved</option>
                     <option value="pending">Pending</option>
@@ -171,11 +171,11 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             if (key === 'status' && collectionName === 'vehicles') {
               return (
                 <div key={key}>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{key}</label>
+                  <label className="block text-xs font-bold text-coffee-500 uppercase tracking-wider mb-1">{key}</label>
                   <select
                     value={val || 'available'}
                     onChange={(e) => handleFieldChange(key, e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline/20 text-sm focus:outline-none focus:ring-2 focus:ring-saffron bg-surface"
                   >
                     <option value="available">Available</option>
                     <option value="in_use">In Use</option>
@@ -188,12 +188,12 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             if (typeof val === 'number') {
               return (
                 <div key={key}>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{key}</label>
+                  <label className="block text-xs font-bold text-coffee-500 uppercase tracking-wider mb-1">{key}</label>
                   <input
                     type="number"
                     value={val}
                     onChange={(e) => handleFieldChange(key, parseFloat(e.target.value) || 0)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline/20 text-sm focus:outline-none focus:ring-2 focus:ring-saffron"
                   />
                 </div>
               );
@@ -207,9 +207,9 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                     id={`check_${key}`}
                     checked={!!val}
                     onChange={(e) => handleFieldChange(key, e.target.checked)}
-                    className="w-4 h-4 text-orange-600 rounded focus:ring-orange-400"
+                    className="w-4 h-4 text-saffron-800 rounded focus:ring-saffron"
                   />
-                  <label htmlFor={`check_${key}`} className="text-xs font-bold text-gray-700 capitalize">{key}</label>
+                  <label htmlFor={`check_${key}`} className="text-xs font-bold text-coffee-700 capitalize">{key}</label>
                 </div>
               );
             }
@@ -217,21 +217,21 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             // Fallback text input
             return (
               <div key={key}>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{key}</label>
+                <label className="block text-xs font-bold text-coffee-500 uppercase tracking-wider mb-1">{key}</label>
                 <input
                   type="text"
                   value={typeof val === 'object' ? JSON.stringify(val) : (val ?? '')}
                   disabled={isReadonlyKey}
                   onChange={(e) => handleFieldChange(key, e.target.value)}
-                  className={`w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 ${
-                    isReadonlyKey ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+                  className={`w-full px-4 py-2.5 rounded-xl border border-hairline/20 text-sm focus:outline-none focus:ring-2 focus:ring-saffron ${
+                    isReadonlyKey ? 'bg-cream-300 text-coffee-500 cursor-not-allowed' : ''
                   }`}
                 />
               </div>
             );
           })}
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-hairline/10">
             <button
               type="button"
               onClick={onClose}

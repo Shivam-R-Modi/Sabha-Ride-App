@@ -113,16 +113,16 @@ export const VehicleForm: React.FC<VehicleFormProps> = ({ vehicle, onClose, onSu
         }
     };
 
-    const commonInputClass = "w-full px-4 py-3 bg-white border border-mocha/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-saffron focus:border-transparent transition-all";
+    const commonInputClass = "w-full px-4 py-3 bg-surface border border-mocha/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-saffron focus:border-transparent transition-all";
     const errorInputClass = "border-red-300 focus:ring-red-300";
     const labelClass = "block text-sm font-semibold text-coffee mb-1.5";
-    const errorClass = "text-xs text-red-600 mt-1";
+    const errorClass = "text-xs text-[rgb(var(--danger-text))] mt-1";
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
             <div className="clay-card max-w-lg w-full max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-cream-dark">
+                <div className="flex items-center justify-between p-6 border-b border-hairline/10">
                     <h2 className="text-xl font-header font-bold text-coffee">
                         {vehicle ? 'Edit Vehicle' : 'Add New Vehicle'}
                     </h2>
@@ -137,9 +137,9 @@ export const VehicleForm: React.FC<VehicleFormProps> = ({ vehicle, onClose, onSu
 
                 {/* Success Message */}
                 {submitSuccess && (
-                    <div className="mx-6 mt-4 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3 animate-in slide-in-from-top">
-                        <CheckCircle2 size={20} className="text-green-700" />
-                        <span className="text-green-700 font-medium">
+                    <div className="mx-6 mt-4 p-4 bg-[rgb(var(--success-bg))] border border-[rgb(var(--success))]/40 rounded-xl flex items-center gap-3 animate-in slide-in-from-top">
+                        <CheckCircle2 size={20} className="text-[rgb(var(--success-text))]" />
+                        <span className="text-[rgb(var(--success-text))] font-medium">
                             {vehicle ? 'Vehicle updated successfully!' : 'Vehicle created successfully!'}
                         </span>
                     </div>
@@ -147,9 +147,9 @@ export const VehicleForm: React.FC<VehicleFormProps> = ({ vehicle, onClose, onSu
 
                 {/* Error Message */}
                 {submitError && (
-                    <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 animate-in slide-in-from-top">
-                        <AlertCircle size={20} className="text-red-600" />
-                        <span className="text-red-700">{submitError}</span>
+                    <div className="mx-6 mt-4 p-4 bg-[rgb(var(--danger-bg))] border border-[rgb(var(--danger))]/40 rounded-xl flex items-center gap-3 animate-in slide-in-from-top">
+                        <AlertCircle size={20} className="text-[rgb(var(--danger-text))]" />
+                        <span className="text-[rgb(var(--danger-text))]">{submitError}</span>
                     </div>
                 )}
 

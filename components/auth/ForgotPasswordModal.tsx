@@ -77,7 +77,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
 
     return (
         <div className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="clay-card max-w-md w-full p-6 space-y-5 bg-white relative animate-in zoom-in-95 duration-200">
+            <div className="clay-card max-w-md w-full p-6 space-y-5 bg-surface relative animate-in zoom-in-95 duration-200">
                 {/* Close Button */}
                 <button
                     onClick={onClose}
@@ -89,7 +89,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
 
                 {/* Header */}
                 <div className="text-center space-y-2 pt-2">
-                    <div className="inline-flex p-3 rounded-2xl bg-orange-50 text-saffron mb-1">
+                    <div className="inline-flex p-3 rounded-2xl bg-cream-300 text-saffron mb-1">
                         <Mail size={32} />
                     </div>
                     <h3 className="text-2xl font-header font-bold text-coffee">Reset Your Password</h3>
@@ -103,8 +103,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                     <div
                         className={`p-3 rounded-xl text-xs flex items-start gap-2 border ${
                             status.type === 'success'
-                                ? 'bg-green-50 text-green-700 border-green-200'
-                                : 'bg-red-50 text-red-700 border-red-200'
+                                ? 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] border-[rgb(var(--success))]/40'
+                                : 'bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))] border-[rgb(var(--danger))]/40'
                         }`}
                     >
                         {status.type === 'success' ? (

@@ -148,7 +148,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       <div className="flex-1 px-6 my-6">
         <div className="clay-card clay-card-lg max-w-md mx-auto">
           {error && (
-            <div className="mb-5 p-3 bg-red-50 text-red-700 text-sm rounded-xl flex items-start gap-2 border border-red-100 animate-in slide-in-from-top-2">
+            <div className="mb-5 p-3 bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))] text-sm rounded-xl flex items-start gap-2 border border-[rgb(var(--danger))]/25 animate-in slide-in-from-top-2">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -164,9 +164,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </button>
 
           <div className="flex items-center gap-2 mb-5 opacity-50">
-            <div className="h-px bg-gray-300 flex-1"></div>
-            <span className="text-xs font-bold text-gray-500">OR WITH EMAIL</span>
-            <div className="h-px bg-gray-300 flex-1"></div>
+            <div className="h-px bg-cream-400 flex-1"></div>
+            <span className="text-xs font-bold text-coffee-500">OR WITH EMAIL</span>
+            <div className="h-px bg-cream-400 flex-1"></div>
           </div>
 
           <form onSubmit={handleEmailAuth} className="space-y-4">
@@ -174,7 +174,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <div>
               <label className="block text-xs font-bold text-coffee mb-1 ml-1 uppercase">Email Address</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-coffee-500" size={18} />
                 <input
                   type="email"
                   placeholder="name@example.com"
@@ -190,7 +190,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             <div>
               <label className="block text-xs font-bold text-coffee mb-1 ml-1 uppercase">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-coffee-500" size={18} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
@@ -202,7 +202,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-coffee transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-coffee-500 hover:text-coffee transition-colors"
                   title={showPassword ? 'Hide Password' : 'Show Password'}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -215,18 +215,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   <div className="flex items-center justify-between text-[11px] font-semibold">
                     <span className="text-coffee-500">Password Strength:</span>
                     <span className={
-                      passwordEvaluation.score === 'strong' ? 'text-green-700' :
-                      passwordEvaluation.score === 'fair' ? 'text-amber-600' : 'text-red-600'
+                      passwordEvaluation.score === 'strong' ? 'text-[rgb(var(--success-text))]' :
+                      passwordEvaluation.score === 'fair' ? 'text-[rgb(var(--warning-text))]' : 'text-[rgb(var(--danger-text))]'
                     }>
                       {passwordEvaluation.label}
                     </span>
                   </div>
 
-                  <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                  <div className="h-1.5 w-full bg-cream-400 rounded-full overflow-hidden">
                     <div
                       className={`h-full transition-all duration-300 ${
-                        passwordEvaluation.score === 'strong' ? 'bg-green-500' :
-                        passwordEvaluation.score === 'fair' ? 'bg-amber-500' : 'bg-red-500'
+                        passwordEvaluation.score === 'strong' ? 'bg-[rgb(var(--success))]' :
+                        passwordEvaluation.score === 'fair' ? 'bg-[rgb(var(--warning))]' : 'bg-[rgb(var(--danger))]'
                       }`}
                       style={{ width: `${passwordEvaluation.percentage}%` }}
                     ></div>
@@ -234,16 +234,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
                   {/* Requirements checklist */}
                   <div className="grid grid-cols-2 gap-1 pt-1 text-[10px] text-coffee-700">
-                    <span className={passwordEvaluation.criteria.hasMinLength ? 'text-green-700 font-semibold' : ''}>
+                    <span className={passwordEvaluation.criteria.hasMinLength ? 'text-[rgb(var(--success-text))] font-semibold' : ''}>
                       {passwordEvaluation.criteria.hasMinLength ? '✓' : '•'} 8+ characters
                     </span>
-                    <span className={passwordEvaluation.criteria.hasNumber ? 'text-green-700 font-semibold' : ''}>
+                    <span className={passwordEvaluation.criteria.hasNumber ? 'text-[rgb(var(--success-text))] font-semibold' : ''}>
                       {passwordEvaluation.criteria.hasNumber ? '✓' : '•'} At least 1 number
                     </span>
-                    <span className={passwordEvaluation.criteria.hasSpecialChar ? 'text-green-700 font-semibold' : ''}>
+                    <span className={passwordEvaluation.criteria.hasSpecialChar ? 'text-[rgb(var(--success-text))] font-semibold' : ''}>
                       {passwordEvaluation.criteria.hasSpecialChar ? '✓' : '•'} 1 special character
                     </span>
-                    <span className={passwordEvaluation.criteria.hasUppercase ? 'text-green-700 font-semibold' : ''}>
+                    <span className={passwordEvaluation.criteria.hasUppercase ? 'text-[rgb(var(--success-text))] font-semibold' : ''}>
                       {passwordEvaluation.criteria.hasUppercase ? '✓' : '•'} 1 uppercase letter
                     </span>
                   </div>
@@ -256,7 +256,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               <div className="animate-in slide-in-from-top-2 duration-200">
                 <label className="block text-xs font-bold text-coffee mb-1 ml-1 uppercase">Confirm Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-coffee-500" size={18} />
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     placeholder="••••••••"
@@ -270,17 +270,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-coffee transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-coffee-500 hover:text-coffee transition-colors"
                     title={showConfirmPassword ? 'Hide Password' : 'Show Password'}
                   >
                     {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
                 {confirmPassword && confirmPassword !== password && (
-                  <p className="text-[11px] text-red-600 font-medium mt-1">Passwords do not match</p>
+                  <p className="text-[11px] text-[rgb(var(--danger-text))] font-medium mt-1">Passwords do not match</p>
                 )}
                 {confirmPassword && confirmPassword === password && (
-                  <p className="text-[11px] text-green-700 font-medium mt-1 flex items-center gap-1">
+                  <p className="text-[11px] text-[rgb(var(--success-text))] font-medium mt-1 flex items-center gap-1">
                     <CheckCircle2 size={12} /> Passwords match
                   </p>
                 )}
@@ -323,7 +323,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 setPassword('');
                 setConfirmPassword('');
               }}
-              className="text-sm text-gray-500 hover:text-saffron-800 font-medium"
+              className="text-sm text-coffee-500 hover:text-saffron-800 font-medium"
             >
               {isRegistering ? "Already have an account? Login" : "New to Sabha? Create Account"}
             </button>
@@ -339,7 +339,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
 
-        <p className="text-center text-gray-500 text-xs mt-8">
+        <p className="text-center text-coffee-500 text-xs mt-8">
           By continuing, you agree to our Terms of Seva and Privacy Policy.
         </p>
 

@@ -17,8 +17,8 @@ undeployed** — see "In flight" below.
 | Cloud Functions | ✅ | all 16 updated |
 | Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
 
-**Test suites, all green:** `functions` **245** · client **374** · rules **81** —
-**700 total**.
+**Test suites, all green:** `functions` **245** · client **407** · rules **81** —
+**733 total**.
 
 `npm run typecheck` reports **55** errors total, of which **19** are outside
 `functions/`. That is the clean baseline, not a regression. It was 58 / 22 before
@@ -46,7 +46,7 @@ A full redesign — modern minimalism, liquid glass, a manual day/night switch, 
 flows rebuilt around one question per screen. Same brand colours. **Presentation
 only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
 
-**Phases 0 to 4 are done.** Client tests went **70 → 374**.
+**Phases 0 to 5 are done.** Client tests went **70 → 407**.
 
 - **Phase 0 — safety net.** Added component rendering to the test suite, which
   the repo did not have: all 70 client tests were pure logic, so nothing
@@ -99,13 +99,26 @@ npx vite build --config preview/vite.config.ts
 npx vite preview --outDir preview-dist   # /preview/rider.html · /preview/driver.html
 ```
 
-**Still to come:** the manager's screens, then the dark-mode polish pass.
-Two things are deliberately unfinished until then:
+- **Phase 5 — the manager's screens.** The four unlabelled toolbar icons are
+  gone; they were destinations, not controls, and now sit in the nav as
+  **Dispatch · People · Reports · Setup · Profile**. The two dispatch tabs stay
+  as you asked, with live counts in their labels.
 
-- Hardcoded `bg-white` / `text-gray-*` utilities remain in the manager's screens,
-  so expect light-coloured patches there in dark mode. Rider and driver are done.
-- 8 screens still have their own hand-rolled modal. Each is migrated onto
-  `Sheet` by the phase that rewrites it; a ratchet test stops the count rising.
+  "Assign" no longer picks a driver for you in silence — it shows who is on
+  shift, their car, seats free and runs done today, and warns when a car is too
+  small for the party. Bulk select works on a phone now (long-press), closing
+  the known gap below. Approvals moved out of the bell-icon modal into their own
+  screen. Setup is five named sections instead of one long scroll, with the raw
+  database editor tucked inside behind a warning.
+
+  The colour sweep also finished: roughly 200 hardcoded colours are gone from
+  every component, and a test now fails the build if one reappears.
+
+**Still to come:** the dark-mode polish pass (Phase 6) — a screen-by-screen look
+in both themes, plus motion, focus rings and touch targets.
+
+- 5 screens still have their own hand-rolled modal. Each is migrated onto
+  `Sheet` by the phase that touches it; a ratchet test stops the count rising.
 
 Decisions taken with the owner, recorded because they went against the
 recommendation and the reasoning should not be relitigated from scratch:
@@ -179,9 +192,9 @@ Nothing is blocked. Nothing is half-finished.
   proven; what is still unproven is how they *look*, because reaching them needs
   a sign-in. Two minutes in a browser each.
 
-**Known gap, deliberately not fixed:** bulk-select on the manager's queue exists
-only in the desktop table. On a phone the checkboxes and "Assign Bulk" are
-unreachable. Pre-existing; not introduced by the seats work.
+**Known gap — fixed 2026-08-12 in Phase 5.** Bulk-select on the manager's queue
+used to exist only in the desktop table, leaving the checkboxes and "Assign Bulk"
+unreachable on a phone. A long-press on a card now starts a selection.
 
 ---
 

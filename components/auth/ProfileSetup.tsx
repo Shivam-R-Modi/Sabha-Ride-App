@@ -114,7 +114,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                         {/* Name Input */}
                         <div>
                             <label className="block text-sm font-medium text-coffee mb-2">
-                                Full Name <span className="text-red-600">*</span>
+                                Full Name <span className="text-[rgb(var(--danger-text))]">*</span>
                             </label>
                             <input
                                 type="text"
@@ -143,7 +143,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                         {/* Address Autocomplete */}
                         <div>
                             <label className="block text-sm font-medium text-coffee mb-2">
-                                Address <span className="text-red-600">*</span>
+                                Address <span className="text-[rgb(var(--danger-text))]">*</span>
                             </label>
                             <AddressAutocomplete
                                 value={address}
@@ -160,7 +160,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                             />
                             {/* Selection confirmation */}
                             {selectedPlace && (
-                                <p className="text-sm text-green-700 mt-1">
+                                <p className="text-sm text-[rgb(var(--success-text))] mt-1">
                                     ✓ Address selected
                                 </p>
                             )}
@@ -173,8 +173,8 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
                     </div>
 
                     {error && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-                            <p className="text-red-700 text-sm">{error}</p>
+                        <div className="bg-[rgb(var(--danger-bg))] border border-[rgb(var(--danger))]/40 rounded-xl p-3">
+                            <p className="text-[rgb(var(--danger-text))] text-sm">{error}</p>
                         </div>
                     )}
 

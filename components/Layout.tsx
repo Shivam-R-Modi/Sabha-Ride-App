@@ -11,7 +11,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
-  ShieldCheck
+  ShieldCheck,
+  UserCheck,
+  Settings
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
@@ -56,7 +58,7 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName
   const { logout } = useAuth();
 
   return (
-    <header className="app-header lg:hidden sticky top-0 z-sticky bg-cream/80 backdrop-blur-md border-b border-orange-100 pt-safe">
+    <header className="app-header lg:hidden sticky top-0 z-sticky bg-cream/80 backdrop-blur-md border-b border-hairline/10 pt-safe">
       <div className="px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2 overflow-hidden">
           <div className="bg-saffron/10 p-2 rounded-full">
@@ -66,7 +68,7 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName
         </div>
         <div className="flex items-center gap-2">
           <RoleSwitcher />
-          <button onClick={logout} className="tap-target p-2 text-gray-500 hover:text-red-600 btn-feedback">
+          <button onClick={logout} className="tap-target p-2 text-coffee-500 hover:text-[rgb(var(--danger-text))] btn-feedback">
             <LogOut size={20} />
           </button>
         </div>
@@ -82,7 +84,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const navItems = getNavItems(role);
 
   return (
-    <aside className={`fixed left-0 top-0 h-full bg-white border-r border-orange-50 shadow-xl z-sticky transition-all duration-300 hidden lg:flex flex-col
+    <aside className={`fixed left-0 top-0 h-full bg-surface border-r border-hairline/10 shadow-xl z-sticky transition-all duration-300 hidden lg:flex flex-col
       ${isSidebarCollapsed ? 'w-20' : 'w-60'}`}>
 
       {/* Logo Section */}
@@ -116,8 +118,8 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
               onClick={() => setCurrentTab(item.id as TabView)}
               title={isSidebarCollapsed ? item.label : undefined}
               className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all group relative btn-feedback ${isActive
-                ? 'bg-orange-50 text-saffron shadow-sm border border-orange-100'
-                : 'text-gray-500 hover:bg-gray-50 hover:text-coffee'
+                ? 'bg-cream-300 text-saffron shadow-sm border border-hairline/10'
+                : 'text-coffee-500 hover:bg-cream-200 hover:text-coffee'
                 }`}
             >
               <Icon size={22} className={`${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
@@ -135,23 +137,23 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
       </nav>
 
       {/* Profile & Footer */}
-      <div className="p-4 border-t border-orange-50 bg-cream/30">
+      <div className="p-4 border-t border-hairline/10 bg-cream/30">
         {!isSidebarCollapsed ? (
           <div className="space-y-4 animate-in fade-in">
             <div className="flex items-center gap-3">
               <img
                 src={userProfile?.avatarUrl || `https://ui-avatars.com/api/?name=${userProfile?.name}`}
-                className="w-10 h-10 rounded-xl border-2 border-white shadow-sm"
+                className="w-10 h-10 rounded-xl border-2 border-surface shadow-sm"
                 alt="Profile"
               />
               <div className="min-w-0">
                 <p className="text-sm font-bold text-coffee truncate">{userProfile?.name}</p>
-                <p className="text-[10px] text-gray-500 font-bold uppercase truncate">{role}</p>
+                <p className="text-[10px] text-coffee-500 font-bold uppercase truncate">{role}</p>
               </div>
             </div>
             <button
               onClick={logout}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gray-100 hover:bg-red-50 hover:text-red-700 text-gray-600 rounded-xl text-xs font-bold transition-all group btn-feedback"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-cream-300 hover:bg-[rgb(var(--danger-bg))] hover:text-[rgb(var(--danger-text))] text-coffee-700 rounded-xl text-xs font-bold transition-all group btn-feedback"
             >
               <LogOut size={16} className="group-hover:rotate-12 transition-transform" />
               Sign Out
@@ -161,7 +163,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
           <button
             onClick={logout}
             title="Logout"
-            className="w-full flex justify-center p-3 text-gray-500 hover:text-red-600 transition-colors btn-feedback"
+            className="w-full flex justify-center p-3 text-coffee-500 hover:text-[rgb(var(--danger-text))] transition-colors btn-feedback"
           >
             <LogOut size={22} />
           </button>
@@ -170,7 +172,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
         {/* Collapse Toggle */}
         <button
           onClick={toggleSidebar}
-          className="absolute -right-3 top-20 bg-white border border-orange-100 rounded-full p-1 shadow-md hover:shadow-lg transition-all text-gray-500 hover:text-saffron z-raised"
+          className="absolute -right-3 top-20 bg-surface border border-hairline/10 rounded-full p-1 shadow-md hover:shadow-lg transition-all text-coffee-500 hover:text-saffron z-raised"
         >
           {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
@@ -185,7 +187,7 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
 
   return (
     <nav className="clay-bottom-nav lg:hidden">
-      <div className="max-w-md mx-auto flex justify-around items-center h-16">
+      <div className="max-w-md mx-auto flex justify-around items-center h-16 gap-0.5">
         {navItems.map((item) => {
           const isActive = currentTab === item.id;
           const Icon = item.icon;
@@ -193,13 +195,13 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
             <button
               key={item.id}
               onClick={() => setCurrentTab(item.id as TabView)}
-              className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${isActive ? 'text-saffron-800' : 'text-gray-500'
+              className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${isActive ? 'text-saffron-800' : 'text-coffee-500'
                 }`}
             >
-              <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-orange-50' : ''}`}>
+              <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-cream-300' : ''}`}>
                 <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
               </div>
-              <span className="text-[10px] mt-1 font-bold uppercase tracking-tighter">
+              <span className="text-[10px] mt-1 font-bold uppercase tracking-tighter truncate max-w-full px-0.5">
                 {item.label}
               </span>
               {isActive && (
@@ -222,9 +224,14 @@ const getNavItems = (role: UserRole) => {
     ];
   }
   if (role === 'manager') {
+    // Five destinations, replacing three nav systems on one screen: this bar,
+    // a segmented control, and four unlabelled toolbar icons — among them a
+    // map-pin that meant "settings" and a car that meant "fleet".
     return [
-      { id: 'home', label: 'Admin', icon: LayoutDashboard },
+      { id: 'home', label: 'Dispatch', icon: LayoutDashboard },
+      { id: 'people', label: 'People', icon: UserCheck },
       { id: 'history', label: 'Reports', icon: History },
+      { id: 'setup', label: 'Setup', icon: Settings },
       { id: 'profile', label: 'Profile', icon: UserIcon },
     ];
   }

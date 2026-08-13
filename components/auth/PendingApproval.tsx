@@ -94,7 +94,7 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
 
                     {/* Manager Access Code Form for Managers */}
                     {role === 'manager' && (
-                        <form onSubmit={handleUnlockManager} className="bg-orange-50 border-2 border-saffron/30 rounded-xl p-4 text-left space-y-3">
+                        <form onSubmit={handleUnlockManager} className="bg-cream-300 border-2 border-saffron/30 rounded-xl p-4 text-left space-y-3">
                             <label className="block text-sm font-bold text-coffee">
                                 Have a manager invite code?
                             </label>
@@ -106,11 +106,11 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                                 value={managerCode}
                                 onChange={(e) => setManagerCode(e.target.value)}
                                 placeholder="e.g. A7K2M9-4FQXB2NRH3"
-                                className="w-full px-3 py-2 rounded-lg border border-mocha/20 text-sm focus:outline-none focus:border-saffron bg-white"
+                                className="w-full px-3 py-2 rounded-lg border border-mocha/20 text-sm focus:outline-none focus:border-saffron bg-surface"
                                 disabled={loading}
                             />
-                            {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
-                            {successMessage && <p className="text-xs text-green-700 font-semibold">{successMessage}</p>}
+                            {error && <p className="text-xs text-[rgb(var(--danger-text))] font-semibold">{error}</p>}
+                            {successMessage && <p className="text-xs text-[rgb(var(--success-text))] font-semibold">{successMessage}</p>}
                             <button
                                 type="submit"
                                 disabled={loading || !managerCode.trim()}
@@ -123,7 +123,7 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
 
                     {/* Info Box */}
                     {role !== 'manager' && (
-                        <div className="bg-orange-50 border-2 border-saffron/20 rounded-xl p-4">
+                        <div className="bg-cream-300 border-2 border-saffron/20 rounded-xl p-4">
                             <p className="text-sm text-coffee/80">
                                 <span className="font-semibold">Note:</span> This usually takes 1-2 business days.
                                 If you have any questions, please contact the Sabha office.

@@ -139,7 +139,7 @@ export const DatabaseConsole: React.FC = () => {
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
       {/* Header Banner */}
-      <div className="clay-card bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-orange-600/10 border-orange-200/60 p-6 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="clay-card bg-gradient-to-r from-[rgb(var(--cta))]/10 via-amber-500/10 to-[rgb(var(--cta-dark))]/10 border-hairline/20/60 p-6 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="p-3.5 bg-saffron text-white rounded-2xl shadow-lg shadow-orange-500/20">
             <Database size={28} />
@@ -147,11 +147,11 @@ export const DatabaseConsole: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-2xl font-bold text-coffee font-header">Database Management Console</h2>
-              <span className="bg-emerald-100 text-emerald-700 text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-emerald-200">
+              <span className="bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-[rgb(var(--success))]/40">
                 Live Admin Mode
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-coffee-500 mt-1">
               Direct administrative access to inspect, query, edit, and audit system data collections.
             </p>
           </div>
@@ -172,7 +172,7 @@ export const DatabaseConsole: React.FC = () => {
       </div>
 
       {/* Collection Selector Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-gray-100 no-scrollbar">
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-hairline/10 no-scrollbar">
         {[
           { id: 'users', label: 'Users', icon: Users, count: activeTab === 'users' ? documents.length : null },
           { id: 'vehicles', label: 'Vehicles', icon: Car, count: activeTab === 'vehicles' ? documents.length : null },
@@ -198,13 +198,13 @@ export const DatabaseConsole: React.FC = () => {
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap ${
                 isActive
                   ? 'bg-coffee text-white shadow-md scale-105'
-                  : 'bg-white text-gray-500 hover:bg-orange-50 border border-gray-100'
+                  : 'bg-surface text-coffee-500 hover:bg-cream-300 border border-hairline/10'
               }`}
             >
-              <Icon size={16} className={isActive ? 'text-saffron' : 'text-gray-500'} />
+              <Icon size={16} className={isActive ? 'text-saffron' : 'text-coffee-500'} />
               <span>{tab.label}</span>
               {tab.count !== null && (
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${isActive ? 'bg-surface/20 text-white' : 'bg-cream-300 text-coffee-700'}`}>
                   {tab.count}
                 </span>
               )}
@@ -220,21 +220,21 @@ export const DatabaseConsole: React.FC = () => {
             <span className="bg-saffron text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
               {selectedDocIds.length} Selected
             </span>
-            <span className="text-xs text-gray-300">
+            <span className="text-xs text-coffee-400">
               Bulk actions ready for collection <strong className="text-white capitalize">{activeTab}</strong>
             </span>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               onClick={() => setSelectedDocIds([])}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-coffee-400 hover:text-white hover:bg-surface/10 transition-colors"
             >
               Deselect All
             </button>
             <button
               onClick={handleBulkDelete}
               disabled={isBulkDeleting}
-              className="bg-red-600 hover:bg-red-600 text-white text-xs font-bold px-4 py-1.5 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 shadow-md"
+              className="bg-[rgb(var(--danger))] hover:opacity-90 text-[rgb(var(--text-on-accent))] text-xs font-bold px-4 py-1.5 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 shadow-md"
             >
               {isBulkDeleting ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
               <span>{isBulkDeleting ? 'Deleting...' : `Delete Selected (${selectedDocIds.length})`}</span>
@@ -246,21 +246,21 @@ export const DatabaseConsole: React.FC = () => {
       {/* Search & Filtering Bar */}
       <div className="clay-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-3">
         <div className="relative w-full md:w-80">
-          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-coffee-500" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={`Search ${activeTab}...`}
-            className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+            className="w-full pl-10 pr-4 py-2 rounded-xl border border-hairline/20 text-xs focus:outline-none focus:ring-2 focus:ring-saffron"
           />
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto">
           {activeTab === 'users' && (
-            <div className="flex items-center gap-1.5 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
-              <Filter size={14} className="text-gray-500 ml-1" />
-              <span className="text-[10px] font-bold text-gray-500 uppercase">Role:</span>
+            <div className="flex items-center gap-1.5 bg-cream-200 p-1.5 rounded-xl border border-hairline/10">
+              <Filter size={14} className="text-coffee-500 ml-1" />
+              <span className="text-[10px] font-bold text-coffee-500 uppercase">Role:</span>
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
@@ -274,9 +274,9 @@ export const DatabaseConsole: React.FC = () => {
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 bg-gray-50 p-1.5 rounded-xl border border-gray-100">
-            <Filter size={14} className="text-gray-500 ml-1" />
-            <span className="text-[10px] font-bold text-gray-500 uppercase">Status:</span>
+          <div className="flex items-center gap-1.5 bg-cream-200 p-1.5 rounded-xl border border-hairline/10">
+            <Filter size={14} className="text-coffee-500 ml-1" />
+            <span className="text-[10px] font-bold text-coffee-500 uppercase">Status:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -297,33 +297,33 @@ export const DatabaseConsole: React.FC = () => {
       {loading ? (
         <div className="clay-card py-16 flex flex-col items-center justify-center space-y-3">
           <Loader2 className="animate-spin text-saffron" size={32} />
-          <p className="text-xs font-bold text-gray-500">Loading collection {activeTab}...</p>
+          <p className="text-xs font-bold text-coffee-500">Loading collection {activeTab}...</p>
         </div>
       ) : error ? (
-        <div className="clay-card py-12 bg-red-50/50 border-red-100 flex flex-col items-center justify-center text-center p-6 space-y-2">
-          <ShieldAlert className="text-red-600" size={32} />
-          <p className="text-sm font-bold text-red-600">{error}</p>
-          <p className="text-xs text-gray-500">Ensure your account has approved manager credentials in Firestore.</p>
+        <div className="clay-card py-12 bg-[rgb(var(--danger-bg))]/50 border-[rgb(var(--danger))]/25 flex flex-col items-center justify-center text-center p-6 space-y-2">
+          <ShieldAlert className="text-[rgb(var(--danger-text))]" size={32} />
+          <p className="text-sm font-bold text-[rgb(var(--danger-text))]">{error}</p>
+          <p className="text-xs text-coffee-500">Ensure your account has approved manager credentials in Firestore.</p>
         </div>
       ) : filteredDocuments.length === 0 ? (
         <div className="clay-card py-16 text-center space-y-2">
-          <Database className="mx-auto text-gray-300" size={36} />
+          <Database className="mx-auto text-coffee-400" size={36} />
           <p className="text-sm font-bold text-coffee">No records found in {activeTab}</p>
-          <p className="text-xs text-gray-500">Try clearing filters or search keywords.</p>
+          <p className="text-xs text-coffee-500">Try clearing filters or search keywords.</p>
         </div>
       ) : (
-        <div className="clay-card overflow-hidden p-0 rounded-3xl border border-orange-100 shadow-sm">
+        <div className="clay-card overflow-hidden p-0 rounded-3xl border border-hairline/10 shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-orange-50/60 border-b border-orange-100 text-[11px] font-bold text-coffee uppercase tracking-wider">
+                <tr className="bg-cream-300/60 border-b border-hairline/10 text-[11px] font-bold text-coffee uppercase tracking-wider">
                   {activeTab !== 'auditLogs' && (
                     <th className="py-3.5 px-3 w-10 text-center">
                       <input
                         type="checkbox"
                         checked={allSelected}
                         onChange={toggleSelectAll}
-                        className="w-4 h-4 text-orange-600 rounded focus:ring-orange-400 cursor-pointer accent-saffron"
+                        className="w-4 h-4 text-saffron-800 rounded focus:ring-saffron cursor-pointer accent-saffron"
                         title="Select All"
                       />
                     </th>
@@ -373,16 +373,16 @@ export const DatabaseConsole: React.FC = () => {
                   {activeTab !== 'auditLogs' && <th className="py-3.5 px-4 text-right">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-xs text-coffee">
+              <tbody className="divide-y divide-hairline/10 text-xs text-coffee">
                 {filteredDocuments.map((docItem) => (
-                  <tr key={docItem.id} className={`hover:bg-orange-50/30 transition-colors ${selectedDocIds.includes(docItem.id) ? 'bg-orange-50/60' : ''}`}>
+                  <tr key={docItem.id} className={`hover:bg-cream-300/30 transition-colors ${selectedDocIds.includes(docItem.id) ? 'bg-cream-300/60' : ''}`}>
                     {activeTab !== 'auditLogs' && (
                       <td className="py-3 px-3 text-center">
                         <input
                           type="checkbox"
                           checked={selectedDocIds.includes(docItem.id)}
                           onChange={() => toggleSelectDoc(docItem.id)}
-                          className="w-4 h-4 text-orange-600 rounded focus:ring-orange-400 cursor-pointer accent-saffron"
+                          className="w-4 h-4 text-saffron-800 rounded focus:ring-saffron cursor-pointer accent-saffron"
                         />
                       </td>
                     )}
@@ -392,24 +392,24 @@ export const DatabaseConsole: React.FC = () => {
                       <>
                         <td className="py-3 px-4">
                           <p className="font-bold">{docItem.name || 'Unnamed'}</p>
-                          <p className="text-[10px] text-gray-500">{docItem.email || docItem.phone || 'No contact'}</p>
+                          <p className="text-[10px] text-coffee-500">{docItem.email || docItem.phone || 'No contact'}</p>
                         </td>
                         <td className="py-3 px-4 capitalize font-medium">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                            docItem.role === 'manager' ? 'bg-purple-100 text-purple-700' :
-                            docItem.role === 'driver' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                            docItem.role === 'manager' ? 'bg-cream-400 text-coffee' :
+                            docItem.role === 'driver' ? 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]' : 'bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]'
                           }`}>
                             {docItem.role || 'student'}
                           </span>
                         </td>
                         <td className="py-3 px-4 capitalize">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            docItem.accountStatus === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            docItem.accountStatus === 'approved' ? 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]' : 'bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))]'
                           }`}>
                             {docItem.accountStatus || 'approved'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 max-w-xs truncate text-[11px] text-gray-500">
+                        <td className="py-3 px-4 max-w-xs truncate text-[11px] text-coffee-500">
                           {docItem.address || docItem.location?.formattedAddress || 'No address'}
                         </td>
                       </>
@@ -419,13 +419,13 @@ export const DatabaseConsole: React.FC = () => {
                     {activeTab === 'vehicles' && (
                       <>
                         <td className="py-3 px-4 font-bold">{docItem.name}</td>
-                        <td className="py-3 px-4 text-gray-500 font-mono text-[11px]">
+                        <td className="py-3 px-4 text-coffee-500 font-mono text-[11px]">
                           {docItem.licensePlate || docItem.plateNumber} ({docItem.color})
                         </td>
                         <td className="py-3 px-4 font-bold">{docItem.capacity} seats</td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            docItem.status === 'available' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                            docItem.status === 'available' ? 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]' : 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]'
                           }`}>
                             {docItem.status || 'available'}
                           </span>
@@ -438,17 +438,17 @@ export const DatabaseConsole: React.FC = () => {
                       <>
                         <td className="py-3 px-4">
                           <p className="font-bold">{docItem.rideType || 'home-to-sabha'}</p>
-                          <p className="text-[10px] text-gray-500">{docItem.timeSlot || '6:00 PM'}</p>
+                          <p className="text-[10px] text-coffee-500">{docItem.timeSlot || '6:00 PM'}</p>
                         </td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            docItem.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                            docItem.status === 'completed' ? 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]' : 'bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]'
                           }`}>
                             {docItem.status || 'requested'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 font-bold text-gray-600">{docItem.driverName || 'Unassigned'}</td>
-                        <td className="py-3 px-4 text-gray-500">
+                        <td className="py-3 px-4 font-bold text-coffee-700">{docItem.driverName || 'Unassigned'}</td>
+                        <td className="py-3 px-4 text-coffee-500">
                           {docItem.students?.length || (docItem.studentName ? 1 : 0)} student(s)
                         </td>
                       </>
@@ -460,10 +460,10 @@ export const DatabaseConsole: React.FC = () => {
                         <td className="py-3 px-4 font-bold text-coffee">
                           {docItem.id || docItem.name || 'System Setting'}
                         </td>
-                        <td className="py-3 px-4 font-mono text-[11px] text-gray-600 max-w-sm truncate">
+                        <td className="py-3 px-4 font-mono text-[11px] text-coffee-700 max-w-sm truncate">
                           {docItem.code ? `Manager Code: ${docItem.code}` : docItem.address ? `Venue: ${docItem.address}` : docItem.rideType ? `Ride Type: ${docItem.rideType}` : JSON.stringify(docItem).slice(0, 80)}
                         </td>
-                        <td className="py-3 px-4 text-[11px] text-gray-500">
+                        <td className="py-3 px-4 text-[11px] text-coffee-500">
                           {docItem.updatedAt ? new Date(docItem.updatedAt).toLocaleString() : 'N/A'}
                         </td>
                       </>
@@ -482,20 +482,20 @@ export const DatabaseConsole: React.FC = () => {
                         <>
                           <td className="py-3 px-4 font-bold">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                              row.tone === 'create' ? 'bg-green-100 text-green-700' :
-                              row.tone === 'neutral' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+                              row.tone === 'create' ? 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]' :
+                              row.tone === 'neutral' ? 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]' : 'bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))]'
                             }`}>
                               {row.action}
                             </span>
                           </td>
                           <td className="py-3 px-4 font-bold text-coffee">{row.actorName}</td>
-                          <td className="py-3 px-4 font-mono text-[11px] text-gray-500">
+                          <td className="py-3 px-4 font-mono text-[11px] text-coffee-500">
                             {row.target}
                             {row.summary && (
-                              <span className="block font-sans text-gray-400 truncate max-w-xs">{row.summary}</span>
+                              <span className="block font-sans text-coffee-500 truncate max-w-xs">{row.summary}</span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-[11px] text-gray-500">
+                          <td className="py-3 px-4 text-[11px] text-coffee-500">
                             {row.timestamp ? new Date(row.timestamp).toLocaleString() : 'N/A'}
                           </td>
                         </>
@@ -504,7 +504,7 @@ export const DatabaseConsole: React.FC = () => {
 
                     {/* OTHER COLLECTIONS FALLBACK */}
                     {activeTab !== 'users' && activeTab !== 'vehicles' && activeTab !== 'rides' && activeTab !== 'settings' && activeTab !== 'auditLogs' && (
-                      <td className="py-3 px-4 font-mono text-[11px] text-gray-600 max-w-md truncate">
+                      <td className="py-3 px-4 font-mono text-[11px] text-coffee-700 max-w-md truncate">
                         {JSON.stringify(docItem).slice(0, 100)}...
                       </td>
                     )}
@@ -515,7 +515,7 @@ export const DatabaseConsole: React.FC = () => {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => setSelectedDocForEdit(docItem)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="p-1.5 text-[rgb(var(--info-text))] hover:bg-[rgb(var(--info-bg))] rounded-lg transition-colors"
                             title="Edit Record"
                           >
                             <Edit2 size={15} />
@@ -523,7 +523,7 @@ export const DatabaseConsole: React.FC = () => {
                           <button
                             onClick={() => handleDelete(docItem.id)}
                             disabled={deletingId === docItem.id}
-                            className="p-1.5 text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            className="p-1.5 text-[rgb(var(--danger-text))] hover:bg-[rgb(var(--danger-bg))] rounded-lg transition-colors disabled:opacity-50"
                             title="Delete Record"
                           >
                             {deletingId === docItem.id ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />}

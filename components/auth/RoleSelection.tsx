@@ -172,7 +172,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                             >
                                 <div className={`inline-flex p-4 rounded-2xl ${selectedRole === role.id
                                     ? 'bg-saffron text-white'
-                                    : 'bg-orange-50 text-saffron'
+                                    : 'bg-cream-300 text-saffron'
                                     }`}>
                                     {role.icon}
                                 </div>
@@ -188,7 +188,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                     {selectedRole === 'manager' && (
                         <div className="clay-card p-6 animate-in slide-in-from-top-4">
                             <label className="block text-sm font-bold text-coffee mb-2">
-                                Manager Access Code <span className="text-red-600">*</span>
+                                Manager Access Code <span className="text-[rgb(var(--danger-text))]">*</span>
                             </label>
                             <p className="text-xs text-coffee-500 mb-3">
                                 Enter the access code provided by the Sabha coordinator to register as a manager.
@@ -204,7 +204,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                                 <button
                                     type="button"
                                     onClick={() => setShowManagerCode(!showManagerCode)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-coffee transition-colors"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-coffee-500 hover:text-coffee transition-colors"
                                     title={showManagerCode ? 'Hide Code' : 'Show Code'}
                                 >
                                     {showManagerCode ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -214,8 +214,8 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                     )}
 
                     {error && (
-                        <div className="clay-card bg-red-50 border border-red-200 p-4">
-                            <p className="text-red-700 text-center">{error}</p>
+                        <div className="clay-card bg-[rgb(var(--danger-bg))] border border-[rgb(var(--danger))]/40 p-4">
+                            <p className="text-[rgb(var(--danger-text))] text-center">{error}</p>
                         </div>
                     )}
 

@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -165,5 +165,65 @@ describe('no colour literals survive outside theme.css', () => {
         const rgba = (read('claymorphism.css').match(/rgba\([^)]+\)/g) ?? [])
             .filter(v => !/rgba\(0,\s*0,\s*0,/.test(v));
         expect(rgba, `Untokenised: ${[...new Set(rgba)].join(', ')}`).toEqual([]);
+    });
+});
+
+/**
+ * Tailwind's stock palette in components.
+ *
+ * `bg-white`, `text-gray-500`, `bg-blue-100` and friends are FIXED values. They
+ * do not move when `data-theme` flips, so every one is a light-coloured patch
+ * sitting in a dark screen — the ETA chip that was white text in a white box,
+ * the route dots that were white squares.
+ *
+ * There were roughly 200 at the start of this work. They are gone; this keeps
+ * them gone. Use the brand ramps (`text-coffee`, `bg-cream-300`, `text-saffron`)
+ * or a semantic token (`bg-[rgb(var(--success-bg))]`).
+ */
+describe('components use themed colours, not Tailwind stock', () => {
+    /**
+     * The NUMBERED scales only — `gray-500`, `blue-100` and so on. Those are
+     * fixed lightness steps chosen for a light background and are simply wrong
+     * on dark.
+     *
+     * `text-white` and `bg-black` are deliberately NOT matched. They sit on
+     * saturated fills and on scrims, where they are frequently correct in both
+     * themes, and a pattern match cannot tell the difference between a white
+     * label on a saffron button and a white label on a surface. Those are
+     * measured in tests/quality/theme-contrast.test.ts and in Phase 6's audit,
+     * which is the right tool for the question.
+     */
+    const OFFENDERS = new RegExp(
+        String.raw`(?<![\w/-])(?:bg|text|border|from|to|divide|ring)-` +
+        String.raw`(?:gray|slate|zinc|neutral|stone|blue|green|red|orange|amber|` +
+        String.raw`yellow|purple|teal|indigo|pink|rose|cyan|emerald|lime|violet|fuchsia|sky)` +
+        String.raw`-\d{2,3}(?![\w-])`,
+    );
+
+    /** Inside a className, not in prose or a comment. */
+    function offences(): string[] {
+        const found: string[] = [];
+        const walk = (dir: string) => {
+            for (const entry of readdirSync(dir)) {
+                const full = path.join(dir, entry);
+                if (statSync(full).isDirectory()) { walk(full); continue; }
+                if (!/\.tsx$/.test(entry)) continue;
+
+                readFileSync(full, 'utf8').split('\n').forEach((line, i) => {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
+                    if (!/class(Name)?=|clsx|tone:|className:/.test(line) && !/^\s*['"`].*['"`],?\s*$/.test(line)) return;
+                    const hit = line.match(OFFENDERS);
+                    if (hit) found.push(`${path.relative(ROOT, full)}:${i + 1}  ${hit[0]}`);
+                });
+            }
+        };
+        walk(path.join(ROOT, 'components'));
+        return found;
+    }
+
+    it('none are left', () => {
+        const hits = offences();
+        expect(hits, `Fixed colours cannot follow the theme:\n  ${hits.join('\n  ')}`).toEqual([]);
     });
 });

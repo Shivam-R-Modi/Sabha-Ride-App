@@ -288,7 +288,15 @@ export interface AssignmentResult {
 
 // --- UI Component Types ---
 
-export type TabView = 'home' | 'rides' | 'profile' | 'history';
+/**
+ * A destination in the shell's nav. Not every role uses every value —
+ * `getNavItems` in components/Layout.tsx decides which apply.
+ *
+ * 'people' and 'setup' are the manager's. They were previously reached through
+ * four unlabelled icon buttons in a toolbar, one of which used a map-pin to
+ * mean "settings".
+ */
+export type TabView = 'home' | 'rides' | 'profile' | 'history' | 'people' | 'setup';
 
 export interface NotificationPayload {
   title: string;

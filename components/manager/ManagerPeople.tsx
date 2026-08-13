@@ -1,0 +1,207 @@
+import React, { useState } from 'react';
+import { CheckCircle2, X, UserCheck, Loader2 } from 'lucide-react';
+import { usePendingDrivers, usePendingRiders, updateUserStatus } from '../../hooks/useFirestore';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../shared/useConfirm';
+import type { Driver, User } from '../../types';
+
+/**
+ * Approvals — who is waiting to be let into the app.
+ *
+ * WHAT THIS REPLACES
+ * ------------------
+ * A bell icon in a toolbar opening a modal that mixed FOUR different decisions:
+ * driver approvals, rider approvals, and pending ride requests — the last of
+ * which duplicated the Request Center sitting directly behind the modal, with a
+ * second "Assign" button that did the same thing.
+ *
+ * Approving someone is not a notification. It gates access to an app holding
+ * children's names, phone numbers and home addresses, and it deserves a screen
+ * rather than a panel you dismiss by tapping outside. Ride requests belong to
+ * Dispatch, and are only there now.
+ */
+export const ManagerPeople: React.FC = () => {
+    const { pendingDrivers, loading: driversLoading } = usePendingDrivers();
+    const { pendingRiders, loading: ridersLoading } = usePendingRiders();
+    const toast = useToast();
+    const { ask, confirmDialog } = useConfirm();
+    const [busyId, setBusyId] = useState<string | null>(null);
+
+    const loading = driversLoading || ridersLoading;
+    const total = pendingDrivers.length + pendingRiders.length;
+
+    const decide = async (
+        person: { id: string; name: string },
+        approve: boolean,
+        kind: 'driver' | 'rider',
+    ) => {
+        if (!approve) {
+            const ok = await ask({
+                title: `Turn down ${person.name}?`,
+                message: kind === 'driver'
+                    ? 'They will not be able to volunteer to drive.'
+                    : 'They will not be able to request rides.',
+                confirmLabel: 'Turn down',
+                cancelLabel: 'Go back',
+                destructive: true,
+            });
+            if (!ok) return;
+        }
+
+        setBusyId(person.id);
+        try {
+            await updateUserStatus(person.id, approve ? 'approved' : 'rejected');
+            toast.success(approve
+                ? `${person.name} approved.`
+                : `${person.name} turned down.`);
+        } catch (error) {
+            console.error('Error updating account status:', error);
+            toast.error(error instanceof Error
+                ? error.message
+                : `Could not update ${person.name}. Please try again.`);
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    return (
+        <div className="px-4 pt-6 pb-6 space-y-5 max-w-3xl mx-auto animate-in fade-in duration-300">
+            <header>
+                <h1 className="text-2xl font-header font-bold text-coffee">People</h1>
+                <p className="text-sm text-coffee-500">
+                    {loading
+                        ? 'Checking who is waiting…'
+                        : total === 0
+                            ? 'Nobody is waiting to be approved.'
+                            : `${total} waiting to be approved.`}
+                </p>
+            </header>
+
+            {loading ? (
+                <PersonSkeleton />
+            ) : total === 0 ? (
+                <div className="clay-card text-center py-12">
+                    <CheckCircle2 size={36} className="mx-auto text-[rgb(var(--success))] mb-3" />
+                    <p className="font-header font-bold text-coffee">All caught up</p>
+                    <p className="text-sm text-coffee-500 mt-1">
+                        New sign-ups will appear here for you to approve.
+                    </p>
+                </div>
+            ) : (
+                <>
+                    {pendingDrivers.length > 0 && (
+                        <Section title="Drivers" count={pendingDrivers.length}>
+                            {pendingDrivers.map(driver => (
+                                <PersonRow
+                                    key={driver.id}
+                                    name={driver.name}
+                                    detail={driver.phone || 'No phone number'}
+                                    extra={(driver as Driver).carModel || 'No vehicle listed'}
+                                    avatarUrl={driver.avatarUrl}
+                                    busy={busyId === driver.id}
+                                    onApprove={() => decide(driver, true, 'driver')}
+                                    onDeny={() => decide(driver, false, 'driver')}
+                                />
+                            ))}
+                        </Section>
+                    )}
+
+                    {pendingRiders.length > 0 && (
+                        <Section title="Riders" count={pendingRiders.length}>
+                            {pendingRiders.map(rider => (
+                                <PersonRow
+                                    key={rider.id}
+                                    name={rider.name}
+                                    detail={(rider as User).phone || rider.email || 'No contact details'}
+                                    extra={rider.address || 'No address set'}
+                                    avatarUrl={rider.avatarUrl}
+                                    busy={busyId === rider.id}
+                                    onApprove={() => decide(rider, true, 'rider')}
+                                    onDeny={() => decide(rider, false, 'rider')}
+                                />
+                            ))}
+                        </Section>
+                    )}
+                </>
+            )}
+
+            {confirmDialog}
+        </div>
+    );
+};
+
+const Section: React.FC<{ title: string; count: number; children: React.ReactNode }> = ({
+    title, count, children,
+}) => (
+    <section className="space-y-3">
+        <h2 className="text-xs font-bold text-coffee-500 uppercase tracking-widest">
+            {title} · {count}
+        </h2>
+        {children}
+    </section>
+);
+
+const PersonRow: React.FC<{
+    name: string;
+    detail: string;
+    extra: string;
+    avatarUrl?: string;
+    busy: boolean;
+    onApprove: () => void;
+    onDeny: () => void;
+}> = ({ name, detail, extra, avatarUrl, busy, onApprove, onDeny }) => (
+    <div className="clay-card">
+        <div className="flex items-center gap-3">
+            <img
+                src={avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FF6B35&color=fff`}
+                alt=""
+                className="w-11 h-11 rounded-xl shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+                <p className="font-bold text-coffee truncate">{name}</p>
+                <p className="text-sm text-coffee-500 truncate">{detail}</p>
+                <p className="text-xs text-coffee-500 truncate">{extra}</p>
+            </div>
+        </div>
+
+        {/* Full-width targets on their own row rather than two small chips
+            squeezed beside the name — this is an irreversible-ish decision made
+            on a phone, and a mis-tap turns someone away. */}
+        <div className="flex gap-3 mt-4">
+            <button
+                onClick={onDeny}
+                disabled={busy}
+                className="flex-1 min-h-11 rounded-xl border-2 border-[rgb(var(--danger))]
+                           text-[rgb(var(--danger-text))] font-semibold text-sm
+                           hover:bg-[rgb(var(--danger-bg))] transition-colors
+                           disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+                <X size={16} /> Turn down
+            </button>
+            <button
+                onClick={onApprove}
+                disabled={busy}
+                className="flex-1 min-h-11 rounded-xl bg-[rgb(var(--success))]
+                           text-[rgb(var(--text-on-accent))] font-semibold text-sm
+                           hover:opacity-90 transition-opacity disabled:opacity-50
+                           flex items-center justify-center gap-2"
+            >
+                {busy ? <Loader2 className="animate-spin" size={16} /> : <UserCheck size={16} />}
+                Approve
+            </button>
+        </div>
+    </div>
+);
+
+const PersonSkeleton: React.FC = () => (
+    <div className="clay-card" aria-busy="true" aria-label="Loading approvals">
+        <div className="flex items-center gap-3 animate-pulse">
+            <div className="w-11 h-11 rounded-xl bg-cream-300 shrink-0" />
+            <div className="flex-1 space-y-2">
+                <div className="h-4 bg-cream-300 rounded w-1/2" />
+                <div className="h-3 bg-cream-300 rounded w-2/3" />
+            </div>
+        </div>
+        <div className="h-11 bg-cream-300 rounded-xl mt-4 animate-pulse" />
+    </div>
+);

@@ -15,7 +15,7 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -235,11 +235,12 @@ describe('RequestTable — acting on a request', () => {
         const boxes = within(table()).getAllByRole('checkbox');
         // boxes[0] is select-all; the rest are rows.
         await user.click(boxes[1]);
-        // The action bar only mounts once something is selected. Awaiting it
-        // rather than assuming it is there keeps this from racing the render
-        // under parallel load — the button's onClick closes over selectedIds,
-        // so clicking a stale one would report an empty selection.
-        await user.click(await screen.findByRole('button', { name: /assign bulk/i }));
+        // Wait for the SELECTION to be committed, not merely for the button to
+        // exist. The action bar mounts as soon as one row is ticked, and its
+        // onClick closes over selectedIds — so clicking the instant it appears
+        // can fire against a half-applied selection.
+        await screen.findByText('1 Selected');
+        await user.click(screen.getByRole('button', { name: /assign bulk/i }));
 
         await waitFor(() => expect(onBulkAssign).toHaveBeenCalledWith(['a']));
     });
@@ -253,24 +254,92 @@ describe('RequestTable — acting on a request', () => {
         });
 
         await user.click(within(table()).getAllByRole('checkbox')[0]);
-        await user.click(await screen.findByRole('button', { name: /assign bulk/i }));
+        await screen.findByText('2 Selected');
+        await user.click(screen.getByRole('button', { name: /assign bulk/i }));
 
         await waitFor(() => expect(onBulkAssign).toHaveBeenCalledWith(['a', 'b']));
     });
 });
 
-describe('RequestTable — known gap, recorded so the fix is verifiable', () => {
-    it('offers no bulk selection outside the desktop table', () => {
-        // STATUS.md: "bulk-select on the manager's queue exists only in the
-        // desktop table. On a phone the checkboxes and Assign Bulk are
-        // unreachable." Every checkbox in the document belongs to the table.
-        //
-        // When Phase 5 gives the mobile list a selection mode, this test will
-        // fail — and that failure is the signal to update it, not a regression.
+describe('RequestTable — bulk select on a phone', () => {
+    /**
+     * STATUS.md carried this as a known gap: "bulk-select on the manager's queue
+     * exists only in the desktop table. On a phone the checkboxes and Assign
+     * Bulk are unreachable." Phase 5 closed it with a long-press.
+     *
+     * The mobile card list is `md:hidden`, and jsdom applies no CSS, so it is in
+     * the document alongside the table. Mobile assertions therefore scope
+     * OUTSIDE the table.
+     */
+    const mobileCard = (name: string) => {
+        const heading = screen.getAllByText(name)
+            .find(el => !table().contains(el));
+        // The card is the positioned foreground element, a few levels up.
+        let node: HTMLElement | null = heading as HTMLElement;
+        while (node && !node.className?.includes?.('rounded-2xl')) node = node.parentElement;
+        return node!;
+    };
+
+    const longPress = async (element: HTMLElement) => {
+        fireEvent.touchStart(element, { touches: [{ clientX: 0 }] });
+        await act(() => new Promise(r => setTimeout(r, 500)));
+        fireEvent.touchEnd(element);
+    };
+
+    it('shows no checkboxes on the cards until asked', () => {
+        // A checkbox on every card would cost width where width is scarcest,
+        // and triage is one-at-a-time most of the time.
+        renderTable({ requests: [request()] });
+        const outsideTable = screen.getAllByRole('checkbox')
+            .filter(box => !table().contains(box));
+        expect(outsideTable).toHaveLength(0);
+    });
+
+    it('a long press starts selecting', async () => {
         renderTable({ requests: [request()] });
 
-        const all = screen.getAllByRole('checkbox');
-        const inTable = within(table()).getAllByRole('checkbox');
-        expect(all.length).toBe(inTable.length);
+        await longPress(mobileCard('Anita Shah'));
+
+        expect(screen.getByRole('checkbox', { name: /select anita shah/i })).toBeChecked();
+    });
+
+    it('bulk-assigns what was selected on the phone', async () => {
+        const user = userEvent.setup();
+        const onBulkAssign = vi.fn();
+        renderTable({ requests: [request({ id: 'a' })], onBulkAssign });
+
+        await longPress(mobileCard('Anita Shah'));
+        await user.click(await screen.findByRole('button', { name: /assign bulk/i }));
+
+        await waitFor(() => expect(onBulkAssign).toHaveBeenCalledWith(['a']));
+    });
+
+    it('a swipe is not a long press', async () => {
+        // Moving the finger has to cancel the hold, or every swipe-to-assign
+        // would also toggle selection.
+        renderTable({ requests: [request()] });
+        const card = mobileCard('Anita Shah');
+
+        fireEvent.touchStart(card, { touches: [{ clientX: 0 }] });
+        fireEvent.touchMove(card, { touches: [{ clientX: 60 }] });
+        await act(() => new Promise(r => setTimeout(r, 500)));
+        fireEvent.touchEnd(card);
+
+        expect(screen.queryByRole('checkbox', { name: /select anita shah/i }))
+            .not.toBeInTheDocument();
+    });
+
+    it('suspends swipe actions while selecting, so a sloppy tap cannot dismiss anyone', async () => {
+        const onDismiss = vi.fn();
+        renderTable({ requests: [request()], onDismiss });
+        const card = mobileCard('Anita Shah');
+
+        await longPress(card);
+
+        fireEvent.touchStart(card, { touches: [{ clientX: 200 }] });
+        fireEvent.touchMove(card, { touches: [{ clientX: 0 }] });
+        fireEvent.touchEnd(card);
+
+        expect(onDismiss).not.toHaveBeenCalled();
     });
 });

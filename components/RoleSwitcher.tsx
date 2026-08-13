@@ -7,17 +7,17 @@ const roleConfig: Record<UserRole, { label: string; icon: React.ReactNode; color
     manager: {
         label: 'Manager',
         icon: <Shield size={16} />,
-        color: 'text-purple-600'
+        color: 'text-coffee'
     },
     driver: {
         label: 'Driver',
         icon: <Car size={16} />,
-        color: 'text-blue-600'
+        color: 'text-[rgb(var(--info-text))]'
     },
     student: {
         label: 'Student',
         icon: <GraduationCap size={16} />,
-        color: 'text-green-700'
+        color: 'text-[rgb(var(--success-text))]'
     }
 };
 
@@ -42,7 +42,7 @@ export const RoleSwitcher: React.FC = () => {
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-2 px-3 py-2 min-h-11 rounded-xl bg-white/80 hover:bg-white shadow-sm border border-gold/20 transition-all duration-200"
+                className="flex items-center gap-2 px-3 py-2 min-h-11 rounded-xl bg-[rgb(var(--surface)/0.8)] hover:bg-surface shadow-sm border border-gold/20 transition-all duration-200"
             >
                 {currentConfig && (
                     <>
@@ -62,7 +62,7 @@ export const RoleSwitcher: React.FC = () => {
                     />
 
                     {/* Dropdown */}
-                    <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gold/20 overflow-hidden z-dropdown animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="absolute top-full left-0 mt-2 w-48 bg-surface rounded-xl shadow-xl border border-gold/20 overflow-hidden z-dropdown animate-in fade-in slide-in-from-top-2 duration-200">
                         <div className="p-2 border-b border-cream-dark">
                             <p className="text-xs text-coffee-500 font-medium uppercase tracking-wide px-2">Switch Role</p>
                         </div>

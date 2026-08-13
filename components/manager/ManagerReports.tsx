@@ -152,7 +152,7 @@ export const ManagerReports: React.FC = () => {
                 </div>
                 <button
                     onClick={fetchStats}
-                    className="px-4 py-2 text-sm font-bold text-saffron-800 bg-orange-50 rounded-xl hover:bg-orange-100 transition-colors"
+                    className="px-4 py-2 text-sm font-bold text-saffron-800 bg-cream-300 rounded-xl hover:bg-cream-300 transition-colors"
                 >
                     Refresh
                 </button>
@@ -163,8 +163,8 @@ export const ManagerReports: React.FC = () => {
                 {/* Total Rides */}
                 <div className="clay-card p-5">
                     <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                            <Car className="w-5 h-5 text-blue-500" />
+                        <div className="w-10 h-10 bg-[rgb(var(--info-bg))] rounded-xl flex items-center justify-center">
+                            <Car className="w-5 h-5 text-[rgb(var(--info-text))]" />
                         </div>
                         <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Total Rides</span>
                     </div>
@@ -175,8 +175,8 @@ export const ManagerReports: React.FC = () => {
                 {/* Students Served */}
                 <div className="clay-card p-5">
                     <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center">
-                            <Users className="w-5 h-5 text-green-500" />
+                        <div className="w-10 h-10 bg-[rgb(var(--success-bg))] rounded-xl flex items-center justify-center">
+                            <Users className="w-5 h-5 text-[rgb(var(--success-text))]" />
                         </div>
                         <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Students Served</span>
                     </div>
@@ -187,8 +187,8 @@ export const ManagerReports: React.FC = () => {
                 {/* Active Drivers */}
                 <div className="clay-card p-5">
                     <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center">
-                            <TrendingUp className="w-5 h-5 text-purple-500" />
+                        <div className="w-10 h-10 bg-cream-300 rounded-xl flex items-center justify-center">
+                            <TrendingUp className="w-5 h-5 text-saffron" />
                         </div>
                         <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Active Drivers</span>
                     </div>
@@ -199,7 +199,7 @@ export const ManagerReports: React.FC = () => {
                 {/* This Week Attendance */}
                 <div className="clay-card p-5">
                     <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center">
+                        <div className="w-10 h-10 bg-cream-300 rounded-xl flex items-center justify-center">
                             <Calendar className="w-5 h-5 text-saffron" />
                         </div>
                         <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">This Week</span>
@@ -233,21 +233,21 @@ export const ManagerReports: React.FC = () => {
                 {currentWeekStats ? (
                     <div className="grid grid-cols-2 gap-4">
                         {/* Yes Responses */}
-                        <div className="bg-green-50 rounded-2xl p-4 text-center border border-green-100">
-                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <CheckCircle2 className="w-6 h-6 text-green-700" />
+                        <div className="bg-[rgb(var(--success-bg))] rounded-2xl p-4 text-center border border-[rgb(var(--success))]/25">
+                            <div className="w-12 h-12 bg-[rgb(var(--success-bg))] rounded-full flex items-center justify-center mx-auto mb-3">
+                                <CheckCircle2 className="w-6 h-6 text-[rgb(var(--success-text))]" />
                             </div>
-                            <p className="text-2xl font-bold text-green-700">{currentWeekStats.totalYes}</p>
-                            <p className="text-xs text-green-700 font-medium mt-1">Attending</p>
+                            <p className="text-2xl font-bold text-[rgb(var(--success-text))]">{currentWeekStats.totalYes}</p>
+                            <p className="text-xs text-[rgb(var(--success-text))] font-medium mt-1">Attending</p>
                         </div>
 
                         {/* No Responses */}
-                        <div className="bg-red-50 rounded-2xl p-4 text-center border border-red-100">
-                            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <XCircle className="w-6 h-6 text-red-600" />
+                        <div className="bg-[rgb(var(--danger-bg))] rounded-2xl p-4 text-center border border-[rgb(var(--danger))]/25">
+                            <div className="w-12 h-12 bg-[rgb(var(--danger-bg))] rounded-full flex items-center justify-center mx-auto mb-3">
+                                <XCircle className="w-6 h-6 text-[rgb(var(--danger-text))]" />
                             </div>
-                            <p className="text-2xl font-bold text-red-700">{currentWeekStats.totalNo}</p>
-                            <p className="text-xs text-red-600 font-medium mt-1">Not Attending</p>
+                            <p className="text-2xl font-bold text-[rgb(var(--danger-text))]">{currentWeekStats.totalNo}</p>
+                            <p className="text-xs text-[rgb(var(--danger-text))] font-medium mt-1">Not Attending</p>
                         </div>
 
                         {/* A third "Pending" tile used to sit here showing the
@@ -275,10 +275,10 @@ export const ManagerReports: React.FC = () => {
                     <button
                         onClick={handleDownloadAttendance}
                         disabled={isDownloading}
-                        className="flex items-center gap-4 p-4 bg-cream/50 rounded-xl border border-orange-100 hover:bg-cream transition-colors text-left"
+                        className="flex items-center gap-4 p-4 bg-cream/50 rounded-xl border border-hairline/10 hover:bg-cream transition-colors text-left"
                     >
-                        <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
-                            <FileSpreadsheet className="w-6 h-6 text-green-700" />
+                        <div className="w-12 h-12 bg-[rgb(var(--success-bg))] rounded-xl flex items-center justify-center shrink-0">
+                            <FileSpreadsheet className="w-6 h-6 text-[rgb(var(--success-text))]" />
                         </div>
                         <div>
                             <p className="font-bold text-coffee">Weekly Attendance CSV</p>
@@ -286,13 +286,13 @@ export const ManagerReports: React.FC = () => {
                         </div>
                     </button>
 
-                    <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200 opacity-50 cursor-not-allowed">
-                        <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
-                            <FileSpreadsheet className="w-6 h-6 text-gray-500" />
+                    <div className="flex items-center gap-4 p-4 bg-cream-200 rounded-xl border border-hairline/20 opacity-50 cursor-not-allowed">
+                        <div className="w-12 h-12 bg-cream-300 rounded-xl flex items-center justify-center shrink-0">
+                            <FileSpreadsheet className="w-6 h-6 text-coffee-500" />
                         </div>
                         <div>
-                            <p className="font-bold text-gray-500">Ride History CSV</p>
-                            <p className="text-xs text-gray-500 mt-0.5">Coming soon</p>
+                            <p className="font-bold text-coffee-500">Ride History CSV</p>
+                            <p className="text-xs text-coffee-500 mt-0.5">Coming soon</p>
                         </div>
                     </div>
                 </div>

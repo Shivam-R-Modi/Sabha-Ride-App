@@ -98,12 +98,12 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
             <div className="flex-1 flex flex-col items-center justify-center p-6 z-raised">
                 {/* Success Icon */}
                 <div className="relative mb-6">
-                    <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping"></div>
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-lg shadow-green-200 animate-bounce">
+                    <div className="absolute inset-0 bg-[rgb(var(--success))]/20 rounded-full animate-ping"></div>
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[rgb(var(--success))] to-[rgb(var(--success))] flex items-center justify-center shadow-lg shadow-green-200 animate-bounce">
                         <CheckCircle2 size={48} className="text-white" />
                     </div>
                     {/* Sparkles */}
-                    <Sparkles size={20} className="absolute -top-2 -right-2 text-yellow-400 animate-pulse" />
+                    <Sparkles size={20} className="absolute -top-2 -right-2 text-gold animate-pulse" />
                     <Sparkles size={16} className="absolute -bottom-1 -left-3 text-saffron animate-pulse delay-150" />
                 </div>
 
@@ -111,43 +111,43 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                 <h1 className="text-3xl font-bold text-coffee text-center mb-2">
                     Ride #{rideNumber} Completed
                 </h1>
-                <p className="text-green-700 font-medium mb-8">✓ Great job!</p>
+                <p className="text-[rgb(var(--success-text))] font-medium mb-8">✓ Great job!</p>
 
                 {/* Ride Summary Card */}
-                <div className="w-full max-w-sm clay-card bg-gradient-to-r from-green-50 to-emerald-50 border-green-100 mb-6">
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 text-center">Ride Summary</h3>
+                <div className="w-full max-w-sm clay-card bg-gradient-to-r from-[rgb(var(--success-bg))] to-[rgb(var(--success-bg))] border-[rgb(var(--success))]/25 mb-6">
+                    <h3 className="text-sm font-bold text-coffee-500 uppercase tracking-wider mb-4 text-center">Ride Summary</h3>
                     <div className="flex items-center justify-center gap-2 text-coffee font-medium text-center mb-4">
                         <span>{stats.students} students</span>
-                        <span className="text-gray-300">•</span>
+                        <span className="text-coffee-400">•</span>
                         <span>{(stats.distance || 0).toFixed(1)} mi</span>
-                        <span className="text-gray-300">•</span>
+                        <span className="text-coffee-400">•</span>
                         <span>{Math.round(stats.time || 0)} min</span>
                     </div>
 
                     {/* Today's Stats */}
-                    <div className="border-t border-green-200/50 pt-4 mt-4">
-                        <p className="text-xs text-gray-500 uppercase tracking-wider text-center mb-3">Today's Seva</p>
+                    <div className="border-t border-[rgb(var(--success))]/40/50 pt-4 mt-4">
+                        <p className="text-xs text-coffee-500 uppercase tracking-wider text-center mb-3">Today's Seva</p>
                         <div className="grid grid-cols-3 gap-4">
                             <div className="text-center">
-                                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-1">
-                                    <Car size={18} className="text-green-700" />
+                                <div className="w-10 h-10 rounded-full bg-[rgb(var(--success-bg))] flex items-center justify-center mx-auto mb-1">
+                                    <Car size={18} className="text-[rgb(var(--success-text))]" />
                                 </div>
                                 <p className="text-xl font-bold text-coffee">{driverStats.ridesCompletedToday}</p>
-                                <p className="text-xs text-gray-500">Rides</p>
+                                <p className="text-xs text-coffee-500">Rides</p>
                             </div>
                             <div className="text-center">
-                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-1">
-                                    <Users size={18} className="text-blue-600" />
+                                <div className="w-10 h-10 rounded-full bg-[rgb(var(--info-bg))] flex items-center justify-center mx-auto mb-1">
+                                    <Users size={18} className="text-[rgb(var(--info-text))]" />
                                 </div>
                                 <p className="text-xl font-bold text-coffee">{driverStats.totalStudentsToday}</p>
-                                <p className="text-xs text-gray-500">Students</p>
+                                <p className="text-xs text-coffee-500">Students</p>
                             </div>
                             <div className="text-center">
-                                <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center mx-auto mb-1">
-                                    <Navigation size={18} className="text-orange-600" />
+                                <div className="w-10 h-10 rounded-full bg-cream-300 flex items-center justify-center mx-auto mb-1">
+                                    <Navigation size={18} className="text-saffron-800" />
                                 </div>
                                 <p className="text-xl font-bold text-coffee">{(driverStats.totalDistanceToday || 0).toFixed(0)}</p>
-                                <p className="text-xs text-gray-500">Miles</p>
+                                <p className="text-xs text-coffee-500">Miles</p>
                             </div>
                         </div>
                     </div>
@@ -155,9 +155,9 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
 
                 {/* Error Display */}
                 {error && (
-                    <div className="w-full max-w-sm bg-red-50 border border-red-200 rounded-xl p-4 mb-4 flex items-start gap-3">
-                        <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={18} />
-                        <p className="text-red-600 text-sm">{error}</p>
+                    <div className="w-full max-w-sm bg-[rgb(var(--danger-bg))] border border-[rgb(var(--danger))]/40 rounded-xl p-4 mb-4 flex items-start gap-3">
+                        <AlertCircle className="text-[rgb(var(--danger-text))] shrink-0 mt-0.5" size={18} />
+                        <p className="text-[rgb(var(--danger-text))] text-sm">{error}</p>
                     </div>
                 )}
 

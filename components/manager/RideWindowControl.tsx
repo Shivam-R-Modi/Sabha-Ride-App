@@ -72,24 +72,24 @@ export const RideWindowControl: React.FC = () => {
     };
 
     return (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-4">
-            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+        <div className="bg-surface rounded-xl border border-hairline/20 shadow-sm overflow-hidden mb-4">
+            <div className="px-4 py-3 border-b border-hairline/10 bg-cream-200">
                 <div className="flex items-center gap-2">
                     <Clock size={18} className="text-saffron" />
-                    <h3 className="text-sm font-bold text-gray-800">Ride Window</h3>
+                    <h3 className="text-sm font-bold text-coffee">Ride Window</h3>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-coffee-500 mt-1">
                     Opens on its own. Use these only to start early.
                 </p>
             </div>
 
-            <div className="px-4 py-3 border-b border-gray-100 bg-amber-50/50">
-                <p className="text-xs text-gray-500 mb-1">Right Now</p>
-                <p className="text-sm font-medium text-gray-800">
+            <div className="px-4 py-3 border-b border-hairline/10 bg-[rgb(var(--warning-bg))]/50">
+                <p className="text-xs text-coffee-500 mb-1">Right Now</p>
+                <p className="text-sm font-medium text-coffee">
                     {context?.displayText || 'No rides available'}
                 </p>
                 {context?.timeContext && (
-                    <p className="text-xs text-gray-500 mt-0.5">{context.timeContext}</p>
+                    <p className="text-xs text-coffee-500 mt-0.5">{context.timeContext}</p>
                 )}
                 {overrideActive && (
                     <p className="text-xs text-saffron-800 font-semibold mt-1">
@@ -133,7 +133,7 @@ export const RideWindowControl: React.FC = () => {
                             { reset: true },
                         )}
                         disabled={!!busy}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-gray-200 text-gray-700 rounded-lg font-semibold text-sm hover:bg-gray-50 disabled:opacity-50 transition-all"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-hairline/20 text-coffee-700 rounded-lg font-semibold text-sm hover:bg-cream-200 disabled:opacity-50 transition-all"
                     >
                         {busy === 'reset' ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
                         Back to automatic
@@ -141,13 +141,13 @@ export const RideWindowControl: React.FC = () => {
                 )}
 
                 {error && (
-                    <div className="flex items-center gap-2 text-red-700 bg-red-50 px-3 py-2 rounded-lg">
+                    <div className="flex items-center gap-2 text-[rgb(var(--danger-text))] bg-[rgb(var(--danger-bg))] px-3 py-2 rounded-lg">
                         <AlertCircle size={14} />
                         <span className="text-xs">{error}</span>
                     </div>
                 )}
                 {done && (
-                    <div className="flex items-center gap-2 text-green-800 bg-green-50 px-3 py-2 rounded-lg">
+                    <div className="flex items-center gap-2 text-[rgb(var(--success-text))] bg-[rgb(var(--success-bg))] px-3 py-2 rounded-lg">
                         <CheckCircle2 size={14} />
                         <span className="text-xs">Updated. Everyone has been notified.</span>
                     </div>
