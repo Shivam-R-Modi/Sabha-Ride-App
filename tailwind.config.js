@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
-// Theme copied verbatim from the former inline `tailwind.config` in index.html.
-// Token normalisation is deliberately NOT part of this commit.
+// Colour is NOT defined here. Every value below resolves to a semantic token in
+// theme.css, which is the single place a colour is chosen and the mechanism the
+// day/night switch works through. See the header of that file.
 export default {
   content: [
     './index.html',
@@ -34,42 +35,66 @@ export default {
         // nav itself so the two cannot drift apart.
         'safe-nav': 'calc(var(--bottom-nav-h) + env(safe-area-inset-bottom))',
       },
+      // Every brand colour is a view onto a semantic token in theme.css, so
+      // `text-coffee` and `bg-cream` follow the day/night switch with no `dark:`
+      // variant anywhere in the codebase. The ramps and their meanings are
+      // unchanged — the LIGHT values resolve to exactly the hexes that used to
+      // be written here, which is what makes Phase 1 a pure refactor.
+      //
+      // `<alpha-value>` is what lets `bg-cream/50` still work. It only works
+      // because the tokens are space-separated RGB channels rather than hex;
+      // see the format note at the top of theme.css.
+      //
+      // Contrast ratios below are for LIGHT mode, measured on cream #FAF9F6.
+      // The dark equivalents are held to the same AA floor in theme.css.
       colors: {
-        // Ramps are the existing brand hues, extended downwards so text has an
-        // accessible step. Contrast measured against cream #FAF9F6.
-        //   saffron 500 is the brand accent and is NOT safe for text (2.84:1) —
-        //   use it for fills, icons and graphics; use 700/800 for text.
         saffron: {
-          DEFAULT: '#FF6B35',
-          dark: '#F4722B',
-          light: '#FF8C5A',
-          300: '#FF8C5A',
-          500: '#FF6B35', // 2.84:1 — fills only
-          600: '#E55A2B', // 3.42:1 — large text / filled buttons
-          700: '#D4531F', // 3.94:1
-          800: '#B84318', // 5.18:1 — AA for all text sizes
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          dark: 'rgb(var(--accent-mid) / <alpha-value>)',
+          light: 'rgb(var(--accent-light) / <alpha-value>)',
+          300: 'rgb(var(--accent-light) / <alpha-value>)',
+          500: 'rgb(var(--accent) / <alpha-value>)',      // 2.84:1 — fills only
+          600: 'rgb(var(--accent-dark) / <alpha-value>)', // 3.42:1 — large text / filled buttons
+          700: 'rgb(var(--accent-deep) / <alpha-value>)', // 3.94:1
+          800: 'rgb(var(--accent-text) / <alpha-value>)', // 5.18:1 — AA for all text sizes
         },
         cream: {
-          DEFAULT: '#FAF9F6',
-          dark: '#F2EFE9',
-          100: '#FAF9F6',
-          200: '#F5F0E8',
-          300: '#EDE8E0',
-          400: '#E5E0D8',
+          DEFAULT: 'rgb(var(--canvas) / <alpha-value>)',
+          dark: 'rgb(var(--canvas-soft) / <alpha-value>)',
+          100: 'rgb(var(--canvas) / <alpha-value>)',
+          200: 'rgb(var(--canvas-mid) / <alpha-value>)',
+          300: 'rgb(var(--canvas-deep) / <alpha-value>)',
+          400: 'rgb(var(--sunken) / <alpha-value>)',
         },
         gold: {
-          DEFAULT: '#D4AF37',
-          500: '#D4AF37', // 2.00:1 — decorative only, never text
-          700: '#8A6A1F', // 4.79:1 — AA text
+          DEFAULT: 'rgb(var(--gold) / <alpha-value>)',
+          500: 'rgb(var(--gold) / <alpha-value>)',      // 2.00:1 — decorative only, never text
+          700: 'rgb(var(--gold-text) / <alpha-value>)', // 4.79:1 — AA text
         },
         coffee: {
-          DEFAULT: '#3D2914',
-          900: '#3D2914', // 13.07:1 — primary text
-          700: '#5D4930', //  8.10:1 — secondary text
-          500: '#7A6B5A', //  4.89:1 — muted text, AA floor
-          400: '#8C7B68', //  3.87:1 — non-text only
+          DEFAULT: 'rgb(var(--text-strong) / <alpha-value>)',
+          900: 'rgb(var(--text-strong) / <alpha-value>)', // 13.07:1 — primary text
+          700: 'rgb(var(--text) / <alpha-value>)',        //  8.10:1 — secondary text
+          500: 'rgb(var(--text-soft) / <alpha-value>)',   //  4.89:1 — muted text, AA floor
+          400: 'rgb(var(--text-faint) / <alpha-value>)',  //  3.87:1 — non-text only
         },
-        mocha: '#5C4033',
+        mocha: 'rgb(var(--mocha) / <alpha-value>)',
+
+        // Theme-aware neutrals. These are the migration target for the ~200
+        // hardcoded `bg-white` / `text-gray-*` utilities still scattered through
+        // components — each phase converts the screens it touches.
+        surface: {
+          DEFAULT: 'rgb(var(--surface) / <alpha-value>)',
+          mid: 'rgb(var(--surface-mid) / <alpha-value>)',
+          deep: 'rgb(var(--surface-deep) / <alpha-value>)',
+          sunken: 'rgb(var(--sunken) / <alpha-value>)',
+        },
+        ink: {
+          DEFAULT: 'rgb(var(--text-strong) / <alpha-value>)',
+          soft: 'rgb(var(--text) / <alpha-value>)',
+          muted: 'rgb(var(--text-soft) / <alpha-value>)',
+        },
+        hairline: 'rgb(var(--hairline) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
@@ -100,14 +125,17 @@ export default {
         modal: '1100',
         toast: '1200',
       },
-      // Elevation scale. Values lifted verbatim from the claymorphism classes so
-      // one card treatment can be reused without re-typing a 3-layer shadow.
-      // Use a border OR a shadow to separate a surface, never both.
+      // Elevation scale. Geometry and alphas lifted verbatim from the
+      // claymorphism classes so one card treatment can be reused without
+      // re-typing a 3-layer shadow. Only the COLOUR is themed — on dark,
+      // --shadow-glow stops being white, which is what keeps these inset
+      // highlights from becoming a glare. Use a border OR a shadow to separate
+      // a surface, never both.
       boxShadow: {
-        'clay-raised': '8px 8px 24px 0 rgba(61, 47, 20, 0.15), inset 8px 8px 16px 0 rgba(255, 255, 255, 0.8), inset -4px -4px 12px 0 rgba(61, 47, 20, 0.08)',
-        'clay-hover': '12px 12px 32px 0 rgba(61, 47, 20, 0.18), inset 8px 8px 16px 0 rgba(255, 255, 255, 0.9), inset -4px -4px 12px 0 rgba(61, 47, 20, 0.1)',
-        'clay-inset': 'inset 4px 4px 8px 0 rgba(61, 47, 20, 0.08), inset -2px -2px 6px 0 rgba(255, 255, 255, 0.9)',
-        'clay-overlay': '20px 20px 48px 0 rgba(61, 47, 20, 0.2), inset 8px 8px 16px 0 rgba(255, 255, 255, 0.8), inset -4px -4px 12px 0 rgba(61, 47, 20, 0.05)',
+        'clay-raised': '8px 8px 24px 0 rgb(var(--shadow-cast) / 0.15), inset 8px 8px 16px 0 rgb(var(--shadow-glow) / 0.8), inset -4px -4px 12px 0 rgb(var(--shadow-cast) / 0.08)',
+        'clay-hover': '12px 12px 32px 0 rgb(var(--shadow-cast) / 0.18), inset 8px 8px 16px 0 rgb(var(--shadow-glow) / 0.9), inset -4px -4px 12px 0 rgb(var(--shadow-cast) / 0.1)',
+        'clay-inset': 'inset 4px 4px 8px 0 rgb(var(--shadow-cast) / 0.08), inset -2px -2px 6px 0 rgb(var(--shadow-glow) / 0.9)',
+        'clay-overlay': '20px 20px 48px 0 rgb(var(--shadow-cast) / 0.2), inset 8px 8px 16px 0 rgb(var(--shadow-glow) / 0.8), inset -4px -4px 12px 0 rgb(var(--shadow-cast) / 0.05)',
       },
     },
   },

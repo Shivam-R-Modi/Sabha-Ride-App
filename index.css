@@ -35,7 +35,7 @@ body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     color: var(--text-primary);
     line-height: 1.6;
-    background: linear-gradient(135deg, #FAF9F6 0%, #F5F0E8 50%, #EDE8E0 100%);
+    background: linear-gradient(135deg, rgb(var(--canvas)) 0%, rgb(var(--canvas-mid)) 50%, rgb(var(--canvas-deep)) 100%);
     min-height: 100dvh;
     height: 100%;
 }
@@ -47,7 +47,7 @@ body {
 body,
 #root,
 .app-container {
-    background: linear-gradient(135deg, #FAF9F6 0%, #F5F0E8 50%, #EDE8E0 100%);
+    background: linear-gradient(135deg, rgb(var(--canvas)) 0%, rgb(var(--canvas-mid)) 50%, rgb(var(--canvas-deep)) 100%);
     min-height: 100dvh;
     position: relative;
 }
@@ -125,20 +125,20 @@ p {
 
 /* Accessible Text Colors */
 .text-primary {
-    color: var(--text-primary, #3D2914);
+    color: var(--text-primary, rgb(var(--text-strong)));
 }
 
 .text-secondary {
-    color: var(--text-secondary, #5D4930);
+    color: var(--text-secondary, rgb(var(--text)));
 }
 
 .text-muted {
-    color: var(--text-muted, #7A6B5A);
+    color: var(--text-muted, rgb(var(--text-soft)));
 }
 
 /* 4.5:1 on cream */
 .text-muted-accessible {
-    color: #6B5D4D;
+    color: rgb(var(--text-soft));
 }
 
 /* Higher contrast for smaller text */
@@ -153,18 +153,18 @@ p {
 }
 
 ::-webkit-scrollbar-track {
-    background: linear-gradient(145deg, #E5E0D8, #F5F0E8);
+    background: linear-gradient(145deg, rgb(var(--sunken)), rgb(var(--canvas-mid)));
     border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: linear-gradient(145deg, #FF8C5A, #E55A2B);
+    background: linear-gradient(145deg, rgb(var(--accent-light)), rgb(var(--accent-dark)));
     border-radius: 10px;
     box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.3);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(145deg, #FF6B35, #D4531F);
+    background: linear-gradient(145deg, rgb(var(--accent)), rgb(var(--cta-dark)));
 }
 /* ───────────────────────────────────────────────────────────────
    NOTE: the hand-rolled utility layer that used to live here
@@ -219,7 +219,7 @@ p {
     position: absolute;
     top: -40px;
     left: 0;
-    background: var(--saffron-orange, #FF6B35);
+    background: var(--saffron-orange, rgb(var(--accent)));
     color: white;
     padding: 8px 16px;
     z-index: 100;
@@ -232,7 +232,7 @@ p {
 
 /* Focus Visible - Global */
 *:focus-visible {
-    outline: 3px solid var(--saffron-orange, #FF6B35);
+    outline: 3px solid var(--saffron-orange, rgb(var(--accent)));
     outline-offset: 2px;
 }
 
@@ -376,49 +376,49 @@ p {
    ─────────────────────────────────────────────────────────────── */
 
 .text-success {
-    color: #22C55E;
+    color: rgb(var(--success));
 }
 
 .text-warning {
-    color: #F59E0B;
+    color: rgb(var(--warning));
 }
 
 .text-error {
-    color: #EF4444;
+    color: rgb(var(--danger));
 }
 
 .text-info {
-    color: #3B82F6;
+    color: rgb(var(--info));
 }
 
 .bg-success {
-    background-color: #22C55E;
+    background-color: rgb(var(--success));
 }
 
 .bg-warning {
-    background-color: #F59E0B;
+    background-color: rgb(var(--warning));
 }
 
 .bg-error {
-    background-color: #EF4444;
+    background-color: rgb(var(--danger));
 }
 
 .bg-info {
-    background-color: #3B82F6;
+    background-color: rgb(var(--info));
 }
 
 .bg-success-light {
-    background-color: #D4EDDA;
+    background-color: rgb(var(--success-bg));
 }
 
 .bg-warning-light {
-    background-color: #FFF3CD;
+    background-color: rgb(var(--warning-bg));
 }
 
 .bg-error-light {
-    background-color: #F8D7DA;
+    background-color: rgb(var(--danger-bg));
 }
 
 .bg-info-light {
-    background-color: #D1ECF1;
+    background-color: rgb(var(--info-bg));
 }

@@ -1,0 +1,407 @@
+/* ═══════════════════════════════════════════════════════════════
+   SEMANTIC COLOUR TOKENS — Sabha Ride Seva
+   Phase 1 of docs/plans/ui-ux-optimization.md
+   ═══════════════════════════════════════════════════════════════
+
+   The one place a colour is chosen. Everything downstream — Tailwind's
+   brand palette, claymorphism.css's surfaces, the glass utilities —
+   reads from here and nowhere else.
+
+   WHY THIS EXISTS
+   ---------------
+   Before this file, colour was baked into gradients and shadows:
+
+       .clay-card { background: linear-gradient(145deg,#FFF,#FAF9F6,#F5F0E8) }
+
+   which is unthemeable by construction. There is no switch you can flip
+   on a literal. So a day/night toggle is not a feature you bolt on, it
+   is this indirection plus a `data-theme` attribute.
+
+   THE FORMAT IS SPACE-SEPARATED RGB CHANNELS, NOT HEX
+   ---------------------------------------------------
+   `255 255 255`, not `#FFFFFF`, so one token serves both an opaque fill
+   and a translucent one:
+
+       background: rgb(var(--surface));          opaque
+       background: rgb(var(--surface) / .62);    glass
+
+   (No inline comment markers in that example on purpose — CSS comments do
+   not nest, so a `*` `/` inside this block would end it here and spill the
+   rest of the prose into the stylesheet as syntax errors. It did exactly
+   that once.)
+
+   The same format is what makes Tailwind's `<alpha-value>` placeholder
+   work, so `bg-surface/50` resolves correctly. A hex token supports
+   neither use.
+
+   THE LIGHT VALUES ARE NOT NEW
+   ----------------------------
+   Every light value below is the exact colour that was already
+   hardcoded somewhere in claymorphism.css, index.css or
+   tailwind.config.js. Phase 1 is a pure refactor: light mode must render
+   byte-identical afterwards, and that is its acceptance test. If you are
+   tempted to improve a light value while you are in here — don't. Do it
+   in Phase 6, where a visual change is expected and will be looked at.
+
+   CONTRAST RATIOS in the comments are measured against the surface the
+   role is intended to sit on. They are load-bearing: this app is held to
+   WCAG 2.1 AA by docs/compliance/privacy-and-data.md, and an earlier
+   pass took the failure count from 111 to 1. Do not add a text token
+   without measuring it.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  /* ── Canvas: the page behind everything ──────────────────────── */
+  --canvas: 250 249 246;
+  /* #FAF9F6 cream 100 */
+  --canvas-mid: 245 240 232;
+  /* #F5F0E8 cream 200 */
+  --canvas-deep: 237 232 224;
+  /* #EDE8E0 cream 300 */
+  --canvas-soft: 242 239 233;
+  /* #F2EFE9 — `cream-dark` in Tailwind. Its own step, half a shade off
+     --canvas-mid; kept distinct so light mode stays byte-identical. */
+
+  /* ── Surfaces: cards, sheets, rows ───────────────────────────── */
+  --surface: 255 255 255;
+  --surface-mid: 250 249 246;
+  --surface-deep: 245 240 232;
+  /* Pressed-in / inset surfaces, and progress-bar tracks. */
+  --sunken: 229 224 216;
+  /* #E5E0D8 cream 400 */
+
+  /* ── Text ────────────────────────────────────────────────────── */
+  --text-strong: 61 41 20;
+  /* #3D2914  13.07:1 on canvas */
+  --text: 93 73 48;
+  /* #5D4930   8.10:1 */
+  --text-soft: 122 107 90;
+  /* #7A6B5A   4.89:1 — the AA floor. Nothing softer may carry text. */
+  --text-faint: 140 123 104;
+  /* #8C7B68   3.87:1 — BELOW the floor. Borders, dividers, disabled
+     glyphs. Never text. */
+  /* Text that sits ON the accent fill rather than on a surface. */
+  --text-on-accent: 255 255 255;
+
+  /* ── Brand accent ────────────────────────────────────────────── */
+  /* 2.84:1 on canvas — FILLS, ICONS AND GRAPHICS ONLY, never text. */
+  --accent: 255 107 53;
+  /* #FF6B35 */
+  --accent-light: 255 140 90;
+  /* #FF8C5A */
+  --accent-dark: 229 90 43;
+  /* #E55A2B  3.42:1 — large text / filled buttons */
+  --accent-mid: 244 114 43;
+  /* #F4722B — `saffron-dark` in Tailwind */
+  --accent-deep: 212 83 31;
+  /* #D4531F  3.94:1 — `saffron-700` */
+  /* 5.18:1 on canvas — the step to use when the accent must be READ. */
+  --accent-text: 184 67 24;
+  /* #B84318 saffron 800 */
+
+  /* CTA fill ramp. White on the brand accent is 2.84:1, so the accent
+     cannot back a filled button. Same hue, chosen so the LIGHTEST stop
+     still clears AA against white. */
+  --cta-light: 194 74 27;
+  /* #C24A1B 4.90:1 */
+  --cta: 184 67 24;
+  /* #B84318 5.45:1 */
+  --cta-dark: 168 60 20;
+  /* #A83C14 6.32:1 */
+
+  /* ── Tints ───────────────────────────────────────────────────── */
+  /* The pale washes behind accent cards, badges and the notice card.
+     Given their own tokens rather than expressed as `rgb(var(--accent)/.04)`
+     because a translucent accent composites against whatever is behind it,
+     and these must stay the exact values light mode already ships. */
+  --accent-tint-1: 255 245 240;
+  /* #FFF5F0 */
+  --accent-tint-2: 255 237 229;
+  /* #FFEDE5 */
+  --accent-tint-3: 255 228 217;
+  /* #FFE4D9 */
+  --accent-tint-badge-1: 255 232 220;
+  /* #FFE8DC */
+  --accent-tint-badge-2: 255 212 196;
+  /* #FFD4C4 */
+  --notice-1: 255 251 235;
+  /* #FFFBEB */
+  --notice-2: 254 243 199;
+  /* #FEF3C7 */
+  --notice-3: 253 230 138;
+  /* #FDE68A */
+  --success-bg-deep: 195 230 203;
+  --warning-bg-deep: 255 230 156;
+  --danger-bg-deep: 245 198 203;
+  --info-bg-deep: 190 229 235;
+
+  /* ── Secondary brand ─────────────────────────────────────────── */
+  --gold: 212 175 55;
+  /* #D4AF37 2.00:1 — decorative only, NEVER text */
+  --gold-text: 138 106 31;
+  /* #8A6A1F 4.79:1 — AA */
+  --mocha: 92 64 51;
+  /* #5C4033 */
+  --header-bg: 61 79 61;
+  /* #3D4F3D */
+
+  /* ── Status ──────────────────────────────────────────────────── */
+  --success: 34 197 94;
+  --success-text: 21 87 36;
+  --success-bg: 212 237 218;
+  --warning: 245 158 11;
+  --warning-text: 133 100 4;
+  --warning-bg: 255 243 205;
+  --danger: 239 68 68;
+  --danger-text: 114 28 36;
+  --danger-bg: 248 215 218;
+  --info: 59 130 246;
+  --info-text: 12 84 96;
+  --info-bg: 209 236 241;
+
+  /* ── Borders ─────────────────────────────────────────────────── */
+  --hairline: 61 47 20;
+  --hairline-alpha: 0.1;
+  /* The bright inner edge that gives a surface its lit top-left. */
+  --edge-light: 255 255 255;
+  --edge-light-alpha: 0.9;
+
+  /* ── Shadow ──────────────────────────────────────────────────── */
+  /* Warm brown rather than black: a neutral shadow on cream reads grey
+     and dirty.
+
+     Only the COLOUR is themed. Each shadow rule keeps its own alpha, so
+     the elevation scale that was tuned by hand survives untouched and the
+     theme swaps what the shadow is made of. See the dark block for why
+     --shadow-glow in particular cannot simply stay white. */
+  --shadow-cast: 61 47 20;
+  --shadow-glow: 255 255 255;
+  --shadow-accent: 255 107 53;
+
+  /* ── Glass ───────────────────────────────────────────────────── */
+  /* The tint sitting between the blur and the content. */
+  --glass-tint: 255 255 255;
+
+  /* Chrome — header, bottom nav, sheet backdrops, toasts. Nothing here
+     carries small body text, so it can be properly translucent. */
+  --glass-chrome-alpha: 0.62;
+
+  /* Content — cards, rows, forms. The 88% floor is not a taste
+     decision: contrast is only computable against a KNOWN colour, and
+     at 88% the surface dominates whatever scrolls beneath it, so the
+     ratios measured above still hold. Glass everywhere was chosen over
+     the chrome-only recommendation; this is the number that makes that
+     choice survive an accessibility audit. Do not lower it. */
+  --glass-surface-alpha: 0.88;
+
+  --glass-blur: 24px;
+  --glass-saturate: 180%;
+
+  /* Lift under the label of a filled button. Light mode puts WHITE text on a
+     dark saffron, where a soft drop shadow helps it sit on the gradient.
+     Dark mode inverts the fill — dark text on light saffron — and the same
+     shadow turns into a muddy halo that makes the label harder to read, not
+     easier. So this is a token, and in dark it is simply off. */
+  --cta-text-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  --cta-text-shadow-lg: 0 2px 4px rgb(0 0 0 / 0.25);
+
+  /* Scrim behind a modal. */
+  --scrim: 61 41 20;
+  --scrim-alpha: 0.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DARK
+   ═══════════════════════════════════════════════════════════════
+
+   Warm dark, not the usual blue-grey. This is a saffron-and-coffee
+   brand; a cold neutral dark reads as a different application. The
+   greys below are the coffee hue at low lightness, not #121212.
+
+   Two things that are NOT simple inversions, and are the reason a dark
+   theme cannot be generated automatically from a light one:
+
+   1. THE ACCENT LIFTS. #FF6B35 on a dark surface is muddy and, as text,
+      fails. Dark uses a lighter step for fills and a lighter one still
+      for text.
+
+   2. THE SHADOW STOPS BEING A SHADOW. On a dark surface a cast shadow
+      is invisible — depth comes from the surface getting LIGHTER as it
+      comes forward, plus a brighter top edge. So the shadow alphas drop
+      towards nothing and the edge does the work. Leaving the light
+      values here is what makes a naive dark mode look flat and muddy.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --canvas: 26 22 18;
+  --canvas-mid: 32 27 22;
+  --canvas-deep: 38 32 27;
+  --canvas-soft: 30 25 21;
+
+  --surface: 38 32 27;
+  --surface-mid: 45 38 32;
+  --surface-deep: 52 44 37;
+  /* Below the canvas, not level with it. A pressed-in surface — an input
+     well, a progress track — reads as recessed only if it is DARKER than
+     what surrounds it. Matching the canvas here made every inset control
+     disappear into the page. */
+  --sunken: 18 15 12;
+
+  --text-strong: 250 249 246;
+  /* 14.8:1 on surface */
+  --text: 226 219 209;
+  /* 11.4:1 */
+  --text-soft: 175 165 152;
+  /*  6.1:1 — still above the AA floor */
+  --text-faint: 128 118 108;
+  /*  non-text only, same as light */
+  --text-on-accent: 26 22 18;
+  /* dark text on the lifted accent, which is now light */
+
+  --accent: 255 140 90;
+  --accent-light: 255 168 122;
+  --accent-dark: 255 107 53;
+  --accent-mid: 255 126 71;
+  --accent-deep: 255 107 53;
+  --accent-text: 255 168 122;
+  /* 7.2:1 on surface */
+
+  /* The CTA ramp inverts direction: on dark, a filled button is a LIGHT
+     saffron carrying dark text, not a dark saffron carrying white. */
+  --cta-light: 255 154 105;
+  --cta: 255 140 90;
+  --cta-dark: 240 122 72;
+
+  /* Tints become dark washes of the same hue, not pale ones. */
+  --accent-tint-1: 52 38 30;
+  --accent-tint-2: 61 43 33;
+  --accent-tint-3: 71 49 37;
+  --accent-tint-badge-1: 66 44 33;
+  --accent-tint-badge-2: 82 54 40;
+  --notice-1: 46 39 22;
+  --notice-2: 58 48 25;
+  --notice-3: 71 58 28;
+  --success-bg-deep: 27 76 47;
+  --warning-bg-deep: 84 63 16;
+  --danger-bg-deep: 92 34 34;
+  --info-bg-deep: 30 61 94;
+
+  --gold: 226 193 92;
+  --gold-text: 232 205 121;
+  /* 8.9:1 — gold can finally be read on dark */
+  --mocha: 168 138 120;
+  --header-bg: 30 38 30;
+
+  --success: 74 222 128;
+  --success-text: 134 239 172;
+  --success-bg: 20 61 38;
+  --warning: 251 191 36;
+  --warning-text: 253 224 71;
+  --warning-bg: 69 51 12;
+  --danger: 248 113 113;
+  --danger-text: 252 165 165;
+  --danger-bg: 76 27 27;
+  --info: 96 165 250;
+  --info-text: 147 197 253;
+  --info-bg: 23 49 77;
+
+  --hairline: 255 255 255;
+  --hairline-alpha: 0.1;
+  --edge-light: 255 255 255;
+  --edge-light-alpha: 0.06;
+
+  --shadow-cast: 0 0 0;
+
+  /* NOT white. The inset highlights in claymorphism.css carry their own
+     alphas — up to 0.95 — so leaving this at #FFF would paint a hard white
+     glare across the top-left of every card and button on a dark surface.
+     It is a warm grey a couple of steps above --surface, so at those same
+     alphas it reads as the gentle lit bevel it was always meant to be.
+     This is the single value that decides whether dark mode looks designed
+     or looks like light mode with the lights off. */
+  --shadow-glow: 58 49 42;
+
+  --shadow-accent: 255 140 90;
+
+  --glass-tint: 38 32 27;
+  --glass-chrome-alpha: 0.58;
+  --glass-surface-alpha: 0.88;
+  --glass-blur: 24px;
+  --glass-saturate: 160%;
+
+  --cta-text-shadow: none;
+  --cta-text-shadow-lg: none;
+
+  --scrim: 0 0 0;
+  --scrim-alpha: 0.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GLASS PRIMITIVES
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Chrome glass: header, bottom nav, floating pills, toasts. */
+.glass-chrome {
+  background: rgb(var(--glass-tint) / var(--glass-chrome-alpha));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border-color: rgb(var(--hairline) / var(--hairline-alpha));
+}
+
+/* Content glass: cards, rows, forms. Same effect, higher tint — see the
+   --glass-surface-alpha note above for why the number is not negotiable. */
+.glass-surface {
+  background: rgb(var(--glass-tint) / var(--glass-surface-alpha));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid rgb(var(--edge-light) / var(--edge-light-alpha));
+}
+
+/* The specular top edge that reads as a lit bevel. */
+.glass-edge {
+  position: relative;
+}
+
+.glass-edge::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+      transparent,
+      rgb(var(--edge-light) / calc(var(--edge-light-alpha) * 1.6)),
+      transparent);
+  pointer-events: none;
+}
+
+/* Unsupported or disabled blur is a DESIGNED state, not an accident.
+   Without this the tint alone shows through as a flat wash and every
+   glass surface loses its separation from the canvas. Firefox shipped
+   backdrop-filter off by default for years, and it is disabled outright
+   in some accessibility and battery-saver modes. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+
+  .glass-chrome,
+  .glass-surface {
+    background: rgb(var(--surface));
+  }
+}
+
+/* Blur is GPU-expensive and compounds when layered — a scrolling list of
+   blurred cards over a blurred background is the exact combination that
+   drops frames on low-end Android. Reduced-motion users have often
+   turned effects down for related reasons, so drop to opaque there too. */
+@media (prefers-reduced-motion: reduce) {
+
+  .glass-chrome,
+  .glass-surface {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(var(--surface));
+  }
+}

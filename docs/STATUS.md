@@ -17,8 +17,8 @@ undeployed** — see "In flight" below.
 | Cloud Functions | ✅ | all 16 updated |
 | Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
 
-**Test suites, all green:** `functions` **245** · client **150** · rules **81** —
-**476 total**.
+**Test suites, all green:** `functions` **245** · client **248** · rules **81** —
+**574 total**.
 
 `npm run typecheck` reports **58** errors total, of which **22** are outside
 `functions/`. That is the clean baseline, not a regression. The "22" this note
@@ -45,10 +45,26 @@ A full redesign — modern minimalism, liquid glass, a manual day/night switch, 
 flows rebuilt around one question per screen. Same brand colours. **Presentation
 only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
 
-**Phase 0 (safety net) is done and is the only phase committed so far.** Nothing
-visual has changed yet. It added component rendering to the test suite, which the
-repo did not have — all 70 client tests were pure logic, so nothing whatsoever
-guarded the UI. Client tests went **70 → 150**.
+**Phases 0 and 1 are done.** Client tests went **70 → 248**.
+
+- **Phase 0 — safety net.** Added component rendering to the test suite, which
+  the repo did not have: all 70 client tests were pure logic, so nothing
+  whatsoever guarded the UI.
+- **Phase 1 — tokens and the day/night switch.** Colour now lives in one file,
+  `theme.css`, as semantic tokens; every literal in `claymorphism.css` and
+  `index.css` is gone. **Light mode is byte-identical** — verified by probing
+  computed styles in a browser against the compiled CSS, not by eye. Dark mode
+  works, with all nine text roles measured at AA or better in both themes. The
+  toggle (Day / Night / Auto) is in Profile.
+
+  Also in Phase 1: pinch-zoom is no longer disabled, which was a straight WCAG
+  1.4.4 failure in an app the compliance doc holds to AA.
+
+**Still to come:** Phase 2 primitives (including sweeping the 27 `alert()`
+calls), then rider, driver, manager, then the dark-mode polish pass. The ~200
+hardcoded `bg-white` / `text-gray-*` utilities in components do **not** follow
+the theme yet — each phase converts the screens it touches, so expect some
+light-coloured patches in dark mode until then.
 
 Decisions taken with the owner, recorded because they went against the
 recommendation and the reasoning should not be relitigated from scratch:

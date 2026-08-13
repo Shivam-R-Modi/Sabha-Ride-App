@@ -3,9 +3,50 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <!-- `maximum-scale=1.0, user-scalable=no` was here and is deliberately gone.
+       It disabled pinch-zoom, which is a WCAG 2.1 AA failure (1.4.4 Resize
+       Text) in an app docs/compliance/privacy-and-data.md holds to AA. iOS has
+       ignored the directive since iOS 10 anyway; Android obeyed it, so the only
+       people it ever affected were the ones who needed to zoom. The reason it
+       usually gets added — iOS zooming the page when you focus a small input —
+       is already handled properly below by `input { font-size: 16px }`. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Sabha Ride Seva</title>
-  <meta name="theme-color" content="#3D2914" />
+  <!-- Kept in step with the theme by applyTheme() in src/utils/theme.ts. -->
+  <meta name="theme-color" content="#FAF9F6" />
+
+  <script>
+    // Runs BEFORE first paint, on purpose, and inline, on purpose.
+    //
+    // The theme preference lives in localStorage, which React cannot read
+    // until its bundle has downloaded, parsed and mounted. Anything applied
+    // after that runs after the browser has already painted the default — so
+    // a dark-theme user gets a full white flash on every single launch. An
+    // external <script src> would not fix it either: that is one more network
+    // round trip before the same paint.
+    //
+    // This deliberately duplicates three constants from src/utils/theme.ts
+    // instead of importing them. It cannot import — it has to run before the
+    // module graph exists. tests/utils/theme.test.ts asserts the two copies
+    // still agree, so the duplication cannot rot unnoticed.
+    (function () {
+      try {
+        var stored = localStorage.getItem('sabha-theme');
+        var pref = (stored === 'light' || stored === 'dark' || stored === 'system') ? stored : 'light';
+        var resolved = pref === 'system'
+          ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : pref;
+        document.documentElement.setAttribute('data-theme', resolved);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', resolved === 'dark' ? '#1A1612' : '#FAF9F6');
+      } catch (e) {
+        // localStorage throws outright in a sandboxed iframe and in Lockdown
+        // Mode. Light is the default regardless, so there is nothing to
+        // recover — just make sure the attribute is always present.
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Sabha Ride" />
@@ -24,9 +65,30 @@
       --sal: env(safe-area-inset-left);
     }
 
+    /* CRITICAL: just enough of the theme to paint the first frame.
+       The full token set is in theme.css, which arrives with the JS bundle —
+       one network round trip later. Without these four lines the pre-paint
+       script above would correctly set data-theme="dark" and the page would
+       still paint cream until that stylesheet landed, which is the very
+       flash the script exists to prevent. theme.css then overrides both.
+       Keep the values here identical to --canvas / --text-strong there;
+       tests/utils/theme.test.ts checks that they match. */
+    :root,
+    :root[data-theme='light'] {
+      --canvas: 250 249 246;
+      --text-strong: 61 41 20;
+      color-scheme: light;
+    }
+
+    :root[data-theme='dark'] {
+      --canvas: 26 22 18;
+      --text-strong: 250 249 246;
+      color-scheme: dark;
+    }
+
     body {
-      background-color: #FAF9F6;
-      color: #3D2914;
+      background-color: rgb(var(--canvas, 250 249 246));
+      color: rgb(var(--text-strong, 61 41 20));
       -webkit-tap-highlight-color: transparent;
       overflow-x: hidden;
       width: 100%;
@@ -65,13 +127,13 @@
       left: 10%;
       right: 10%;
       height: 4px;
-      background-image: radial-gradient(#D4AF37 1px, transparent 1.5px);
+      background-image: radial-gradient(rgb(var(--gold, 212 175 55)) 1px, transparent 1.5px);
       background-size: 8px 8px;
       opacity: 0.4;
     }
 
     .gold-shimmer {
-      background: linear-gradient(135deg, #D4AF37 0%, #FFD700 50%, #D4AF37 100%);
+      background: linear-gradient(135deg, rgb(var(--gold, 212 175 55)) 0%, #FFD700 50%, rgb(var(--gold, 212 175 55)) 100%);
       -webkit-background-clip: text;
       background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -105,7 +167,7 @@
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #D4AF3744;
+      background: rgb(var(--gold, 212 175 55) / 0.27);
       border-radius: 10px;
     }
   </style>

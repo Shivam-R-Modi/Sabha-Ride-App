@@ -13,6 +13,7 @@ import { PhoneNumberInput } from '../auth/PhoneNumberInput';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
 import { geocodeAddressViaCloud } from '../../src/utils/cloudFunctions';
 import { Save, X, CheckCircle, AlertCircle, Pencil } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
 
 export const ProfileEditor: React.FC = () => {
     const { currentUser, userProfile, refreshProfile, logout } = useAuth();
@@ -195,6 +196,13 @@ export const ProfileEditor: React.FC = () => {
                             <p className="text-sm text-coffee-700 line-clamp-2">{userProfile.address}</p>
                         </div>
                     )}
+                </div>
+
+                {/* Appearance. Lives here rather than in a settings modal
+                    because Profile is the one destination all three roles
+                    share — the manager's Settings sheet is manager-only. */}
+                <div className="mt-6 max-w-sm mx-auto text-left">
+                    <ThemeToggle />
                 </div>
 
                 {/* Edit & Sign Out buttons */}

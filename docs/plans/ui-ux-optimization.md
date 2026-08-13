@@ -441,17 +441,72 @@ errors (61 / 25). Fixed rather than accepted — two loose casts in the RideStat
 fixtures, and a genuine Vite 5-vs-6 `Plugin` type skew in `vitest.config.ts` that
 is annotated in place rather than silenced.
 
-### Phase 1 — tokens + theme switch
+### Phase 1 — tokens + theme switch ✅ **done 2026-08-12**
 
-Pure refactor. **Light mode must look byte-identical**; that is the acceptance
-test, and it is verified by screenshot comparison before and after.
+Pure refactor. Light mode had to come out byte-identical, and did.
 
-- Semantic token layer; Tailwind colours point at it.
-- `data-theme` + pre-paint inline script + `theme-color` swap.
-- Theme control in Profile.
-- Dark palette defined but not yet audited screen by screen.
+**What landed**
 
-*Gate: light unchanged by screenshot; dark renders without crashing.*
+- **`theme.css`** — 60-odd semantic tokens per theme, as space-separated RGB
+  channels so one token serves an opaque fill, a translucent one, and Tailwind's
+  `<alpha-value>`. Every light value is the exact hex that was already hardcoded
+  somewhere.
+- **Every colour literal is gone** from `claymorphism.css` and `index.css` — 31
+  distinct hexes and 44 distinct `rgba()`s converted. The only survivors are the
+  `rgba(0,0,0,·)` inner shadows on filled buttons, which are correct on both
+  themes and annotated as deliberate.
+- **Tailwind reads the tokens**, so `text-coffee` and `bg-cream` theme with no
+  `dark:` variant anywhere. Four ramp steps (`saffron-dark`, `saffron-700`,
+  `cream-dark`, `coffee-400`) needed their own tokens rather than being folded
+  into a near neighbour — folding them would have shifted light mode.
+- **Pre-paint script in `index.html`** plus a four-line critical CSS block, so a
+  dark launch is dark on the first frame rather than flashing cream.
+- **`ThemeProvider` + `ThemeToggle`** — Day / Night / Auto, in Profile, mounted
+  outside `AuthProvider` so it survives sign-out and applies to the login screen.
+- **Pinch-zoom restored** (finding 16). `user-scalable=no` deleted.
+- **Glass primitives** — `.glass-chrome`, `.glass-surface`, `.glass-edge`, with
+  the opaque `@supports` fallback and a reduced-motion opt-out.
+
+**Verified in a real browser, not by eye.** A swatch harness was built against
+the compiled CSS and probed with `getComputedStyle`:
+
+- Light: `.clay-card` resolves to `#FFFFFF → #FAF9F6 → #F5F0E8` with
+  `rgba(61,47,20,.15)` — identical to before. Every ramp step matches.
+- Dark: warm surfaces, inverted CTA ramp (light fill, dark text), no white glare.
+- **Contrast measured for all nine text roles × two surfaces × two themes.
+  Lowest is 4.79:1. Everything clears AA.**
+
+**Three real defects the new tests caught before anyone saw them**
+
+1. **Dark `--sunken` equalled `--canvas`**, so every pressed-in control — input
+   wells, progress tracks — would have vanished into the page. Caught by the
+   depth-ordering assertion.
+2. **`--edge-light` identical across themes** — legitimate (it is differentiated
+   by alpha, a specular highlight being white on anything), but it had to be
+   justified rather than assumed.
+3. **The CTA text-shadow** was tuned for white text. Dark inverts the fill to
+   light-saffron-with-dark-text, where the same shadow is a muddy halo. Now a
+   token, and `none` on dark.
+
+Also fixed en route: the header comment in `theme.css` originally contained a
+code example with `/*` `*/` inside it. CSS comments do not nest, so it terminated
+the block early and spilled the prose into the stylesheet as four syntax errors.
+A scanner now checks all three stylesheets for the same shape.
+
+**New tests: 48.** `theme.test.ts` (24), `ThemeToggle.test.tsx` (14),
+`theme-tokens.test.ts` (12), `theme-contrast.test.ts` (47 cases). Notable ones:
+
+- Every light token must have a dark counterpart. A missed one does not error —
+  custom properties inherit, so it silently keeps its **light** value, and the
+  only way to find it is a human looking at every screen in both themes.
+- The pre-paint script's duplicated constants must match `src/utils/theme.ts`,
+  and the critical CSS must match `theme.css`. Necessary duplication, now
+  unable to rot silently.
+- The contrast ratios written in `theme.css` comments are asserted, so the
+  documentation cannot drift into fiction.
+
+*Gate met:* client **248** · functions **245** · rules **81** — **574 total**.
+Typecheck **58 / 22**, unchanged. Build clean.
 
 ### Phase 2 — primitives
 
