@@ -120,7 +120,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
       {/* Sticky Filter Bar */}
-      <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-gray-100 p-4">
+      <div className="sticky top-0 z-sticky bg-white/90 backdrop-blur-md border-b border-gray-100 p-4">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative w-full sm:max-w-xs">
             <Search className="absolute left-3 top-2.5 text-gray-500" size={18} />
@@ -173,7 +173,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
         {/* Desktop View (Table) */}
         <div className="hidden md:block">
           <table className="w-full border-collapse text-left">
-            <thead className="sticky top-0 bg-gray-50 z-10">
+            <thead className="sticky top-0 bg-gray-50 z-raised">
               <tr className="border-b border-gray-100">
                 <th className="p-4 w-12">
                   <input 
@@ -327,7 +327,7 @@ const SwipeableCard: React.FC<{
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
                 style={{ transform: `translateX(${offset}px)` }}
-                className={`relative z-10 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm transition-transform duration-200 flex items-center gap-4 ${isUrgent ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-saffron'}`}
+                className={`relative z-raised bg-white p-4 rounded-2xl border border-gray-100 shadow-sm transition-transform duration-200 flex items-center gap-4 ${isUrgent ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-saffron'}`}
             >
                 <img src={request.avatarUrl} className="w-12 h-12 rounded-full shrink-0" alt="" />
                 <div className="min-w-0 flex-1">

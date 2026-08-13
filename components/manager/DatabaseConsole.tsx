@@ -21,8 +21,10 @@ import { useAdminDatabase, SupportedCollection } from '../../hooks/useAdminDatab
 import { DocumentEditorModal } from './DocumentEditorModal';
 import { useConfirm } from '../shared/useConfirm';
 import { normaliseAuditRow } from '../../src/utils/audit';
+import { useToast } from '../../contexts/ToastContext';
 
 export const DatabaseConsole: React.FC = () => {
+  const toast = useToast();
   const { userProfile, currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<SupportedCollection>('users');
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,7 +100,7 @@ export const DatabaseConsole: React.FC = () => {
       await deleteAdminDocument(activeTab, docId, managerInfo);
       setSelectedDocIds((prev) => prev.filter((id) => id !== docId));
     } catch (err: any) {
-      alert(err.message || 'Failed to delete document.');
+      toast.error(err.message || 'Could not delete that document.');
     } finally {
       setDeletingId(null);
     }
@@ -118,7 +120,7 @@ export const DatabaseConsole: React.FC = () => {
       await deleteMultipleAdminDocuments(activeTab, selectedDocIds, managerInfo);
       setSelectedDocIds([]);
     } catch (err: any) {
-      alert(err.message || 'Failed to bulk delete documents.');
+      toast.error(err.message || 'Could not delete those documents.');
     } finally {
       setIsBulkDeleting(false);
     }

@@ -137,7 +137,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         {/* Gradient Overlay for better text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/30"></div>
         {/* Text Content - centered */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-white z-10">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white z-raised">
           <h1 className="font-cursive text-4xl md:text-5xl font-bold drop-shadow-[0_1px_3px_rgba(255,255,255,0.6)] tracking-wide text-[#B84318]">
             Jai Swaminarayan!
           </h1>

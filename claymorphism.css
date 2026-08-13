@@ -448,8 +448,12 @@
   justify-content: center;
   gap: 8px;
 
-  /* Pulse animation for attention */
-  animation: clay-cta-pulse 2s ease-in-out infinite;
+  /* The infinite `clay-cta-pulse` animation was here and is deliberately gone.
+     A control that never stops moving is not emphasis, it is noise: the rider's
+     "I'M READY TO LEAVE" button carries this class and is on screen — usually
+     DISABLED — about six days out of seven, throbbing the whole time. Size,
+     colour and position already make it the loudest thing on the page.
+     Its keyframes went with it — nothing else referenced them. */
 }
 
 .clay-btn-cta-large:hover {
@@ -471,27 +475,6 @@
   cursor: not-allowed;
   transform: none;
   animation: none;
-}
-
-@keyframes clay-cta-pulse {
-
-  0%,
-  100% {
-    box-shadow:
-      8px 8px 28px 0 rgb(var(--shadow-accent) / 0.45),
-      4px 4px 12px 0 rgb(var(--accent-dark) / 0.3),
-      inset 6px 6px 12px 0 rgb(var(--shadow-glow) / 0.35),
-      inset -3px -3px 8px 0 rgba(0, 0, 0, 0.2);
-  }
-
-  50% {
-    box-shadow:
-      12px 12px 36px 0 rgb(var(--shadow-accent) / 0.55),
-      6px 6px 16px 0 rgb(var(--accent-dark) / 0.4),
-      inset 6px 6px 12px 0 rgb(var(--shadow-glow) / 0.4),
-      inset -3px -3px 8px 0 rgba(0, 0, 0, 0.22),
-      0 0 30px rgb(var(--shadow-accent) / 0.3);
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -722,7 +705,8 @@
     0 -8px 24px 0 rgb(var(--shadow-cast) / 0.12),
     inset 0 4px 8px 0 rgb(var(--shadow-glow) / 0.9);
 
-  z-index: 40;
+  /* `sticky` rung — shell chrome. See the ladder in tailwind.config.js. */
+  z-index: 100;
 }
 
 /* Hide on desktop */
@@ -793,6 +777,7 @@
 
   display: flex;
   flex-direction: column;
+  /* `sticky` rung, same as the bottom nav — they never overlap. */
   z-index: 100;
 }
 
@@ -893,7 +878,9 @@
   backdrop-filter: blur(8px);
   position: fixed;
   inset: 0;
-  z-index: 50;
+  /* `modal` rung. Was 50, which put it BELOW .clay-sidebar at 100 — so on
+     desktop the sidebar drew straight over any modal using this class. */
+  z-index: 1100;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1074,7 +1061,8 @@
   position: fixed;
   bottom: 100px;
   right: 20px;
-  z-index: 40;
+  /* `sticky` rung — floating page furniture, below any dialog. */
+  z-index: 100;
 }
 
 .clay-fab:hover {
@@ -1093,20 +1081,6 @@
    ANIMATIONS
    ═══════════════════════════════════════════════════════════════ */
 
-@keyframes clay-press {
-  0% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(0.95);
-  }
-
-  100% {
-    transform: scale(1);
-  }
-}
-
 @keyframes clay-float {
 
   0%,
@@ -1117,29 +1091,6 @@
   50% {
     transform: translateY(-4px);
   }
-}
-
-@keyframes clay-pulse {
-
-  0%,
-  100% {
-    box-shadow:
-      6px 6px 16px 0 rgb(var(--shadow-accent) / 0.3),
-      inset 4px 4px 8px 0 rgb(var(--shadow-glow) / 0.3),
-      inset -2px -2px 6px 0 rgba(0, 0, 0, 0.15);
-  }
-
-  50% {
-    box-shadow:
-      8px 8px 24px 0 rgb(var(--shadow-accent) / 0.45),
-      inset 4px 4px 8px 0 rgb(var(--shadow-glow) / 0.35),
-      inset -2px -2px 6px 0 rgba(0, 0, 0, 0.18),
-      0 0 20px rgb(var(--shadow-accent) / 0.25);
-  }
-}
-
-.clay-button-primary-pulse {
-  animation: clay-pulse 2s ease-in-out infinite;
 }
 
 .clay-float {

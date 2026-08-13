@@ -17,6 +17,7 @@ import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { downloadAttendanceCSV } from '../../hooks/useFirestore';
 import '../../claymorphism.css';
 import { seatsOnRide } from '../../src/constants/seats';
+import { useToast } from '../../contexts/ToastContext';
 
 interface WeeklyStats {
     weekId: string;
@@ -33,6 +34,7 @@ interface RideStats {
 }
 
 export const ManagerReports: React.FC = () => {
+    const toast = useToast();
     const [weeklyStats, setWeeklyStats] = useState<WeeklyStats[]>([]);
     const [rideStats, setRideStats] = useState<RideStats>({
         totalRides: 0,
@@ -123,7 +125,7 @@ export const ManagerReports: React.FC = () => {
             await downloadAttendanceCSV(eventId!);
         } catch (error) {
             console.error('Error downloading:', error);
-            alert('Failed to download attendance CSV');
+            toast.error(error instanceof Error ? error.message : 'Could not download the attendance list.');
         } finally {
             setIsDownloading(false);
         }

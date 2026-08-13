@@ -15,7 +15,7 @@
  */
 
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -235,9 +235,13 @@ describe('RequestTable — acting on a request', () => {
         const boxes = within(table()).getAllByRole('checkbox');
         // boxes[0] is select-all; the rest are rows.
         await user.click(boxes[1]);
-        await user.click(screen.getByRole('button', { name: /assign bulk/i }));
+        // The action bar only mounts once something is selected. Awaiting it
+        // rather than assuming it is there keeps this from racing the render
+        // under parallel load — the button's onClick closes over selectedIds,
+        // so clicking a stale one would report an empty selection.
+        await user.click(await screen.findByRole('button', { name: /assign bulk/i }));
 
-        expect(onBulkAssign).toHaveBeenCalledWith(['a']);
+        await waitFor(() => expect(onBulkAssign).toHaveBeenCalledWith(['a']));
     });
 
     it('select-all ticks every row currently shown', async () => {
@@ -249,9 +253,9 @@ describe('RequestTable — acting on a request', () => {
         });
 
         await user.click(within(table()).getAllByRole('checkbox')[0]);
-        await user.click(screen.getByRole('button', { name: /assign bulk/i }));
+        await user.click(await screen.findByRole('button', { name: /assign bulk/i }));
 
-        expect(onBulkAssign).toHaveBeenCalledWith(['a', 'b']);
+        await waitFor(() => expect(onBulkAssign).toHaveBeenCalledWith(['a', 'b']));
     });
 });
 

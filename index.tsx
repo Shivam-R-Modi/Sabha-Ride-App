@@ -13,6 +13,7 @@ import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { NavigationProvider } from './contexts/NavigationContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 const rootElement = document.getElementById('root');
@@ -28,11 +29,15 @@ root.render(
           device, not of whoever is signed in, and it must survive sign-out
           and apply to the login screen too. */}
       <ThemeProvider>
-        <AuthProvider>
-          <NavigationProvider>
-            <App />
-          </NavigationProvider>
-        </AuthProvider>
+        {/* Also outside AuthProvider: a sign-in failure needs somewhere to be
+            reported, and that is before any of this is mounted. */}
+        <ToastProvider>
+          <AuthProvider>
+            <NavigationProvider>
+              <App />
+            </NavigationProvider>
+          </AuthProvider>
+        </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>

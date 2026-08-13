@@ -51,7 +51,10 @@ export const WeeklyAttendancePopup: React.FC<WeeklyAttendancePopupProps> = ({ us
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 9999,
+            // 1100 = the `modal` rung of the ladder in tailwind.config.js.
+            // This was 9999, the highest number in the codebase, which put it
+            // above even the toast layer that has to report its own failures.
+            zIndex: 1100,
             backdropFilter: 'blur(4px)'
         }}>
             <div className="clay-card" style={{

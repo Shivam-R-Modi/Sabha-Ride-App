@@ -114,7 +114,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
     return (
         <div className="min-h-screen pb-safe bg-gradient-to-br from-[#FAF9F6] to-[#F5F0E8]">
             {/* Header */}
-            <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-orange-100 sticky top-0 z-30">
+            <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-orange-100 sticky top-0 z-sticky">
                 <div className="p-4">
                     <button
                         onClick={onBack}

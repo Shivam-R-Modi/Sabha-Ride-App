@@ -88,7 +88,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-modal animate-in fade-in duration-200">
       <div className="clay-card max-w-xl w-full bg-white rounded-3xl p-6 shadow-2xl border border-orange-100 max-h-[90vh] overflow-y-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 pb-4">

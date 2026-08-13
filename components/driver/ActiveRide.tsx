@@ -155,7 +155,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
     return (
         <div className="min-h-screen pb-safe bg-gradient-to-br from-[#FAF9F6] to-[#F5F0E8]">
             {/* Header */}
-            <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-orange-100 sticky top-0 z-30">
+            <div className="bg-white/80 backdrop-blur-md shadow-sm border-b border-orange-100 sticky top-0 z-sticky">
                 <div className="p-4">
                     <div className="flex items-center justify-between mb-4">
                         <button
@@ -354,7 +354,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
 
             {/* Back Confirmation Modal */}
             {showBackConfirm && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4">
                     <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
                         <h3 className="text-lg font-bold text-coffee mb-2">Leave Ride?</h3>
                         <p className="text-gray-600 text-sm mb-4">

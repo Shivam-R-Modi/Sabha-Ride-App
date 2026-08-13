@@ -17,6 +17,7 @@ import {
 } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl } from '../../src/utils/googleMaps';
 import { useConfirm } from '../shared/useConfirm';
+import { useToast } from '../../contexts/ToastContext';
 
 // Driver workflow states
 type DriverViewState =
@@ -50,6 +51,7 @@ export const DriverDashboard: React.FC = () => {
     const [showVehicleSelector, setShowVehicleSelector] = useState(false);
     const [selectingVehicle, setSelectingVehicle] = useState(false);
     const { ask, confirmDialog } = useConfirm();
+    const toast = useToast();
 
     // Available vehicles hook for real-time updates
     const { vehicles: availableVehicles, loading: vehiclesLoading } = useAvailableVehicles();
@@ -202,7 +204,7 @@ export const DriverDashboard: React.FC = () => {
             }
         } catch (error) {
             console.error("Failed to toggle availability:", error);
-            alert("Failed to update availability. Please try again.");
+            toast.error('Could not change your availability. Please try again.');
         }
         await refreshProfile();
     };
@@ -226,7 +228,7 @@ export const DriverDashboard: React.FC = () => {
             setShowVehicleSelector(false);
         } catch (error) {
             console.error('Error selecting vehicle:', error);
-            alert('Failed to select vehicle. Please try again.');
+            toast.error('Could not take that car. Someone may have just claimed it.');
         } finally {
             setSelectingVehicle(false);
         }
@@ -238,7 +240,13 @@ export const DriverDashboard: React.FC = () => {
 
     const handleAssignMe = async () => {
         if (!currentUser || !userProfile?.currentVehicleId) {
-            alert('Please select a vehicle first');
+            // ponytail: unreachable today — the button is `disabled` without a
+            // vehicle, so this click handler never runs and the driver is left
+            // with a grey button and no reason. Phase 4 replaces the disabled
+            // state with a button that says "Pick a car to start" and does it.
+            // Until then the guard stays, but it now reports rather than
+            // relying on a dialog nobody can trigger.
+            toast.error('Pick a car before finding riders.');
             return;
         }
 
@@ -362,7 +370,7 @@ export const DriverDashboard: React.FC = () => {
             setViewState('dashboard');
         } catch (error: unknown) {
             console.error('Error marking done:', error);
-            alert(error.message || 'Failed to finish. Please try again.');
+            toast.error(error.message || 'Could not finish your shift. Please try again.');
         }
     };
 
@@ -530,7 +538,7 @@ export const DriverDashboard: React.FC = () => {
                                         await driverDoneForToday(currentUser.uid);
                                         await refreshProfile();
                                     } catch (error: unknown) {
-                                        alert(error.message || 'Failed to finish.');
+                                        toast.error(error.message || 'Could not finish your shift.');
                                     }
                                 }}
                                 className="w-full clay-button-secondary py-3 mt-4"
@@ -556,7 +564,7 @@ export const DriverDashboard: React.FC = () => {
 
             {/* Vehicle Selector Modal */}
             {showVehicleSelector && (
-                <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
+                <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-modal p-4">
                     <div className="bg-white sm:rounded-2xl w-full max-w-md max-h-[80vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
                         {/* Header */}
                         <div className="sticky top-0 bg-white border-b border-cream-dark p-4 flex items-center justify-between">

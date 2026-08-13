@@ -88,28 +88,88 @@ describe('native dialogs', () => {
     });
 
     /**
-     * The budget. Lower it whenever calls are removed; never raise it.
-     * Phase 2 takes it to 0.
+     * Was a ratchet at 27 while Phase 2 worked through them. Now zero, and it
+     * stays zero — this is a ban, like `confirm` above.
      */
-    const ALERT_BUDGET = 27;
-
-    it(`window.alert is capped at ${ALERT_BUDGET} and may only go down`, () => {
+    it('window.alert is banned too — a suppressed alert hides the failure', () => {
         const hits = callSites('alert');
-
         expect(
-            hits.length,
-            hits.length > ALERT_BUDGET
-                ? `New alert() calls were added. A suppressed alert makes failures invisible — ` +
-                  `use a toast. Budget ${ALERT_BUDGET}, found ${hits.length}:\n${format(hits)}`
-                : `alert() calls dropped to ${hits.length}. Lower ALERT_BUDGET in this file to ` +
-                  `${hits.length} so the ratchet holds.`,
-        ).toBe(ALERT_BUDGET);
+            hits,
+            `Use useToast() from contexts/ToastContext. A suppressed alert does not make ` +
+            `the button inert — the write already happened — it makes the FAILURE ` +
+            `INVISIBLE.\n${format(hits)}`,
+        ).toHaveLength(0);
     });
 
-    it('no alert() has crept into the shared primitives, whatever the total is', () => {
-        // Shared components are rendered inside every role's screens. An
-        // invisible failure here is an invisible failure everywhere.
-        const hits = callSites('alert').filter(h => h.file.includes('components/shared/'));
+    it('window.prompt is banned as well, for the same reason', () => {
+        // Not currently used anywhere. Asserted so it cannot arrive later as
+        // the "quick" way to collect a value — suppressed, it returns null and
+        // the caller silently takes the cancel path.
+        const hits = callSites('prompt');
+        expect(hits, format(hits)).toHaveLength(0);
+    });
+});
+
+/**
+ * Hand-rolled overlays.
+ *
+ * Twelve files built their own `fixed inset-0` modal and exactly one announced
+ * itself as a dialog. `components/shared/Sheet.tsx` now provides the real thing
+ * — focus trap, scroll lock, Escape, focus restored to the opener — and
+ * useConfirm is migrated onto it, which upgrades every destructive action in
+ * the app at once.
+ *
+ * The rest are migrated by the phase that rewrites their screen, so this is a
+ * ratchet rather than a ban: the count may only fall. Rewriting a screen and
+ * leaving its bespoke overlay behind should fail the build.
+ */
+describe('hand-rolled overlays', () => {
+    const OVERLAY_BUDGET = 11;
+
+    /**
+     * Full-bleed layers that are not dialogs and should never become Sheets:
+     *
+     *   Sheet.tsx       is the primitive itself.
+     *   SplashScreen    is a whole screen, not something layered over one. It
+     *                   has nothing behind it to trap focus away from.
+     *   RoleSwitcher    is the invisible click-catcher behind a dropdown menu.
+     *                   A dropdown is not modal — Escape and click-away are its
+     *                   whole interaction, and making it a dialog would trap
+     *                   focus in a three-item menu.
+     */
+    const NOT_DIALOGS = ['shared/Sheet.tsx', 'auth/SplashScreen.tsx', 'RoleSwitcher.tsx'];
+
+    /** A `fixed inset-0` that ought to be a Sheet and is not one yet. */
+    function overlays(): { file: string; line: number; text: string }[] {
+        const hits: { file: string; line: number; text: string }[] = [];
+        for (const file of sourceFiles()) {
+            const relative = path.relative(ROOT, file);
+            if (NOT_DIALOGS.some(exempt => relative.endsWith(exempt))) continue;
+
+            readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+                if (/fixed inset-0/.test(line) && !/pointer-events-none/.test(line)) {
+                    hits.push({ file: relative, line: i + 1, text: line.trim() });
+                }
+            });
+        }
+        return hits;
+    }
+
+    it(`is capped at ${OVERLAY_BUDGET} and may only go down`, () => {
+        const hits = overlays();
+        expect(
+            hits.length,
+            hits.length > OVERLAY_BUDGET
+                ? `A new hand-rolled overlay appeared. Use <Sheet> — it traps focus, locks ` +
+                  `background scroll, closes on Escape and restores focus.\n${format(hits)}`
+                : `Down to ${hits.length}. Lower OVERLAY_BUDGET to ${hits.length}.`,
+        ).toBe(OVERLAY_BUDGET);
+    });
+
+    it('the shared confirm dialog is not one of them', () => {
+        // Every destructive action in the app routes through useConfirm, so it
+        // was the one worth migrating before any screen rewrite.
+        const hits = overlays().filter(h => h.file.includes('useConfirm'));
         expect(hits, format(hits)).toHaveLength(0);
     });
 });

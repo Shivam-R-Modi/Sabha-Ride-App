@@ -80,7 +80,27 @@ describe('useConfirm', () => {
         // forever, which is the inert-button failure wearing a different hat.
         const { user, answered } = await open({ message: 'Go ahead?' });
 
-        await user.click(screen.getByRole('dialog'));
+        // The backdrop is the dialog's parent. Clicking the dialog itself must
+        // NOT cancel — see the next test.
+        await user.click(screen.getByRole('dialog').parentElement as Element);
+
+        expect(answered).toHaveBeenCalledWith(false);
+    });
+
+    it('does not cancel when the click lands inside the dialog', async () => {
+        const { user, answered } = await open({ message: 'Go ahead?' });
+
+        await user.click(screen.getByText('Go ahead?'));
+
+        expect(answered).not.toHaveBeenCalled();
+    });
+
+    it('cancels on Escape', async () => {
+        // New since the migration to <Sheet>. The hand-rolled overlay ignored
+        // the key entirely.
+        const { user, answered } = await open({ message: 'Go ahead?' });
+
+        await user.keyboard('{Escape}');
 
         expect(answered).toHaveBeenCalledWith(false);
     });

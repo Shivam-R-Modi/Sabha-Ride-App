@@ -136,7 +136,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                         top: '100%',
                         left: 0,
                         right: 0,
-                        zIndex: 50,
+                        zIndex: 1000, // `dropdown` rung
                         marginTop: '4px',
                         maxHeight: '240px',
                         overflowY: 'auto',

@@ -28,7 +28,7 @@ export const PWAPrompt: React.FC = () => {
   if (!showPrompt) return null;
 
   return (
-    <div className="fixed bottom-safe-nav left-4 right-4 z-50 animate-in slide-in-from-bottom-10">
+    <div className="fixed bottom-safe-nav left-4 right-4 z-sticky animate-in slide-in-from-bottom-10">
       <div className="bg-coffee text-white p-4 rounded-xl shadow-2xl flex items-center justify-between">
         <div>
           <h4 className="font-bold text-sm">Install App</h4>

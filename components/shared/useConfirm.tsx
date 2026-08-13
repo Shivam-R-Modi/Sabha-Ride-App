@@ -1,5 +1,6 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { Sheet } from './Sheet';
 
 /**
  * In-app replacement for `window.confirm`.
@@ -22,6 +23,10 @@ import { AlertTriangle } from 'lucide-react';
  *
  * The promise resolves false on dismiss, so the "no" path is unchanged — but now
  * the user has actually been asked.
+ *
+ * Since Phase 2 the markup is a shared <Sheet>, which is what gives this a focus
+ * trap, background scroll lock, Escape-to-cancel and focus restored to whatever
+ * opened it. It had none of those when it hand-rolled its own overlay.
  */
 
 export interface ConfirmOptions {
@@ -40,6 +45,7 @@ interface Pending extends ConfirmOptions {
 
 export function useConfirm() {
     const [pending, setPending] = useState<Pending | null>(null);
+    const cancelRef = useRef<HTMLButtonElement>(null);
 
     const ask = useCallback(
         (options: ConfirmOptions) =>
@@ -55,54 +61,51 @@ export function useConfirm() {
     };
 
     const confirmDialog = pending ? (
-        <div
-            className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-150"
-            role="dialog"
-            aria-modal="true"
-            onClick={() => settle(false)}
-        >
-            <div
-                className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in duration-150"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="p-5">
-                    <div className="flex items-start gap-3">
-                        {pending.destructive && (
-                            <div className="p-2 bg-red-50 text-red-600 rounded-xl shrink-0">
-                                <AlertTriangle size={18} />
-                            </div>
-                        )}
-                        <div className="min-w-0">
-                            <h3 className="font-header font-bold text-coffee text-lg">
-                                {pending.title ?? 'Are you sure?'}
-                            </h3>
-                            {/* whitespace-pre-line so callers can use \n for a second paragraph. */}
-                            <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">
-                                {pending.message}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex gap-2 px-5 pb-5">
+        <Sheet
+            open
+            onClose={() => settle(false)}
+            title={pending.title ?? 'Are you sure?'}
+            maxWidth="max-w-sm"
+            // The one legitimate use of initialFocus: this sheet IS a single
+            // question, and the safe answer should be under the user's finger.
+            // A stray Enter must never delete anything.
+            initialFocus={cancelRef}
+            footer={
+                <div className="flex gap-2">
                     <button
+                        ref={cancelRef}
                         onClick={() => settle(false)}
-                        autoFocus
-                        className="flex-1 px-4 py-2.5 border-2 border-gray-200 text-gray-700 rounded-xl font-semibold text-sm hover:bg-gray-50 transition-colors"
+                        className="flex-1 px-4 py-2.5 border-2 border-hairline/20 text-coffee-700
+                                   rounded-xl font-semibold text-sm hover:bg-cream-300/60 transition-colors
+                                   min-h-11"
                     >
                         {pending.cancelLabel ?? 'Go back'}
                     </button>
                     <button
                         onClick={() => settle(true)}
-                        className={`flex-1 px-4 py-2.5 rounded-xl font-semibold text-sm text-white transition-colors ${pending.destructive
-                            ? 'bg-red-600 hover:bg-red-700'
-                            : 'bg-saffron hover:bg-saffron/90'}`}
+                        className={`flex-1 px-4 py-2.5 rounded-xl font-semibold text-sm min-h-11
+                                    text-[rgb(var(--text-on-accent))] transition-colors ${pending.destructive
+                                ? 'bg-[rgb(var(--danger))] hover:opacity-90'
+                                : 'bg-[rgb(var(--cta))] hover:opacity-90'}`}
                     >
                         {pending.confirmLabel ?? (pending.destructive ? 'Delete' : 'Confirm')}
                     </button>
                 </div>
+            }
+        >
+            <div className="flex items-start gap-3">
+                {pending.destructive && (
+                    <div className="p-2 bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))]
+                                    rounded-xl shrink-0">
+                        <AlertTriangle size={18} aria-hidden="true" />
+                    </div>
+                )}
+                {/* whitespace-pre-line so callers can use \n for a second paragraph. */}
+                <p className="text-sm text-coffee-700 whitespace-pre-line min-w-0">
+                    {pending.message}
+                </p>
             </div>
-        </div>
+        </Sheet>
     ) : null;
 
     return { ask, confirmDialog };

@@ -50,7 +50,7 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName
   const { logout } = useAuth();
 
   return (
-    <header className="app-header lg:hidden sticky top-0 z-40 bg-cream/80 backdrop-blur-md border-b border-orange-100 pt-safe">
+    <header className="app-header lg:hidden sticky top-0 z-sticky bg-cream/80 backdrop-blur-md border-b border-orange-100 pt-safe">
       <div className="px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2 overflow-hidden">
           <div className="bg-saffron/10 p-2 rounded-full">
@@ -76,7 +76,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const navItems = getNavItems(role);
 
   return (
-    <aside className={`fixed left-0 top-0 h-full bg-white border-r border-orange-50 shadow-xl z-50 transition-all duration-300 hidden lg:flex flex-col
+    <aside className={`fixed left-0 top-0 h-full bg-white border-r border-orange-50 shadow-xl z-sticky transition-all duration-300 hidden lg:flex flex-col
       ${isSidebarCollapsed ? 'w-20' : 'w-60'}`}>
 
       {/* Logo Section */}
@@ -164,7 +164,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
         {/* Collapse Toggle */}
         <button
           onClick={toggleSidebar}
-          className="absolute -right-3 top-20 bg-white border border-orange-100 rounded-full p-1 shadow-md hover:shadow-lg transition-all text-gray-500 hover:text-saffron z-50"
+          className="absolute -right-3 top-20 bg-white border border-orange-100 rounded-full p-1 shadow-md hover:shadow-lg transition-all text-gray-500 hover:text-saffron z-raised"
         >
           {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>

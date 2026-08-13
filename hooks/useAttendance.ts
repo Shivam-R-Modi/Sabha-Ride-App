@@ -149,9 +149,14 @@ export const useWeeklyAttendanceCount = () => {
  * Fetch all "yes" responses and generate CSV download
  */
 export const downloadAttendanceCSV = async (eventId: string): Promise<void> => {
+    // Throws rather than alerts. This is not a component, so it has no toast to
+    // reach for — and the previous `alert(); return;` was the worse of the two
+    // options anyway: with dialogs suppressed the function resolved SUCCESSFULLY
+    // having done nothing, so the caller's `await` completed, no catch ran, and
+    // the manager watched a download button do absolutely nothing. Both callers
+    // already try/catch and surface `error.message`.
     if (!eventId) {
-        alert('No gathering is scheduled right now.');
-        return;
+        throw new Error('No sabha is scheduled right now, so there is no list to download.');
     }
     const responsesRef = collection(db, 'weeklyAttendance', eventId, 'responses');
     const q = query(responsesRef, where('response', '==', 'yes'));
@@ -159,8 +164,7 @@ export const downloadAttendanceCSV = async (eventId: string): Promise<void> => {
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-        alert('No confirmed attendees for this sabha yet.');
-        return;
+        throw new Error('Nobody has said they are coming to this sabha yet.');
     }
 
     // Build CSV content

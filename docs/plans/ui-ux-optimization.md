@@ -508,14 +508,70 @@ A scanner now checks all three stylesheets for the same shape.
 *Gate met:* client **248** · functions **245** · rules **81** — **574 total**.
 Typecheck **58 / 22**, unchanged. Build clean.
 
-### Phase 2 — primitives
+### Phase 2 — primitives ✅ **done 2026-08-12**
 
-`Surface`, `Sheet`, `Dialog`, `Toast`, `Button`, `Field`, `StatusPill`,
-`SeatBadge`. Glass utilities for chrome only. Kill all 27 `alert()`. Z-index
-ladder applied. Viewport meta fixed.
+Scope was trimmed deliberately. The original list named eight primitives;
+`Surface`, `Button`, `Field`, `StatusPill` and `SeatBadge` were **not** built,
+because they have no consumer until Phases 3–5 rewrite the screens that would use
+them, and a primitive with no consumer is a guess about an API. They get built
+with their first real caller.
 
-*Gate: no `alert(` in components; every overlay announces itself; Escape closes
-every sheet.*
+What did land is what had consumers today:
+
+**`ToastContext` — all 27 `alert()` calls are gone.**
+
+`window.confirm` was banned long ago; `alert` never was. The harm differs and is
+worth stating precisely, because it is not the same bug: a suppressed alert does
+**not** make the button inert — the write already happened — it makes the
+**failure invisible**. `alert('Failed to unassign student')` where dialogs are
+suppressed means the manager taps unassign, it fails, and the screen says
+nothing.
+
+- **Errors never auto-dismiss.** A success that fades is fine; a failure that
+  fades is a failure nobody saw.
+- **Two live regions**, not one: errors `assertive`, confirmations `polite`.
+  Politeness is not a single setting, and either choice is wrong half the time.
+- **Focus is not stolen.** `alert()` blocked the page and moved focus; being
+  announced without being interrupted is better for a screen-reader user.
+
+**`Sheet` — one overlay primitive.** Focus trap, background scroll lock (with
+scrollbar compensation, and it survives nested sheets), Escape closing only the
+topmost, `role="dialog"` + `aria-modal`, and focus returned to whatever opened
+it. `dismissible={false}` for a write in flight — and it hides the close button
+too, rather than leaving one that does nothing.
+
+`useConfirm` is migrated onto it, which upgrades **every destructive action in
+the app at once**. The other 11 hand-rolled overlays are migrated by the phase
+that rewrites their screen; a ratchet test caps the count so it can only fall.
+
+**The z-index ladder is finally used.** It was defined in `tailwind.config.js`
+and referenced nowhere. The codebase held `z-50` ×14, `z-40`, `z-30`, `z-20`,
+`z-10`, `z-[60]`, `z-[100]` and an inline `9999` — so which layer covered which
+was settled by DOM order. One real bug fell out: `.clay-modal-overlay` sat at 50
+while `.clay-sidebar` sat at 100, so on desktop **the sidebar drew straight over
+any modal using that class**.
+
+**Dead code removed:** `src/utils/asyncErrorHandler.tsx` (87 lines, zero imports
+anywhere, and one of the 27 alerts), plus three `@keyframes` and a CSS class with
+no references.
+
+**The infinite CTA pulse is gone** (finding 3). A control that never stops moving
+is noise, not emphasis — and the rider's "I'M READY TO LEAVE" carries that class
+while sitting *disabled* about six days out of seven.
+
+**One behaviour change worth flagging:** `downloadAttendanceCSV` now **throws**
+instead of alerting. Its old `alert(); return;` was the worse failure of the two —
+with dialogs suppressed it resolved *successfully* having done nothing, so the
+caller's `await` completed, no catch ran, and the manager watched a download
+button do absolutely nothing. Both callers already surface `error.message`.
+
+**New tests: 39.** `Sheet` (22), `Toast` (13), plus useConfirm's new Escape and
+click-inside cases. The `alert` ratchet is now a **ban at zero**, joined by
+`prompt`. Two flaky bulk-assign assertions were made deterministic rather than
+left at a 1-in-4 failure.
+
+*Gate met:* client **287** · functions **245** · rules **81** — **613 total**.
+Typecheck **58 / 22**, unchanged. Build clean.
 
 ### Phase 3 — rider
 

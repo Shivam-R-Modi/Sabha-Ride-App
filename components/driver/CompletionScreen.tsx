@@ -79,7 +79,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#FAF9F6] to-[#F5F0E8] flex flex-col relative overflow-hidden">
             {/* Confetti Animation */}
-            <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+            <div className="fixed inset-0 pointer-events-none overflow-hidden z-base">
                 {confetti.map((piece) => (
                     <div
                         key={piece.id}
@@ -95,7 +95,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col items-center justify-center p-6 z-10">
+            <div className="flex-1 flex flex-col items-center justify-center p-6 z-raised">
                 {/* Success Icon */}
                 <div className="relative mb-6">
                     <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping"></div>

@@ -17,8 +17,8 @@ undeployed** — see "In flight" below.
 | Cloud Functions | ✅ | all 16 updated |
 | Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
 
-**Test suites, all green:** `functions` **245** · client **248** · rules **81** —
-**574 total**.
+**Test suites, all green:** `functions` **245** · client **287** · rules **81** —
+**613 total**.
 
 `npm run typecheck` reports **58** errors total, of which **22** are outside
 `functions/`. That is the clean baseline, not a regression. The "22" this note
@@ -45,7 +45,7 @@ A full redesign — modern minimalism, liquid glass, a manual day/night switch, 
 flows rebuilt around one question per screen. Same brand colours. **Presentation
 only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
 
-**Phases 0 and 1 are done.** Client tests went **70 → 248**.
+**Phases 0, 1 and 2 are done.** Client tests went **70 → 287**.
 
 - **Phase 0 — safety net.** Added component rendering to the test suite, which
   the repo did not have: all 70 client tests were pure logic, so nothing
@@ -60,11 +60,22 @@ only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
   Also in Phase 1: pinch-zoom is no longer disabled, which was a straight WCAG
   1.4.4 failure in an app the compliance doc holds to AA.
 
-**Still to come:** Phase 2 primitives (including sweeping the 27 `alert()`
-calls), then rider, driver, manager, then the dark-mode polish pass. The ~200
-hardcoded `bg-white` / `text-gray-*` utilities in components do **not** follow
-the theme yet — each phase converts the screens it touches, so expect some
-light-coloured patches in dark mode until then.
+- **Phase 2 — shared primitives.** All **27 `alert()` calls are gone**, replaced
+  by in-app toasts where errors stay put until dismissed. `window.alert` and
+  `window.prompt` are now banned by test, alongside `confirm`. A single `Sheet`
+  overlay provides the focus trap, scroll lock and Escape handling that none of
+  the twelve hand-rolled modals had; the shared confirm dialog is migrated onto
+  it, which covers every destructive action in the app. The z-index ladder is
+  finally applied — that fixed a real bug where the desktop sidebar drew over
+  open modals.
+
+**Still to come:** rider, driver and manager screens, then the dark-mode polish
+pass. Two things are deliberately unfinished until then:
+
+- The ~200 hardcoded `bg-white` / `text-gray-*` utilities in components do
+  **not** follow the theme, so expect light-coloured patches in dark mode.
+- 11 screens still have their own hand-rolled modal. Each is migrated onto
+  `Sheet` by the phase that rewrites it; a ratchet test stops the count rising.
 
 Decisions taken with the owner, recorded because they went against the
 recommendation and the reasoning should not be relitigated from scratch:

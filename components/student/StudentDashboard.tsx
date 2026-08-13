@@ -13,6 +13,7 @@ import { WeeklyAttendancePopup } from './WeeklyAttendancePopup';
 import { seatsOf } from '../../src/constants/seats';
 import { AttendanceBlockedScreen } from './AttendanceBlockedScreen';
 import { ProfileEditor } from '../shared/ProfileEditor';
+import { useToast } from '../../contexts/ToastContext';
 
 interface StudentDashboardProps {
     user: User | Driver;
@@ -21,6 +22,7 @@ interface StudentDashboardProps {
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogout }) => {
     const { currentTab } = useNavigation();
+    const toast = useToast();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [showReadyModal, setShowReadyModal] = useState(false);
     // Whether drop-off is open comes from the server, not from this device's
@@ -131,7 +133,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
             await studentReadyToLeave(user.id);
         } catch (error) {
             console.error('Error marking ready to leave:', error);
-            alert('Failed to notify driver. Please try again.');
+            toast.error('Could not let your driver know. Please try again.');
         } finally {
             setIsReadyLoading(false);
         }
@@ -205,7 +207,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                                 its own it reads as "everyone is sorted" — which for a
                                 family still standing outside is simply untrue. */}
                             {splitStatus && (
-                                <div className="clay-card border-l-4 border-l-amber-500 bg-amber-50/60 relative z-10">
+                                <div className="clay-card border-l-4 border-l-amber-500 bg-amber-50/60 relative z-raised">
                                     <p className="font-bold text-coffee text-sm">
                                         {splitStatus.assignedSeats} of your {splitStatus.totalSeats} seats
                                         {splitStatus.driverName ? ` are with ${splitStatus.driverName}` : ' have a car'}.
@@ -228,7 +230,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
                             <div className="absolute top-0 right-0 p-2 opacity-10">
                                 <Sparkles size={40} className="text-gold" />
                             </div>
-                            <div className="flex gap-4 items-center relative z-10">
+                            <div className="flex gap-4 items-center relative z-raised">
                                 <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center text-saffron group-hover:bg-orange-100 transition-colors shadow-inner">
                                     <Car size={28} />
                                 </div>
@@ -248,7 +250,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
 
                     <div className="clay-card text-center relative overflow-hidden transition-all group">
                         {!dropoffOpen && (
-                            <div className="absolute inset-0 bg-cream/40 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-cream/40 backdrop-blur-[1px] z-raised flex items-center justify-center">
                                 <span className="clay-badge-status text-center px-3">
                                     {timeContext || 'Not available yet'}
                                 </span>
@@ -313,7 +315,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onLogo
             {renderContent()}
 
             {showReadyModal && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-coffee/60 backdrop-blur-md animate-in fade-in">
+                <div className="fixed inset-0 z-modal flex items-center justify-center p-6 bg-coffee/60 backdrop-blur-md animate-in fade-in">
                     <div className="clay-modal max-w-sm">
                         <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-6 text-saffron">
                             <Navigation size={32} />

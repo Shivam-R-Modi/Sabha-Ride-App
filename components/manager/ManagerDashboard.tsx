@@ -25,6 +25,7 @@ import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch,
 import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { useConfirm } from '../shared/useConfirm';
+import { useToast } from '../../contexts/ToastContext';
 import { seatsOnRide } from '../../src/constants/seats';
 
 // Grouped Ride Card Component
@@ -187,6 +188,7 @@ export const ManagerDashboard: React.FC = () => {
   const [pendingReleaseDriver, setPendingReleaseDriver] = useState<{ driverId: string; rideIds: string[]; driver: Driver | null } | null>(null);
   const [releaseLoading, setReleaseLoading] = useState(false);
   const { ask, confirmDialog } = useConfirm();
+  const toast = useToast();
 
   useAutoDispatch();
 
@@ -256,7 +258,7 @@ export const ManagerDashboard: React.FC = () => {
       await downloadAttendanceCSV(eventId!);
     } catch (error) {
       console.error('Error downloading attendance:', error);
-      alert('Failed to download attendance CSV');
+      toast.error(error instanceof Error ? error.message : 'Could not download the attendance list.');
     } finally {
       setIsDownloading(false);
     }
@@ -267,7 +269,7 @@ export const ManagerDashboard: React.FC = () => {
     if (available) {
       await assignRideToDriver(requestId, available);
     } else {
-      alert("No available drivers found to assign manually.");
+      toast.error('No driver is available right now. Ask someone to go on shift.');
     }
   };
 
@@ -311,7 +313,7 @@ export const ManagerDashboard: React.FC = () => {
       setPendingReleaseDriver(null);
     } catch (error) {
       console.error("Failed to clear students:", error);
-      alert("Failed to clear students. Please try again.");
+      toast.error('Could not return those riders to the queue. Please try again.');
     } finally {
       setReleaseLoading(false);
     }
@@ -341,7 +343,7 @@ export const ManagerDashboard: React.FC = () => {
       setPendingReleaseDriver(null);
     } catch (error) {
       console.error("Failed to fully release driver:", error);
-      alert("Failed to fully release driver. Please try again.");
+      toast.error('Could not release the driver. Please try again.');
     } finally {
       setReleaseLoading(false);
     }
@@ -350,12 +352,33 @@ export const ManagerDashboard: React.FC = () => {
 
   const handleBulkAssign = async (ids: string[]) => {
     const available = availableDrivers.find(d => d.status === 'available');
-    if (!available) return alert("No available drivers.");
-
-    for (const id of ids) {
-      await assignRideToDriver(id, available);
+    if (!available) {
+      toast.error('No driver is available right now. Ask someone to go on shift.');
+      return;
     }
-    alert(`Assigned ${ids.length} requests to ${available.name}`);
+
+    // Partial success is the normal outcome here, not an edge case: each
+    // assignment is its own write and a later one can fail once the driver
+    // fills up. Reporting "Assigned 5" after two succeeded would send a
+    // manager away believing three riders are sorted when they are waiting.
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        await assignRideToDriver(id, available);
+      } catch (error) {
+        console.error('Bulk assign failed for', id, error);
+        failed.push(id);
+      }
+    }
+
+    const assigned = ids.length - failed.length;
+    if (failed.length === 0) {
+      toast.success(`Assigned ${assigned} ${assigned === 1 ? 'request' : 'requests'} to ${available.name}.`);
+    } else if (assigned === 0) {
+      toast.error(`Could not assign any of the ${ids.length} requests. They are still waiting.`);
+    } else {
+      toast.error(`Assigned ${assigned} of ${ids.length}. ${failed.length} still waiting — try again.`);
+    }
   };
 
   // handleManualAssign was defined here and never referenced in the JSX.
@@ -372,10 +395,10 @@ export const ManagerDashboard: React.FC = () => {
   const handleApproveDriver = async (driverId: string) => {
     try {
       await updateUserStatus(driverId, 'approved');
-      alert('Driver approved successfully!');
+      toast.success('Driver approved. They can now volunteer.');
     } catch (error: any) {
       console.error('Error approving driver:', error);
-      alert(`Failed to approve driver: ${error?.message || error}`);
+      toast.error(`Could not approve the driver: ${error?.message || error}`);
     }
   };
 
@@ -388,10 +411,10 @@ export const ManagerDashboard: React.FC = () => {
     })) {
       try {
         await updateUserStatus(driverId, 'rejected');
-        alert('Driver denied.');
+        toast.success('Driver denied.');
       } catch (error: any) {
         console.error('Error denying driver:', error);
-        alert(`Failed to deny driver: ${error?.message || error}`);
+        toast.error(`Could not deny the driver: ${error?.message || error}`);
       }
     }
   };
@@ -399,10 +422,10 @@ export const ManagerDashboard: React.FC = () => {
   const handleApproveRider = async (riderId: string) => {
     try {
       await updateUserStatus(riderId, 'approved');
-      alert('Rider approved successfully!');
+      toast.success('Rider approved. They can now request rides.');
     } catch (error: any) {
       console.error('Error approving rider:', error);
-      alert(`Failed to approve rider: ${error?.message || error}`);
+      toast.error(`Could not approve the rider: ${error?.message || error}`);
     }
   };
 
@@ -415,10 +438,10 @@ export const ManagerDashboard: React.FC = () => {
     })) {
       try {
         await updateUserStatus(riderId, 'rejected');
-        alert('Rider denied.');
+        toast.success('Rider denied.');
       } catch (error: any) {
         console.error('Error denying rider:', error);
-        alert(`Failed to deny rider: ${error?.message || error}`);
+        toast.error(`Could not deny the rider: ${error?.message || error}`);
       }
     }
   };
@@ -426,7 +449,7 @@ export const ManagerDashboard: React.FC = () => {
   return (
     <div className="app-panel flex flex-col bg-gray-50 relative overflow-hidden">
       {/* Top Control Bar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shadow-sm z-20 shrink-0 pt-safe lg:pt-2">
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shadow-sm z-sticky shrink-0 pt-safe lg:pt-2">
         <div className="flex items-center gap-3 min-w-0">
           <div className="bg-gray-100 p-1 rounded-lg flex gap-1 min-w-0 overflow-x-auto no-scrollbar">
             <button
@@ -564,7 +587,7 @@ export const ManagerDashboard: React.FC = () => {
                           await returnStudentToPool(rideId);
                         } catch (error) {
                           console.error('Failed to unassign:', error);
-                          alert('Failed to unassign student');
+                          toast.error('Could not unassign that rider. Please try again.');
                         }
                       }}
                       onRelease={handleReleaseDriver}
@@ -584,7 +607,7 @@ export const ManagerDashboard: React.FC = () => {
 
       {/* Notifications Panel */}
       {showNotifications && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-modal flex items-end sm:items-center justify-center p-4">
           <div className="bg-white sm:rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden animate-in slide-in-from-bottom duration-300">
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
@@ -739,7 +762,7 @@ export const ManagerDashboard: React.FC = () => {
 
       {/* Fleet Management Modal */}
       {showFleetManagement && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in zoom-in duration-200">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="font-header font-bold text-xl text-coffee">Fleet Management</h2>
@@ -759,7 +782,7 @@ export const ManagerDashboard: React.FC = () => {
 
       {/* Location Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-modal flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden animate-in zoom-in duration-200">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="font-header font-bold text-xl text-coffee">Settings</h2>
@@ -781,7 +804,7 @@ export const ManagerDashboard: React.FC = () => {
 
       {/* Release Driver Choice Modal */}
       {showReleaseModal && pendingReleaseDriver && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-modal p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in duration-200">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
