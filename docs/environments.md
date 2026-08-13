@@ -118,15 +118,26 @@ will confirm the previous build and think the deploy worked.
 
 ## Production safety settings
 
-Both of these were disabled last time the database configuration was read.
-Neither is enabled by deploying — they are one-time account actions.
+Both were disabled from the database's creation in January 2026 until
+2026-08-13. Both are **now enabled**:
 
-- **Delete protection.** Free, and it prevents anyone accidentally deleting the
-  database holding every ride and member record:
+| Setting | State | Effect |
+|---|---|---|
+| Delete protection | `ENABLED` | The database cannot be deleted without disabling this first |
+| Point-in-time recovery | `ENABLED` | Retention went from 3,600s (1 hour) to 604,800s (7 days) |
 
-  ```bash
-  firebase firestore:databases:update "(default)" --delete-protection ENABLED --project prod
-  ```
+Check them at any time:
 
-- **Point-in-time recovery.** Gives a 7-day recovery window for a bad write or
-  a faulty migration. It has a cost. Worth it before any data migration.
+```bash
+firebase firestore:databases:get "(default)" --project prod
+```
+
+Neither is set by deploying — they are account-level settings that survive
+every deploy, and nothing in this repo can turn them off. PITR carries a
+running cost proportional to the data held; it is the thing that makes a bad
+write or a faulty migration recoverable, so review the cost rather than the
+setting.
+
+Recovering to an earlier moment is a `gcloud` export-and-restore, not a
+one-liner, and it only reaches back 7 days. It is a floor, not a backup
+strategy.
