@@ -199,11 +199,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   className="clay-input pl-10 pr-10"
                   required
                 />
+                {/* 44x44, and named.
+                    This was an 18x18 box whose only name was `title` — which
+                    is a tooltip, not an accessible name, so a screen reader
+                    announced "button" and nothing else. It cannot use
+                    `.tap-target` (that sets position: relative and would fight
+                    the absolute placement), so the box is sized directly.
+                    right-1 rather than right-3 keeps the wider button inside
+                    the input's own pr-10 padding. */}
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-coffee-500 hover:text-coffee transition-colors"
-                  title={showPassword ? 'Hide Password' : 'Show Password'}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center
+                             text-coffee-500 hover:text-coffee transition-colors"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -267,11 +277,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     }`}
                     required
                   />
+                  {/* Same fix as the password field above. */}
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-coffee-500 hover:text-coffee transition-colors"
-                    title={showConfirmPassword ? 'Hide Password' : 'Show Password'}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center
+                               text-coffee-500 hover:text-coffee transition-colors"
+                    aria-label={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'}
+                    aria-pressed={showConfirmPassword}
                   >
                     {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
@@ -290,12 +303,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             {/* Terms & Privacy Consent Checkbox (Sign Up Only) */}
             {isRegistering && (
               <div className="flex items-start gap-2 pt-1 animate-in fade-in duration-200">
+                {/* w-5 h-5 rather than the browser's 13px default. The label
+                    below already makes the sentence itself tappable, so this
+                    was usable — just needlessly fiddly on a phone, for a box
+                    you cannot register without ticking. */}
                 <input
                   type="checkbox"
                   id="terms"
                   checked={agreedToTerms}
                   onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  className="mt-0.5 rounded border-mocha/30 text-saffron focus:ring-saffron cursor-pointer"
+                  className="mt-0.5 w-5 h-5 shrink-0 rounded border-mocha/30 text-saffron focus:ring-saffron cursor-pointer"
                   required
                 />
                 <label htmlFor="terms" className="text-xs text-coffee-700 leading-tight cursor-pointer">
@@ -323,14 +340,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 setPassword('');
                 setConfirmPassword('');
               }}
-              className="text-sm text-coffee-500 hover:text-saffron-800 font-medium"
+              className="tap-target text-sm text-coffee-500 hover:text-saffron-800 font-medium"
             >
               {isRegistering ? "Already have an account? Login" : "New to Sabha? Create Account"}
             </button>
             {!isRegistering && (
               <button
                 onClick={() => setIsForgotModalOpen(true)}
-                className="block mx-auto mt-2 text-sm text-saffron-800 hover:text-coffee font-medium"
+                className="tap-target block mx-auto mt-2 text-sm text-saffron-800 hover:text-coffee font-medium"
                 type="button"
               >
                 Forgot Password?

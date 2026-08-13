@@ -1,11 +1,27 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-12**, at commit `0406ab8`.
+at the end. Last updated **2026-08-13**.
 
 `main` matches production exactly. Branch
 `claude/ride-app-ui-ux-optimization-86f88a` carries a complete UI/UX redesign and
 is **ahead of production and undeployed** — see below.
+
+## Changed 2026-08-13
+
+- **Staging is gone.** It had a Firestore database and one hosting deploy but
+  **no Cloud Functions ever deployed**, so it could not exercise a single
+  meaningful path. Nothing was migrated because nothing existed to migrate. One
+  project now: `sabha-ride-app`. See [`environments.md`](environments.md).
+- **`deploy:prod` no longer ships everything at once.** It was a bare
+  `firebase deploy`; now it is build → rules → functions → hosting, with
+  `deploy:rules` / `deploy:functions` / `deploy:hosting` runnable alone.
+- **Delete protection and point-in-time recovery are ON** in production, both
+  off since the database was created in January. Recovery window went from
+  1 hour to 7 days.
+- **Sign-in screen accessibility fixed** — see Open items; it was the one screen
+  the redesign never touched and it had the worst control in the app.
+- `.claude/launch.json` said the dev server runs on 5173. It runs on **3000**.
 
 ---
 
@@ -17,8 +33,8 @@ is **ahead of production and undeployed** — see below.
 | Cloud Functions | ✅ | all 16 updated |
 | Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
 
-**Test suites, all green:** `functions` **245** · client **417** · rules **81** —
-**743 total**.
+**Test suites, all green:** `functions` **245** · client **431** · rules **81** —
+**757 total**.
 
 `npm run typecheck` reports **55** errors total, of which **19** are outside
 `functions/`. That is the clean baseline, not a regression. It was 58 / 22 before
@@ -206,6 +222,27 @@ Full design and the rejected alternatives: [`plans/phase-3-seats.md`](plans/phas
 
 Nothing is blocked. Nothing is half-finished.
 
+**Fixed 2026-08-13 — the sign-in screen.** The redesign covered rider, driver and
+manager and never touched auth, so the screen every user reaches first kept the
+worst controls in the app. Running `preview/audit.js` against the real dev server
+rather than the preview pages found three:
+
+| Control | Was | Now |
+|---|---|---|
+| Show/hide password eye | 18×18, named only by `title` | 44×44, `aria-label` + `aria-pressed` |
+| "New to Sabha? Create Account" | 20px tall | `.tap-target`, 44px hit area |
+| "Forgot Password?" | 20px tall | `.tap-target`, 44px hit area |
+| Terms checkbox | browser default 13×13 | 20×20 (its `<label>` already made the sentence tappable) |
+
+The eye was the serious one: unnamed **and** unreachable, on the control that
+decides whether someone can check what they typed.
+
+Worth knowing for the next session: **`title` satisfies `getByRole(..., {name})`**
+— the accessible-name spec falls back to it — so a role-and-name query would have
+passed against the broken version. `tests/components/LoginScreen.test.tsx` asserts
+`aria-label` directly for that reason. The 14 cases were run against the pre-fix
+component to confirm they fail (8 of 14 did).
+
 **For the owner, not code:**
 
 - **The sabha calendar may only have Aug 7 left.** The audit log shows five
@@ -248,4 +285,12 @@ order, and what a phone session cannot do.
 The short version of that last part: **from the Claude mobile app you can read,
 edit, test, build, commit and push — you cannot deploy, and you cannot see
 production data.** Deploys happen from the owner's Mac, in the order
-`firestore:rules → functions → hosting`, then fast-forward `main`.
+`firestore:rules → functions → hosting`, then fast-forward `main`. That order is
+now encoded in `npm run deploy:prod`, so it no longer depends on remembering it.
+
+**Testing without waiting for Friday.** [`plans/testing-plan.md`](plans/testing-plan.md)
+§4 has the method: edit the sabha's times in **Setup → Sabha Calendar** (not
+Setup → Location & Times, which only sets defaults for new events and silently
+does nothing to a scheduled one — tracked as a defect). Notifications fire only
+on a *transition into* a ride type, so pickup testing inside the normal two-day
+window alerts nobody; drop-off always alerts everyone.
