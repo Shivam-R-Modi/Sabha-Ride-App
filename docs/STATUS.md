@@ -1,9 +1,11 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-08**, at commit `76c087d`.
+at the end. Last updated **2026-08-12**, at commit `0406ab8`.
 
-`main` matches production exactly. Working tree clean, everything pushed.
+`main` matches production exactly. Branch
+`claude/ride-app-ui-ux-optimization-86f88a` is **ahead of production and
+undeployed** — see "In flight" below.
 
 ---
 
@@ -15,16 +17,57 @@ at the end. Last updated **2026-08-08**, at commit `76c087d`.
 | Cloud Functions | ✅ | all 16 updated |
 | Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
 
-**Test suites, all green:** `functions` **245** · client **70** · rules **81** —
-**396 total**. `npm run typecheck` reports **22** errors, which is the clean
-baseline, not a regression.
+**Test suites, all green:** `functions` **245** · client **150** · rules **81** —
+**476 total**.
+
+`npm run typecheck` reports **58** errors total, of which **22** are outside
+`functions/`. That is the clean baseline, not a regression. The "22" this note
+used to quote was the client-only figure; both numbers are recorded now so the
+next session does not think 36 errors appeared overnight.
 
 `node scripts/tenancy.cjs verify` reads **0 unstamped** (owner's Mac only — needs
 the Admin SDK key).
 
+**Building in a worktree needs `.env.local`,** which is gitignored and therefore
+absent from every `git worktree`. `npm run build` fails there with "Missing
+Firebase environment variables" before compiling anything. Copy the file across,
+or pass throwaway values to prove compilation — the four variables are only
+asserted for presence.
+
 ---
 
-## What was just finished: Phase 3 part 1 — seats
+## In flight: UI/UX optimization
+
+Branch `claude/ride-app-ui-ux-optimization-86f88a`. Plan:
+[`plans/ui-ux-optimization.md`](plans/ui-ux-optimization.md).
+
+A full redesign — modern minimalism, liquid glass, a manual day/night switch, and
+flows rebuilt around one question per screen. Same brand colours. **Presentation
+only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
+
+**Phase 0 (safety net) is done and is the only phase committed so far.** Nothing
+visual has changed yet. It added component rendering to the test suite, which the
+repo did not have — all 70 client tests were pure logic, so nothing whatsoever
+guarded the UI. Client tests went **70 → 150**.
+
+Decisions taken with the owner, recorded because they went against the
+recommendation and the reasoning should not be relitigated from scratch:
+
+- **Glass everywhere**, content cards included — not the chrome-only version that
+  was recommended. Delivered under an 88% opacity floor on any surface bearing
+  text, so WCAG AA survives it. See §4.2 of the plan.
+- **Request Center and Live Operations keep their separate tabs.** The merge was
+  declined; live counts in the tab labels reduce the toggling instead.
+
+**Both surfaces this note flagged as "never seen rendered" now have real render
+tests** — rider *Request Pickup* (20 tests) and manager *Request Center* (21).
+That is not the same as having been looked at: a test proves the seat stepper
+counts and files the right payload, it does not prove the screen looks right.
+Both still want two minutes in a browser.
+
+---
+
+## What was previously finished: Phase 3 part 1 — seats
 
 Until this shipped, **a ride request WAS one seat**. A family of four was booked a
 single place and the driver arrived with room for one. Riders now say how many are
@@ -72,11 +115,12 @@ Nothing is blocked. Nothing is half-finished.
 
 - **The sabha calendar may only have Aug 7 left.** The audit log shows five
   Fridays were deleted. Worth checking before the next gathering.
-- **Two UI surfaces have never been seen rendered** — they are covered by tests
-  and confirmed present in the live bundle, but nobody has looked at them in a
-  browser, because reaching them needs a sign-in. Rider → *Request Pickup* (seat
-  stepper, "Keep us in one car"); Manager → **Request Center** (Seats column).
-  Note that is Request Center, *not* Live Operations.
+- **Two UI surfaces have never been *looked at*** — Rider → *Request Pickup* (seat
+  stepper, "Keep us in one car") and Manager → **Request Center** (Seats column).
+  Note that is Request Center, *not* Live Operations. Since 2026-08-12 both are
+  covered by real render tests (41 between them), so their behaviour is now
+  proven; what is still unproven is how they *look*, because reaching them needs
+  a sign-in. Two minutes in a browser each.
 
 **Known gap, deliberately not fixed:** bulk-select on the manager's queue exists
 only in the desktop table. On a phone the checkboxes and "Assign Bulk" are

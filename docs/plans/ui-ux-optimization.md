@@ -1,0 +1,526 @@
+# UI/UX optimization — plan
+
+Full redesign of the interface and the flows through it. **No change to Cloud
+Functions, Firestore rules, or any data path.** Same brand colours. New surface
+treatment (modern minimalism + liquid glass), a manual day/night switch, and an
+information architecture rebuilt around one question per screen.
+
+Written 2026-08-12, against commit `0406ab8`.
+
+---
+
+## 1. Baseline, measured not assumed
+
+Everything below was run on this branch before a single line was changed. These
+are the numbers the work has to still produce at the end.
+
+| Check | Result |
+|---|---|
+| `npx vitest run` | **70 passed**, 6 files |
+| `npm run typecheck` | **58 errors** — 22 client + 36 `functions/` |
+| `npm test --prefix functions` | 245 (not re-run here) |
+| `npm run test:rules` | 81 (needs emulator) |
+
+**On the "22" in CLAUDE.md.** It is correct but under-specified: `tsc` reports
+**58** errors, of which exactly **22** are outside `functions/`. The 22 are in
+ten files, and eight of them are files this work rewrites:
+
+```
+src/utils/cloudFunctions.ts        5     components/manager/ManagerDashboard.tsx    2
+hooks/useAdminDatabase.ts          3     components/driver/CompletionScreen.tsx     2
+components/driver/DriverDashboard  3     components/driver/AssignmentPreview.tsx    2
+scripts/setRideContext.ts          2     components/manager/LocationSettings.tsx    1
+                                         components/driver/ActiveRide.tsx           1
+                                         components/RideStatus.tsx                  1
+```
+
+Nearly all are the same shape: `catch (e: unknown)` then `e.message`. Rewriting
+these screens will incidentally fix some, which *lowers* the count. That is an
+improvement, but it breaks "22 means clean" as a checksum. **Decision: the count
+may only go down, never up, and CLAUDE.md gets updated with the new number at the
+end of each phase.**
+
+**Safety net gap.** The 70 client tests are all pure logic — utils and hooks.
+**Not one component is ever rendered in a test**, and `@testing-library/react` is
+not installed. So today nothing at all would catch a UI regression. Phase 0
+fixes that before anything is touched, because "the functions still work" is the
+explicit requirement and right now only the functions are actually guarded.
+
+---
+
+## 2. The workflows as they really are
+
+### 2.1 Rider — from opening the app to having a ride
+
+```
+splash (needs a TAP to dismiss)
+  → attendance interstitial   full-screen, blocks everything, every session
+      ├─ "Nah"  → AttendanceBlockedScreen replaces the entire dashboard
+      └─ "Yes"  → home
+  → home        up to 5 stacked cards, 2 competing primary CTAs
+  → tap Request Pickup card
+  → PickupForm  replaces home entirely (not a sheet — no context left behind)
+  → Confirm
+  → success screen, 2s hard timeout
+  → home
+```
+
+Six screens and a mandatory tap to do the one thing the app exists for.
+
+### 2.2 Driver — from opening the app to carrying people
+
+```
+dashboard
+   status card (avatar, online toggle, vehicle sub-panel with "Select Car")
+   stats row (today's seva / assignments)
+   ride-type card
+   error banner
+   [Assign Me]              ← grey and unclickable until a car is chosen
+   "No assignments yet"     ← rendered ALWAYS, even directly under Assign Me
+   [I'm Done for Today]
+   "You are currently offline"  ← when offline, says the same as the card above
+  → preview → accept → ActiveRide → complete → CompletionScreen
+```
+
+### 2.3 Manager — Friday evening
+
+```
+app-panel
+  segmented control:  Request Center | Live Operations | Database Console
+  toolbar icons:      🚗 Fleet   📍 Settings   ⬇ CSV   🔔 Approvals
+  bottom nav:         Admin | Reports | Profile
+```
+
+Three navigation systems visible simultaneously. The Settings modal stacks
+`SabhaCalendar` + `RideWindowControl` + `LocationSettings` — three unrelated
+jobs — into one scrolling column.
+
+---
+
+## 3. Findings
+
+Ordered by how much they cost the person using the screen. Each is a thing I read
+in the code, not a general principle.
+
+### 3.1 Cognitive load
+
+| # | Finding | Where |
+|---|---|---|
+| 1 | **Rider home has two competing primary CTAs.** "Request Pickup" (accent card) and "I'M READY TO LEAVE" (large pulsing CTA) sit side by side. Nothing says which one tonight calls for. | `StudentDashboard.tsx:200-287` |
+| 2 | **The Return Trip card is on screen ~6 days out of 7 doing nothing.** When `dropoffOpen` is false it is covered by a blur veil and a status pill — a permanent grey rectangle occupying half the fold. | `StudentDashboard.tsx:249-276` |
+| 3 | **The CTA pulses forever.** `clay-btn-cta-large` carries `animation: clay-cta-pulse 2s ease-in-out infinite`. Continuous motion on a control that is usually disabled. | `claymorphism.css:436` |
+| 4 | **Attendance is a full-screen blocking interstitial every session**, and answering "no" swaps the entire dashboard for `AttendanceBlockedScreen`. A one-bit answer takes the whole app hostage. | `StudentDashboard.tsx:100-117` |
+| 5 | **The splash screen requires a tap.** The auto-dismiss timer was deliberately removed. Every launch costs one meaningless interaction. | `App.tsx:27-31` |
+| 6 | **Driver sees an empty-state card that is never conditional.** "No assignments yet" renders in the dashboard view always — including immediately below the Assign Me button, and simultaneously with the *second* offline card that says the same thing in different words. | `DriverDashboard.tsx:507-547` |
+| 7 | **Manager runs three navigation systems at once** — segmented control, toolbar icons, bottom nav — on one screen. | `ManagerDashboard.tsx:429-499` |
+| 8 | **Settings is three unrelated tools in one scroll**: sabha calendar, ride window, venue location. | `ManagerDashboard.tsx:773-777` |
+| 9 | **"My Rides → Upcoming" duplicates the home ride card**, so the rider's second nav tab is empty or redundant most of the time. | `MyRides.tsx:118-129` |
+| 10 | **Approvals modal mixes four different decisions** — driver approvals, rider approvals, ride requests — and the ride-request rows duplicate the Request Center tab behind it. | `ManagerDashboard.tsx:586-738` |
+
+### 3.2 Controls that mislead
+
+| # | Finding | Where |
+|---|---|---|
+| 11 | **The disabled "Assign Me" never says why.** It is `disabled` when no vehicle is chosen, so the click handler cannot fire — which makes its `alert('Please select a vehicle first')` **unreachable code**. The driver gets a grey button and no reason, ever. | `DriverDashboard.tsx:239-243, 491-494` |
+| 12 | **Settings is behind a 📍 map-pin icon.** The icon does not mean settings. | `ManagerDashboard.tsx:468` |
+| 13 | **"Assign" silently picks a driver for you** — `availableDrivers.find(d => d.status === 'available')`, i.e. whoever is first in the array. The manager is not shown who, and cannot choose. | `ManagerDashboard.tsx:265-272` |
+| 14 | **Bulk select is unreachable on a phone.** Checkboxes and "Assign Bulk" exist only in the `hidden md:block` desktop table. Already recorded as a known gap in STATUS.md. | `RequestTable.tsx:174, 271` |
+| 15 | **The availability control is a `<button class="clay-toggle">` that renders a Toggle icon inside itself** — two toggle metaphors nested — with no `role="switch"` and no `aria-checked`. | `DriverDashboard.tsx:430-432` |
+
+### 3.3 The known failure mode, still present
+
+The repo banned `window.confirm` because a suppressed dialog returns `false` and
+made every destructive button inert. **`window.alert` was never swept, and there
+are 27 calls left.**
+
+```
+components/manager/ManagerDashboard.tsx   15
+components/driver/DriverDashboard.tsx      5
+components/manager/DatabaseConsole.tsx     2
+components/student/StudentDashboard.tsx    1
+components/manager/ManagerReports.tsx      1
+src/utils/asyncErrorHandler.tsx            1
+```
+
+To be precise about the harm, because it differs from `confirm`: a suppressed
+`alert` does not make the button inert — the write already happened. What it does
+is **make failures invisible**. `alert('Failed to unassign student')` in a context
+where dialogs are suppressed means the manager taps unassign, it fails, and the
+screen says nothing. That is the same "looks wired up, silently does nothing"
+class this codebase has spent releases removing, arriving through a different
+door. It is also simply inconsistent: half the destructive actions use the proper
+`useConfirm` dialog and half use a native alert.
+
+### 3.4 Accessibility
+
+The compliance doc holds this app to **WCAG 2.1 AA**
+(`docs/compliance/privacy-and-data.md:13`), and the earlier design-system pass got
+contrast failures from 111 down to 1. Two live regressions against that:
+
+| # | Finding | Where |
+|---|---|---|
+| 16 | **Pinch-zoom is disabled.** `maximum-scale=1.0, user-scalable=no` — a direct WCAG 1.4.4 (Resize Text) failure. | `index.html:6` |
+| 17 | **Only one of twelve hand-rolled modals is announced as one.** `useConfirm` sets `role="dialog"` + `aria-modal`. The other eleven `fixed inset-0` overlays set neither, and none trap focus, lock scroll, or close on Escape. | 12 files |
+
+### 3.5 Structural
+
+| # | Finding | Where |
+|---|---|---|
+| 18 | **The z-index ladder exists and is unused.** `tailwind.config.js` defines `base/raised/sticky/dropdown/modal/toast`. Components use 14× `z-50`, plus `z-40`, `z-30`, `z-20`, `z-10`, `z-[60]`, `z-[100]`, and an inline `zIndex: 9999`. | `tailwind.config.js:95-102` |
+| 19 | **12 files hand-roll their own modal.** No shared sheet/dialog primitive. | grep `fixed inset-0` |
+| 20 | **`WeeklyAttendancePopup` is written in inline styles**, ~90 lines of them, bypassing the design system entirely. | `WeeklyAttendancePopup.tsx:44-168` |
+| 21 | **~200 off-palette Tailwind utilities** (`bg-white`, `text-gray-*`, `blue-*`, `red-*`, `green-*`) across components. Every one is a colour that cannot follow a theme switch. Worst: ManagerDashboard 57, DatabaseConsole 46, RequestTable 39. | all components |
+| 22 | **`ActiveRide` renders `min-h-screen` with its own sticky header inside a shell that already has a header and a bottom nav.** Double chrome, and the driver can navigate away mid-ride. | `ActiveRide.tsx:156-158` |
+
+---
+
+## 4. Design direction
+
+### 4.1 The honest problem with the brief
+
+Claymorphism and glassmorphism are opposites. Clay is heavy, opaque, deeply
+inset-shadowed, with 32–48px radii:
+
+```css
+box-shadow: 8px 8px 24px rgba(61,47,20,.15),
+            inset 8px 8px 16px rgba(255,255,255,.8),
+            inset -4px -4px 12px rgba(61,47,20,.08);
+```
+
+Glass is thin, translucent, blurred, hairline-bordered. So this is a **replacement
+of the design system, not a re-skin** — 1215 lines of `claymorphism.css` plus the
+~200 off-palette utilities. That is the true size of the job, and the plan is
+phased accordingly.
+
+Second honest note: glass everywhere is a trap. `backdrop-filter` on large
+scrolling surfaces janks on low-end Android, and translucent backgrounds behind
+body text are how contrast ratios quietly die — which would undo the 111 → 1 win
+this repo already banked.
+
+### 4.2 Glass everywhere — **decided 2026-08-12**
+
+Chrome-only was recommended; **glass on content surfaces too was chosen.** Taken as
+given. What follows is how to deliver it without losing the contrast baseline,
+because AA is a compliance requirement in
+`docs/compliance/privacy-and-data.md`, not a preference I get to trade away.
+
+| Layer | Treatment |
+|---|---|
+| **Chrome** — header, bottom nav, sheet backdrops, floating pills, toasts | Full glass. `backdrop-filter: blur(24px) saturate(180%)`, tint at **~62%** opacity, 1px specular top edge. |
+| **Content** — cards, rows, tables, forms | Glass, but **tinted to ≥88% opacity**. Reads as frosted; text on it still measures AA against the token, not against whatever happens to scroll underneath. |
+| **Text** | Only ever on a ≥88% surface. Never directly on an unfilled blur. |
+
+Three engineering rules make "glass everywhere" safe:
+
+1. **Opacity floor of 88% on any surface bearing text.** Contrast is then computed
+   against a known colour rather than against arbitrary content behind it. This is
+   what keeps the effect and the AA baseline in the same build.
+2. **`@supports not (backdrop-filter: blur(1px))` fallback to fully opaque.** Blur
+   is unsupported or disabled often enough that the unblurred state must be a
+   designed state, not an accident.
+3. **Blur budget.** `backdrop-filter` is GPU-expensive and compounds when layered.
+   Cap at **one blurred layer in the scroll path** — a scrolling list of frosted
+   cards over a frosted background is the exact combination that stutters. Cards
+   get their tint and border; the blur belongs to the surface they scroll over.
+
+If Phase 6 measurement shows content-card glass costing contrast or frame rate, the
+fix is to raise the tint further, not to abandon the look.
+
+Everything else gets lighter: radii **24/32/48 → 12/16/20**, three-layer shadows →
+one, borders to hairlines, and a real vertical rhythm instead of the current mix
+of `space-y-6` / `p-8` / `gap-4`.
+
+### 4.3 Day / night
+
+No dark mode exists today — zero `dark:` utilities, no `prefers-color-scheme`, no
+theme context. The blocker is that colour is baked into gradients and shadows
+rather than named.
+
+**Architecture:**
+
+1. **Semantic tokens, one layer above the brand.** Brand hues (saffron, cream,
+   coffee, gold) stay exactly as they are and stay the source. What changes is
+   that components stop naming them:
+
+   ```css
+   :root[data-theme="light"] {
+     --bg-canvas:      250 249 246;   /* cream 100  */
+     --bg-surface:     255 255 255;
+     --bg-glass:       255 255 255 / .62;
+     --text-primary:    61  41  20;   /* coffee 900 */
+     --border-hairline: 61  41  20 / .10;
+     --accent:         255 107  53;   /* saffron — fills   */
+     --accent-text:    184  67  24;   /* saffron 800 — text */
+   }
+   :root[data-theme="dark"] {
+     --bg-canvas:       26  22  18;   /* warm near-black, not blue-grey */
+     --bg-surface:      38  32  27;
+     --bg-glass:        38  32  27 / .58;
+     --text-primary:   250 249 246;
+     --border-hairline:255 255 255 / .10;
+     --accent:         255 140  90;   /* lifted: saffron 500 is muddy on dark */
+     --accent-text:    255 168 122;   /* AA on --bg-surface */
+   }
+   ```
+
+   Warm dark, not the usual blue-grey — this is a saffron-and-coffee brand and a
+   cold dark theme would read as a different app.
+
+2. **Tailwind reads the tokens**, so every existing utility themes for free:
+   `surface: 'rgb(var(--bg-surface) / <alpha-value>)'`.
+
+3. **`data-theme` on `<html>`**, set by an inline script in `index.html` *before*
+   first paint, so there is no white flash on a dark-theme launch. `<meta
+   name="theme-color">` is swapped with it.
+
+4. **Three-way control** — Light / Dark / System — persisted in `localStorage`.
+   The brief asks for manual, and manual is the default position; System is there
+   because a phone that flips at sunset otherwise fights the app. Lives in
+   Profile, for all three roles.
+
+5. **Dark mode is a genuine feature here, not decoration.** Drivers use this app
+   in a car, at night, after sabha.
+
+---
+
+## 5. Screen by screen
+
+Organising principle: **one question per screen, one primary action per screen.**
+
+### 5.1 Rider
+
+**Home becomes a single state card** that answers "what is happening with my
+ride?" and carries exactly one action for whichever state you are in:
+
+| State | Card says | The one action |
+|---|---|---|
+| No sabha scheduled | "No sabha scheduled yet" | — |
+| Attendance unanswered | "Sabha this Friday. Coming?" | Yes / No, **inline** |
+| Not requested | "Friday 15 Aug · 5:30 PM" | **Request a ride** |
+| Requested | "Waiting for a driver · 12 min" | Cancel |
+| Assigned | Driver, car, plate, ETA | Call · Text |
+| Split group | "3 of your 5 seats are with Ramesh" | Call · Text |
+| En route / arriving | Live status | Call |
+| At sabha, window shut | — card not shown at all — | — |
+| At sabha, drop-off open | "Ready to go home?" | **I'm ready to leave** |
+| In queue | "In the drop-off queue" | — |
+
+Changes that follow from it:
+
+- Splash auto-dismisses when auth resolves. The brand moment stays; the tap goes.
+- Attendance is **a card, not an interstitial**. "Not this time" collapses it to a
+  one-line "You said you're not coming — changed your mind?" It never replaces the
+  dashboard, so `AttendanceBlockedScreen` is deleted.
+- The Return Trip control **does not render** when the window is shut. No veiled
+  ghost card.
+- Weekly Notice becomes one line of helper text under the request button.
+- `PickupForm` becomes a **bottom sheet**, so home stays visible behind it.
+- Success stops being a 2-second timed screen and becomes an inline confirmation
+  the rider dismisses — or that simply becomes the new state of the card.
+- "My Rides" is history only. Home owns "now".
+
+**Fold count: 5 cards + 2 CTAs → 1 card + 1 action.**
+
+### 5.2 Driver
+
+**Home becomes a shift card.**
+
+- Offline → one button: **Go on shift**. Choosing a car is step 1 *of that flow*,
+  not a separate sub-panel — you cannot be on shift without a car, so stop
+  modelling them as independent.
+- Online → car + plate + seats, today's tally as one quiet line, and one button:
+  **Find my next riders**.
+- The unconditional empty-state card and the duplicate offline card are both
+  deleted. The button is the empty state.
+- Never a grey button with an unexplained reason. If no car is chosen, the button
+  reads **"Pick a car to start"** and does that. Finding 11's unreachable alert
+  goes with it.
+- Availability becomes one control with `role="switch"` + `aria-checked`.
+- **`ActiveRide` becomes focus mode**: full-bleed, shell nav suppressed, one job.
+  Big targets, high contrast, dark theme by default at night. Per-rider rows get
+  a swipe-to-tick as well as the tap target.
+
+### 5.3 Manager
+
+**One navigation system.** The toolbar icons go; the Request Center / Live
+Operations segmented control **stays** (see the decision below). Everything else
+moves into the sidebar (desktop) / bottom nav (mobile):
+
+| | Screen | Contains |
+|---|---|---|
+| 1 | **Dispatch** | The existing two tabs, restyled, with live counts in the labels |
+| 2 | **People** | Driver + rider approvals, with a count badge |
+| 3 | **Reports** | ManagerReports + attendance CSV |
+| 4 | **Setup** | Sabha calendar · ride window · venue · fleet — as four *sections*, not one scroll |
+| 5 | **Profile** | Profile + theme |
+
+That still removes one of the three competing navigation systems (the four
+unlabelled toolbar icons, including the map-pin-means-settings one in finding 12)
+and leaves two: the bottom nav for areas, the segmented control for the two
+dispatch views.
+
+**The two tabs stay — decided 2026-08-12.** Merging Request Center and Live
+Operations was recommended and declined: it changes a working Friday-night
+routine. So Request Center and Live Operations keep their own tabs and keep their
+current split of work. They are restyled, not restructured.
+
+What that costs, recorded so it is a known trade and not an oversight: the manager
+still toggles tabs to answer one question — *who is waiting, and who is driving?*
+Two things reduce the toggling without moving anything:
+
+- **A persistent count in each tab label** — "Waiting · 7 (11 people)" and "Out
+  now · 3 cars" — so the number you switch tabs to check is legible without
+  switching. Cheap, and it removes most of the round trips.
+- **Bulk select works on mobile** (below), so triage on a phone stops needing the
+  desktop table.
+
+Everything else in this section still applies:
+
+- **Assign opens a driver picker** — available drivers with seats free — instead of
+  silently taking the first match (finding 13).
+- **Bulk select works on mobile**: long-press enters selection mode, action bar
+  docks to the bottom. Closes the known gap in STATUS.md.
+- Database Console moves to **Setup → Advanced**, behind a plain warning that it
+  edits live records. It is a raw admin tool and should not be a peer tab to
+  Friday-evening operations.
+
+### 5.4 Cross-cutting
+
+| Item | Change |
+|---|---|
+| **Toasts** | New `<Toast>` primitive. All 27 `alert()` calls become toasts; confirms keep `useConfirm`. Errors are persistent and dismissible, never auto-hiding. |
+| **Sheet / Dialog** | One primitive replacing 12 hand-rolled overlays. Focus trap, Escape, scroll lock, `role="dialog"`, `aria-modal`, returns focus on close. |
+| **Z-index** | The six existing tokens, used. No raw values, no `9999`. |
+| **Motion** | Infinite pulse deleted. Transitions ≤200ms. `prefers-reduced-motion` already handled globally — keep it. |
+| **Viewport** | Drop `maximum-scale=1.0, user-scalable=no`. Fixes WCAG 1.4.4. |
+| **Skeletons** | Real skeletons matching final layout, replacing centred spinners, so nothing jumps on load. |
+| **Empty states** | One per surface, never two, never unconditional. |
+
+---
+
+## 6. Phasing
+
+Each phase is independently shippable and ends with the full sweep from CLAUDE.md.
+**No phase touches `functions/`, `firestore.rules`, or any hook's data contract.**
+
+### Phase 0 — safety net ✅ **done 2026-08-12**
+
+The whole "nothing breaks" promise rested on this. No test rendered a component,
+so a UI overhaul would have been flying blind.
+
+Added `@testing-library/react`, `/user-event`, `/dom`, `/jest-dom`
+(`--legacy-peer-deps`, per the Vite 6 peer-range note), `tests/setup.ts`, and the
+React plugin in `vitest.config.ts`.
+
+**80 new tests**, all asserting text, roles and behaviour — never a class name, so
+the restyle cannot break them:
+
+| File | | Covers |
+|---|---|---|
+| `tests/components/PickupForm.test.tsx` | 20 | The seat stepper, "Keep us in one car", and the exact payload handed to `createRideRequest`. **Never rendered before today.** |
+| `tests/components/RequestTable.test.tsx` | 21 | Seat badges, "Needs 2 cars", "No car this big", remainders, sort direction, assign/dismiss/bulk. **Never rendered before today.** |
+| `tests/components/RideStatus.test.tsx` | 15 | Every one of the seven ride statuses renders a labelled card, never a blank one. |
+| `tests/components/MyRides.test.tsx` | 11 | Details actually reveals something; Load More only when there is more. |
+| `tests/components/useConfirm.test.tsx` | 10 | The destructive-action gate. Resolves true/false, always settles, focuses the safe choice. |
+| `tests/quality/native-dialogs.test.ts` | 3 | Ratchets: `confirm` stays at 0, `alert` capped at 27 and may only fall. |
+
+Two guards worth calling out because they encode decisions rather than behaviour:
+
+- **`RequestTable` "known gap"** asserts that bulk-select exists *only* in the
+  desktop table. When Phase 5 gives the mobile list a selection mode this test
+  fails — and that failure is the signal to update it, not a regression.
+- **The alert budget** is a ratchet, not a gate. It fails if the count rises *and*
+  if it falls without the budget being lowered, so the number cannot drift in
+  either direction unnoticed.
+
+*Gate met:* client **150** (was 70) · functions **245** · rules **81** —
+**476 total**, was 396. Typecheck **58 / 22**, unchanged. `vite build` clean.
+
+One incident worth recording: the new test files initially added 3 typecheck
+errors (61 / 25). Fixed rather than accepted — two loose casts in the RideStatus
+fixtures, and a genuine Vite 5-vs-6 `Plugin` type skew in `vitest.config.ts` that
+is annotated in place rather than silenced.
+
+### Phase 1 — tokens + theme switch
+
+Pure refactor. **Light mode must look byte-identical**; that is the acceptance
+test, and it is verified by screenshot comparison before and after.
+
+- Semantic token layer; Tailwind colours point at it.
+- `data-theme` + pre-paint inline script + `theme-color` swap.
+- Theme control in Profile.
+- Dark palette defined but not yet audited screen by screen.
+
+*Gate: light unchanged by screenshot; dark renders without crashing.*
+
+### Phase 2 — primitives
+
+`Surface`, `Sheet`, `Dialog`, `Toast`, `Button`, `Field`, `StatusPill`,
+`SeatBadge`. Glass utilities for chrome only. Kill all 27 `alert()`. Z-index
+ladder applied. Viewport meta fixed.
+
+*Gate: no `alert(` in components; every overlay announces itself; Escape closes
+every sheet.*
+
+### Phase 3 — rider
+
+State card, inline attendance, PickupForm as a sheet, splash auto-dismiss,
+`AttendanceBlockedScreen` deleted, MyRides simplified.
+
+### Phase 4 — driver
+
+Shift card, car choice folded into going on shift, empty-state duplicates removed,
+`ActiveRide` focus mode, accessible availability switch.
+
+### Phase 5 — manager
+
+Nav unified, Tonight merged, driver picker, mobile bulk select, Setup sectioned,
+Database Console relocated.
+
+### Phase 6 — dark pass + polish
+
+Every screen in both themes. Contrast measured, not eyeballed — target is the
+existing standard: **≤1 failure**. Motion, focus rings, skeletons, 44px targets
+re-verified.
+
+---
+
+## 7. What could break, and why it will not
+
+| Risk | Mitigation |
+|---|---|
+| A hook's data contract changes | Not touched. This is presentation only; every `useFirestore` / `useRides` / `useVehicles` signature stays as it is. |
+| A Cloud Function call is dropped in a rewrite | Phase 0 smoke tests assert each screen still calls its callable. `src/utils/cloudFunctions.ts` is unchanged. |
+| Firestore rules drift | No rules change. `npm run test:rules` stays at 81. |
+| Typecheck count moves | Tracked per phase; may only fall. CLAUDE.md updated when it does. |
+| A dead control ships — the repo's recurring bug class | Every control gets a test that asserts its effect, not its presence. A disabled control must state its reason on screen (finding 11 is exactly this bug). |
+| Contrast regresses | Measured each phase against the 111 → 1 baseline. Glass never sits behind text. |
+| The e2e spec breaks | It asserts only `text=Sabha Ride Seva` and `input[type="email"]`. Both survive. |
+| Service worker serves a stale bundle | Existing CLAUDE.md procedure: unregister, clear caches, match `dist/assets/index-*.js`. |
+
+---
+
+## 8. Decisions
+
+Settled 2026-08-12.
+
+| | Decision | Note |
+|---|---|---|
+| 1 | **Glass everywhere**, content cards included | Chosen over the chrome-only recommendation. Delivered under the three rules in §4.2 — 88% opacity floor on text-bearing surfaces, opaque fallback, one blurred layer per scroll path — so the AA requirement survives it. |
+| 2 | **Request Center and Live Operations keep their own tabs** | Merge declined. Live counts in the tab labels reduce the toggling instead. §5.3. |
+| 3 | **Theme control is Light / Dark / System** | Manual is the default position, as the brief asks; System is offered so a phone that flips at sunset does not fight the app. |
+
+Still open, not blocking:
+
+- **Gujarati / `GJDW` font** — declared in `index.css` and configured in Tailwind
+  but used nowhere. Either a bilingual UI is intended (worth planning properly) or
+  it is dead weight to delete.
+
+---
+
+## 9. Out of scope
+
+Deliberately not in this plan: server-side dispatch (Phase 4 of the roadmap), real
+mapping, named passengers (blocked on roadmap §8 Q3), multi-city tenancy, and
+driver vetting. This work is presentation and flow. It does not change who can do
+what, and it does not touch a single guard.
