@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { DEFAULT_SABHA_START, DEFAULT_SABHA_END } from '../src/constants/schedule';
 
 /**
  * Default Sabha location used as fallback when Firestore has no settings doc.
@@ -18,18 +19,18 @@ export interface SabhaLocation {
 }
 
 /**
- * When sabha starts and ends, as "HH:MM" in Sabha local time.
+ * The DEFAULT sabha start and end, as "HH:MM" in Sabha local time.
  *
- * These drive everything: pickups are open from Wednesday until the start time,
- * and drop-off opens 15 minutes before the end time. They used to be literals
- * inside a Cloud Function, so moving sabha needed a code change and a deploy.
+ * Defaults, not the schedule — see src/constants/schedule.ts, which owns them now
+ * so that non-React code and the tests can read them without pulling in Firebase.
+ * Re-exported here because this is where callers have always imported them from.
  *
- * PickupForm also read `settings.timeSlot` and then `settings.arrivalTimeSlot`,
- * neither of which useSettings returned, so the arrival time riders were shown
- * always fell through to a hardcoded '5:30 PM'.
+ * They used to be literals inside a Cloud Function, so moving sabha needed a code
+ * change and a deploy. PickupForm also read `settings.timeSlot` and then
+ * `settings.arrivalTimeSlot`, neither of which useSettings returned, so the
+ * arrival time riders were shown always fell through to a hardcoded '5:30 PM'.
  */
-export const DEFAULT_SABHA_START = '19:00';
-export const DEFAULT_SABHA_END = '22:00';
+export { DEFAULT_SABHA_START, DEFAULT_SABHA_END };
 
 export interface AppSettings {
     sabhaLocation: SabhaLocation;
@@ -125,9 +126,20 @@ export function useSettings() {
     };
 
     /**
-     * Update when sabha starts and ends. Manager-only, enforced by rules.
-     * Values are "HH:MM" in Sabha local time; the scheduler derives the pickup
-     * and drop-off windows from them.
+     * Update the DEFAULT sabha start and end. Manager-only, enforced by rules.
+     *
+     * Values are "HH:MM" in Sabha local time. This does NOT move a sabha that is
+     * already on the calendar — each event owns its own times, and the published
+     * ride window is built from those (buildCurrentEvent). What these do is
+     * prefill the Calendar's "Add a sabha" form (newSabhaTimes in
+     * components/manager/SabhaCalendar.tsx) and seed the very first gathering on a
+     * fresh project (seedFirstEventIfNeeded).
+     *
+     * The previous comment here claimed "the scheduler derives the pickup and
+     * drop-off windows from them", which stopped being true when events got their
+     * own dates and times — and for a while nothing read these fields at all, so
+     * the Settings control reported success and changed nothing anywhere.
+     * To move tonight's sabha, edit it in the Sabha Calendar.
      */
     const updateSabhaTimes = async (
         sabhaStartTime: string,
