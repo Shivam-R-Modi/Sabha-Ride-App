@@ -1,8 +1,7 @@
 {
   "projects": {
     "default": "sabha-ride-app",
-    "prod": "sabha-ride-app",
-    "staging": "sabha-ride-app-staging"
+    "prod": "sabha-ride-app"
   },
   "targets": {},
   "etags": {}

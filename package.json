@@ -12,9 +12,10 @@
     "test": "vitest",
     "test:rules": "firebase emulators:exec --only firestore --project sabha-rules-test \"vitest run --config vitest.rules.config.ts\"",
     "test:e2e": "playwright test",
-    "build:staging": "vite build --mode staging",
-    "deploy:staging": "npm run build:staging && firebase deploy --project staging",
-    "deploy:prod": "npm run build && firebase deploy --project prod"
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes --project prod",
+    "deploy:functions": "firebase deploy --only functions --project prod",
+    "deploy:hosting": "firebase deploy --only hosting --project prod",
+    "deploy:prod": "npm run build && npm run deploy:rules && npm run deploy:functions && npm run deploy:hosting"
   },
   "dependencies": {
     "date-fns": "^3.3.0",

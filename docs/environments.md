@@ -1,122 +1,132 @@
-# Environments
+# Environment
 
-Two Firebase projects. **Nothing reaches production without going through
-staging first.**
+One Firebase project. There is no staging.
 
-| | Staging | Production |
-|---|---|---|
-| Project ID | `sabha-ride-app-staging` | `sabha-ride-app` |
-| Alias | `staging` | `prod` (also `default`) |
-| Env file | `.env.staging` | `.env.local` |
-| Build | `npm run build:staging` | `npm run build` |
-| Deploy | `npm run deploy:staging` | `npm run deploy:prod` |
-| Firestore region | `nam5` (to match prod) | `nam5` |
-| Real user data | **No — test data only** | Yes, real families |
+| | Production |
+|---|---|
+| Project ID | `sabha-ride-app` |
+| Alias | `prod` (also `default`) |
+| Env file | `.env.local` |
+| Build | `npm run build` |
+| Deploy | `npm run deploy:prod` |
+| Firestore region | `nam5` |
+| Real user data | Yes, real families |
 
-Both env files are gitignored. Firebase web config is not secret (it ships in
-the bundle regardless), but keeping the files out of git stops anyone
-accidentally building one environment with the other's credentials.
+`.env.local` is gitignored. The Firebase web config is not secret — it ships in
+the bundle regardless — but keeping the file out of git means the repo never
+carries credentials.
 
-## Why staging exists
+## Why there is no staging
 
-Production has been deployed directly, more than once, with real users
-depending on it for rides on Friday nights. One of those deploys shipped a
-bundle with `apiKey: undefined` and the app rendered a blank page for everyone
-until it was diagnosed. `vite.config.ts` now fails the build when Firebase env
-vars are missing, but a build guard only catches one class of mistake.
+A `sabha-ride-app-staging` project was created in August 2026 and never
+finished. It got a Firestore database and one hosting deploy, but **no Cloud
+Functions were ever deployed to it** — the Blaze plan was never enabled.
 
-Staging catches the rest. It matters most for the multi-location work, where a
-mistake in the security rules would not be a blank page — it would be one
-city's manager able to read another city's families.
+That made it worse than useless. Every meaningful action in this app runs
+through a Cloud Function: creating a ride, assigning a driver, seeding the
+calendar, opening the ride window. A front-end with no functions behind it
+cannot exercise any of them. Anything that "passed" on staging would have
+proved nothing, which is the most dangerous kind of test environment.
 
-## Regenerating an env file
+It was removed on 2026-08-13. Nothing was migrated because nothing existed to
+migrate.
+
+**If staging is ever rebuilt, it needs the Blaze plan and a functions deploy on
+day one, or it should not be built at all.**
+
+## What guards production instead
+
+Staging was meant to catch the mistake where a bad deploy takes the app down
+for real people on a Friday night. That has happened — one deploy shipped a
+bundle with `apiKey: undefined` and everyone got a blank page until it was
+diagnosed. Three things now stand in for it:
+
+1. **`vite.config.ts` fails the build** when Firebase env vars are missing.
+   That is the specific `apiKey: undefined` class of failure, closed off.
+2. **The verification sweep** in `CLAUDE.md` — 743 tests across client,
+   functions and Firestore rules, plus a build and a typecheck. Run it in full
+   before every deploy. Do not substitute a shorter subset.
+3. **`preview/`** renders the real rider, driver and manager screens against
+   stubbed data, with no sign-in. Use it to look at a change before shipping it.
+   Two screens in this app went months without anyone seeing them rendered,
+   because reaching them required signing in as the right role at the right
+   time of week.
+
+None of this covers a Firestore rules mistake as well as a second project
+would. When changing `firestore.rules`, lean on `npm run test:rules` — 81 cases
+against the emulator — and read the diff twice.
+
+## Regenerating the env file
 
 Config values come from the project itself, so there is nothing to copy by
 hand:
 
 ```bash
-firebase apps:list WEB --project staging          # find the app ID
-firebase apps:sdkconfig WEB <appId> --project staging
+firebase apps:list WEB --project prod
+```
+
+```bash
+firebase apps:sdkconfig WEB <appId> --project prod
 ```
 
 Map the values to `VITE_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`,
 `_STORAGE_BUCKET`, `_MESSAGING_SENDER_ID`, `_APP_ID`.
 
-## Deploy flow
+## Deploy
+
+Order is always **rules → functions → hosting**. `npm run deploy:prod` builds
+and then runs the three in that order:
 
 ```bash
-npm run deploy:staging     # build with staging config, deploy to staging
-# ... verify in staging ...
-npm run deploy:prod        # only after staging looks right
+npm run deploy:prod
 ```
+
+The order is not cosmetic. Old client plus new rules degrades to a clean
+permission error. New client plus old rules **silently bypasses server-side
+guards** — the failure mode is invisible, which is exactly the one this app
+cannot afford.
 
 Deploy a single part when that is all that changed:
 
 ```bash
-firebase deploy --only hosting            --project staging
-firebase deploy --only firestore:rules    --project staging
-firebase deploy --only functions          --project staging
+npm run deploy:rules
 ```
-
-**`firebase.json` has no `predeploy` hook for functions**, so Firebase ships
-`functions/lib` exactly as it is on disk. Always run `npm run build` inside
-`functions/` first, or you will deploy stale compiled output. Worth adding a
-predeploy hook to remove the footgun.
-
-## Staging setup — remaining steps
-
-Done already:
-
-- [x] Project created (`sabha-ride-app-staging`)
-- [x] Web app registered, config pulled into `.env.staging`
-- [x] `.firebaserc` aliases: `staging`, `prod`, `default`
-- [x] `build:staging` / `deploy:staging` / `deploy:prod` scripts
-- [x] Verified a staging build bakes in `projectId: sabha-ride-app-staging`
-      and a production build bakes in `sabha-ride-app`
-
-Needs the console or a billing decision — **cannot be done from the CLI**:
-
-- [ ] **Create the Firestore database.** Console → Firestore Database →
-      Create database → **Multi-region `nam5`** → Production mode. This also
-      enables the Firestore API, which is currently off and blocks the CLI.
-      The region is permanent, so it must be `nam5` to match production.
-- [ ] **Enable the Blaze plan.** Cloud Functions cannot deploy on Spark. This
-      is a billing commitment and is the owner's to make. Staging traffic is
-      tiny, but set a budget alert regardless.
-- [ ] **Enable Auth providers**: Email/Password and Google. Console →
-      Authentication → Sign-in method.
-- [ ] **Add authorized domains** for Google sign-in: the staging hosting domain
-      and `localhost`.
-- [ ] **A separate Google Maps API key** for staging, restricted to the staging
-      domain. Do not reuse the production key — it is referrer-restricted and
-      would either fail or widen production's restrictions.
-
-Then, from the CLI:
 
 ```bash
-firebase deploy --only firestore:rules,firestore:indexes --project staging
-npm run deploy:staging
+npm run deploy:functions
 ```
 
-## Seed data
+```bash
+npm run deploy:hosting
+```
 
-Staging must never hold real member data — that would create a second copy of
-families' and children's records, with a second retention and deletion
-obligation, in an environment with weaker access discipline.
+`firebase.json` has a `predeploy` hook that builds `functions/` before shipping
+it, so stale compiled output in `functions/lib` is no longer a footgun.
 
-Use synthetic data only. A seed script belongs with the Phase 1 work, alongside
-the `cityId` backfill, so both are exercised against the same fixtures.
+After deploying, fast-forward `main` so it matches what is live.
 
-## Two recommendations for production
+## Verifying a hosting deploy
 
-Noticed while reading the production database configuration:
+Match the live bundle filename against your local `dist/assets/index-*.js`:
 
-- **Delete protection is DISABLED.** Enabling it is free and prevents anyone
-  accidentally deleting the database that holds every ride and member record:
+```bash
+curl -s https://sabha-ride-app.web.app | grep -o 'assets/index-[A-Za-z0-9_-]*\.js'
+```
+
+The service worker caches hard. Unregister it and clear caches first, or you
+will confirm the previous build and think the deploy worked.
+
+## Production safety settings
+
+Both of these were disabled last time the database configuration was read.
+Neither is enabled by deploying — they are one-time account actions.
+
+- **Delete protection.** Free, and it prevents anyone accidentally deleting the
+  database holding every ride and member record:
+
   ```bash
   firebase firestore:databases:update "(default)" --delete-protection ENABLED --project prod
   ```
-- **Point-in-time recovery is DISABLED.** PITR gives a 7-day recovery window
-  for a bad write or a faulty migration. It has a cost, but the multi-location
-  migration is exactly the kind of work it exists for. Worth enabling before
-  Phase 1 and reviewing after.
+
+- **Point-in-time recovery.** Gives a 7-day recovery window for a bad write or
+  a faulty migration. It has a cost. Worth it before any data migration.
