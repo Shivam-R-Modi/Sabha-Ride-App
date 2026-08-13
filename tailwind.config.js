@@ -113,14 +113,31 @@ export default {
           '50%': { transform: 'translateY(-5px)' },
         },
       },
-      // Stacking ladder. These six are the only values that should be used.
+      // Stacking ladder. These seven are the only values that should be used.
       // The numeric z-0…z-50 utilities still exist but are being migrated off;
       // today the codebase holds 11 competing values including a bare 9999.
-      //   base 0 · raised 10 · sticky 100 · dropdown 1000 · modal 1100 · toast 1200
+      //   base 0 · raised 10 · sticky 100 · chrome 200
+      //   · dropdown 1000 · modal 1100 · toast 1200
+      //
+      // `chrome` exists because `sticky` was doing two different jobs. The app
+      // header and the sidebar are chrome — they frame the page. An in-page
+      // sticky column header (RequestTable, ActiveRide, AssignmentPreview) is
+      // page content that happens to pin. Both sat on `sticky`, and a header
+      // that is `position: sticky` with a z-index CREATES A STACKING CONTEXT —
+      // so `z-dropdown` on the role menu inside it was capped at 100, not 1000,
+      // and every in-page sticky later in the DOM painted straight over it.
+      //
+      // Anything opened FROM chrome must therefore outrank page content, which
+      // is what this rung buys. modal and toast stay above chrome on purpose:
+      // a modal covers the header, it does not slide under it.
+      //
+      // tests/quality/z-index.test.ts asserts the ordering and that the header
+      // and sidebar stay on this rung.
       zIndex: {
         base: '0',
         raised: '10',
         sticky: '100',
+        chrome: '200',
         dropdown: '1000',
         modal: '1100',
         toast: '1200',

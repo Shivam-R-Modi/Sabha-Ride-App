@@ -61,8 +61,16 @@ export const RoleSwitcher: React.FC = () => {
                         onClick={() => setIsOpen(false)}
                     />
 
-                    {/* Dropdown */}
-                    <div className="absolute top-full left-0 mt-2 w-48 bg-surface rounded-xl shadow-xl border border-gold/20 overflow-hidden z-dropdown animate-in fade-in slide-in-from-top-2 duration-200">
+                    {/* Dropdown.
+                        right-0, not left-0. In the mobile header this control
+                        sits hard against the right edge, so aligning the menu's
+                        LEFT edge to it pushed a 192px panel 50px past the
+                        viewport on a 375px phone — the "Active" badge and the
+                        right of every row were simply off-screen. Aligning the
+                        right edges instead makes it open inward.
+                        No change on desktop: in the sidebar the trigger is also
+                        192px wide, so both alignments land in the same place. */}
+                    <div className="absolute top-full right-0 mt-2 w-48 bg-surface rounded-xl shadow-xl border border-gold/20 overflow-hidden z-dropdown animate-in fade-in slide-in-from-top-2 duration-200">
                         <div className="p-2 border-b border-cream-dark">
                             <p className="text-xs text-coffee-500 font-medium uppercase tracking-wide px-2">Switch Role</p>
                         </div>

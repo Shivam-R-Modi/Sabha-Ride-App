@@ -58,7 +58,12 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName
   const { logout } = useAuth();
 
   return (
-    <header className="app-header lg:hidden sticky top-0 z-sticky bg-cream/80 backdrop-blur-md border-b border-hairline/10 pt-safe">
+    // z-chrome, not z-sticky. `sticky` + a z-index creates a stacking context,
+    // so the role menu's z-dropdown was capped at this element's own level —
+    // every in-page sticky header (the manager's tab strip, RequestTable,
+    // ActiveRide, AssignmentPreview) shares z-sticky and comes later in the
+    // DOM, so they all painted over the open menu.
+    <header className="app-header lg:hidden sticky top-0 z-chrome bg-cream/80 backdrop-blur-md border-b border-hairline/10 pt-safe">
       <div className="px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2 overflow-hidden">
           <div className="bg-saffron/10 p-2 rounded-full">
@@ -84,7 +89,8 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const navItems = getNavItems(role);
 
   return (
-    <aside className={`fixed left-0 top-0 h-full bg-surface border-r border-hairline/10 shadow-xl z-sticky transition-all duration-300 hidden lg:flex flex-col
+    // Same rung as the mobile header: it is chrome, and it holds a RoleSwitcher too.
+    <aside className={`fixed left-0 top-0 h-full bg-surface border-r border-hairline/10 shadow-xl z-chrome transition-all duration-300 hidden lg:flex flex-col
       ${isSidebarCollapsed ? 'w-20' : 'w-60'}`}>
 
       {/* Logo Section */}

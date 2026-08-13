@@ -21,6 +21,8 @@ is **ahead of production and undeployed** — see below.
   1 hour to 7 days.
 - **Sign-in screen accessibility fixed** — see Open items; it was the one screen
   the redesign never touched and it had the worst control in the app.
+- **The role menu had two bugs, both only visible with the chrome around it** —
+  see Open items. A new `chrome` rung was added to the stacking ladder.
 - `.claude/launch.json` said the dev server runs on 5173. It runs on **3000**.
 
 ---
@@ -236,6 +238,39 @@ rather than the preview pages found three:
 
 The eye was the serious one: unnamed **and** unreachable, on the control that
 decides whether someone can check what they typed.
+
+**Fixed 2026-08-13 — the role menu, two bugs.** Reported from a screenshot: the
+manager's tab strip was painting over the open menu.
+
+1. **Stacking.** The mobile header is `sticky top-0` with a z-index, and that
+   combination **creates a stacking context** — so `z-dropdown` (1000) on the
+   menu inside it was only ever worth the header's own rung. Four in-page sticky
+   headers sit on `z-sticky` (100) too — the manager tab strip, `RequestTable`,
+   `ActiveRide`, `AssignmentPreview` — and all come later in the DOM, so at equal
+   z-index they won. **The bigger number lost to the smaller one**, which is why
+   reading the class names never revealed it.
+
+   Fixed with a new **`chrome` (200)** rung between `sticky` and `dropdown`.
+   Chrome frames the page; an in-page sticky header is page content that pins.
+   They were sharing one rung. Header and sidebar moved to `z-chrome`.
+
+2. **Alignment.** The menu used `left-0` while its trigger sits hard against the
+   right edge of the header. Measured on a 375px viewport, the 192px panel ran
+   233→425px — **50px off-screen**. Now `right-0`, which lands it at 134→326.
+   No desktop change: the sidebar trigger is also 192px, so both coincide.
+
+Both were confirmed in a browser against compiled CSS, not reasoned about —
+`document.elementFromPoint` returned the tab strip before and the menu after.
+
+Two traps worth knowing, both of which cost time here:
+
+- **A class that appears nowhere in source does not exist in the CSS.** Probing
+  `right-0` by injecting it at runtime silently did nothing — Tailwind had never
+  generated it — and the element fell back to static placement, which *looks*
+  identical to `left-0`. Model geometry with inline styles, or put the class in
+  source first.
+- **Changing `tailwind.config.js` needs a dev-server restart.** HMR does not pick
+  up new theme keys; `z-chrome` resolved to `auto` until the restart.
 
 Worth knowing for the next session: **`title` satisfies `getByRole(..., {name})`**
 — the accessible-name spec falls back to it — so a role-and-name query would have
