@@ -38,7 +38,7 @@
           : pref;
         document.documentElement.setAttribute('data-theme', resolved);
         var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.setAttribute('content', resolved === 'dark' ? '#1A1612' : '#FAF9F6');
+        if (meta) meta.setAttribute('content', resolved === 'dark' ? '#1C1815' : '#FAF9F6');
       } catch (e) {
         // localStorage throws outright in a sandboxed iframe and in Lockdown
         // Mode. Light is the default regardless, so there is nothing to
@@ -81,8 +81,8 @@
     }
 
     :root[data-theme='dark'] {
-      --canvas: 26 22 18;
-      --text-strong: 250 249 246;
+      --canvas: 28 24 21;
+      --text-strong: 232 227 220;
       color-scheme: dark;
     }
 

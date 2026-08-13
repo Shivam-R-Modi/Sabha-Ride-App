@@ -104,7 +104,7 @@ describe('ThemeToggle — it actually does something', () => {
 
         await waitFor(() =>
             expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content'))
-                .toBe('#1A1612'));
+                .toBe('#1C1815'));
     });
 });
 

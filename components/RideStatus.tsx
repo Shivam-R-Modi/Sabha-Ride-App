@@ -46,8 +46,11 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
 
   return (
     <div className="clay-card clay-card-lg overflow-hidden w-full">
-      {/* Header Status */}
-      <div className={`${config.tone} px-4 py-2.5 flex justify-between items-center`}>
+      {/* Header Status.
+          Rounded, because it is an inset panel sitting inside the card's own
+          32px padding — not a full-bleed band clipped by the card edge. Square
+          corners inside a 48px-radius card read as a mistake. */}
+      <div className={`${config.tone} px-4 py-2.5 rounded-2xl flex justify-between items-center`}>
         <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">
           {config.label}
         </span>

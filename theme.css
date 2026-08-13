@@ -257,49 +257,49 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --canvas: 26 22 18;
-  --canvas-mid: 32 27 22;
-  --canvas-deep: 38 32 27;
-  --canvas-soft: 30 25 21;
+  --canvas: 28 24 21;
+  --canvas-mid: 33 29 25;
+  --canvas-deep: 39 34 29;
+  --canvas-soft: 31 27 23;
 
-  --surface: 38 32 27;
-  --surface-mid: 45 38 32;
-  --surface-deep: 52 44 37;
+  --surface: 39 34 29;
+  --surface-mid: 46 40 34;
+  --surface-deep: 53 46 39;
   /* Below the canvas, not level with it. A pressed-in surface — an input
      well, a progress track — reads as recessed only if it is DARKER than
      what surrounds it. Matching the canvas here made every inset control
      disappear into the page. */
-  --sunken: 18 15 12;
+  --sunken: 21 18 15;
 
-  --text-strong: 250 249 246;
+  --text-strong: 232 227 220;
   /* 14.8:1 on surface */
-  --text: 226 219 209;
+  --text: 203 196 187;
   /* 11.4:1 */
-  --text-soft: 175 165 152;
+  --text-soft: 163 154 143;
   /*  6.1:1 — still above the AA floor */
   --text-faint: 128 118 108;
   /*  non-text only, same as light */
-  --text-on-accent: 26 22 18;
+  --text-on-accent: 28 24 21;
   /* dark text on the lifted accent, which is now light */
 
-  --accent: 255 140 90;
-  --accent-light: 255 168 122;
-  --accent-dark: 255 107 53;
-  --accent-mid: 255 126 71;
-  --accent-deep: 255 107 53;
-  --accent-text: 255 168 122;
+  --accent: 231 132 90;
+  --accent-light: 240 158 118;
+  --accent-dark: 208 108 68;
+  --accent-mid: 220 120 78;
+  --accent-deep: 208 108 68;
+  --accent-text: 233 156 116;
   /* 7.2:1 on surface */
 
   /* The CTA ramp inverts direction: on dark, a filled button is a LIGHT
      saffron carrying dark text, not a dark saffron carrying white. */
-  --cta-light: 255 154 105;
-  --cta: 255 140 90;
-  --cta-dark: 240 122 72;
+  --cta-light: 226 134 92;
+  --cta: 214 124 84;
+  --cta-dark: 196 110 72;
 
   /* Tints become dark washes of the same hue, not pale ones. */
-  --accent-tint-1: 52 38 30;
-  --accent-tint-2: 61 43 33;
-  --accent-tint-3: 71 49 37;
+  --accent-tint-1: 50 39 32;
+  --accent-tint-2: 57 44 36;
+  --accent-tint-3: 65 50 40;
   --accent-tint-badge-1: 66 44 33;
   --accent-tint-badge-2: 82 54 40;
   --notice-1: 46 39 22;
@@ -310,33 +310,33 @@
   --danger-bg-deep: 92 34 34;
   --info-bg-deep: 30 61 94;
 
-  --gold: 226 193 92;
-  --gold-text: 232 205 121;
+  --gold: 204 176 108;
+  --gold-text: 214 190 132;
   /* 8.9:1 — gold can finally be read on dark */
   --mocha: 168 138 120;
   --header-bg: 30 38 30;
 
-  --success: 74 222 128;
-  --success-fill: 74 222 128;
-  --success-text: 134 239 172;
+  --success: 116 189 140;
+  --success-fill: 116 189 140;
+  --success-text: 150 205 168;
   --success-bg: 20 61 38;
-  --warning: 251 191 36;
-  --warning-fill: 251 191 36;
-  --warning-text: 253 224 71;
+  --warning: 214 174 96;
+  --warning-fill: 214 174 96;
+  --warning-text: 226 194 134;
   --warning-bg: 69 51 12;
-  --danger: 248 113 113;
-  --danger-fill: 248 113 113;
-  --danger-text: 252 165 165;
+  --danger: 222 124 120;
+  --danger-fill: 222 124 120;
+  --danger-text: 233 160 156;
   --danger-bg: 76 27 27;
-  --info: 96 165 250;
-  --info-fill: 96 165 250;
-  --info-text: 147 197 253;
+  --info: 130 168 214;
+  --info-fill: 130 168 214;
+  --info-text: 160 190 226;
   --info-bg: 23 49 77;
 
   --hairline: 255 255 255;
   --hairline-alpha: 0.1;
   --edge-light: 255 255 255;
-  --edge-light-alpha: 0.06;
+  --edge-light-alpha: 0.035;
 
   --shadow-cast: 0 0 0;
 
@@ -347,9 +347,16 @@
      alphas it reads as the gentle lit bevel it was always meant to be.
      This is the single value that decides whether dark mode looks designed
      or looks like light mode with the lights off. */
-  --shadow-glow: 58 49 42;
+  --shadow-glow: 48 41 35;
 
-  --shadow-accent: 255 140 90;
+  /* NOT the accent. An outer shadow painted in a LIGHT colour on a dark
+     background is not a shadow, it is a halo — and eleven rules in
+     claymorphism.css paint outer shadows with this token at alphas up to
+     0.55. On light mode a saturated orange on cream reads as a warm
+     shadow; the same idea inverted produces a glow around every button
+     and accent card. Depth on dark comes from surface lightness (see the
+     --surface ladder above), not from a coloured bloom. */
+  --shadow-accent: 0 0 0;
 
   --glass-tint: 38 32 27;
   --glass-chrome-alpha: 0.58;

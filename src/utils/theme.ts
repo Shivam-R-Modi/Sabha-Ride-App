@@ -25,7 +25,7 @@ export const DEFAULT_PREFERENCE: ThemePreference = 'light';
 /** Browser chrome colour, so the notch and status bar match the app. */
 const THEME_COLOR: Record<ResolvedTheme, string> = {
     light: '#FAF9F6',
-    dark: '#1A1612',
+    dark: '#1C1815',
 };
 
 export function isThemePreference(value: unknown): value is ThemePreference {

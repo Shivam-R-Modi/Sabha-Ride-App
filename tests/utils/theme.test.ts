@@ -133,7 +133,7 @@ describe('applyTheme', () => {
         // cream while the app is dark, which reads as a rendering bug.
         applyTheme('dark');
         expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content'))
-            .toBe('#1A1612');
+            .toBe('#1C1815');
 
         applyTheme('light');
         expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content'))
@@ -165,7 +165,7 @@ describe('the pre-paint script in index.html agrees with src/utils/theme.ts', ()
     });
 
     it('uses the same two theme-colors applyTheme does', () => {
-        expect(html()).toContain('#1A1612');
+        expect(html()).toContain('#1C1815');
         expect(html()).toContain('#FAF9F6');
     });
 
@@ -185,8 +185,8 @@ describe('index.html critical CSS agrees with theme.css', () => {
     });
 
     it('matches the dark canvas', () => {
-        expect(readRoot('index.html')).toContain('--canvas: 26 22 18');
-        expect(readRoot('theme.css')).toContain('--canvas: 26 22 18');
+        expect(readRoot('index.html')).toContain('--canvas: 28 24 21');
+        expect(readRoot('theme.css')).toContain('--canvas: 28 24 21');
     });
 });
 
