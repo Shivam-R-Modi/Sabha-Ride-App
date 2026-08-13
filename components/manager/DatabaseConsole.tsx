@@ -234,7 +234,7 @@ export const DatabaseConsole: React.FC = () => {
             <button
               onClick={handleBulkDelete}
               disabled={isBulkDeleting}
-              className="bg-[rgb(var(--danger))] hover:opacity-90 text-[rgb(var(--text-on-accent))] text-xs font-bold px-4 py-1.5 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 shadow-md"
+              className="bg-[rgb(var(--danger-fill))] hover:opacity-90 text-[rgb(var(--text-on-accent))] text-xs font-bold px-4 py-1.5 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50 shadow-md"
             >
               {isBulkDeleting ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
               <span>{isBulkDeleting ? 'Deleting...' : `Delete Selected (${selectedDocIds.length})`}</span>

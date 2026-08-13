@@ -44,7 +44,7 @@ const RideAssignmentCard: React.FC<{
             className="w-12 h-12 rounded-xl shadow-md border-2 border-surface"
             alt={driver?.name || 'Driver'}
           />
-          <div className="absolute -bottom-1 -right-1 bg-[rgb(var(--success))] p-1 rounded-full border-2 border-surface">
+          <div className="absolute -bottom-1 -right-1 bg-[rgb(var(--success-fill))] p-1 rounded-full border-2 border-surface">
             <Car size={10} className="text-white" />
           </div>
         </div>

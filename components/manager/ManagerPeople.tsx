@@ -181,7 +181,7 @@ const PersonRow: React.FC<{
             <button
                 onClick={onApprove}
                 disabled={busy}
-                className="flex-1 min-h-11 rounded-xl bg-[rgb(var(--success))]
+                className="flex-1 min-h-11 rounded-xl bg-[rgb(var(--success-fill))]
                            text-[rgb(var(--text-on-accent))] font-semibold text-sm
                            hover:opacity-90 transition-opacity disabled:opacity-50
                            flex items-center justify-center gap-2"

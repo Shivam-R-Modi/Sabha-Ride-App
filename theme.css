@@ -149,16 +149,35 @@
   /* #3D4F3D */
 
   /* ── Status ──────────────────────────────────────────────────── */
+  /*
+   * Three roles per status, for the same reason the saffron ramp has three.
+   *
+   *   --x        the saturated hue. FILLS, DOTS AND ICONS ONLY. White text on
+   *              --success is 2.28:1 and on --danger is 3.36:1 — both fail.
+   *   --x-fill   dark enough to carry --text-on-accent. Filled BUTTONS.
+   *   --x-text   readable on a surface. Text and bordered buttons.
+   *
+   * The middle one was missing, and a filled "Approve" button shipped at
+   * 2.28:1 because of it — caught by the Phase 6 audit, not by eye.
+   */
   --success: 34 197 94;
+  --success-fill: 21 128 61;
+  /* #15803D — 5.10:1 with white */
   --success-text: 21 87 36;
   --success-bg: 212 237 218;
   --warning: 245 158 11;
+  --warning-fill: 146 84 4;
+  /* #925404 — 6.65:1 with white */
   --warning-text: 133 100 4;
   --warning-bg: 255 243 205;
   --danger: 239 68 68;
+  --danger-fill: 185 28 28;
+  /* #B91C1C — 6.38:1 with white */
   --danger-text: 114 28 36;
   --danger-bg: 248 215 218;
   --info: 59 130 246;
+  --info-fill: 29 78 216;
+  /* #1D4ED8 — 6.98:1 with white */
   --info-text: 12 84 96;
   --info-bg: 209 236 241;
 
@@ -298,15 +317,19 @@
   --header-bg: 30 38 30;
 
   --success: 74 222 128;
+  --success-fill: 74 222 128;
   --success-text: 134 239 172;
   --success-bg: 20 61 38;
   --warning: 251 191 36;
+  --warning-fill: 251 191 36;
   --warning-text: 253 224 71;
   --warning-bg: 69 51 12;
   --danger: 248 113 113;
+  --danger-fill: 248 113 113;
   --danger-text: 252 165 165;
   --danger-bg: 76 27 27;
   --info: 96 165 250;
+  --info-fill: 96 165 250;
   --info-text: 147 197 253;
   --info-bg: 23 49 77;
 

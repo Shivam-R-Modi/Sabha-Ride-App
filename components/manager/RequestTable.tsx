@@ -414,7 +414,7 @@ const SwipeableCard: React.FC<{
 const getWaitBadge = (time: string) => {
     const minutes = Math.floor((Date.now() - new Date(time).getTime()) / 60000);
     if (minutes > 30) return (
-        <span className="flex items-center gap-1 text-[10px] font-bold text-[rgb(var(--danger-text))] bg-[rgb(var(--danger-bg))] px-2 py-1 rounded-full animate-pulse">
+        <span className="flex items-center gap-1 text-[10px] font-bold text-[rgb(var(--danger-text))] bg-[rgb(var(--danger-bg))] px-2 py-1 rounded-full">
             <AlertCircle size={12} /> {minutes}m wait
         </span>
     );
@@ -436,7 +436,7 @@ const LoadingSkeleton = () => (
 const EmptyState = () => (
     <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
         <div className="w-24 h-24 bg-cream-300 rounded-full flex items-center justify-center mb-6 text-saffron relative">
-            <CheckCircle size={40} className="animate-float" />
+            <CheckCircle size={40} />
             <div className="absolute inset-0 border-4 border-dashed border-gold/20 rounded-full"></div>
         </div>
         <h3 className="text-2xl font-header font-bold text-coffee mb-2">All Caught Up!</h3>

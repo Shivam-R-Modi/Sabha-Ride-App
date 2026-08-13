@@ -136,7 +136,7 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
         )}
 
         <div className="text-center space-y-2">
-          <DiyaIcon className="w-12 h-12 mx-auto text-saffron mb-2 animate-float" />
+          <DiyaIcon className="w-12 h-12 mx-auto text-saffron mb-2" />
           <p className="text-xs font-bold text-gold-700 uppercase tracking-[0.2em]">Next Sabha</p>
           <h3 className="text-xl font-header font-bold text-coffee">{eventDateFormatted()}</h3>
           <p className="text-sm text-coffee-500">Sabha starts at {arrivalTime}</p>

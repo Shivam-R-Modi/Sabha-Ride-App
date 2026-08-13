@@ -9,11 +9,12 @@ interface RideStatusCardProps {
 /**
  * Status colours come from tokens, not from Tailwind's stock palette.
  *
- * They used to be `bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]` and friends — fixed light values
- * that stay light whatever the theme, so on a dark surface the header band was a
- * pale slab and the text on it did not move with it. Six hues collapse to four
- * token pairs, which is also more honest: "en route" and "arriving" are stages
- * of the same thing, not different kinds of thing.
+ * They used to be Tailwind's stock scales — blue-100 behind blue-800 and so on.
+ * Those are fixed light values that stay light whatever the theme, so on a dark
+ * surface the header band was a pale slab and the text on it did not move with
+ * it. Six hues collapse to four token pairs, which is also more honest: "en
+ * route" and "arriving" are stages of the same thing, not different kinds of
+ * thing.
  */
 const STATUS_CONFIG: Record<RideStatus, { label: string; tone: string }> = {
   requested: { label: 'Looking for Driver', tone: 'bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]' },
@@ -31,7 +32,7 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
 
   if (ride.status === 'requested') {
     return (
-      <div className="clay-card text-center animate-pulse">
+      <div className="clay-card text-center">
         <div className="w-16 h-16 bg-cream-300 rounded-full mx-auto flex items-center justify-center mb-3">
           <Clock className="text-saffron w-8 h-8" />
         </div>
@@ -51,8 +52,9 @@ export const RideStatusCard: React.FC<RideStatusCardProps> = ({ ride }) => {
           {config.label}
         </span>
         {ride.etaMinutes && (
-          // Inherits the band's own text colour. It used to be `bg-[rgb(var(--surface)/0.6)]
-          // text-coffee`, which on a dark theme is light text in a light box.
+          // Inherits the band's own text colour. It used to be a fixed
+          // white-at-60% box with coffee text, which on a dark theme is light
+          // text inside a light box.
           <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded
                            bg-[rgb(var(--surface)/0.35)] border border-current/20">
             ETA: {ride.etaMinutes} min

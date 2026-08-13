@@ -733,11 +733,91 @@ Hand-rolled overlays fell **8 → 5**.
 *Gate met:* client **407** · functions **245** · rules **81** — **733 total**.
 Typecheck **55 / 19**. Build clean.
 
-### Phase 6 — dark pass + polish
+### Phase 6 — dark pass + polish ✅ **done 2026-08-12**
 
-Every screen in both themes. Contrast measured, not eyeballed — target is the
-existing standard: **≤1 failure**. Motion, focus rings, skeletons, 44px targets
-re-verified.
+**Contrast measured, not eyeballed.** `preview/audit.js` walks every rendered
+text node, composites the real background through every translucent glass layer,
+and compares against the WCAG AA threshold for that element's size and weight.
+Run across **three pages × two themes**:
+
+| | light | dark |
+|---|---|---|
+| rider | 0 | 0 |
+| driver | 0 | 0 |
+| manager | 0 *(was 3)* | 0 |
+
+Target was ≤1 failure, matching the existing standard. Result is **0**.
+
+**The three were a real bug, and only this found it.** A filled "Approve" button
+used the *saturated* `--success` (34 197 94) behind white text — **2.28:1**. The
+token tests could not catch it: they check the palette against itself, and had no
+way to know that a component had paired `--text-on-accent` with a mid-tone rather
+than with a fill step. It is exactly the lesson the saffron `--cta` ramp already
+encoded, applied to one hue and not the others.
+
+So every status hue now has three roles, mirroring saffron:
+
+```
+--x        saturated. FILLS, DOTS, ICONS. White on --success is 2.28:1,
+           on --danger 3.36:1 — both fail as text.
+--x-fill   dark enough to carry --text-on-accent. Filled BUTTONS.
+--x-text   readable on a surface. Text and bordered buttons.
+```
+
+The missing middle step is now asserted for all four hues in both themes, so this
+cannot come back.
+
+**Touch targets: 0 below 44×44** across all pages, once `.tap-target` — which
+grows the hit area with a pseudo-element while leaving the visual box small — is
+accounted for. **0 controls suppress their focus ring.**
+
+**Perpetual motion removed** where it was decoration or data:
+
+- The "Request Received" card pulsed for as long as it took a driver to accept,
+  which can be many minutes. Same problem as the CTA pulse; the words already say
+  it is waiting.
+- A wait badge a manager has to *read* was throbbing. Making the number move does
+  not get the rider collected sooner.
+- A bobbing diya in the booking sheet, a floating tick on an empty state, two
+  pulsing sparkles.
+
+Kept: skeleton shimmer (it ends when data arrives) and the small "Live" dot (it
+means something). `prefers-reduced-motion` still switches all of it off, and now
+also drops the glass blur.
+
+**One methodological gotcha, documented in `preview/audit.js` because it cost
+half an hour.** Flipping `data-theme` at runtime is correct in the app, but in a
+headless browser the screenshot pipeline can return a frame from *before* the
+change and `getComputedStyle` can return pre-recalc values. That produced a dark
+screen that photographed as light and **~20 phantom contrast failures that all
+vanished** once the page was loaded dark from the start. The previews now take
+`?theme=dark` so the question cannot arise.
+
+*Gate met:* client **417** · functions **245** · rules **81** — **743 total**.
+Typecheck **55 / 19**. Build clean.
+
+---
+
+## 10. Where this leaves the branch
+
+All six phases are done. **Nothing is deployed** — this branch is ahead of
+production and, per CLAUDE.md, rules → functions → hosting is released from the
+owner's Mac only.
+
+Before deploying:
+
+1. Run the full sweep once more on the deploy machine, with a real `.env.local`
+   (a worktree cannot build without one).
+2. `npm run build`, then verify the live bundle filename against
+   `dist/assets/index-*.js` — **unregister the service worker and clear caches
+   first**, or you will confirm the previous build.
+3. Deploy order is **`firestore:rules` → `functions` → `hosting`**, then
+   fast-forward `main`. Rules and functions are untouched by this work, so in
+   practice only hosting changes — but the order costs nothing.
+
+What this work did **not** touch, and what therefore cannot have broken: any
+Cloud Function, any Firestore rule, any hook's data contract. 245 functions tests
+and 81 rules tests are unchanged and green throughout.
 
 ---
 

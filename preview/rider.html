@@ -1,4 +1,13 @@
 <!DOCTYPE html><html lang="en" data-theme="light"><head><meta charset="UTF-8">
 <title>Rider states</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+<script>
+  // ?theme=dark renders dark from the first frame. Toggling data-theme at
+  // runtime works in the app, but the headless screenshot pipeline can return
+  // a cached frame from before the change — which made a correct dark screen
+  // photograph as light, and made a getComputedStyle audit report phantom
+  // contrast failures. Setting it before render removes the ambiguity.
+  document.documentElement.setAttribute('data-theme',
+    new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light');
+</script>
 </head><body><div id="root"></div><script type="module" src="/preview/rider.tsx"></script></body></html>

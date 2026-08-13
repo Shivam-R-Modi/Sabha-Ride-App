@@ -85,7 +85,7 @@ export function useConfirm() {
                         onClick={() => settle(true)}
                         className={`flex-1 px-4 py-2.5 rounded-xl font-semibold text-sm min-h-11
                                     text-[rgb(var(--text-on-accent))] transition-colors ${pending.destructive
-                                ? 'bg-[rgb(var(--danger))] hover:opacity-90'
+                                ? 'bg-[rgb(var(--danger-fill))] hover:opacity-90'
                                 : 'bg-[rgb(var(--cta))] hover:opacity-90'}`}
                     >
                         {pending.confirmLabel ?? (pending.destructive ? 'Delete' : 'Confirm')}

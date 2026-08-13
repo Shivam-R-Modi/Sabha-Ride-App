@@ -103,8 +103,8 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                         <CheckCircle2 size={48} className="text-white" />
                     </div>
                     {/* Sparkles */}
-                    <Sparkles size={20} className="absolute -top-2 -right-2 text-gold animate-pulse" />
-                    <Sparkles size={16} className="absolute -bottom-1 -left-3 text-saffron animate-pulse delay-150" />
+                    <Sparkles size={20} className="absolute -top-2 -right-2 text-gold" />
+                    <Sparkles size={16} className="absolute -bottom-1 -left-3 text-saffron" />
                 </div>
 
                 {/* Success Message */}

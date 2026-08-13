@@ -319,7 +319,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                         <button
                                             onClick={() => routePoint && handleToggleWaypoint(routePoint, routeIdx)}
                                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isVisited
-                                                ? 'bg-[rgb(var(--success))] text-[rgb(var(--text-on-accent))]'
+                                                ? 'bg-[rgb(var(--success-fill))] text-[rgb(var(--text-on-accent))]'
                                                 : 'bg-cream-300 text-coffee-500 hover:bg-cream-400'
                                                 }`}
                                         >
@@ -355,7 +355,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                         >
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${waypoint.type === 'start' ? 'bg-cream-400' :
                                 waypoint.type === 'end' ? 'bg-cream-400' :
-                                    visitedWaypoints.has(`${waypoint.type}-${idx}`) ? 'bg-[rgb(var(--success))] text-[rgb(var(--text-on-accent))]' : 'bg-saffron/20 text-saffron-800'
+                                    visitedWaypoints.has(`${waypoint.type}-${idx}`) ? 'bg-[rgb(var(--success-fill))] text-[rgb(var(--text-on-accent))]' : 'bg-saffron/20 text-saffron-800'
                                 }`}>
                                 {waypoint.type === 'start' ? 'S' :
                                     waypoint.type === 'end' ? 'E' :

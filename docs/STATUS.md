@@ -4,8 +4,8 @@
 at the end. Last updated **2026-08-12**, at commit `0406ab8`.
 
 `main` matches production exactly. Branch
-`claude/ride-app-ui-ux-optimization-86f88a` is **ahead of production and
-undeployed** — see "In flight" below.
+`claude/ride-app-ui-ux-optimization-86f88a` carries a complete UI/UX redesign and
+is **ahead of production and undeployed** — see below.
 
 ---
 
@@ -17,8 +17,8 @@ undeployed** — see "In flight" below.
 | Cloud Functions | ✅ | all 16 updated |
 | Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
 
-**Test suites, all green:** `functions` **245** · client **407** · rules **81** —
-**733 total**.
+**Test suites, all green:** `functions` **245** · client **417** · rules **81** —
+**743 total**.
 
 `npm run typecheck` reports **55** errors total, of which **19** are outside
 `functions/`. That is the clean baseline, not a regression. It was 58 / 22 before
@@ -37,7 +37,7 @@ asserted for presence.
 
 ---
 
-## In flight: UI/UX optimization
+## Done, undeployed: UI/UX optimization
 
 Branch `claude/ride-app-ui-ux-optimization-86f88a`. Plan:
 [`plans/ui-ux-optimization.md`](plans/ui-ux-optimization.md).
@@ -46,7 +46,7 @@ A full redesign — modern minimalism, liquid glass, a manual day/night switch, 
 flows rebuilt around one question per screen. Same brand colours. **Presentation
 only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
 
-**Phases 0 to 5 are done.** Client tests went **70 → 407**.
+**All six phases are done.** Client tests went **70 → 417**. Nothing is deployed.
 
 - **Phase 0 — safety net.** Added component rendering to the test suite, which
   the repo did not have: all 70 client tests were pure logic, so nothing
@@ -88,17 +88,6 @@ only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
   run the screen takes over the whole display — no nav to tap by accident, and
   no two stacked headers eating the top of the screen.
 
-**New: `preview/`.** A way to render real screens with real stylesheets without
-signing in — see `preview/vite.config.ts`. This exists because of the note lower
-down that has stood for months: screens go unlooked-at *because reaching them
-needs an account*. The two Phase 3 faults above turned up within a minute of
-using it. Pages exist for the rider and the driver.
-
-```
-npx vite build --config preview/vite.config.ts
-npx vite preview --outDir preview-dist   # /preview/rider.html · /preview/driver.html
-```
-
 - **Phase 5 — the manager's screens.** The four unlabelled toolbar icons are
   gone; they were destinations, not controls, and now sit in the nav as
   **Dispatch · People · Reports · Setup · Profile**. The two dispatch tabs stay
@@ -114,11 +103,47 @@ npx vite preview --outDir preview-dist   # /preview/rider.html · /preview/drive
   The colour sweep also finished: roughly 200 hardcoded colours are gone from
   every component, and a test now fails the build if one reappears.
 
-**Still to come:** the dark-mode polish pass (Phase 6) — a screen-by-screen look
-in both themes, plus motion, focus rings and touch targets.
+- **Phase 6 — the polish pass.** Contrast measured rather than eyeballed:
+  `preview/audit.js` walks every piece of text on screen, works out what is
+  actually behind it through the glass layers, and checks the ratio. Run over
+  three pages in both themes — **zero failures** in all six.
 
-- 5 screens still have their own hand-rolled modal. Each is migrated onto
-  `Sheet` by the phase that touches it; a ratchet test stops the count rising.
+  It found one real bug the token tests could not: a filled "Approve" button put
+  white text on the bright success green at 2.28:1. Every status colour now has a
+  proper darker step for filled buttons, and that is asserted in tests.
+
+  Touch targets: none below the 44px minimum. Focus rings: none suppressed.
+  Perpetual motion removed where it was decoration or, worse, a number a manager
+  has to read.
+
+**New: `preview/`.** Renders real screens with real stylesheets, without signing
+in — see `preview/vite.config.ts`. It exists because of the note further down that
+has stood for months: screens go unlooked-at *because reaching them needs an
+account*. Three of the faults fixed above were found this way within a minute
+each, and `preview/audit.js` is what measured the contrast.
+
+```
+npx vite build --config preview/vite.config.ts
+npx vite preview --outDir preview-dist
+#   /preview/rider.html   /preview/driver.html   /preview/manager.html
+#   add ?theme=dark — do NOT toggle data-theme by hand, see the note in audit.js
+```
+
+**Ready to deploy from your Mac.** Before you do:
+
+1. Run the sweep once more there, with the real `.env.local` — a worktree cannot
+   build without one.
+2. `npm run build`, then check the live bundle filename against
+   `dist/assets/index-*.js`. **Unregister the service worker and clear caches
+   first**, or you will confirm the previous build.
+3. Order is `firestore:rules` → `functions` → `hosting`, then fast-forward
+   `main`. Rules and functions are untouched here, so in practice only hosting
+   changes — but the order costs nothing.
+
+**Still open, deliberately:** 5 screens keep their own hand-rolled modal
+(FleetManagement, VehicleForm, DocumentEditorModal, ForgotPasswordModal, and one
+in AssignmentPreview). They work; they just lack the focus trap and Escape
+handling `Sheet` provides. A ratchet test stops the count rising.
 
 Decisions taken with the owner, recorded because they went against the
 recommendation and the reasoning should not be relitigated from scratch:
