@@ -14,8 +14,23 @@ const SPIRITUAL_QUOTES = [
 
 const QUOTE_INDEX_KEY = 'sabha_ride_quote_index';
 
+/** Long enough to read a short line of Gujarati, short enough not to be a wait. */
+const SPLASH_MS = 1800;
+
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     const [currentQuote, setCurrentQuote] = useState<string>('');
+
+    // Dismisses itself.
+    //
+    // The auto-dismiss timer was removed once "to favour a user-initiated
+    // transition", which in practice meant one mandatory, meaningless tap
+    // before every single launch — including for a rider who opened the app to
+    // check whether their driver had arrived. Tapping still skips it, so the
+    // impatient lose nothing.
+    useEffect(() => {
+        const timer = setTimeout(onComplete, SPLASH_MS);
+        return () => clearTimeout(timer);
+    }, [onComplete]);
 
     useEffect(() => {
         // Get the last quote index from localStorage
@@ -58,7 +73,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
 
             {/* Tap to Continue */}
             <div className="text-center animate-in fade-in slide-in-from-bottom duration-700 delay-300">
-                <p className="text-white text-lg md:text-xl font-medium drop-shadow-lg animate-pulse">
+                <p className="text-white text-lg md:text-xl font-medium drop-shadow-lg">
                     Tap to continue
                 </p>
                 <div className="mt-3 flex justify-center">

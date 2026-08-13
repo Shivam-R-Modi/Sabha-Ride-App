@@ -11,9 +11,15 @@ interface PickupFormProps {
   user: User | Driver;
   onClose: () => void;
   onSubmit: (details: any) => void;
+  /**
+   * Rendered inside a <Sheet>, which already supplies the surface, the title and
+   * a close button. Without this the rider gets two of each — a chevron and an
+   * X that do the same thing, one above the other.
+   */
+  embedded?: boolean;
 }
 
-export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit }) => {
+export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit, embedded = false }) => {
   // Everything shown here comes from the gathering the server has published,
   // falling back to the global defaults only until it has.
   //
@@ -121,17 +127,8 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
     );
   }
 
-  return (
-    <div className="clay-card clay-card-lg overflow-hidden mx-4 mt-8">
-      <div className="bg-gradient-to-r from-orange-50 to-cream p-4 border-b border-orange-100 flex items-center justify-between">
-        <button onClick={onClose} className="p-2 hover:bg-orange-100/50 rounded-full transition-colors text-coffee btn-feedback">
-          <ChevronLeft size={20} />
-        </button>
-        <h2 className="font-header font-bold text-coffee gold-shimmer">Confirm Ride</h2>
-        <div className="w-10"></div> {/* Spacer */}
-      </div>
-
-      <div className="p-8 space-y-6">
+  const body = (
+    <div className={embedded ? 'space-y-6' : 'p-8 space-y-6'}>
         {error && (
           <div className="bg-red-50 text-red-700 p-4 rounded-2xl text-sm flex items-center gap-3 border border-red-100">
             <AlertCircle size={20} /> {error}
@@ -236,11 +233,25 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit 
               <>No sabha scheduled yet</>
             )}
           </button>
-          <p className="text-center text-[10px] text-gray-500 mt-4 px-4 italic">
+          <p className="text-center text-[10px] text-coffee-500 mt-4 px-4 italic">
             By confirming, you agree to be ready at your pickup location 5 minutes before the ETA.
           </p>
         </div>
+    </div>
+  );
+
+  if (embedded) return body;
+
+  return (
+    <div className="clay-card clay-card-lg overflow-hidden mx-4 mt-8">
+      <div className="bg-gradient-to-r from-orange-50 to-cream p-4 border-b border-orange-100 flex items-center justify-between">
+        <button onClick={onClose} className="p-2 hover:bg-orange-100/50 rounded-full transition-colors text-coffee btn-feedback">
+          <ChevronLeft size={20} />
+        </button>
+        <h2 className="font-header font-bold text-coffee gold-shimmer">Confirm Ride</h2>
+        <div className="w-10"></div> {/* Spacer */}
       </div>
+      {body}
     </div>
   );
 };

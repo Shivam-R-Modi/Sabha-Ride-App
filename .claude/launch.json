@@ -9,6 +9,20 @@
         "dev"
       ],
       "port": 5173
+    },
+    {
+      "name": "screen-previews",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--outDir",
+        "preview-dist",
+        "--port",
+        "4174",
+        "--strictPort"
+      ],
+      "port": 4174
     }
   ]
 }

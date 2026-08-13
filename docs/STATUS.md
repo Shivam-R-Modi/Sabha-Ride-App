@@ -17,8 +17,8 @@ undeployed** — see "In flight" below.
 | Cloud Functions | ✅ | all 16 updated |
 | Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
 
-**Test suites, all green:** `functions` **245** · client **287** · rules **81** —
-**613 total**.
+**Test suites, all green:** `functions` **245** · client **350** · rules **81** —
+**676 total**.
 
 `npm run typecheck` reports **58** errors total, of which **22** are outside
 `functions/`. That is the clean baseline, not a regression. The "22" this note
@@ -45,7 +45,7 @@ A full redesign — modern minimalism, liquid glass, a manual day/night switch, 
 flows rebuilt around one question per screen. Same brand colours. **Presentation
 only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
 
-**Phases 0, 1 and 2 are done.** Client tests went **70 → 287**.
+**Phases 0 to 3 are done.** Client tests went **70 → 350**.
 
 - **Phase 0 — safety net.** Added component rendering to the test suite, which
   the repo did not have: all 70 client tests were pure logic, so nothing
@@ -69,12 +69,34 @@ only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
   finally applied — that fixed a real bug where the desktop sidebar drew over
   open modals.
 
-**Still to come:** rider, driver and manager screens, then the dark-mode polish
-pass. Two things are deliberately unfinished until then:
+- **Phase 3 — the rider's screens.** The first visible change. Home shows **one
+  card with one action** instead of up to five cards and two competing buttons.
+  Which card appears is now a pure, tested function rather than early returns
+  scattered through the render. The weekly attendance question no longer takes
+  over the whole app — it is a card, and saying "not this time" collapses it
+  instead of replacing the dashboard. The splash screen stops demanding a tap.
 
-- The ~200 hardcoded `bg-white` / `text-gray-*` utilities in components do
-  **not** follow the theme, so expect light-coloured patches in dark mode.
-- 11 screens still have their own hand-rolled modal. Each is migrated onto
+  Two faults were found by *looking* at it, which no test would have caught: the
+  driver's name truncated to "Ra…" at phone width, and the ride card's status
+  band did not follow the theme. Both fixed.
+
+**New: `preview/`.** A way to render real screens with real stylesheets without
+signing in — see `preview/vite.config.ts`. This exists because of the note lower
+down that has stood for months: screens go unlooked-at *because reaching them
+needs an account*. Both faults above turned up within a minute of using it.
+
+```
+npx vite build --config preview/vite.config.ts
+npx vite preview --outDir preview-dist      # then open /preview/rider.html
+```
+
+**Still to come:** driver and manager screens, then the dark-mode polish pass.
+Two things are deliberately unfinished until then:
+
+- Hardcoded `bg-white` / `text-gray-*` utilities remain in the driver and manager
+  screens, so expect light-coloured patches there in dark mode. The rider's
+  screens are done.
+- 10 screens still have their own hand-rolled modal. Each is migrated onto
   `Sheet` by the phase that rewrites it; a ratchet test stops the count rising.
 
 Decisions taken with the owner, recorded because they went against the

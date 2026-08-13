@@ -6,18 +6,17 @@
  * every destructive button took the "user said no" branch and did nothing.
  * `components/shared/useConfirm.tsx` replaced it.
  *
- * `window.alert` was never swept, and 27 calls remain. The harm is different but
- * the same family: a suppressed alert does not make the button inert (the write
- * already happened), it makes the FAILURE invisible. `alert('Failed to unassign
- * student')` in a context where dialogs are suppressed means the manager taps
- * unassign, it fails, and the screen says nothing at all. Browsers suppress
- * dialogs in sandboxed frames, in embedded webviews, and after the user ticks
- * "prevent this page from creating additional dialogs" — and this app ships as a
- * PWA, which is one of those contexts.
+ * `window.alert` went unswept far longer — 27 calls, all removed in Phase 2. The
+ * harm is different but from the same family: a suppressed alert does not make
+ * the button inert (the write already happened), it makes the FAILURE invisible.
+ * `alert('Failed to unassign student')` where dialogs are suppressed means the
+ * manager taps unassign, it fails, and the screen says nothing at all. Browsers
+ * suppress dialogs in sandboxed frames, in embedded webviews, and after the user
+ * ticks "prevent this page from creating additional dialogs" — and this app
+ * ships as a PWA, which is one of those contexts.
  *
- * These are ratchets, not pass/fail gates: the count may only go DOWN. Phase 2
- * of docs/plans/ui-ux-optimization.md replaces every remaining call with a toast
- * and drops the budget to zero.
+ * `alert`, `confirm` and `prompt` are now flat bans. The overlay count further
+ * down is still a ratchet: it may only fall.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -124,7 +123,7 @@ describe('native dialogs', () => {
  * leaving its bespoke overlay behind should fail the build.
  */
 describe('hand-rolled overlays', () => {
-    const OVERLAY_BUDGET = 11;
+    const OVERLAY_BUDGET = 10;
 
     /**
      * Full-bleed layers that are not dialogs and should never become Sheets:

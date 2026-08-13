@@ -42,3 +42,6 @@ firestore-debug.log
 serviceAccountKey.json
 *-firebase-adminsdk-*.json
 **/serviceAccountKey.json
+
+# Built output of the screen previews in preview/. Not shipped.
+preview-dist/

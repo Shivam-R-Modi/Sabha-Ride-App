@@ -573,10 +573,66 @@ left at a 1-in-4 failure.
 *Gate met:* client **287** · functions **245** · rules **81** — **613 total**.
 Typecheck **58 / 22**, unchanged. Build clean.
 
-### Phase 3 — rider
+### Phase 3 — rider ✅ **done 2026-08-12**
 
-State card, inline attendance, PickupForm as a sheet, splash auto-dismiss,
-`AttendanceBlockedScreen` deleted, MyRides simplified.
+The first phase with a visible result. **Home went from up to five stacked cards
+and two competing primary buttons to one card and one action.**
+
+**Which card shows is now a pure function.** `src/utils/riderState.ts` takes the
+loading flags, the ride window, the rides and the attendance answer, and returns
+exactly one of ten states. It used to be four early returns and five conditional
+blocks scattered through the render, which meant the priority order between
+overlapping states was implicit in *where a return happened to sit in the file* —
+not somewhere anyone could review it. **29 tests**, most of them about that
+ordering: a live ride outranks the attendance question, a dismissal outranks
+both, drop-off outranks everything.
+
+**The two interstitials are gone.** `WeeklyAttendancePopup` (172 lines, written
+almost entirely in inline styles — finding 20) and `AttendanceBlockedScreen` both
+replaced the *entire dashboard* to handle a one-bit answer. The question is now a
+card among the others, and "not this time" collapses it to a card with a way
+back rather than taking the app away.
+
+Also:
+
+- **The go-home button is not rendered when the window is shut**, instead of
+  sitting there greyed out under a blur veil roughly six days out of seven.
+- **The splash screen dismisses itself** after 1.8s. Tapping still skips it. The
+  timer had been removed "to favour a user-initiated transition", which meant one
+  mandatory meaningless tap before every launch.
+- **The booking form is a sheet**, so home stays visible behind it.
+- **Weekly Notice is one line of helper text**, not a card competing with the
+  real action.
+
+**Two defects found by looking at it, which no test would have caught:**
+
+1. **The driver's name truncated to "Ra…"** at phone width. The avatar, the name
+   and two 40px icon buttons were sharing one row, and the name lost — the single
+   most important word on the card. Contact moved to its own row and became two
+   labelled, full-width targets, which is what someone standing on a kerb in the
+   dark actually needs.
+2. **The status band did not theme.** `bg-blue-100 text-blue-800` and friends are
+   fixed light values, so on dark the band was a pale slab; the ETA chip was
+   light text in a light box, and the route dots were white squares. All
+   tokenised. Measured after: lowest ratio on that card is **7.36:1**.
+
+**`preview/` is new** — a build config and stubs that render real screens with
+real stylesheets, with only the Firestore boundary faked. STATUS.md has carried
+the same note for months: screens "have never been seen rendered ... because
+reaching them needs a sign-in". That is a standing problem, not a one-off, and
+both defects above were found this way within a minute of looking.
+
+```
+npx vite build --config preview/vite.config.ts
+npx vite preview --outDir preview-dist      # then open /preview/rider.html
+```
+
+**New tests: 63.** `riderState` (29) and `RiderHome` (34). The load-bearing one
+counts primary actions per state, because "one card, one action" is the whole
+point and is otherwise the first thing to erode.
+
+*Gate met:* client **350** · functions **245** · rules **81** — **676 total**.
+Typecheck **58 / 22**, unchanged.
 
 ### Phase 4 — driver
 
