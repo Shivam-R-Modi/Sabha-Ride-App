@@ -64,6 +64,8 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isApprovedManagerData = isApprovedManagerData;
 exports.assertApprovedManager = assertApprovedManager;
+exports.isApprovedDriverData = isApprovedDriverData;
+exports.assertApprovedDriver = assertApprovedDriver;
 const functions = __importStar(require("firebase-functions"));
 const roles_1 = require("./roles");
 /**
@@ -96,6 +98,47 @@ async function assertApprovedManager(db, uid, action = 'do this') {
     const data = snap.data();
     if (!isApprovedManagerData(data)) {
         throw new functions.https.HttpsError('permission-denied', `Only approved managers can ${action}.`);
+    }
+    return data;
+}
+/**
+ * The same test for someone acting as a driver.
+ *
+ * `hasGrantedRole`, not `hasRecordedRole` — the opposite of the manager check
+ * above, and deliberately so. Manager is the top of the hierarchy, so reading
+ * the granted set there would promote every driver. Driver is below it, and in
+ * this congregation every driver is recorded as a manager who also drives, so
+ * reading only the recorded set here would refuse all of them.
+ */
+function isApprovedDriverData(data) {
+    const user = data;
+    if (!user)
+        return false;
+    return user.accountStatus === 'approved' && (0, roles_1.hasGrantedRole)(user, 'driver');
+}
+/**
+ * Throw unless `uid` belongs to an approved driver. Returns their document so
+ * the caller does not read it twice.
+ *
+ * ADDED 2026-08-14, and it was never there before. globalAssignDriver checked
+ * that a caller was dispatching themselves, and nothing else — no account
+ * status, no role. The only mention of `accountStatus` anywhere in that function
+ * was inside the query that built K-means SEEDS, which authorises nobody; a test
+ * named "a revoked driver gets no riders" asserted the clause was in that query
+ * and never that a revoked caller was refused.
+ *
+ * So a revoked account that was still signed in and still holding a car could
+ * tap Assign Me and be handed riders — receiving the names, phone numbers and
+ * home addresses of children, which is precisely what revoking was meant to stop.
+ *
+ * Read fresh every time, for the same reason as assertApprovedManager: a custom
+ * claim survives on an ID token for up to an hour after a revocation.
+ */
+async function assertApprovedDriver(db, uid, action = 'do this') {
+    const snap = await db.collection('users').doc(uid).get();
+    const data = snap.data();
+    if (!isApprovedDriverData(data)) {
+        throw new functions.https.HttpsError('permission-denied', `Only approved drivers can ${action}.`);
     }
     return data;
 }

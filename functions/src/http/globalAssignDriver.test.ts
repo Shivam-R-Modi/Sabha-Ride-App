@@ -214,10 +214,18 @@ const baseFixture = (
     carOverride?: Record<string, unknown>,
 ): Fixture => ({
     rideType,
-    driver: driverOverride ?? {
-        name: 'Asha',
-        phone: '555-0100',
-        location: { lat: DRIVER_HOME.lat, lng: DRIVER_HOME.lng },
+    // accountStatus and roles are defaults rather than part of the override, so
+    // every fixture describes a driver who is actually allowed to drive. A test
+    // that wants a revoked or non-driver caller sets them explicitly and the
+    // spread below lets it win.
+    driver: {
+        accountStatus: 'approved',
+        roles: ['driver'],
+        ...(driverOverride ?? {
+            name: 'Asha',
+            phone: '555-0100',
+            location: { lat: DRIVER_HOME.lat, lng: DRIVER_HOME.lng },
+        }),
     },
     car: carOverride ?? { name: 'Odyssey', color: 'Silver', licensePlate: 'ABC123', capacity: 4, status: 'available' },
     rides: [
@@ -279,47 +287,70 @@ describe('globalAssignDriver — a driver may only dispatch themselves', () => {
     });
 });
 
-describe('globalAssignDriver — the driver pool must match real drivers', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
+describe('globalAssignDriver — who is allowed to be handed riders', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    /**
+     * These replaced two tests of the K-means SEED query, which is gone: a driver
+     * pool is not needed once the carload is built by seed-and-grow.
+     *
+     * One of them was called "requires an approved account, so a revoked driver
+     * gets no riders" and asserted that the seed query contained an
+     * `accountStatus == approved` clause. That clause decided who could be a
+     * clustering centroid. It authorised nobody. Nothing in this function ever
+     * checked the CALLER's account status or role, so a revoked account still
+     * signed in and still holding a car could tap Assign Me and be handed
+     * children's names, phone numbers and home addresses.
+     *
+     * These assert the thing the old name promised.
+     */
+
+    it('refuses a revoked account', async () => {
+        const fixture = baseFixture('home-to-sabha');
+        fixture.driver = { ...fixture.driver, accountStatus: 'revoked' };
+
+        await expect(runAs('driver-1', fixture)).rejects.toThrow(/approved drivers/i);
     });
 
-    it('seeds clustering from granted roles, not activeRole', async () => {
-        // The bug this replaces: the pool queried `activeRole == 'driver'`, and
-        // activeRole is denied to users by touchesPrivilegeFields() in
-        // firestore.rules — so the RoleSwitcher never persists it and the stored
-        // value stays frozen at signup. Measured against production the query
-        // returned zero rows every time, so every dispatch ran K=1 and one driver
-        // was handed every rider instead of the nearest share.
-        const { recorder } = await run(baseFixture('home-to-sabha'));
+    it('refuses an account still awaiting approval', async () => {
+        const fixture = baseFixture('home-to-sabha');
+        fixture.driver = { ...fixture.driver, accountStatus: 'pending' };
 
-        const poolQuery = recorder.queries
-            .filter(q => q.collection === 'users')
-            .sort((a, b) => b.clauses.length - a.clauses.length)[0];
-
-        expect(poolQuery).toBeDefined();
-        expect(poolQuery.clauses).toEqual([
-            ['roles', 'array-contains', 'driver'],
-            ['accountStatus', '==', 'approved'],
-            ['status', '==', 'available'],
-        ]);
+        await expect(runAs('driver-1', fixture)).rejects.toThrow(/approved drivers/i);
     });
 
-    it('never queries activeRole', async () => {
-        const { recorder } = await run(baseFixture('home-to-sabha'));
+    it('refuses an approved account that is not a driver', async () => {
+        const fixture = baseFixture('home-to-sabha');
+        fixture.driver = { ...fixture.driver, roles: ['student'] };
 
-        const fields = recorder.queries.flatMap(q => q.clauses.map(c => c[0]));
-        expect(fields).not.toContain('activeRole');
+        await expect(runAs('driver-1', fixture)).rejects.toThrow(/approved drivers/i);
     });
 
-    it('requires an approved account, so a revoked driver gets no riders', async () => {
-        const { recorder } = await run(baseFixture('home-to-sabha'));
+    it('refuses before writing anything at all', async () => {
+        // The check must land before the fleet is touched or riders are moved.
+        const fixture = baseFixture('home-to-sabha');
+        fixture.driver = { ...fixture.driver, accountStatus: 'revoked' };
+        const made = makeDb(fixture);
+        db = made.db;
 
-        const poolQuery = recorder.queries
-            .filter(q => q.collection === 'users')
-            .sort((a, b) => b.clauses.length - a.clauses.length)[0];
+        await expect((globalAssignDriver as any)(
+            { driverId: 'driver-1', carId: 'car-1' }, { auth: { uid: 'driver-1' } },
+        )).rejects.toThrow();
 
-        expect(poolQuery.clauses).toContainEqual(['accountStatus', '==', 'approved']);
+        expect(made.recorder.updates).toHaveLength(0);
+        expect(made.recorder.committed).toBe(false);
+    });
+
+    it('allows a manager who also drives, which is how every driver here is recorded', async () => {
+        // hasGrantedRole, not hasRecordedRole. In this congregation every driver
+        // is a manager who drives; reading only the recorded set would refuse
+        // all of them.
+        const fixture = baseFixture('home-to-sabha');
+        fixture.driver = { ...fixture.driver, role: 'manager', roles: ['manager', 'driver', 'student'] };
+
+        const { result } = await runAs('driver-1', fixture);
+
+        expect((result as any).status).not.toBe('locked');
     });
 });
 
@@ -477,17 +508,21 @@ describe('globalAssignDriver — a request costs its seats', () => {
 
     it('does not hand three seats to two two-person requests', async () => {
         // The reported defect: a request WAS a seat, so a family of four was
-        // booked one place and the driver arrived with room for one.
-        // r1 is nearly on top of the driver (42.36, -71.06) and r2 is several
-        // miles out, so the distance ordering is unambiguous rather than a
-        // floating-point coin toss.
+        // booked one place and the driver arrived with room for one. Two
+        // two-person requests and three seats must serve exactly ONE of them,
+        // for two seats — never both, never three.
+        //
+        // r2 is the one taken because it is farther from the VENUE and so is the
+        // seed. This assertion used to name r1, back when the ordering was
+        // nearest-to-the-driver; the defect being guarded is the seat arithmetic,
+        // not which of the two is chosen.
         const { recorder } = await run(seatFixture([
             ride('r1', 'stu-a', { seatsRequested: 2, pickupLat: 42.359, pickupLng: -71.059 }),
             ride('r2', 'stu-b', { seatsRequested: 2, pickupLat: 42.450, pickupLng: -71.050 }),
         ]));
 
         const assigned = recorder.updates.filter(u => u.path.startsWith('rides/'));
-        expect(assigned.map(u => u.path)).toEqual(['rides/r1']);
+        expect(assigned.map(u => u.path)).toEqual(['rides/r2']);
         expect(assigned[0].data.seatsRequested).toBe(2);
     });
 

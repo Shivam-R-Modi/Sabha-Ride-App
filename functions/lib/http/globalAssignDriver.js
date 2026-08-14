@@ -42,7 +42,7 @@ exports.globalAssignDriver = void 0;
 exports.isValidPendingRide = isValidPendingRide;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
-const clustering_1 = require("../utils/clustering");
+const carload_1 = require("../utils/carload");
 const seats_1 = require("../utils/seats");
 const seats_2 = require("../constants/seats");
 const tenancy_1 = require("../constants/tenancy");
@@ -50,6 +50,7 @@ const routing_1 = require("../utils/routing");
 const coords_1 = require("../utils/coords");
 const fleet_1 = require("../utils/fleet");
 const events_1 = require("../utils/events");
+const authz_1 = require("../utils/authz");
 const notifications_1 = require("../utils/notifications");
 const settings_1 = require("../utils/settings");
 const rateLimiter_1 = require("../utils/rateLimiter");
@@ -137,7 +138,7 @@ function isValidPendingRide(docData, expectedEventKey, expectedRideType) {
 }
 // ── main function ──────────────────────────────────────────
 exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
     // Auth check
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -211,6 +212,20 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('not-found', 'Driver profile not found.');
         }
         const driverData = driverDoc.data();
+        // Approved, and actually a driver.
+        //
+        // This function checked that a caller was dispatching THEMSELVES and
+        // nothing else — no account status, no role. The single mention of
+        // `accountStatus` was inside the query that built K-means seeds, which
+        // authorises nobody, and the test named "a revoked driver gets no riders"
+        // asserted that clause existed rather than that a revoked caller was
+        // refused. So a revoked account still signed in and still holding a car
+        // could tap Assign Me and be handed the names, phone numbers and home
+        // addresses of children — the exact thing revoking exists to stop.
+        //
+        // Kept here, after the existence check, so a missing profile still reports
+        // "profile not found" rather than "permission denied".
+        await (0, authz_1.assertApprovedDriver)(db, driverId, 'be assigned riders');
         const carDoc = await db.collection('cars').doc(carId).get();
         if (!carDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Vehicle not found.');
@@ -291,6 +306,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                 // as the request it came from, rather than being re-derived.
                 date: (_f = (_e = d.date) !== null && _e !== void 0 ? _e : d.eventDate) !== null && _f !== void 0 ? _f : '',
                 timeSlot: (_g = d.timeSlot) !== null && _g !== void 0 ? _g : '',
+                createdAt: typeof d.createdAt === 'string' ? d.createdAt : undefined,
             });
         }
         const allStudentPoints = Array.from(requestMap.values());
@@ -298,71 +314,28 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             return { status: 'no_students' };
         }
         console.log(`[globalAssign] ${allStudentPoints.length} unassigned students`);
-        // ── Step 5: All remaining available drivers ──────────
+        // ── Step 5: Choose this carload, seed and grow ──────
         //
-        // This queried `activeRole == 'driver'`, which matched NOBODY. activeRole
-        // is listed in touchesPrivilegeFields() in firestore.rules, so a user
-        // cannot write it: the RoleSwitcher only changes React state and the
-        // stored value stays frozen at whatever signup wrote. Measured against
-        // production, this query returned zero rows every time, so every dispatch
-        // ran K=1 and the tapping driver was handed every rider in range instead
-        // of the nearest share of them. The clustering below was seeded with one
-        // point and did nothing.
+        // This replaced a K-means pass seeded on every available driver's HOME.
+        // That design needs drivers to be spread out, so that "the cluster
+        // nearest me" is a meaningful share of the riders. Every driver in this
+        // congregation lives within about two miles of the venue, so all K seeds
+        // were effectively one point and which driver got which cluster was
+        // decided by a near-tie at initialisation.
         //
-        // `roles` is now the GRANTED set — a manager may act as a driver, which in
-        // this congregation is how every driver is recorded — so one query serves
-        // it with no special case. `accountStatus` is checked because a revoked
-        // account must not be handed riders.
-        const driversSnap = await db.collection('users')
-            .where('roles', 'array-contains', 'driver')
-            .where('accountStatus', '==', 'approved')
-            .where('status', '==', 'available')
-            .get();
-        // Build driver points (always include tapping driver)
-        const driverPointsMap = new Map();
-        // Add the tapping driver first
-        driverPointsMap.set(driverId, {
-            id: driverId,
-            lat: tappingDriverLoc.lat,
-            lng: tappingDriverLoc.lng
-        });
-        // Add other available drivers
-        for (const doc of driversSnap.docs) {
-            if (doc.id === driverId)
-                continue; // already added
-            const loc = (0, coords_1.resolveHomeCoords)(doc.data());
-            if (loc) {
-                driverPointsMap.set(doc.id, { id: doc.id, lat: loc.lat, lng: loc.lng });
-            }
-        }
-        const driverPoints = Array.from(driverPointsMap.values());
-        console.log(`[globalAssign] K=${driverPoints.length} drivers for clustering`);
-        // ── Step 6: Run K-means ─────────────────────────────
-        const clusters = (0, clustering_1.kMeansWithDriverSeeds)(allStudentPoints, driverPoints);
-        // Find the tapping driver's cluster
-        let myCluster = clusters.find(c => c.driverId === driverId);
-        // Fallback: if tapping driver's cluster is empty (all students
-        // were closer to other drivers), fall back to greedy — sort all
-        // unassigned students by distance to this driver.
-        if (!myCluster || myCluster.students.length === 0) {
-            console.log('[globalAssign] Empty cluster for tapping driver — greedy fallback');
-            myCluster = {
-                driverId,
-                centroid: { lat: tappingDriverLoc.lat, lng: tappingDriverLoc.lng },
-                students: [...allStudentPoints] // consider all
-            };
-        }
-        console.log(`[globalAssign] Cluster has ${myCluster.students.length} students`);
-        // ── Step 7: Sort by distance + apply geo-fence ──────
-        const studentPointMap = new Map(allStudentPoints.map(sp => [sp.id, sp]));
-        const sortedStudents = myCluster.students
-            .map(s => {
-            const studentFull = studentPointMap.get(s.id);
-            const dist = haversineDistanceMiles(tappingDriverLoc.lat, tappingDriverLoc.lng, s.lat, s.lng);
-            return Object.assign(Object.assign({}, studentFull), { distMi: dist });
-        })
-            .filter(s => s.distMi <= GEO_FENCE_MILES)
-            .sort((a, b) => a.distMi - b.distMi);
+        // It also cost a whole collection scan of `users` on every tap purely to
+        // build those seeds. Seed-and-grow needs no driver query at all.
+        //
+        // The geo-fence stays: it is a limit on how far one volunteer is sent,
+        // and is measured from the DRIVER because that is whose journey it bounds.
+        const withinFence = allStudentPoints.filter(s => haversineDistanceMiles(tappingDriverLoc.lat, tappingDriverLoc.lng, s.lat, s.lng)
+            <= GEO_FENCE_MILES);
+        // Anchored on the rider farthest from the venue — remainders and
+        // long-waiters first — then grown outward from that anchor by proximity.
+        // See utils/carload.ts for why the farthest rider is the right anchor.
+        const sortedStudents = (0, carload_1.orderForCarload)(withinFence, SABHA_LOCATION);
+        console.log(`[globalAssign] ${withinFence.length} within fence, `
+            + `seed=${(_j = (_h = sortedStudents[0]) === null || _h === void 0 ? void 0 : _h.name) !== null && _j !== void 0 ? _j : 'none'}`);
         // ── Step 7b: Fill by SEATS, not by head count ───────
         //
         // This was `sortedStudents.slice(0, availableSeats)` — one request, one
@@ -489,10 +462,10 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                 // it is LESS than the rider asked for, and the sibling document
                 // below holds the rest.
                 seatsRequested: s.seatsTaken,
-                groupId: s.wasSplit ? ((_h = s.groupId) !== null && _h !== void 0 ? _h : s.rideRequestId) : ((_j = s.groupId) !== null && _j !== void 0 ? _j : null),
+                groupId: s.wasSplit ? ((_k = s.groupId) !== null && _k !== void 0 ? _k : s.rideRequestId) : ((_l = s.groupId) !== null && _l !== void 0 ? _l : null),
                 groupSeatsTotal: s.wasSplit
-                    ? ((_k = s.groupSeatsTotal) !== null && _k !== void 0 ? _k : s.groupTotalSeats)
-                    : ((_l = s.groupSeatsTotal) !== null && _l !== void 0 ? _l : null),
+                    ? ((_m = s.groupSeatsTotal) !== null && _m !== void 0 ? _m : s.groupTotalSeats)
+                    : ((_o = s.groupSeatsTotal) !== null && _o !== void 0 ? _o : null),
                 estimatedDistance,
                 estimatedTime,
                 assignedAt: new Date().toISOString()
@@ -535,8 +508,8 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
                         // stop is part of a larger party, and completion waits for
                         // the whole group rather than declaring the family home
                         // while half of them are still waiting.
-                        groupId: (_m = s.groupId) !== null && _m !== void 0 ? _m : s.rideRequestId,
-                        groupSeatsTotal: (_o = s.groupSeatsTotal) !== null && _o !== void 0 ? _o : s.groupTotalSeats,
+                        groupId: (_p = s.groupId) !== null && _p !== void 0 ? _p : s.rideRequestId,
+                        groupSeatsTotal: (_q = s.groupSeatsTotal) !== null && _q !== void 0 ? _q : s.groupTotalSeats,
                         splitFromRideId: s.rideRequestId,
                         cityId: tenancy_1.FOUNDING_CITY_ID,
                         locationId: tenancy_1.FOUNDING_LOCATION_ID,
@@ -589,7 +562,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
             // should get one message, not two.
             for (const studentId of new Set(assignedStudents.map(s => s.studentId))) {
                 const sDoc = await db.collection('users').doc(studentId).get();
-                const sToken = (_p = sDoc.data()) === null || _p === void 0 ? void 0 : _p.fcmToken;
+                const sToken = (_r = sDoc.data()) === null || _r === void 0 ? void 0 : _r.fcmToken;
                 if (sToken) {
                     await (0, notifications_1.notifyStudentDriverAssigned)(sToken, driverData.name || 'Driver', carData.name || 'Vehicle', carData.color || '');
                 }
@@ -644,7 +617,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         // This runs after catch block, providing extra guarantee
         try {
             const lockStillExists = await lockRef.get();
-            if (lockStillExists.exists && ((_q = lockStillExists.data()) === null || _q === void 0 ? void 0 : _q.driverId) === driverId) {
+            if (lockStillExists.exists && ((_s = lockStillExists.data()) === null || _s === void 0 ? void 0 : _s.driverId) === driverId) {
                 await lockRef.delete();
                 console.log('[globalAssign] Lock cleaned up in finally block');
             }

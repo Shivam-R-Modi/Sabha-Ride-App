@@ -7,7 +7,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { RideType, RideStudent } from '../types';
-import { kMeansWithDriverSeeds, LightPoint } from '../utils/clustering';
+import { orderForCarload, LightPoint } from '../utils/carload';
 import { fillBySeats, remaindersFirst, maxPassengerSeats } from '../utils/seats';
 import { seatsOf } from '../constants/seats';
 import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../constants/tenancy';
@@ -15,6 +15,7 @@ import { optimizeRoute, buildGoogleMapsNavigationUrl } from '../utils/routing';
 import { resolveHomeCoords } from '../utils/coords';
 import { writeVehicleState, resolveVehicleHolder } from '../utils/fleet';
 import { eventKeyFromRide } from '../utils/events';
+import { assertApprovedDriver } from '../utils/authz';
 import { notifyStudentDriverAssigned, notifyDriverStudentsAssigned } from '../utils/notifications';
 import { getSabhaLocation, resolveVenue } from '../utils/settings';
 import { checkRateLimit } from '../utils/rateLimiter';
@@ -202,6 +203,21 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         }
         const driverData = driverDoc.data()!;
 
+        // Approved, and actually a driver.
+        //
+        // This function checked that a caller was dispatching THEMSELVES and
+        // nothing else — no account status, no role. The single mention of
+        // `accountStatus` was inside the query that built K-means seeds, which
+        // authorises nobody, and the test named "a revoked driver gets no riders"
+        // asserted that clause existed rather than that a revoked caller was
+        // refused. So a revoked account still signed in and still holding a car
+        // could tap Assign Me and be handed the names, phone numbers and home
+        // addresses of children — the exact thing revoking exists to stop.
+        //
+        // Kept here, after the existence check, so a missing profile still reports
+        // "profile not found" rather than "permission denied".
+        await assertApprovedDriver(db, driverId, 'be assigned riders');
+
         const carDoc = await db.collection('cars').doc(carId).get();
         if (!carDoc.exists) {
             throw new functions.https.HttpsError('not-found', 'Vehicle not found.');
@@ -275,6 +291,9 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
             groupSeatsTotal: number | null;
             date: string;
             timeSlot: string;
+            // When the rider asked. Feeds the wait-escalation valve in
+            // utils/carload.ts; without it that valve is dead code.
+            createdAt?: string;
         }>();
 
         for (const doc of ridesSnap.docs) {
@@ -302,6 +321,7 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
                 // as the request it came from, rather than being re-derived.
                 date: d.date ?? d.eventDate ?? '',
                 timeSlot: d.timeSlot ?? '',
+                createdAt: typeof d.createdAt === 'string' ? d.createdAt : undefined,
             });
         }
 
@@ -313,82 +333,32 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
 
         console.log(`[globalAssign] ${allStudentPoints.length} unassigned students`);
 
-        // ── Step 5: All remaining available drivers ──────────
+        // ── Step 5: Choose this carload, seed and grow ──────
         //
-        // This queried `activeRole == 'driver'`, which matched NOBODY. activeRole
-        // is listed in touchesPrivilegeFields() in firestore.rules, so a user
-        // cannot write it: the RoleSwitcher only changes React state and the
-        // stored value stays frozen at whatever signup wrote. Measured against
-        // production, this query returned zero rows every time, so every dispatch
-        // ran K=1 and the tapping driver was handed every rider in range instead
-        // of the nearest share of them. The clustering below was seeded with one
-        // point and did nothing.
+        // This replaced a K-means pass seeded on every available driver's HOME.
+        // That design needs drivers to be spread out, so that "the cluster
+        // nearest me" is a meaningful share of the riders. Every driver in this
+        // congregation lives within about two miles of the venue, so all K seeds
+        // were effectively one point and which driver got which cluster was
+        // decided by a near-tie at initialisation.
         //
-        // `roles` is now the GRANTED set — a manager may act as a driver, which in
-        // this congregation is how every driver is recorded — so one query serves
-        // it with no special case. `accountStatus` is checked because a revoked
-        // account must not be handed riders.
-        const driversSnap = await db.collection('users')
-            .where('roles', 'array-contains', 'driver')
-            .where('accountStatus', '==', 'approved')
-            .where('status', '==', 'available')
-            .get();
+        // It also cost a whole collection scan of `users` on every tap purely to
+        // build those seeds. Seed-and-grow needs no driver query at all.
+        //
+        // The geo-fence stays: it is a limit on how far one volunteer is sent,
+        // and is measured from the DRIVER because that is whose journey it bounds.
+        const withinFence = allStudentPoints.filter(s =>
+            haversineDistanceMiles(tappingDriverLoc.lat, tappingDriverLoc.lng, s.lat, s.lng)
+            <= GEO_FENCE_MILES);
 
-        // Build driver points (always include tapping driver)
-        const driverPointsMap = new Map<string, LightPoint>();
+        // Anchored on the rider farthest from the venue — remainders and
+        // long-waiters first — then grown outward from that anchor by proximity.
+        // See utils/carload.ts for why the farthest rider is the right anchor.
+        const sortedStudents = orderForCarload(withinFence, SABHA_LOCATION);
 
-        // Add the tapping driver first
-        driverPointsMap.set(driverId, {
-            id: driverId,
-            lat: tappingDriverLoc.lat,
-            lng: tappingDriverLoc.lng
-        });
+        console.log(`[globalAssign] ${withinFence.length} within fence, `
+            + `seed=${sortedStudents[0]?.name ?? 'none'}`);
 
-        // Add other available drivers
-        for (const doc of driversSnap.docs) {
-            if (doc.id === driverId) continue; // already added
-            const loc = resolveHomeCoords(doc.data());
-            if (loc) {
-                driverPointsMap.set(doc.id, { id: doc.id, lat: loc.lat, lng: loc.lng });
-            }
-        }
-
-        const driverPoints = Array.from(driverPointsMap.values());
-        console.log(`[globalAssign] K=${driverPoints.length} drivers for clustering`);
-
-        // ── Step 6: Run K-means ─────────────────────────────
-        const clusters = kMeansWithDriverSeeds(allStudentPoints, driverPoints);
-
-        // Find the tapping driver's cluster
-        let myCluster = clusters.find(c => c.driverId === driverId);
-
-        // Fallback: if tapping driver's cluster is empty (all students
-        // were closer to other drivers), fall back to greedy — sort all
-        // unassigned students by distance to this driver.
-        if (!myCluster || myCluster.students.length === 0) {
-            console.log('[globalAssign] Empty cluster for tapping driver — greedy fallback');
-            myCluster = {
-                driverId,
-                centroid: { lat: tappingDriverLoc.lat, lng: tappingDriverLoc.lng },
-                students: [...allStudentPoints] // consider all
-            };
-        }
-
-        console.log(`[globalAssign] Cluster has ${myCluster.students.length} students`);
-
-        // ── Step 7: Sort by distance + apply geo-fence ──────
-        const studentPointMap = new Map(allStudentPoints.map(sp => [sp.id, sp]));
-        const sortedStudents = myCluster.students
-            .map(s => {
-                const studentFull = studentPointMap.get(s.id)!;
-                const dist = haversineDistanceMiles(
-                    tappingDriverLoc.lat, tappingDriverLoc.lng,
-                    s.lat, s.lng
-                );
-                return { ...studentFull, distMi: dist };
-            })
-            .filter(s => s.distMi <= GEO_FENCE_MILES)
-            .sort((a, b) => a.distMi - b.distMi);
 
         // ── Step 7b: Fill by SEATS, not by head count ───────
         //
