@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CalendarDays, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUpcomingEvents, updateEvent, createEvent, SabhaEvent } from '../../hooks/useEvents';
@@ -9,6 +9,9 @@ import { AddressAutocomplete } from '../auth/AddressAutocomplete';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
 import { useConfirm } from '../shared/useConfirm';
 import { formatTime } from '../../hooks/useSettings';
+import {
+    DROPOFF_LEAD_MINUTES, PICKUP_LEAD_DAYS, minutesOf, isUsableDuration, newSabhaTimes,
+} from '../../src/constants/schedule';
 
 /**
  * The sabha calendar, for managers.
@@ -29,31 +32,6 @@ import { formatTime } from '../../hooks/useSettings';
  * Firestore leaves behind), cancelling outstanding ride requests, and rewriting the
  * published ride window.
  */
-
-/**
- * A sabha must be longer than the drop-off lead, or the window inverts: drop-off
- * would open before it starts and pickup would flip straight to drop-off. The
- * server clamps this too (buildCurrentEvent), but rejecting it here means the
- * manager finds out at the point of saving rather than never.
- */
-const DROPOFF_LEAD_MINUTES = 15;
-
-const minutesOf = (hhmm: string): number | null => {
-    const m = /^(\d{1,2}):(\d{2})$/.exec((hhmm || '').trim());
-    if (!m) return null;
-    return Number(m[1]) * 60 + Number(m[2]);
-};
-
-/** Long enough to hold a sabha AND get drivers moving before it ends. */
-export const isUsableDuration = (start: string, end: string): boolean => {
-    const s = minutesOf(start);
-    const e = minutesOf(end);
-    if (s === null || e === null) return false;
-    return e - s > DROPOFF_LEAD_MINUTES;
-};
-
-/** Ride requests open this many days before a sabha. Mirrors PICKUP_LEAD_DAYS. */
-const PICKUP_LEAD_DAYS = 2;
 
 /** "2026-08-14" -> "Friday 14 Aug". Uses the date parts directly, so no timezone shift. */
 function formatDate(dateKey: string): string {
@@ -318,16 +296,29 @@ export const SabhaCalendar: React.FC = () => {
     const { events, loading, error } = useUpcomingEvents();
     const { calendarStatus } = useCurrentEvent();
 
+    const { sabhaLocation, sabhaStartTime, sabhaEndTime } = useSettings();
+
     const [adding, setAdding] = useState(false);
     const [date, setDate] = useState('');
-    const [start, setStart] = useState('19:00');
-    const [end, setEnd] = useState('22:00');
+    const [start, setStart] = useState(() => newSabhaTimes({ sabhaStartTime, sabhaEndTime }).start);
+    const [end, setEnd] = useState(() => newSabhaTimes({ sabhaStartTime, sabhaEndTime }).end);
     const [agenda, setAgenda] = useState('');
     const [newVenueText, setNewVenueText] = useState('');
     const [newVenuePlace, setNewVenuePlace] = useState<PlaceDetails | null>(null);
     const [busy, setBusy] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
-    const { sabhaLocation } = useSettings();
+
+    // Keep the prefill in step with the saved defaults, but only while the form
+    // is CLOSED. `useSettings` hands back the shipped defaults for the first
+    // render and the real values when the snapshot lands, so a plain initialiser
+    // would freeze on 19:00/22:00 — and syncing under an open form would
+    // overwrite whatever the manager was in the middle of typing.
+    useEffect(() => {
+        if (adding) return;
+        const { start: s, end: e } = newSabhaTimes({ sabhaStartTime, sabhaEndTime });
+        setStart(s);
+        setEnd(e);
+    }, [adding, sabhaStartTime, sabhaEndTime]);
 
     // Cancelled documents are filtered out upstream, so every row here is live.
     const nextScheduled = events[0];

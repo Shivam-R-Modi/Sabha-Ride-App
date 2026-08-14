@@ -1,11 +1,37 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-13**.
+at the end. Last updated **2026-08-14**.
 
-**The UI/UX redesign is DEPLOYED.** Rules, all 16 functions and hosting went out
-on 2026-08-13; live bundle `index-EyuhruP1.js`, matched against `dist/` and
-verified. `main` is fast-forwarded to match.
+**The UI/UX redesign is DEPLOYED**, and so is the sabha-times fix that was
+developed in parallel on `main`. See the incident note directly below before
+doing anything else.
+
+## Incident, 2026-08-13 — a fix was reverted in production for ~20 minutes
+
+Two streams of work ran at once and neither knew about the other:
+
+- `main` got `8dd800e`, the Settings sabha-times fix, **and shipped it to
+  production** (hosting only).
+- The redesign branch was developed and tested independently, never merged with
+  `main`, and was then deployed on top.
+
+The redesign branch did not contain `8dd800e`, so deploying it **reverted a live
+fix**. Nobody noticed from the deploy output, because every stage reported
+success — the deploy was clean; it was the *input* that was stale.
+
+The check that would have caught it is one line, and it was not run:
+
+```bash
+git log --oneline HEAD..main
+```
+
+Diffing `main..HEAD` to see what was going out was not enough. That answers "what
+am I adding" and says nothing about "what am I dropping". **Both directions, every
+deploy.** A hosting deploy is a whole-bundle replacement, so anything absent from
+the branch is removed from production whether or not it appears in a diff.
+
+Resolved by merging `main` into the branch and redeploying.
 
 ## Changed 2026-08-13
 
@@ -40,8 +66,8 @@ So the release was **effectively hosting-only**: the whole UI redesign, against 
 backend that did not move. That is why it was safe to ship without the
 sign-in-gated hand testing — but see the caveat under Open items.
 
-**Test suites, all green:** `functions` **245** · client **456** · rules **81** —
-**782 total**.
+**Test suites, all green:** `functions` **245** · client **471** · rules **81** —
+**797 total**.
 
 `npm run typecheck` reports **19** errors, all client-side. That is the clean
 baseline. It was 22 before this branch; Phase 4 removed three by deleting the
@@ -54,6 +80,12 @@ code that held them.
 worktree. They vanish after `npm install` inside `functions/`. Nobody should
 spend time on them again, and no baseline should be quoted from a worktree that
 has not installed them.
+
+> Measure typecheck from this checkout, not from a `git worktree`. A worktree
+> resolves `functions/` imports differently and reports **58** — the extra 36 are
+> all `Cannot find module 'firebase-functions'`, not a regression. `npm run build`
+> cannot run in a worktree at all: `.env.local` is gitignored and never copied
+> there.
 
 `node scripts/tenancy.cjs verify` reads **0 unstamped** (owner's Mac only — needs
 the Admin SDK key).
@@ -75,7 +107,7 @@ exactly why the order is rules → functions → hosting and not one bare
 
 ---
 
-## Done, undeployed: UI/UX optimization
+## Shipped: UI/UX optimization
 
 Branch `claude/ride-app-ui-ux-optimization-86f88a`. Plan:
 [`plans/ui-ux-optimization.md`](plans/ui-ux-optimization.md).
@@ -200,6 +232,49 @@ Both still want two minutes in a browser.
 
 ---
 
+## Also shipped: the Settings sabha times reached nothing
+
+Developed on `main` in parallel with the redesign, deployed, then accidentally
+reverted by the redesign deploy, then restored by merging `main` into the branch.
+See the incident note at the top.
+
+The manager's Settings screen has a sabha start/end control. It wrote
+`sabhaStartTime`/`sabhaEndTime` to `settings/main` and showed a success state. The
+Calendar's "Add a sabha" form hardcoded `19:00`/`22:00`, and the only other reader
+was `seedFirstEventIfNeeded`, which never runs again once `system/eventGenerator`
+is marked. **So on this project, saving those times changed nothing anywhere.**
+
+The control had already been relabelled "Default Start/End" with a note saying it
+applied to newly added sabhas. That note was false, which made it worse than an
+unlabelled control: it explained behaviour the app did not have. Adding a Friday
+in the Calendar ignored the saved defaults completely.
+
+Adding a sabha now prefills from the saved defaults, so the note is true. The
+prefill syncs only while the form is closed — an arriving Firestore snapshot must
+not overwrite what the manager is typing.
+
+Three more things found on the way:
+
+- Settings validated `end > start` while the Calendar required more than the
+  15-minute drop-off lead, so `19:00–19:10` saved cleanly in Settings and then
+  blocked the manager in the Calendar. Both now use `isUsableDuration`.
+- `PickupForm` printed "Sabha starts at 7:00 PM" from the global default when
+  nothing was scheduled, under a heading reading "Not scheduled yet". It now says
+  rides cannot be requested. The Confirm button was already disabled; nothing said
+  why.
+- Both doc comments on those times in `useSettings.ts` were stale, not just the one
+  on `updateSabhaTimes`.
+
+Timing policy now lives in `src/constants/schedule.ts`, free of any Firebase
+import — a test could not reach it inside a component without initialising
+Firebase Auth. `minutesOf` gained the range check its old copy lacked, which had
+parsed `"25:99"` to 1599 minutes.
+
+The guard was checked by reintroducing the hardcoded `19:00`/`22:00`: four cases
+fail, including the explicit "does not fall back to the shipped constant" one.
+
+---
+
 ## What was previously finished: Phase 3 part 1 — seats
 
 Until this shipped, **a ride request WAS one seat**. A family of four was booked a
@@ -309,14 +384,30 @@ component to confirm they fail (8 of 14 did).
 
 **For the owner, not code:**
 
-- **The sabha calendar may only have Aug 7 left.** The audit log shows five
-  Fridays were deleted. Worth checking before the next gathering.
-- **Two UI surfaces have never been *looked at*** — Rider → *Request Pickup* (seat
-  stepper, "Keep us in one car") and Manager → **Request Center** (Seats column).
-  Note that is Request Center, *not* Live Operations. Since 2026-08-12 both are
-  covered by real render tests (41 between them), so their behaviour is now
-  proven; what is still unproven is how they *look*, because reaching them needs
-  a sign-in. Two minutes in a browser each.
+- 🔴 **RIDES ARE CLOSED RIGHT NOW.** No longer a suspicion — production was read
+  directly on 2026-08-14 and `system/rideContext` says:
+
+  ```
+  rideType: null
+  calendarStatus: "no-scheduled-event"
+  displayText: "No rides available"
+  ```
+
+  The whole `events` collection is 2026-08-07, 08-08, 08-09 and 08-13 (all past)
+  plus 2026-09-18 and 09-25 (both **cancelled**). There is no future sabha, so
+  nobody can request a ride until a manager adds one in **Setup → Sabha Calendar**.
+  Several of the past entries look like time-shift test events; they are harmless
+  but worth deleting.
+
+  This is surfaced rather than silent — the Calendar shows a "Rides are closed"
+  banner and `PickupForm` says so too — but it needs a human to act on it.
+- **Three UI surfaces have never been seen rendered** — covered by tests and
+  confirmed present in the live bundle, but nobody has looked at them in a browser,
+  because reaching them needs a sign-in. Rider → *Request Pickup* (seat stepper,
+  "Keep us in one car", and the "no sabha on the calendar" line); Manager →
+  **Request Center** (Seats column); Manager → **Sabha Calendar** → *Add a sabha*
+  (the prefill from the Settings defaults). Note that is Request Center, *not*
+  Live Operations.
 
 **Known gap — fixed 2026-08-12 in Phase 5.** Bulk-select on the manager's queue
 used to exist only in the desktop table, leaving the checkboxes and "Assign Bulk"

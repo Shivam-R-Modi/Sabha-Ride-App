@@ -5,6 +5,9 @@ import { useSettings } from '../../hooks/useSettings';
 import { AddressAutocomplete } from '../auth/AddressAutocomplete';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
 import { createManagerInvite, CreateInviteResult } from '../../src/utils/cloudFunctions';
+import {
+    isUsableDuration, DROPOFF_LEAD_MINUTES, PICKUP_LEAD_DAYS,
+} from '../../src/constants/schedule';
 
 /** Must match INVITE_TTL_DAYS in functions/src/utils/invites.ts. */
 const INVITE_TTL_DAYS = 7;
@@ -62,9 +65,11 @@ export const LocationSettings: React.FC = () => {
     }, [loading, sabhaStartTime, sabhaEndTime]);
 
     const timesChanged = startInput !== sabhaStartTime || endInput !== sabhaEndTime;
-    // An end at or before the start would mean a negative-length sabha, and
-    // drop-off would open before pickup closed.
-    const timesValid = !!startInput && !!endInput && endInput > startInput;
+    // Same rule the Calendar enforces, not a weaker one. These values now prefill
+    // the "Add a sabha" form, so a pair this screen accepted but that screen
+    // rejected (anything under 16 minutes — drop-off would open before the sabha
+    // started) would save here and then block the manager there.
+    const timesValid = isUsableDuration(startInput, endInput);
     const canSave = !!selectedPlace || (timesChanged && timesValid);
 
     const handlePlaceSelect = (details: PlaceDetails) => {
@@ -78,7 +83,7 @@ export const LocationSettings: React.FC = () => {
         if (!currentUser) return;
 
         if (timesChanged && !timesValid) {
-            setErrorMsg('Sabha must end after it starts.');
+            setErrorMsg(`Sabha must run for more than ${DROPOFF_LEAD_MINUTES} minutes.`);
             return;
         }
 
@@ -218,26 +223,30 @@ export const LocationSettings: React.FC = () => {
 
                 <div className="bg-[rgb(var(--warning-bg))]/60 border border-[rgb(var(--warning))]/25 rounded-lg px-3 py-2 space-y-1">
                     {/*
-                      These are the times NEW Fridays are created with. Once an
-                      event exists it carries its own times, so changing this does
-                      not move a sabha that is already on the calendar. Saying so
-                      plainly, because a manager changing this expecting tonight
-                      to move is exactly the kind of quiet mismatch this app has
-                      been full of.
+                      These prefill the "Add a sabha" form in the Calendar (see
+                      newSabhaTimes there). Once an event exists it carries its own
+                      times, so changing this does not move a sabha already on the
+                      calendar. Saying so plainly, because a manager changing this
+                      expecting tonight to move is exactly the kind of quiet
+                      mismatch this app has been full of.
                     */}
                     <p className="text-xs text-coffee-700">
-                        Used for <span className="font-semibold">newly added Fridays</span>. To
-                        change a sabha already on the calendar, edit it in{' '}
+                        Prefills the times when you{' '}
+                        <span className="font-semibold">add a new sabha</span> below. To change a
+                        sabha already on the calendar, edit it in{' '}
                         <span className="font-semibold">Sabha Calendar</span> above.
                     </p>
                     <p className="text-xs text-coffee-700">
-                        Ride requests open <span className="font-semibold">2 days before</span> each
+                        Ride requests open{' '}
+                        <span className="font-semibold">{PICKUP_LEAD_DAYS} days before</span> each
                         sabha. Drop-off opens{' '}
-                        <span className="font-semibold">15 minutes before it ends</span>.
+                        <span className="font-semibold">
+                            {DROPOFF_LEAD_MINUTES} minutes before it ends
+                        </span>.
                     </p>
                     {timesChanged && !timesValid && (
                         <p className="text-xs text-[rgb(var(--danger-text))] font-semibold">
-                            Sabha must end after it starts.
+                            Sabha must run for more than {DROPOFF_LEAD_MINUTES} minutes.
                         </p>
                     )}
                 </div>

@@ -139,8 +139,20 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
           <DiyaIcon className="w-12 h-12 mx-auto text-saffron mb-2" />
           <p className="text-xs font-bold text-gold-700 uppercase tracking-[0.2em]">Next Sabha</p>
           <h3 className="text-xl font-header font-bold text-coffee">{eventDateFormatted()}</h3>
-          <p className="text-sm text-coffee-500">Sabha starts at {arrivalTime}</p>
-          <p className="text-xs text-coffee-500">{venueAddress}</p>
+          {/* Only claim a time and a place when there is a gathering to claim them
+              for. With no event published, `arrivalTime` is the global default and
+              `venueAddress` the default venue — printing those under "Next Sabha"
+              stated a start time for a sabha that does not exist. */}
+          {hasEvent ? (
+            <>
+              <p className="text-sm text-coffee-500">Sabha starts at {arrivalTime}</p>
+              <p className="text-xs text-coffee-500">{venueAddress}</p>
+            </>
+          ) : (
+            <p className="text-sm text-coffee-500">
+              No sabha is on the calendar yet, so rides cannot be requested.
+            </p>
+          )}
         </div>
 
         <div className="bg-cream/50 rounded-2xl p-5 border border-hairline/10 space-y-3">
