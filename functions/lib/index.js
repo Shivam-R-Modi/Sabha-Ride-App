@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.geocodeAddress = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.releaseIdleVehicles = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.geocodeAddress = exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.releaseIdleVehicles = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -92,6 +92,10 @@ Object.defineProperty(exports, "createManagerInvite", { enumerable: true, get: f
 Object.defineProperty(exports, "redeemManagerInvite", { enumerable: true, get: function () { return managerInvites_1.redeemManagerInvite; } });
 var adminDeleteUser_1 = require("./http/adminDeleteUser");
 Object.defineProperty(exports, "adminDeleteUser", { enumerable: true, get: function () { return adminDeleteUser_1.adminDeleteUser; } });
+// The fleet's escape hatch. A car held by a driver who stopped without
+// finishing could previously be freed by nobody but that driver.
+var managerReleaseVehicle_1 = require("./http/managerReleaseVehicle");
+Object.defineProperty(exports, "managerReleaseVehicle", { enumerable: true, get: function () { return managerReleaseVehicle_1.managerReleaseVehicle; } });
 // Utility Functions
 var geocodeAddress_1 = require("./http/geocodeAddress");
 Object.defineProperty(exports, "geocodeAddress", { enumerable: true, get: function () { return geocodeAddress_1.geocodeAddress; } });

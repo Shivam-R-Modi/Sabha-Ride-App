@@ -48,6 +48,9 @@ export { deleteSabhaEvent } from './http/deleteSabhaEvent';
 // minted and redeemed end to end.
 export { createManagerInvite, redeemManagerInvite } from './http/managerInvites';
 export { adminDeleteUser } from './http/adminDeleteUser';
+// The fleet's escape hatch. A car held by a driver who stopped without
+// finishing could previously be freed by nobody but that driver.
+export { managerReleaseVehicle } from './http/managerReleaseVehicle';
 
 // Utility Functions
 export { geocodeAddress } from './http/geocodeAddress';

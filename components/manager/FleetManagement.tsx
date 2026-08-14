@@ -4,6 +4,8 @@ import { Vehicle } from '../../types';
 import { VehicleForm } from './VehicleForm';
 import { VehicleList } from './VehicleList';
 import { Plus, Shield, Loader2, AlertCircle } from 'lucide-react';
+import { managerReleaseVehicle } from '../../src/utils/cloudFunctions';
+import { useConfirm } from '../shared/useConfirm';
 
 export const FleetManagement: React.FC = () => {
     const { vehicles, loading, error } = useVehicles();
@@ -12,6 +14,8 @@ export const FleetManagement: React.FC = () => {
     const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<Vehicle | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [releasingId, setReleasingId] = useState<string | null>(null);
+    const { ask, confirmDialog } = useConfirm();
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     // Auto-hide notifications
@@ -45,6 +49,50 @@ export const FleetManagement: React.FC = () => {
             setNotification({ type: 'error', message: 'Failed to delete vehicle. Please try again.' });
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    /**
+     * Hand a held car back to the fleet.
+     *
+     * Names the holder in the question, because "Release Car3?" and "Release Car3
+     * from Tonny Stark?" are different decisions and only one of them can be made
+     * safely from a list.
+     *
+     * Goes through the callable rather than writing here: freeing a car also
+     * clears `currentVehicleId` on another user's document, and the server
+     * refuses outright while that driver has a live ride. The error is surfaced
+     * rather than swallowed — a Release that silently did nothing is exactly the
+     * dead control this screen already had too much of.
+     */
+    const handleReleaseVehicle = async (vehicle: Vehicle) => {
+        const holder = vehicle.currentDriverName;
+        const confirmed = await ask({
+            title: `Release ${vehicle.name}?`,
+            message: holder
+                ? `${holder} is holding this car. Releasing puts it back in the fleet `
+                  + `and takes it off their shift.`
+                : 'This car is marked in use but no driver is recorded against it. '
+                  + 'Releasing puts it back in the fleet.',
+            confirmLabel: 'Release',
+        });
+        if (!confirmed) return;
+
+        setReleasingId(vehicle.id);
+        try {
+            await managerReleaseVehicle(vehicle.id);
+            setNotification({
+                type: 'success',
+                message: `${vehicle.name} is back in the fleet.`,
+            });
+        } catch (error: unknown) {
+            console.error('Error releasing vehicle:', error);
+            setNotification({
+                type: 'error',
+                message: error instanceof Error ? error.message : 'Could not release that vehicle.',
+            });
+        } finally {
+            setReleasingId(null);
         }
     };
 
@@ -135,7 +183,10 @@ export const FleetManagement: React.FC = () => {
                 loading={loading}
                 onEdit={handleEditVehicle}
                 onDelete={(vehicle) => setDeleteConfirm(vehicle)}
+                onRelease={handleReleaseVehicle}
+                releasingId={releasingId}
             />
+            {confirmDialog}
 
             {/* Add/Edit Vehicle Form Modal */}
             {showForm && (

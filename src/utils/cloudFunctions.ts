@@ -132,6 +132,23 @@ export async function driverDoneForToday(driverId: string): Promise<DriverDoneRe
     return callFunction<DriverDoneResult>('driverDoneForToday', { driverId });
 }
 
+export interface ManagerReleaseVehicleResult {
+    success: boolean;
+    vehicleId: string;
+    previousHolder: string | null;
+}
+
+/**
+ * A manager hands a stuck car back to the fleet.
+ *
+ * Server-side rather than a client write, because freeing a car also clears
+ * `currentVehicleId` on ANOTHER user's document and the writes must land together
+ * or not at all. The callable refuses while that driver has a live ride.
+ */
+export async function managerReleaseVehicle(vehicleId: string): Promise<ManagerReleaseVehicleResult> {
+    return callFunction<ManagerReleaseVehicleResult>('managerReleaseVehicle', { vehicleId });
+}
+
 // ============================================
 // STUDENT FUNCTIONS
 // ============================================

@@ -91,7 +91,20 @@ export const VehicleForm: React.FC<VehicleFormProps> = ({ vehicle, onClose, onSu
 
         try {
             if (vehicle) {
-                // Update existing vehicle
+                // Update existing vehicle.
+                //
+                // `formData` deliberately carries no `status`: this form edits the
+                // vehicle's DESCRIPTION — name, colour, plate, seats — and its
+                // status belongs to whoever is driving it. Saving an edit while a
+                // driver holds the car must not quietly hand it back, and the old
+                // create-branch default of 'available' would have done exactly
+                // that on every save.
+                //
+                // Freeing a held car is the Release action in VehicleList, which
+                // goes through managerReleaseVehicle so the driver's own record is
+                // cleared in the same batch. That was the missing half: with no
+                // Release action, and edit not touching status, a stuck car had no
+                // way back through the UI at all.
                 await updateVehicle(vehicle.id, formData);
             } else {
                 // Create new vehicle

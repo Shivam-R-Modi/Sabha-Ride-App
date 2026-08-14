@@ -5,6 +5,38 @@ import { collection, query, where, onSnapshot, addDoc, updateDoc, setDoc, doc, d
 import { Vehicle } from '../types';
 import { maxPassengerSeats } from '../src/constants/seats';
 
+/**
+ * One Firestore document to one Vehicle.
+ *
+ * Extracted because it was duplicated in both subscriptions below and one copy
+ * was wrong: `currentDriverName` was read from a document field of that name,
+ * which NOTHING writes. Every writer — assignVehicleToDriver here, and
+ * writeVehicleState on the server — sets `assignedDriverName`. So the holder was
+ * always undefined and the fleet list showed a car as In Use while naming
+ * nobody, which is what made an ordinary soft release look like corruption.
+ *
+ * The line above it already worked around exactly this mismatch for the ID
+ * (`currentDriverId` from `assignedDriverId`), so half the pair was mapped and
+ * half was not.
+ *
+ * Pure and exported so the mapping has a test of its own; a fix living only
+ * inside an onSnapshot callback is a fix nothing can guard.
+ */
+export function toVehicle(id: string, data: any): Vehicle {
+    return {
+        id,
+        name: data.name || '',
+        color: data.color || '',
+        licensePlate: data.licensePlate || '',
+        capacity: data.capacity || 4,
+        status: data.status || 'available',
+        currentDriverId: data.assignedDriverId || data.currentDriverId || undefined,
+        currentDriverName: data.assignedDriverName || data.currentDriverName || undefined,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+    };
+}
+
 // --- Vehicle Management ---
 
 export const updateVehicle = async (id: string, data: Partial<Vehicle>) => {
@@ -75,18 +107,7 @@ export const useVehicles = () => {
             const vehicleList: Vehicle[] = [];
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                vehicleList.push({
-                    id: doc.id,
-                    name: data.name || '',
-                    color: data.color || '',
-                    licensePlate: data.licensePlate || '',
-                    capacity: data.capacity || 4,
-                    status: data.status || 'available',
-                    currentDriverId: data.assignedDriverId || undefined,
-                    currentDriverName: data.currentDriverName || undefined,
-                    createdAt: data.createdAt,
-                    updatedAt: data.updatedAt
-                });
+                vehicleList.push(toVehicle(doc.id, data));
             });
             // Sort by name
             vehicleList.sort((a, b) => a.name.localeCompare(b.name));
@@ -133,18 +154,7 @@ export const useAvailableVehicles = () => {
             const vehicleList: Vehicle[] = [];
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                vehicleList.push({
-                    id: doc.id,
-                    name: data.name || '',
-                    color: data.color || '',
-                    licensePlate: data.licensePlate || '',
-                    capacity: data.capacity || 4,
-                    status: data.status || 'available',
-                    currentDriverId: data.assignedDriverId || undefined,
-                    currentDriverName: data.currentDriverName || undefined,
-                    createdAt: data.createdAt,
-                    updatedAt: data.updatedAt
-                });
+                vehicleList.push(toVehicle(doc.id, data));
             });
             vehicleList.sort((a, b) => a.name.localeCompare(b.name));
             setVehicles(vehicleList);
