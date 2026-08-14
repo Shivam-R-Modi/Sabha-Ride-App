@@ -4,9 +4,13 @@
  * WHY THIS EXISTS
  * ---------------
  * A vehicle becomes `in_use` the moment a driver picks it, before any rider is
- * assigned. It is only released by a deliberate action — driverDoneForToday,
- * completeRide or releaseAssignment. So a driver who simply stops leaves the car
- * held forever, and there is no timeout, no sweep and no manager control.
+ * assigned, and a driver KEEPS it between runs — one volunteer uses one car all
+ * evening. Only `driverDoneForToday` releases it. So a driver who simply stops
+ * without saying so leaves the car held, which is what this repairs.
+ *
+ * Since Phase 1 there is also a scheduled sweep (releaseIdleVehicles, 03:00) and
+ * a manager Release button, so this script is now the blunt instrument rather
+ * than the only instrument.
  *
  * Worse, adminDeleteUser deletes `vehicles/{uid}` and `cars/{uid}` — documents
  * keyed by the USER's uid, which no real vehicle uses. So deleting a driver never
@@ -77,6 +81,22 @@ const LOCATION_ID = 'boston-huntington';
 /** Statuses that mean a ride is live and its car must NOT be touched. */
 const ACTIVE_RIDE_STATUSES = ['assigned', 'driver_en_route', 'arriving', 'in_progress'];
 
+/**
+ * A car held this long with no live ride is assumed forgotten.
+ *
+ * Matches IDLE_HOURS in functions/src/scheduled/releaseIdleVehicles.ts, and it
+ * is not optional here. A driver now KEEPS their car between runs — completeRide
+ * and releaseAssignment stopped releasing it, because a volunteer uses one car
+ * all evening. So "holds it, no live ride" is the NORMAL state between runs, and
+ * without this threshold running the script at 8pm on a Friday would strip every
+ * driver's car mid-shift — the script reached for to fix a stuck fleet would be
+ * the thing that broke a working one.
+ *
+ * Missing/mismatched holders are still released unconditionally below: no amount
+ * of waiting brings a deleted account back.
+ */
+const IDLE_HOURS = 6;
+
 const label = APPLY ? 'APPLY' : 'DRY RUN';
 
 async function auditRow(entry) {
@@ -121,9 +141,23 @@ async function releaseReason(vehicleId, v) {
         .where('driverId', '==', holder)
         .where('status', 'in', ACTIVE_RIDE_STATUSES)
         .get();
-    if (live.empty) return 'holder exists and holds it, but has no active ride';
+    if (!live.empty) return null; // carrying passengers — leave it
 
-    return null; // carrying passengers — leave it
+    // Idle, but possibly only between runs. A missing timestamp counts as
+    // infinitely old on purpose: updatedAt is written whenever a car is picked,
+    // so its absence means the document predates that and has sat untouched.
+    const updatedAt = typeof v.updatedAt === 'string' ? Date.parse(v.updatedAt) : NaN;
+    const heldHours = Number.isFinite(updatedAt)
+        ? (Date.now() - updatedAt) / 3600000
+        : Infinity;
+
+    if (heldHours < IDLE_HOURS) {
+        return null; // a driver between runs — leave it
+    }
+
+    return Number.isFinite(heldHours)
+        ? `no live ride, held ${heldHours.toFixed(1)}h`
+        : 'no live ride, and no updatedAt to date it from';
 }
 
 async function repairVehicles() {
@@ -141,7 +175,9 @@ async function repairVehicles() {
         const reason = await releaseReason(doc.id, v);
         if (!reason) {
             kept++;
-            console.log(`  ${v.name || doc.id}: KEEP — has a live ride`);
+            // Either carrying passengers, or a driver between runs inside the
+            // idle window. Both are working states.
+            console.log(`  ${v.name || doc.id}: KEEP — in use and not stale`);
             continue;
         }
 

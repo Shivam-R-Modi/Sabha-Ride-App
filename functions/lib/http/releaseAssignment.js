@@ -40,7 +40,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.releaseAssignment = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
-const fleet_1 = require("../utils/fleet");
+// The fleet helpers were imported to release the car when an assignment was
+// declined. Nothing here touches the fleet now — see the driver update below.
 /**
  * HTTP Callable: Release a ride assignment
  * Input: { rideId: string }
@@ -82,16 +83,25 @@ exports.releaseAssignment = functions.https.onCall(async (data, context) => {
                 currentRideId: null
             });
         }
-        // Clear the driver's vehicle under BOTH names. Clearing only
-        // currentVehicleId left a stale currentCarId behind, and
-        // driverDoneForToday falls back to it — releasing a car that another
-        // driver had since been given.
-        batch.update(db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), Object.assign({ status: 'available', activeRideId: null }, fleet_1.DRIVER_VEHICLE_CLEARED));
-        // Update vehicle status back to available, in both collections.
-        const vehicleId = ride === null || ride === void 0 ? void 0 : ride.carId;
-        if (vehicleId) {
-            (0, fleet_1.writeVehicleState)(batch, db, vehicleId, fleet_1.VEHICLE_RELEASED);
-        }
+        // THE DRIVER KEEPS THEIR CAR.
+        //
+        // Declining a proposed run is an ordinary thing to do — the preview
+        // exists so a driver can look at who they have been given and say no.
+        // This used to release their vehicle and clear `currentVehicleId` too, so
+        // saying no to one carload dropped them off shift and put their car back
+        // into every other driver's picker. A driver could decline a run and lose
+        // the car they had been using all evening to someone else.
+        //
+        // Only `driverDoneForToday` releases now. A driver who stops without
+        // saying so is caught by releaseIdleVehicles at 03:00, or freed sooner by
+        // managerReleaseVehicle. Same change as completeRide, for the same
+        // reason: one run ending is not the evening ending.
+        //
+        // `activeRideId` still clears — that assignment really is over.
+        batch.update(db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), {
+            status: 'available',
+            activeRideId: null,
+        });
         // Reset ride document status to 'requested' so it returns to the unassigned queue
         batch.update(db.collection('rides').doc(rideId), {
             status: 'requested',

@@ -48,10 +48,39 @@ export const driverDoneForToday = functions.https.onCall(async (data, context) =
             throw new functions.https.HttpsError('failed-precondition', 'Cannot mark done while in an active ride');
         }
 
-        // The currentCarId half of this fallback used to go stale, because
-        // releaseAssignment and completeRide cleared only currentVehicleId.
-        // Both now clear both names, so it can only resolve documents written
-        // before that change.
+        // …and check the RIDES, not just the pointer.
+        //
+        // `activeRideId` names one ride. A driver assigned a carload holds several
+        // ride documents — one per rider — and on a split it is more than one per
+        // family. It is also only a pointer: `returnStudentToPool` cleared the
+        // ride's driverId and left it dangling, so it has been both wrong and
+        // stale in production on the same day.
+        //
+        // "Done for today" means everyone is home and so am I. Letting it through
+        // while riders are still assigned would release the car and set the driver
+        // offline with people still expecting to be collected — and nothing
+        // anywhere would say so. This is the one action where failing closed
+        // costs a driver a tap and failing open strands a child.
+        const stillAssigned = await db.collection('rides')
+            .where('driverId', '==', driverId)
+            .where('status', 'in', ['assigned', 'driver_en_route', 'arriving', 'in_progress'])
+            .get();
+
+        if (!stillAssigned.empty) {
+            const names = stillAssigned.docs
+                .map(d => d.data()?.studentName)
+                .filter(Boolean)
+                .join(', ');
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                `You still have ${stillAssigned.size} rider(s) assigned`
+                + `${names ? ` — ${names}` : ''}. Complete or release them first.`,
+            );
+        }
+
+        // Only reached once nobody is left. `currentCarId` is the older name for
+        // the same thing and can only resolve documents written before both were
+        // cleared together.
         const vehicleId = resolveDriverVehicleId(driver);
         const batch = db.batch();
 

@@ -6,9 +6,9 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { notifyStudentRideCompleted } from '../utils/notifications';
-import {
-    writeVehicleState, resolveDriverVehicleId, VEHICLE_RELEASED, DRIVER_VEHICLE_CLEARED,
-} from '../utils/fleet';
+// The fleet helpers were imported here to release the car on every completed
+// run. Nothing in this file touches the fleet any more — see the comment on the
+// driver update below.
 import { eventKeyFromRide } from '../utils/events';
 import { getTimeZone } from '../utils/settings';
 import { zonedDateKey } from '../utils/time';
@@ -122,19 +122,38 @@ export const completeRide = functions.https.onCall(async (data, context) => {
             + (seatsCarried || ride?.students?.length || 1);
         const newTotalDistance = (driver?.totalDistanceToday || 0) + (ride?.estimatedDistance || 0);
 
-        // Released in BOTH collections. Clearing only `vehicles` left
-        // `cars/{id}` saying in_use with the previous driver still on it, and
-        // globalAssignDriver reads `cars` — so a completed ride left its
-        // vehicle looking permanently taken to the assigner.
-        const vehicleId = resolveDriverVehicleId(driver) || ride?.carId;
-        if (vehicleId) {
-            writeVehicleState(batch, db, vehicleId, VEHICLE_RELEASED);
-        }
-
+        // THE DRIVER KEEPS THEIR CAR.
+        //
+        // This used to release the vehicle and clear `currentVehicleId` on every
+        // completed run, which modelled a run as the end of the driver's
+        // relationship with the car. A volunteer keeps the same car all evening
+        // and does several runs in it, so that model was wrong, and it produced
+        // two failures:
+        //
+        //  - "Assign next" on the completion screen guards on
+        //    `userProfile.currentVehicleId`. AuthContext subscribes to the user
+        //    document, so the snapshot nulled that field within ~50-200ms while
+        //    handleAssignNext waited a hardcoded 100ms. Whichever won the race
+        //    decided whether the driver got riders or "Pick a car before finding
+        //    riders". Intermittent, and unexplainable from the screen.
+        //
+        //  - Worse and quieter: the car went back to `available` with no holder,
+        //    so ANOTHER driver could take it between runs. The first driver then
+        //    got "Vehicle is assigned to another driver" for a car they had been
+        //    using all evening.
+        //
+        // Only `driverDoneForToday` releases now — the explicit "everyone is home
+        // and so am I" action. A driver who simply closes the app is caught by
+        // releaseIdleVehicles at 03:00, and a manager can force it sooner with
+        // managerReleaseVehicle. Both of those exist precisely so this does not
+        // have to guess.
+        //
+        // `activeRideId` still clears: that ride IS over. `status` stays
+        // 'available', which is what lets the shift card keep showing them on
+        // shift, ready for the next tap.
         batch.update(db.collection('users').doc(driverUid), {
             status: 'available',
             activeRideId: null,
-            ...DRIVER_VEHICLE_CLEARED,
             ridesCompletedToday: newRidesCompleted,
             totalStudentsToday: newTotalStudents,
             totalDistanceToday: newTotalDistance

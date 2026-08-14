@@ -361,10 +361,15 @@ export const DriverDashboard: React.FC = () => {
     const handleAssignNext = () => {
         setCompletedRideStats(null);
         setViewState('dashboard');
-        // Small delay to allow state update before fetching new assignment
-        setTimeout(() => {
-            handleAssignMe();
-        }, 100);
+        // Called straight away. There used to be a 100ms setTimeout here "to allow
+        // state update", and what it was really racing was the Firestore snapshot
+        // that cleared currentVehicleId — completeRide released the car on every
+        // run, and handleAssignMe guards on that field. Whichever won decided
+        // whether the driver got riders or "Pick a car before finding riders".
+        //
+        // The driver keeps their car now, so there is nothing to wait for. A timer
+        // that guesses at a round trip was the bug, not the fix.
+        handleAssignMe();
     };
 
     // Handle Done for Today from CompletionScreen
