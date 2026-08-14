@@ -48,6 +48,7 @@ const tenancy_1 = require("../constants/tenancy");
 const routing_1 = require("../utils/routing");
 const coords_1 = require("../utils/coords");
 const fleet_1 = require("../utils/fleet");
+const events_1 = require("../utils/events");
 const notifications_1 = require("../utils/notifications");
 const settings_1 = require("../utils/settings");
 const rateLimiter_1 = require("../utils/rateLimiter");
@@ -67,8 +68,28 @@ function haversineDistanceMiles(lat1, lng1, lat2, lng2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
-/** Check if a pending ride has valid GPS */
-function isValidPendingRide(docData) {
+/**
+ * Is this pending ride dispatchable for the gathering we are dispatching?
+ *
+ * The GPS checks were the whole of this function, and that was a real hole: a
+ * `requested` ride is only ever filtered by `status`, so a request left over from
+ * a PREVIOUS sabha stayed in the pool for ever and would be handed to the next
+ * driver who tapped. Three of them were live in production on 2026-08-14, five
+ * days after their gathering, and a tap would have routed a driver to collect
+ * people for a sabha that had already happened.
+ *
+ * `expectedEventKey` is the gathering from `system/rideContext` — the same
+ * document that decided the ride window, so the two cannot disagree.
+ *
+ * A ride with NO event key at all is rejected. That is the deliberate choice:
+ * every client that creates a request stamps `date` and `eventDate`
+ * (hooks/useRides.ts), and studentReadyToLeave stamps `eventDate` server-side, so
+ * an unkeyed request is either pre-dating that or hand-written in the console.
+ * Refusing it means such a ride is never dispatched; accepting it means it is
+ * dispatched to every gathering for ever. The first failure is visible to a
+ * manager in the Waiting queue, the second sends a car to the wrong place.
+ */
+function isValidPendingRide(docData, expectedEventKey) {
     var _a, _b;
     const lat = (_a = docData.pickupLat) !== null && _a !== void 0 ? _a : 0;
     const lng = (_b = docData.pickupLng) !== null && _b !== void 0 ? _b : 0;
@@ -79,6 +100,11 @@ function isValidPendingRide(docData) {
     if (lat === 0 && lng === 0)
         return false;
     if (!docData.studentId)
+        return false;
+    // Reuses eventKeyFromRide so `eventId` and `eventDate` are read in the same
+    // priority order, and validated against the same YYYY-MM-DD shape, as
+    // everywhere else that has to work out which gathering a ride belongs to.
+    if (expectedEventKey && (0, events_1.eventKeyFromRide)(docData) !== expectedEventKey)
         return false;
     return true;
 }
@@ -214,7 +240,10 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         const requestMap = new Map();
         for (const doc of ridesSnap.docs) {
             const d = doc.data();
-            if (!isValidPendingRide(d))
+            // eventId comes from system/rideContext, the same read that produced
+            // rideType — so a leftover request from a previous sabha cannot enter
+            // this pool.
+            if (!isValidPendingRide(d, eventId))
                 continue;
             requestMap.set(doc.id, {
                 id: doc.id,

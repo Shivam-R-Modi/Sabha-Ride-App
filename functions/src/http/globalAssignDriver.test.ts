@@ -66,7 +66,7 @@ vi.mock('../utils/settings', () => ({
     },
 }));
 
-import { globalAssignDriver } from './globalAssignDriver';
+import { globalAssignDriver, isValidPendingRide } from './globalAssignDriver';
 
 // ── fake Firestore ─────────────────────────────────────────
 
@@ -126,6 +126,25 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
         docs: docs.map(d => ({ id: d.id, data: () => d.data })),
     });
 
+    /**
+     * Rides default to the gathering being dispatched.
+     *
+     * Dispatch filters the pool by event, so a fixture ride with no event key is
+     * correctly rejected and every test below would see an empty pool. Defaulting
+     * here says "these riders asked for tonight", which is the precondition all
+     * these tests actually mean — they are about seats, splitting and venues.
+     *
+     * A test that wants to prove the event filter sets `eventDate` explicitly and
+     * this leaves it alone. `isValidPendingRide` also has direct unit tests, so
+     * the filter is not resting on this default.
+     */
+    const ridesForThisEvent = () => fixture.rides.map(r => ({
+        id: r.id,
+        data: ('eventDate' in r.data || 'eventId' in r.data)
+            ? r.data
+            : { ...r.data, eventDate: fixture.eventId ?? '2026-08-07' },
+    }));
+
     let generated = 0;
 
     const collection = (name: string) => {
@@ -146,7 +165,7 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
                 return chain;
             },
             get: async () => {
-                if (name === 'rides') return querySnap(fixture.rides);
+                if (name === 'rides') return querySnap(ridesForThisEvent());
                 if (name === 'vehicles') {
                     return querySnap((fixture.vehicles ?? []).map((v, i) => ({ id: `veh-${i}`, data: v })));
                 }
@@ -700,5 +719,151 @@ describe('globalAssignDriver — per-event venue', () => {
             expect(update.data.venue).toEqual(HALL_B);
             expect(update.data.eventId).toBe('2026-08-11');
         }
+    });
+});
+
+/**
+ * The event filter.
+ *
+ * A `requested` ride was only ever filtered by `status`, so a leftover request
+ * from a PREVIOUS sabha stayed in the dispatch pool for ever. Three were live in
+ * production on 2026-08-14, five days after their gathering, and the next tap
+ * would have routed a driver to collect people for a sabha that had happened.
+ *
+ * The pool is the one input to every clustering and seat decision below it, so a
+ * stale member is not a cosmetic problem — it sends a car to the wrong place.
+ */
+describe('isValidPendingRide — which gathering a request belongs to', () => {
+    const good = {
+        studentId: 'stu_1',
+        pickupLat: 42.34,
+        pickupLng: -71.09,
+    };
+
+    it('accepts a request stamped with the gathering being dispatched', () => {
+        expect(isValidPendingRide({ ...good, eventId: '2026-08-14' }, '2026-08-14')).toBe(true);
+    });
+
+    it('accepts `eventDate`, which is what the client actually writes', () => {
+        // hooks/useRides.ts stamps `date` and `eventDate`, never `eventId` — so a
+        // filter that only read eventId would reject every real rider request.
+        expect(isValidPendingRide({ ...good, eventDate: '2026-08-14' }, '2026-08-14')).toBe(true);
+    });
+
+    it('REJECTS a request for a past gathering — the reported bug', () => {
+        expect(isValidPendingRide({ ...good, eventDate: '2026-08-09' }, '2026-08-14')).toBe(false);
+    });
+
+    it('rejects a request for a future gathering too', () => {
+        // Requests open two days ahead, so a rider can hold one for next week
+        // while tonight is being dispatched.
+        expect(isValidPendingRide({ ...good, eventDate: '2026-08-21' }, '2026-08-14')).toBe(false);
+    });
+
+    it('rejects a request carrying no event key at all', () => {
+        // Deliberate: accepting it means dispatching it to every gathering for
+        // ever. Refusing leaves it visible in the manager's Waiting queue.
+        expect(isValidPendingRide({ ...good }, '2026-08-14')).toBe(false);
+    });
+
+    it('prefers eventId over eventDate when the two disagree', () => {
+        // eventId is written by the server, eventDate by the browser. Same order
+        // as eventKeyFromRide uses everywhere else.
+        expect(isValidPendingRide(
+            { ...good, eventId: '2026-08-14', eventDate: '2026-08-09' }, '2026-08-14',
+        )).toBe(true);
+    });
+
+    it('ignores a malformed event key rather than matching on it', () => {
+        expect(isValidPendingRide({ ...good, eventDate: 'next friday' }, '2026-08-14')).toBe(false);
+    });
+
+    it('does not filter by event when no gathering is known', () => {
+        // rideType is null whenever eventId is, so the handler throws before it
+        // gets here. Kept permissive so a future caller cannot silently empty the
+        // pool by passing null.
+        expect(isValidPendingRide({ ...good, eventDate: '2026-08-09' }, null)).toBe(true);
+    });
+
+    it('still rejects the 0,0 placeholder that means "never geocoded"', () => {
+        expect(isValidPendingRide(
+            { studentId: 'stu_1', pickupLat: 0, pickupLng: 0, eventDate: '2026-08-14' },
+            '2026-08-14',
+        )).toBe(false);
+    });
+
+    it('still rejects a request with no studentId', () => {
+        expect(isValidPendingRide(
+            { pickupLat: 42.34, pickupLng: -71.09, eventDate: '2026-08-14' },
+            '2026-08-14',
+        )).toBe(false);
+    });
+
+    it('still rejects non-numeric coordinates', () => {
+        expect(isValidPendingRide(
+            { ...good, pickupLat: '42.34', eventDate: '2026-08-14' },
+            '2026-08-14',
+        )).toBe(false);
+    });
+});
+
+/**
+ * The same filter, proven through the handler rather than on the predicate.
+ *
+ * The unit tests above assert the decision; these assert that dispatch actually
+ * applies it. Both are worth having: the predicate could be perfect and never
+ * called, which is the shape of most bugs in this codebase.
+ */
+describe('globalAssignDriver — a stale request is never dispatched', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('reports no students when the only requests are for a past sabha', async () => {
+        const fixture = baseFixture('home-to-sabha');
+        fixture.eventId = '2026-08-14';
+        // Exactly the production state on 2026-08-14: requests left over from the
+        // gathering on the 9th, which a tap would have dispatched.
+        fixture.rides = fixture.rides.map(r => ({
+            id: r.id,
+            data: { ...r.data, eventDate: '2026-08-09' },
+        }));
+
+        const { result, recorder } = await runAs('driver-1', fixture);
+
+        expect((result as any).status).toBe('no_students');
+        // And nothing was written — no ride assigned, no car taken.
+        expect(recorder.updates).toHaveLength(0);
+    });
+
+    it('still dispatches requests that belong to tonight', async () => {
+        const fixture = baseFixture('home-to-sabha');
+        fixture.eventId = '2026-08-14';
+        fixture.rides = fixture.rides.map(r => ({
+            id: r.id,
+            data: { ...r.data, eventDate: '2026-08-14' },
+        }));
+
+        const { result } = await runAs('driver-1', fixture);
+
+        expect((result as any).status).not.toBe('no_students');
+    });
+
+    it('dispatches tonight and leaves last week behind, from one mixed pool', async () => {
+        // The case that matters operationally: a stale request must not poison a
+        // pool that also holds real ones.
+        const fixture = baseFixture('home-to-sabha');
+        fixture.eventId = '2026-08-14';
+        const [first, ...rest] = fixture.rides;
+        fixture.rides = [
+            { id: first.id, data: { ...first.data, eventDate: '2026-08-09' } },
+            ...rest.map(r => ({ id: r.id, data: { ...r.data, eventDate: '2026-08-14' } })),
+        ];
+
+        const { recorder } = await runAs('driver-1', fixture);
+
+        const assignedPaths = recorder.updates.map(u => u.path);
+        expect(assignedPaths).not.toContain(`rides/${first.id}`);
+        expect(assignedPaths.length).toBeGreaterThan(0);
     });
 });

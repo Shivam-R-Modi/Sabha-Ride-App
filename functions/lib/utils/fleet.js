@@ -28,6 +28,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DRIVER_VEHICLE_CLEARED = exports.VEHICLE_RELEASED = void 0;
 exports.writeVehicleState = writeVehicleState;
+exports.releaseVehiclesHeldBy = releaseVehiclesHeldBy;
 exports.resolveVehicleHolder = resolveVehicleHolder;
 exports.resolveDriverVehicleId = resolveDriverVehicleId;
 /** Both halves of the mirror. Order is irrelevant; the write is batched. */
@@ -39,10 +40,48 @@ const FLEET_COLLECTIONS = ['vehicles', 'cars'];
  * mirror existed may be present in only one of them, and `update` on a missing
  * document fails the whole batch.
  */
-function writeVehicleState(batch, db, vehicleId, state) {
+function writeVehicleState(batch, db, vehicleId, state, now = new Date()) {
+    // `updatedAt` is stamped HERE rather than at each call site, because the
+    // idle-vehicle sweep decides how long a car has been held from it. The client
+    // picker (hooks/useVehicles.ts) has always written it; the server paths did
+    // not, so a car taken by globalAssignDriver carried whatever timestamp the
+    // pick had left — and a field that is only sometimes written is worse than one
+    // that is never written, because the sweep would trust it.
+    const stamped = Object.assign(Object.assign({}, state), { updatedAt: now.toISOString() });
     for (const name of FLEET_COLLECTIONS) {
-        batch.set(db.collection(name).doc(vehicleId), state, { merge: true });
+        batch.set(db.collection(name).doc(vehicleId), stamped, { merge: true });
     }
+}
+/**
+ * Stage the release of every vehicle recorded as held by this driver.
+ *
+ * Exists because the release paths all start from the DRIVER's record — they read
+ * `currentVehicleId` and release that one car. When the driver's record is being
+ * deleted, or has already gone, there is nothing to read, and the vehicle keeps
+ * `assignedDriverId` pointing at a uid that no longer resolves. No code path in
+ * the app can then free it: `adminDeleteUser` deleted `vehicles/{uid}` and
+ * `cars/{uid}`, keys no real vehicle uses, so the car simply stayed `in_use` for
+ * ever. That is exactly how a three-car fleet reached zero available cars.
+ *
+ * So this works the other way round — from the vehicle side, by query.
+ *
+ * BOTH collections are queried and the ids unioned, rather than trusting
+ * `vehicles` alone. The mirror agrees today, but the entire reason this file
+ * exists is that it has drifted before, and a half-released car is the failure
+ * this function is meant to end.
+ *
+ * Returns the vehicle ids staged, so the caller can audit what it freed.
+ */
+async function releaseVehiclesHeldBy(db, batch, uid) {
+    const ids = new Set();
+    for (const name of FLEET_COLLECTIONS) {
+        const snap = await db.collection(name).where('assignedDriverId', '==', uid).get();
+        snap.docs.forEach(doc => ids.add(doc.id));
+    }
+    for (const id of ids) {
+        writeVehicleState(batch, db, id, exports.VEHICLE_RELEASED);
+    }
+    return Array.from(ids);
 }
 /** The state every release path should write. Named so the call sites read as intent. */
 exports.VEHICLE_RELEASED = {

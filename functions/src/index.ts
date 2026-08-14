@@ -12,6 +12,10 @@ admin.initializeApp();
 // ============================================
 
 export { updateRideTypeContext, manuallyUpdateRideContext, ensureSabhaEvents } from './scheduled/updateRideTypeContext';
+// Its own function rather than a side effect inside ensureSabhaEvents: a stranded
+// fleet is an operational fault, and a named entry in the logs is what makes it
+// diagnosable at 19:00 on a Friday.
+export { releaseIdleVehicles } from './scheduled/releaseIdleVehicles';
 
 // ============================================
 // HTTP CALLABLE FUNCTIONS

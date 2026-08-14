@@ -42,10 +42,57 @@ export function writeVehicleState(
     db: admin.firestore.Firestore,
     vehicleId: string,
     state: Record<string, unknown>,
+    now: Date = new Date(),
 ): void {
+    // `updatedAt` is stamped HERE rather than at each call site, because the
+    // idle-vehicle sweep decides how long a car has been held from it. The client
+    // picker (hooks/useVehicles.ts) has always written it; the server paths did
+    // not, so a car taken by globalAssignDriver carried whatever timestamp the
+    // pick had left — and a field that is only sometimes written is worse than one
+    // that is never written, because the sweep would trust it.
+    const stamped = { ...state, updatedAt: now.toISOString() };
     for (const name of FLEET_COLLECTIONS) {
-        batch.set(db.collection(name).doc(vehicleId), state, { merge: true });
+        batch.set(db.collection(name).doc(vehicleId), stamped, { merge: true });
     }
+}
+
+/**
+ * Stage the release of every vehicle recorded as held by this driver.
+ *
+ * Exists because the release paths all start from the DRIVER's record — they read
+ * `currentVehicleId` and release that one car. When the driver's record is being
+ * deleted, or has already gone, there is nothing to read, and the vehicle keeps
+ * `assignedDriverId` pointing at a uid that no longer resolves. No code path in
+ * the app can then free it: `adminDeleteUser` deleted `vehicles/{uid}` and
+ * `cars/{uid}`, keys no real vehicle uses, so the car simply stayed `in_use` for
+ * ever. That is exactly how a three-car fleet reached zero available cars.
+ *
+ * So this works the other way round — from the vehicle side, by query.
+ *
+ * BOTH collections are queried and the ids unioned, rather than trusting
+ * `vehicles` alone. The mirror agrees today, but the entire reason this file
+ * exists is that it has drifted before, and a half-released car is the failure
+ * this function is meant to end.
+ *
+ * Returns the vehicle ids staged, so the caller can audit what it freed.
+ */
+export async function releaseVehiclesHeldBy(
+    db: admin.firestore.Firestore,
+    batch: admin.firestore.WriteBatch,
+    uid: string,
+): Promise<string[]> {
+    const ids = new Set<string>();
+
+    for (const name of FLEET_COLLECTIONS) {
+        const snap = await db.collection(name).where('assignedDriverId', '==', uid).get();
+        snap.docs.forEach(doc => ids.add(doc.id));
+    }
+
+    for (const id of ids) {
+        writeVehicleState(batch, db, id, VEHICLE_RELEASED);
+    }
+
+    return Array.from(ids);
 }
 
 /** The state every release path should write. Named so the call sites read as intent. */

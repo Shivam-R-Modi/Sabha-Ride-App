@@ -43,6 +43,7 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const authz_1 = require("../utils/authz");
 const audit_1 = require("../utils/audit");
+const fleet_1 = require("../utils/fleet");
 exports.adminDeleteUser = functions.https.onCall(async (data, context) => {
     // Verify authentication
     if (!context.auth) {
@@ -81,10 +82,28 @@ exports.adminDeleteUser = functions.https.onCall(async (data, context) => {
             batch.delete(db.collection('users').doc(uid));
             batch.delete(db.collection('students').doc(uid));
             batch.delete(db.collection('drivers').doc(uid));
-            batch.delete(db.collection('vehicles').doc(uid));
-            batch.delete(db.collection('cars').doc(uid));
+            // Hand back any car this person was holding.
+            //
+            // This used to be `batch.delete(vehicles/{uid})` and
+            // `batch.delete(cars/{uid})` — documents keyed by the USER's uid.
+            // Vehicles have their own ids, so those two lines matched nothing on
+            // any real fleet and quietly did NOTHING. Deleting a driver therefore
+            // left `assignedDriverId` pointing at a uid with no user document, and
+            // because every release path reads the DRIVER's record to find their
+            // car, no code in the app could ever free it again.
+            //
+            // Found in production on 2026-08-14: one of three cars in the fleet
+            // was permanently `in_use`, held by a deleted account, which is a
+            // third of the fleet gone with nothing reporting it.
+            //
+            // Released BEFORE the commit and in the same batch, so the car cannot
+            // be orphaned by a crash between deleting the user and freeing it.
+            const releasedVehicleIds = await (0, fleet_1.releaseVehiclesHeldBy)(db, batch, uid);
             await batch.commit();
             deletedFirestoreCount++;
+            if (releasedVehicleIds.length > 0) {
+                console.log(`[adminDeleteUser] Released ${releasedVehicleIds.join(', ')} held by ${uid}`);
+            }
             // Delete Firebase Authentication Account via Admin SDK
             try {
                 await admin.auth().deleteUser(uid);
@@ -104,8 +123,16 @@ exports.adminDeleteUser = functions.https.onCall(async (data, context) => {
                 actorName: String((callerData === null || callerData === void 0 ? void 0 : callerData.name) || 'Manager'),
                 targetCollection: 'users',
                 targetDocumentId: uid,
-                summary: 'Permanently deleted the user\'s profile and sign-in account',
-                details: { deletedAuthAccount: deletedAuthCount > 0 },
+                summary: releasedVehicleIds.length > 0
+                    ? `Permanently deleted the user's profile and sign-in account, and released ${releasedVehicleIds.length} vehicle(s) they held`
+                    : 'Permanently deleted the user\'s profile and sign-in account',
+                details: {
+                    deletedAuthAccount: deletedAuthCount > 0,
+                    // Named so a manager reading the log can tell which car came
+                    // back, rather than discovering it changed status for no
+                    // recorded reason.
+                    releasedVehicleIds,
+                },
             });
         }
         return {

@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.geocodeAddress = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.geocodeAddress = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.releaseIdleVehicles = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -47,6 +47,11 @@ var updateRideTypeContext_1 = require("./scheduled/updateRideTypeContext");
 Object.defineProperty(exports, "updateRideTypeContext", { enumerable: true, get: function () { return updateRideTypeContext_1.updateRideTypeContext; } });
 Object.defineProperty(exports, "manuallyUpdateRideContext", { enumerable: true, get: function () { return updateRideTypeContext_1.manuallyUpdateRideContext; } });
 Object.defineProperty(exports, "ensureSabhaEvents", { enumerable: true, get: function () { return updateRideTypeContext_1.ensureSabhaEvents; } });
+// Its own function rather than a side effect inside ensureSabhaEvents: a stranded
+// fleet is an operational fault, and a named entry in the logs is what makes it
+// diagnosable at 19:00 on a Friday.
+var releaseIdleVehicles_1 = require("./scheduled/releaseIdleVehicles");
+Object.defineProperty(exports, "releaseIdleVehicles", { enumerable: true, get: function () { return releaseIdleVehicles_1.releaseIdleVehicles; } });
 // ============================================
 // HTTP CALLABLE FUNCTIONS
 // ============================================
