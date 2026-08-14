@@ -39,6 +39,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.globalAssignDriver = void 0;
+exports.isValidPendingRide = isValidPendingRide;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const clustering_1 = require("../utils/clustering");

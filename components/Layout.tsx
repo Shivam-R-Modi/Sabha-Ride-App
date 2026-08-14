@@ -30,25 +30,42 @@ export const ResponsiveLayout: React.FC<LayoutProps> = ({ children, role }) => {
 
   // A focus-mode screen owns the viewport: no sidebar, no header, no bottom
   // nav, and no bottom padding reserved for one.
-  if (isFocusMode) {
-    return <div className="min-h-screen bg-cream">{children}</div>;
-  }
-
+  //
+  // THE CHROME IS HIDDEN, THE TREE IS NOT RESHAPED. This used to be an early
+  // `return <div>{children}</div>`, which put `children` at a completely
+  // different depth from the normal branch:
+  //
+  //     focus   div > children
+  //     normal  div > div > main > div > children
+  //
+  // React reconciles by position, so flipping the flag UNMOUNTED and REMOUNTED
+  // everything below it. ActiveRide sets isFocusMode in a mount effect and
+  // clears it on cleanup, so it remounted itself for ever: mount → true →
+  // reshape → unmount → false → reshape → mount. The driver saw the page
+  // blinking until React gave up with "Maximum update depth exceeded" and the
+  // ErrorBoundary swallowed the whole screen — immediately after a successful
+  // assignment, with riders already committed to them in Firestore.
+  //
+  // Keeping one tree and toggling siblings keeps `children` in the same
+  // position, so its state and effects survive the switch. Any focus-mode
+  // screen is free to set the flag on mount now, which is the only way that
+  // pattern can be used safely.
   return (
     <div className="min-h-screen bg-cream flex flex-col lg:flex-row">
-      <Sidebar role={role} />
+      {!isFocusMode && <Sidebar role={role} />}
 
-      <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-60'
-        }`}>
-        <MobileHeader userName={userProfile?.name || 'User'} role={role} />
+      <div className={isFocusMode
+        ? 'flex-1 flex flex-col'
+        : `flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-60'}`}>
+        {!isFocusMode && <MobileHeader userName={userProfile?.name || 'User'} role={role} />}
 
-        <main className="flex-1 pb-safe-nav lg:pb-0">
-          <div className="max-w-7xl mx-auto w-full">
+        <main className={isFocusMode ? 'flex-1' : 'flex-1 pb-safe-nav lg:pb-0'}>
+          <div className={isFocusMode ? 'w-full' : 'max-w-7xl mx-auto w-full'}>
             {children}
           </div>
         </main>
 
-        <BottomNav role={role} />
+        {!isFocusMode && <BottomNav role={role} />}
       </div>
     </div>
   );
