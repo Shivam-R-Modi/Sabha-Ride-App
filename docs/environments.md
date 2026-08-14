@@ -74,6 +74,29 @@ Map the values to `VITE_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`,
 
 ## Deploy
 
+### Before you deploy: check what you are DROPPING
+
+```bash
+git log --oneline HEAD..main
+```
+
+**If that prints anything, stop and merge `main` first.**
+
+A hosting deploy replaces the entire bundle. Anything on `main` that is missing
+from your branch is *removed from production*, whether or not it appears in a
+diff — and every deploy stage will still report success, because the deploy is
+fine. The input is what is stale.
+
+This is not hypothetical. On 2026-08-13 a branch was deployed that predated a
+fix already live on `main`, and the fix went backwards in production. Checking
+`main..HEAD` — "what am I adding" — did not catch it and cannot. Check both
+directions.
+
+Deploying from a worktree also needs `npm install` inside `functions/`, or the
+`tsc` predeploy hook fails part-way through the deploy.
+
+### The deploy itself
+
 Order is always **rules → functions → hosting**. `npm run deploy:prod` builds
 and then runs the three in that order:
 
