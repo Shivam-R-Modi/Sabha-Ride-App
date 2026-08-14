@@ -162,7 +162,26 @@ async function repairVehicles() {
             const userRef = db.collection('users').doc(holder);
             const userSnap = await userRef.get();
             // set+merge would resurrect a deleted user as a stub document.
-            if (userSnap.exists) batch.update(userRef, DRIVER_VEHICLE_CLEARED);
+            if (userSnap.exists) {
+                const cleared = { ...DRIVER_VEHICLE_CLEARED };
+
+                // A driver freed by this script has no car, so an activeRideId is
+                // a dangling pointer. Only cleared when the ride it names is not
+                // actually theirs any more — a manager's soft release returns a
+                // ride to the queue and clears its driverId, but nothing cleared
+                // the driver's side, so the pointer outlived the assignment.
+                //
+                // Checked rather than blanked, because a driver mid-run legitimately
+                // has one and this script must never be the thing that loses it.
+                const activeRideId = userSnap.data()?.activeRideId;
+                if (activeRideId) {
+                    const rideSnap = await db.collection('rides').doc(activeRideId).get();
+                    const stillTheirs = rideSnap.exists && rideSnap.data()?.driverId === holder;
+                    if (!stillTheirs) cleared.activeRideId = null;
+                }
+
+                batch.update(userRef, cleared);
+            }
         }
         batch.set(db.collection('auditLogs').doc(), await auditRow({
             targetCollection: 'vehicles',
@@ -223,6 +242,58 @@ async function repairOrphanRequests() {
     console.log(`  → ${stale} stale request(s)`);
 }
 
+/**
+ * Drivers pointing at a ride that is no longer theirs.
+ *
+ * A manager's soft release (`returnStudentToPool`) returns a ride to the queue
+ * and clears its `driverId`, but nothing cleared the DRIVER's `activeRideId`. So
+ * the driver kept a pointer to a ride sitting back in the pool with no driver —
+ * seen in production on 2026-08-14, where Tonny Stark still named ride igFK1kHP
+ * after it had been released.
+ *
+ * Runs independently of the vehicle pass, because the two orphans do not always
+ * occur together: a soft release deliberately leaves the car held, so the vehicle
+ * pass will not even look at that driver.
+ */
+async function repairDanglingActiveRides() {
+    console.log(`\n=== DANGLING activeRideId (${label}) ===`);
+    const users = await db.collection('users').get();
+    let fixed = 0;
+
+    for (const doc of users.docs) {
+        const u = doc.data();
+        if (!u.activeRideId) continue;
+
+        const rideSnap = await db.collection('rides').doc(u.activeRideId).get();
+        // Theirs only if the ride still exists AND still names them. A ride that
+        // was reassigned to someone else is just as dangling as a deleted one.
+        if (rideSnap.exists && rideSnap.data()?.driverId === doc.id) {
+            console.log(`  ${u.name || doc.id}: keep — still driving ${u.activeRideId.slice(0, 8)}…`);
+            continue;
+        }
+
+        fixed++;
+        const why = rideSnap.exists
+            ? `ride ${u.activeRideId.slice(0, 8)}… is now driverId=${rideSnap.data()?.driverId ?? 'null'}`
+            : `ride ${u.activeRideId.slice(0, 8)}… no longer exists`;
+        console.log(`  ${u.name || doc.id}: CLEAR — ${why}`);
+
+        if (!APPLY) continue;
+
+        const batch = db.batch();
+        batch.update(doc.ref, { activeRideId: null });
+        batch.set(db.collection('auditLogs').doc(), await auditRow({
+            targetCollection: 'users',
+            targetDocumentId: doc.id,
+            summary: `Fleet repair cleared a dangling activeRideId on ${u.name || doc.id}: ${why}`,
+            details: { previousActiveRideId: u.activeRideId, reason: why },
+        }));
+        await batch.commit();
+    }
+
+    console.log(`  → ${fixed} dangling pointer(s)`);
+}
+
 (async () => {
     console.log(APPLY
         ? '*** APPLYING CHANGES TO PRODUCTION ***'
@@ -230,6 +301,7 @@ async function repairOrphanRequests() {
 
     await repairVehicles();
     await repairOrphanRequests();
+    await repairDanglingActiveRides();
 
     console.log(APPLY ? '\nDone.' : '\nDry run complete. Nothing changed.');
     process.exit(0);

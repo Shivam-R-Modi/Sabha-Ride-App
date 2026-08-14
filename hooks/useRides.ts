@@ -306,6 +306,9 @@ export const returnStudentToPool = async (rideId: string) => {
 
         const rideData = rideSnap.data();
         const studentId = rideData.studentId;
+        // Captured BEFORE the write below — once driverId is null there is no way
+        // left to work out whose assignment this was.
+        const previousDriverId = rideData.driverId;
 
         // Reset ride status to 'requested' and clear driver assignment
         await updateDoc(rideRef, {
@@ -329,6 +332,27 @@ export const returnStudentToPool = async (rideId: string) => {
                 status: 'waiting',
                 currentRideId: null
             });
+        }
+
+        // The driver's activeRideId still pointed at the ride we just took off
+        // them. Nothing cleared it, so a soft release left a driver holding a
+        // pointer to a ride that was back in the queue with driverId: null.
+        // Observed in production on 2026-08-14: Tonny Stark kept activeRideId
+        // igFK1kHP long after it had been returned to the pool.
+        //
+        // currentVehicleId is deliberately NOT cleared here. A soft release keeps
+        // the driver on shift in their car so they can be given new riders — that
+        // is the entire difference between soft and hard release, and clearing
+        // the car would collapse the two into one.
+        //
+        // Only cleared when it still points at THIS ride: a driver who has since
+        // been assigned something else must keep that pointer.
+        if (previousDriverId) {
+            const driverRef = doc(db, 'users', previousDriverId);
+            const driverSnap = await getDoc(driverRef);
+            if (driverSnap.exists() && driverSnap.data().activeRideId === rideId) {
+                await updateDoc(driverRef, { activeRideId: null });
+            }
         }
 
         console.log(`Student ${studentId} returned to pool from ride ${rideId}`);
