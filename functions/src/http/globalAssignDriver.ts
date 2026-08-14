@@ -62,8 +62,32 @@ function haversineDistanceMiles(
  * Refusing it means such a ride is never dispatched; accepting it means it is
  * dispatched to every gathering for ever. The first failure is visible to a
  * manager in the Waiting queue, the second sends a car to the wrong place.
+ *
+ * `expectedRideType` closes the same hole in the other dimension. The pool was
+ * filtered by status and event but never by DIRECTION, and the two kinds of
+ * request do not look alike:
+ *
+ *   pickup    hooks/useRides.ts writes no `rideType` field at all
+ *   drop-off  studentReadyToLeave stamps `rideType: 'sabha-to-home'`
+ *
+ * So once the window flipped, every unserved pickup request was swept into the
+ * drop-off run. Reproduced in production on 2026-08-14: Rebo Fe asked to be
+ * COLLECTED from home, and was assigned a driver routed from the venue to her
+ * house — a sabha she had never reached. Unserved pickups always outlive the
+ * pickup window, so this fired every week.
+ *
+ * An ABSENT rideType means `home-to-sabha`, and that default is load-bearing:
+ * every pickup request ever written lacks the field, so treating absent as
+ * "no match" would refuse every genuine request instead. Same reasoning as
+ * `seatsOf` in constants/seats.ts — absent means the original behaviour, so
+ * nothing needs backfilling and there is no window where a half-stamped
+ * collection reports the wrong thing.
  */
-export function isValidPendingRide(docData: any, expectedEventKey: string | null): boolean {
+export function isValidPendingRide(
+    docData: any,
+    expectedEventKey: string | null,
+    expectedRideType: RideType,
+): boolean {
     const lat = docData.pickupLat ?? 0;
     const lng = docData.pickupLng ?? 0;
     if (typeof lat !== 'number' || typeof lng !== 'number') return false;
@@ -75,6 +99,12 @@ export function isValidPendingRide(docData: any, expectedEventKey: string | null
     // priority order, and validated against the same YYYY-MM-DD shape, as
     // everywhere else that has to work out which gathering a ride belongs to.
     if (expectedEventKey && eventKeyFromRide(docData) !== expectedEventKey) return false;
+
+    // Anything that is not one of the two known directions is rejected rather
+    // than defaulted — a hand-edited 'sabha-to-Home' should strand one request
+    // visibly, not quietly join whichever run is open.
+    const direction = docData.rideType ?? 'home-to-sabha';
+    if (direction !== expectedRideType) return false;
 
     return true;
 }
@@ -249,10 +279,11 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
 
         for (const doc of ridesSnap.docs) {
             const d = doc.data();
-            // eventId comes from system/rideContext, the same read that produced
-            // rideType — so a leftover request from a previous sabha cannot enter
-            // this pool.
-            if (!isValidPendingRide(d, eventId)) continue;
+            // Both come from the same system/rideContext read, so the gathering
+            // and the direction can never disagree with the window being served:
+            // a leftover request from a previous sabha, or one asking for the
+            // opposite direction, cannot enter this pool.
+            if (!isValidPendingRide(d, eventId, rideType)) continue;
             requestMap.set(doc.id, {
                 id: doc.id,
                 rideRequestId: doc.id,

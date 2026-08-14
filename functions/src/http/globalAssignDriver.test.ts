@@ -127,23 +127,33 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
     });
 
     /**
-     * Rides default to the gathering being dispatched.
+     * Rides default to the gathering AND the direction being dispatched.
      *
-     * Dispatch filters the pool by event, so a fixture ride with no event key is
-     * correctly rejected and every test below would see an empty pool. Defaulting
-     * here says "these riders asked for tonight", which is the precondition all
-     * these tests actually mean — they are about seats, splitting and venues.
+     * Dispatch filters the pool on both, so a fixture ride missing either is
+     * correctly rejected and the test sees an empty pool. Defaulting here says
+     * "these riders asked for the run being dispatched", which is the
+     * precondition all these tests actually mean — they are about seats,
+     * splitting, routing and venues, not about the filters.
      *
-     * A test that wants to prove the event filter sets `eventDate` explicitly and
-     * this leaves it alone. `isValidPendingRide` also has direct unit tests, so
-     * the filter is not resting on this default.
+     * Note the asymmetry, which is real rather than a test convenience: a pickup
+     * request genuinely carries NO rideType (hooks/useRides.ts never writes one),
+     * while studentReadyToLeave stamps 'sabha-to-home'. So only the drop-off
+     * fixtures need stamping, and leaving pickups bare keeps them faithful.
+     *
+     * A test that wants to prove either filter sets the field explicitly and this
+     * leaves it alone. Both filters also have direct unit tests, so neither rests
+     * on this default.
      */
-    const ridesForThisEvent = () => fixture.rides.map(r => ({
-        id: r.id,
-        data: ('eventDate' in r.data || 'eventId' in r.data)
-            ? r.data
-            : { ...r.data, eventDate: fixture.eventId ?? '2026-08-07' },
-    }));
+    const ridesForThisEvent = () => fixture.rides.map(r => {
+        const data: Record<string, unknown> = { ...r.data };
+        if (!('eventDate' in data) && !('eventId' in data)) {
+            data.eventDate = fixture.eventId ?? '2026-08-07';
+        }
+        if (!('rideType' in data) && fixture.rideType === 'sabha-to-home') {
+            data.rideType = 'sabha-to-home';
+        }
+        return { id: r.id, data };
+    });
 
     let generated = 0;
 
@@ -741,68 +751,68 @@ describe('isValidPendingRide — which gathering a request belongs to', () => {
     };
 
     it('accepts a request stamped with the gathering being dispatched', () => {
-        expect(isValidPendingRide({ ...good, eventId: '2026-08-14' }, '2026-08-14')).toBe(true);
+        expect(isValidPendingRide({ ...good, eventId: '2026-08-14' }, '2026-08-14', 'home-to-sabha')).toBe(true);
     });
 
     it('accepts `eventDate`, which is what the client actually writes', () => {
         // hooks/useRides.ts stamps `date` and `eventDate`, never `eventId` — so a
         // filter that only read eventId would reject every real rider request.
-        expect(isValidPendingRide({ ...good, eventDate: '2026-08-14' }, '2026-08-14')).toBe(true);
+        expect(isValidPendingRide({ ...good, eventDate: '2026-08-14' }, '2026-08-14', 'home-to-sabha')).toBe(true);
     });
 
     it('REJECTS a request for a past gathering — the reported bug', () => {
-        expect(isValidPendingRide({ ...good, eventDate: '2026-08-09' }, '2026-08-14')).toBe(false);
+        expect(isValidPendingRide({ ...good, eventDate: '2026-08-09' }, '2026-08-14', 'home-to-sabha')).toBe(false);
     });
 
     it('rejects a request for a future gathering too', () => {
         // Requests open two days ahead, so a rider can hold one for next week
         // while tonight is being dispatched.
-        expect(isValidPendingRide({ ...good, eventDate: '2026-08-21' }, '2026-08-14')).toBe(false);
+        expect(isValidPendingRide({ ...good, eventDate: '2026-08-21' }, '2026-08-14', 'home-to-sabha')).toBe(false);
     });
 
     it('rejects a request carrying no event key at all', () => {
         // Deliberate: accepting it means dispatching it to every gathering for
         // ever. Refusing leaves it visible in the manager's Waiting queue.
-        expect(isValidPendingRide({ ...good }, '2026-08-14')).toBe(false);
+        expect(isValidPendingRide({ ...good }, '2026-08-14', 'home-to-sabha')).toBe(false);
     });
 
     it('prefers eventId over eventDate when the two disagree', () => {
         // eventId is written by the server, eventDate by the browser. Same order
         // as eventKeyFromRide uses everywhere else.
         expect(isValidPendingRide(
-            { ...good, eventId: '2026-08-14', eventDate: '2026-08-09' }, '2026-08-14',
+            { ...good, eventId: '2026-08-14', eventDate: '2026-08-09' }, '2026-08-14', 'home-to-sabha',
         )).toBe(true);
     });
 
     it('ignores a malformed event key rather than matching on it', () => {
-        expect(isValidPendingRide({ ...good, eventDate: 'next friday' }, '2026-08-14')).toBe(false);
+        expect(isValidPendingRide({ ...good, eventDate: 'next friday' }, '2026-08-14', 'home-to-sabha')).toBe(false);
     });
 
     it('does not filter by event when no gathering is known', () => {
         // rideType is null whenever eventId is, so the handler throws before it
         // gets here. Kept permissive so a future caller cannot silently empty the
         // pool by passing null.
-        expect(isValidPendingRide({ ...good, eventDate: '2026-08-09' }, null)).toBe(true);
+        expect(isValidPendingRide({ ...good, eventDate: '2026-08-09' }, null, 'home-to-sabha')).toBe(true);
     });
 
     it('still rejects the 0,0 placeholder that means "never geocoded"', () => {
         expect(isValidPendingRide(
             { studentId: 'stu_1', pickupLat: 0, pickupLng: 0, eventDate: '2026-08-14' },
-            '2026-08-14',
+            '2026-08-14', 'home-to-sabha',
         )).toBe(false);
     });
 
     it('still rejects a request with no studentId', () => {
         expect(isValidPendingRide(
             { pickupLat: 42.34, pickupLng: -71.09, eventDate: '2026-08-14' },
-            '2026-08-14',
+            '2026-08-14', 'home-to-sabha',
         )).toBe(false);
     });
 
     it('still rejects non-numeric coordinates', () => {
         expect(isValidPendingRide(
             { ...good, pickupLat: '42.34', eventDate: '2026-08-14' },
-            '2026-08-14',
+            '2026-08-14', 'home-to-sabha',
         )).toBe(false);
     });
 });
@@ -865,5 +875,111 @@ describe('globalAssignDriver — a stale request is never dispatched', () => {
         const assignedPaths = recorder.updates.map(u => u.path);
         expect(assignedPaths).not.toContain(`rides/${first.id}`);
         expect(assignedPaths.length).toBeGreaterThan(0);
+    });
+});
+
+/**
+ * The direction filter.
+ *
+ * The pool was filtered by status and event but never by DIRECTION, and the two
+ * kinds of request do not look alike: a pickup carries no `rideType` at all,
+ * while studentReadyToLeave stamps 'sabha-to-home'. So once the window flipped,
+ * every unserved pickup was swept into the drop-off run.
+ *
+ * Reproduced in production on 2026-08-14: Rebo Fe asked to be COLLECTED from
+ * home and was assigned a driver routed from the venue to her house — a sabha
+ * she had never reached. Unserved pickups always outlive the pickup window, so
+ * this fired every week.
+ */
+describe('isValidPendingRide — which direction the rider asked for', () => {
+    const good = { studentId: 'stu_1', pickupLat: 42.34, pickupLng: -71.09, eventDate: '2026-08-14' };
+    const EVENT = '2026-08-14';
+
+    it('accepts a pickup request during the pickup window', () => {
+        // No rideType field, which is exactly what hooks/useRides.ts writes.
+        expect(isValidPendingRide(good, EVENT, 'home-to-sabha')).toBe(true);
+    });
+
+    it('REJECTS a pickup request during the drop-off window — the reported bug', () => {
+        // Rebo Fe's case. Taking her home from a sabha she never reached.
+        expect(isValidPendingRide(good, EVENT, 'sabha-to-home')).toBe(false);
+    });
+
+    it('accepts a drop-off request during the drop-off window', () => {
+        expect(isValidPendingRide(
+            { ...good, rideType: 'sabha-to-home' }, EVENT, 'sabha-to-home',
+        )).toBe(true);
+    });
+
+    it('rejects a drop-off request during the pickup window', () => {
+        // The mirror case: someone who asked to go home cannot be collected
+        // from home for a sabha that has not started.
+        expect(isValidPendingRide(
+            { ...good, rideType: 'sabha-to-home' }, EVENT, 'home-to-sabha',
+        )).toBe(false);
+    });
+
+    it('treats an ABSENT rideType as a pickup, because every real one is', () => {
+        // Load-bearing. Every pickup request ever written lacks the field, so
+        // treating absent as "no match" would refuse all of them.
+        expect(isValidPendingRide(good, EVENT, 'home-to-sabha')).toBe(true);
+        expect(isValidPendingRide({ ...good, rideType: null }, EVENT, 'home-to-sabha')).toBe(true);
+    });
+
+    it('honours an explicit home-to-sabha as well as an absent one', () => {
+        expect(isValidPendingRide(
+            { ...good, rideType: 'home-to-sabha' }, EVENT, 'home-to-sabha',
+        )).toBe(true);
+    });
+
+    it('rejects an unrecognised direction rather than defaulting it', () => {
+        // A hand-edited value should strand one request visibly, not quietly
+        // join whichever run happens to be open.
+        expect(isValidPendingRide(
+            { ...good, rideType: 'sabha-to-Home' }, EVENT, 'home-to-sabha',
+        )).toBe(false);
+        expect(isValidPendingRide(
+            { ...good, rideType: 'sabha-to-Home' }, EVENT, 'sabha-to-home',
+        )).toBe(false);
+    });
+
+    it('applies both filters together, not one or the other', () => {
+        // Right direction, wrong sabha.
+        expect(isValidPendingRide(
+            { ...good, eventDate: '2026-08-09', rideType: 'sabha-to-home' }, EVENT, 'sabha-to-home',
+        )).toBe(false);
+    });
+});
+
+describe('globalAssignDriver — a pickup is never served by a drop-off run', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('reports no students when only pickup requests remain at drop-off time', async () => {
+        const fixture = baseFixture('sabha-to-home');
+        fixture.eventId = '2026-08-14';
+        // Unserved pickups, exactly as they sit in the queue when the window
+        // flips. `rideType` is absent because that is what the client writes.
+        fixture.rides = fixture.rides.map(r => ({
+            id: r.id,
+            data: { ...r.data, eventDate: '2026-08-14', rideType: undefined },
+        }));
+
+        const { result, recorder } = await runAs('driver-1', fixture);
+
+        expect((result as any).status).toBe('no_students');
+        expect(recorder.updates).toHaveLength(0);
+    });
+
+    it('still serves genuine drop-off requests', async () => {
+        const fixture = baseFixture('sabha-to-home');
+        fixture.eventId = '2026-08-14';
+        fixture.rides = fixture.rides.map(r => ({
+            id: r.id,
+            data: { ...r.data, eventDate: '2026-08-14', rideType: 'sabha-to-home' },
+        }));
+
+        const { result } = await runAs('driver-1', fixture);
+
+        expect((result as any).status).not.toBe('no_students');
     });
 });
