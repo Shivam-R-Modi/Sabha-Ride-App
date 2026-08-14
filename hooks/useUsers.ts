@@ -5,6 +5,8 @@ import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/f
 import { Driver, StudentRequest, User } from '../types';
 import { handleSnapshotError } from '../src/utils/firestoreErrors';
 import { seatsOf } from '../src/constants/seats';
+import { isDispatchable } from '../src/utils/ridePool';
+import { useCurrentEvent } from './useCurrentEvent';
 
 /** Same generated avatar the assignment function builds for ride peers. */
 const avatarUrlFor = (name: string) =>
@@ -81,9 +83,29 @@ export const usePendingRiders = () => {
     return { pendingRiders, loading };
 };
 
+/**
+ * The riders a driver could actually be given right now.
+ *
+ * Scoped to the gathering and direction the server has published, because
+ * globalAssignDriver dispatches from exactly that pool. Unscoped, the two
+ * disagreed in public: on 2026-08-14 this read "Waiting · 4" while a driver
+ * tapping Assign Me was told "Nobody is waiting right now" — four riders queued
+ * whom no tap could serve, because they had asked for a pickup and the window had
+ * moved to drop-off.
+ *
+ * A count a manager cannot act on is worse than no count: it sends them looking
+ * for a fault in dispatch.
+ *
+ * Filtered in memory rather than in the query. Adding `eventDate` and `rideType`
+ * clauses would need a composite index on rides(status, eventDate, rideType),
+ * which does not exist, and a pickup request carries no `rideType` field at all —
+ * so a Firestore equality filter would exclude every genuine one. See
+ * src/utils/ridePool.ts.
+ */
 export const usePendingRequests = () => {
     const [requests, setRequests] = useState<StudentRequest[]>([]);
     const [loading, setLoading] = useState(true);
+    const { eventId, rideType } = useCurrentEvent();
 
     useEffect(() => {
         const q = query(collection(db, 'rides'), where('status', '==', 'requested'));
@@ -92,6 +114,7 @@ export const usePendingRequests = () => {
             const list: StudentRequest[] = [];
             snapshot.forEach((doc) => {
                 const data = doc.data();
+                if (!isDispatchable(data, eventId, rideType)) return;
                 // Map fields to StudentRequest type for UI
                 const name = data.studentName || 'Student';
                 list.push({
@@ -128,7 +151,10 @@ export const usePendingRequests = () => {
             setLoading(false);
         }, handleSnapshotError('useUsers', () => setLoading(false)));
         return unsubscribe;
-    }, []);
+        // Re-subscribes when the window flips. With [] the filter would close over
+        // the first eventId and rideType it ever saw, so the queue would freeze on
+        // the gathering the manager happened to load the page during.
+    }, [eventId, rideType]);
 
     return { requests, loading };
 };

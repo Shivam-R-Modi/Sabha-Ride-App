@@ -116,6 +116,18 @@ export const FleetManagement: React.FC = () => {
     const inUseVehicles = vehicles.filter(v => v.status === 'in_use').length;
     const maintenanceVehicles = vehicles.filter(v => v.status === 'maintenance').length;
 
+    // "In Use" means HELD BY A DRIVER — a car goes in_use the moment it is picked,
+    // long before anyone is assigned to it. The dashboard's "Out now" counts
+    // drivers with live rides. The two are different quantities and used to share
+    // the word "cars", so a fleet reading 3 In Use against Out now · 0 looked like
+    // a bug rather than three drivers holding cars with nobody yet aboard.
+    //
+    // Splitting the number is the honest fix: a held car is unavailable to
+    // everyone else whether or not it is moving, and an idle one is the first
+    // thing worth chasing when riders are waiting.
+    const heldWithoutDriverRecorded = vehicles.filter(
+        v => v.status === 'in_use' && !v.currentDriverId).length;
+
     return (
         <div className="space-y-6 p-6">
             {/* Header */}
@@ -149,7 +161,12 @@ export const FleetManagement: React.FC = () => {
                     <div className="text-2xl font-bold text-[rgb(var(--success-text))]">{availableVehicles}</div>
                 </div>
                 <div className="clay-card p-4">
-                    <div className="text-sm text-[rgb(var(--info-text))]">In Use</div>
+                    {/* "Held", not "In Use". A car is held from the moment a driver
+                        picks it, which is not the same as carrying anyone — the
+                        dashboard's "Out now" counts drivers with live rides. The
+                        old wording made those two numbers look like they should
+                        agree. */}
+                    <div className="text-sm text-[rgb(var(--info-text))]">Held by a driver</div>
                     <div className="text-2xl font-bold text-[rgb(var(--info-text))]">{inUseVehicles}</div>
                 </div>
                 <div className="clay-card p-4">
@@ -157,6 +174,39 @@ export const FleetManagement: React.FC = () => {
                     <div className="text-2xl font-bold text-[rgb(var(--danger-text))]">{maintenanceVehicles}</div>
                 </div>
             </div>
+
+            {/* Two things a manager needs told, not left to infer from counters. */}
+            {availableVehicles === 0 && totalVehicles > 0 && (
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-[rgb(var(--warning-bg))]
+                                border border-[rgb(var(--warning))]/30 text-[rgb(var(--warning-text))]">
+                    <AlertCircle size={20} className="shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                        <p className="font-bold">No cars are free.</p>
+                        <p>
+                            Every vehicle is held by a driver, so nobody else can go on shift.
+                            Release one below if a driver has finished.
+                        </p>
+                    </div>
+                </div>
+            )}
+            {heldWithoutDriverRecorded > 0 && (
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-[rgb(var(--warning-bg))]
+                                border border-[rgb(var(--warning))]/30 text-[rgb(var(--warning-text))]">
+                    <AlertCircle size={20} className="shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                        <p className="font-bold">
+                            {heldWithoutDriverRecorded === 1
+                                ? '1 car is held with no driver recorded.'
+                                : `${heldWithoutDriverRecorded} cars are held with no driver recorded.`}
+                        </p>
+                        {/* Every release path in the app starts from the driver's
+                            record, so this car cannot be freed by anyone but a
+                            manager. Saying so is the difference between a two-second
+                            fix and an evening spent guessing. */}
+                        <p>Nothing can free these automatically. Use Release below.</p>
+                    </div>
+                </div>
+            )}
 
             {/* Notification */}
             {notification && (

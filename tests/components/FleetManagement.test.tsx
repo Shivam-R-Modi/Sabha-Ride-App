@@ -149,3 +149,64 @@ describe('FleetManagement — Release asks first, then actually releases', () =>
         expect(await screen.findByText(/on a run with 3 ride/i)).toBeInTheDocument();
     });
 });
+
+/**
+ * The two things a manager should be told rather than left to infer.
+ *
+ * A fleet with nothing free and a fleet with a car nobody can release look
+ * identical in a list of counters. Both stop drivers going on shift, and one of
+ * them cannot be fixed by waiting.
+ */
+describe('FleetManagement — saying what the counters imply', () => {
+    it('warns when no car is free', () => {
+        vehicles = [HELD];
+        render(<FleetManagement />);
+        expect(screen.getByText(/no cars are free/i)).toBeInTheDocument();
+    });
+
+    it('says nothing when a car is free', () => {
+        vehicles = [HELD, FREE];
+        render(<FleetManagement />);
+        expect(screen.queryByText(/no cars are free/i)).toBeNull();
+    });
+
+    it('says nothing about a free fleet when there is no fleet at all', () => {
+        // An empty fleet already has its own empty state; "no cars are free" on
+        // top of it is noise, and it is not the same problem.
+        vehicles = [];
+        render(<FleetManagement />);
+        expect(screen.queryByText(/no cars are free/i)).toBeNull();
+    });
+
+    it('flags a car held with no driver recorded', () => {
+        // Every release path starts from the driver's record, so this one cannot
+        // be freed by anybody but a manager.
+        vehicles = [{ ...HELD, currentDriverId: undefined, currentDriverName: undefined }];
+        render(<FleetManagement />);
+        expect(screen.getByText(/1 car is held with no driver recorded/i)).toBeInTheDocument();
+        expect(screen.getByText(/nothing can free these automatically/i)).toBeInTheDocument();
+    });
+
+    it('counts several orphans correctly', () => {
+        vehicles = [
+            { ...HELD, id: 'a', name: 'Car1', currentDriverId: undefined, currentDriverName: undefined },
+            { ...HELD, id: 'b', name: 'Car2', currentDriverId: undefined, currentDriverName: undefined },
+        ];
+        render(<FleetManagement />);
+        expect(screen.getByText(/2 cars are held with no driver recorded/i)).toBeInTheDocument();
+    });
+
+    it('does not flag a held car that has a driver', () => {
+        vehicles = [HELD, FREE];
+        render(<FleetManagement />);
+        expect(screen.queryByText(/no driver is recorded/i)).toBeNull();
+    });
+
+    it('labels the held count as held, not as in use', () => {
+        // "In Use" invited comparison with the dashboard's "Out now", which counts
+        // drivers carrying riders — a different quantity entirely.
+        vehicles = [HELD, FREE];
+        render(<FleetManagement />);
+        expect(screen.getByText(/held by a driver/i)).toBeInTheDocument();
+    });
+});

@@ -1,0 +1,111 @@
+/**
+ * The manager's Waiting queue lists only riders a driver could actually be given.
+ *
+ * `globalAssignDriver` dispatches from a pool scoped to the gathering and the
+ * direction on `system/rideContext`. This hook listed every `requested` ride in
+ * the collection, so the two disagreed in public: on 2026-08-14 the tab read
+ * "Waiting · 4" while a driver tapping Assign Me was told "Nobody is waiting
+ * right now".
+ *
+ * `isDispatchable` has its own tests in tests/utils/ridePool.test.ts. These
+ * assert something different and, on the evidence, more necessary: that the hook
+ * CALLS it. Deleting the filter line broke none of those unit tests — a correct
+ * predicate nobody invokes is the same bug in a new place, and this codebase has
+ * produced that shape three times in two days.
+ */
+
+import { renderHook, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+/** Rides the fake snapshot will deliver. */
+let docs: Array<{ id: string; data: Record<string, unknown> }> = [];
+/** What the server has published as the open window. */
+let context: { eventId: string | null; rideType: string | null } = {
+    eventId: '2026-08-14', rideType: 'home-to-sabha',
+};
+
+vi.mock('firebase/firestore', () => ({
+    collection: vi.fn(), query: vi.fn(), where: vi.fn(), doc: vi.fn(),
+    updateDoc: vi.fn(),
+    onSnapshot: (_q: unknown, next: any) => {
+        next({ forEach: (fn: any) => docs.forEach(d => fn({ id: d.id, data: () => d.data })) });
+        return () => undefined;
+    },
+}));
+vi.mock('../../firebase/config', () => ({ db: {}, auth: {} }));
+vi.mock('../../hooks/useCurrentEvent', () => ({ useCurrentEvent: () => context }));
+
+import { usePendingRequests } from '../../hooks/useUsers';
+
+const ride = (id: string, data: Record<string, unknown>) => ({
+    id, data: { studentName: id, pickupAddress: '1 St', ...data },
+});
+
+const names = async () => {
+    const { result } = renderHook(() => usePendingRequests());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    return result.current.requests.map(r => r.name);
+};
+
+beforeEach(() => {
+    context = { eventId: '2026-08-14', rideType: 'home-to-sabha' };
+    docs = [];
+});
+
+describe('usePendingRequests — scoped to the open window', () => {
+    it('lists a pickup during the pickup window', async () => {
+        // No rideType field, which is what hooks/useRides.ts writes.
+        docs = [ride('Rebo', { eventDate: '2026-08-14' })];
+
+        expect(await names()).toEqual(['Rebo']);
+    });
+
+    it('EXCLUDES a leftover pickup once the window is drop-off', async () => {
+        // The reported disagreement, exactly.
+        context = { eventId: '2026-08-14', rideType: 'sabha-to-home' };
+        docs = [ride('Rebo', { eventDate: '2026-08-14' })];
+
+        expect(await names()).toEqual([]);
+    });
+
+    it('lists a genuine drop-off during the drop-off window', async () => {
+        context = { eventId: '2026-08-14', rideType: 'sabha-to-home' };
+        docs = [ride('Joka', { eventDate: '2026-08-14', rideType: 'sabha-to-home' })];
+
+        expect(await names()).toEqual(['Joka']);
+    });
+
+    it('excludes a request left over from a previous sabha', async () => {
+        docs = [ride('Stale', { eventDate: '2026-08-09' })];
+
+        expect(await names()).toEqual([]);
+    });
+
+    it('keeps tonight and drops last week from one mixed queue', async () => {
+        docs = [
+            ride('Stale', { eventDate: '2026-08-09' }),
+            ride('Tonight', { eventDate: '2026-08-14' }),
+        ];
+
+        expect(await names()).toEqual(['Tonight']);
+    });
+
+    it('shows nothing when no window is published', async () => {
+        // Both are null when no sabha is scheduled. A queue nobody can act on
+        // invites a manager to look for a fault in dispatch.
+        context = { eventId: null, rideType: null };
+        docs = [ride('Rebo', { eventDate: '2026-08-14' })];
+
+        expect(await names()).toEqual([]);
+    });
+
+    it('still carries the seat count for the rows it keeps', async () => {
+        // The filter must not quietly drop the fields the queue renders.
+        docs = [ride('Family', { eventDate: '2026-08-14', seatsRequested: 4 })];
+
+        const { result } = renderHook(() => usePendingRequests());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        expect(result.current.requests[0].seats).toBe(4);
+    });
+});

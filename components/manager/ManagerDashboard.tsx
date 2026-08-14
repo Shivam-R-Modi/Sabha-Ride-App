@@ -500,7 +500,16 @@ export const ManagerDashboard: React.FC = () => {
                 ? 'bg-surface text-coffee shadow-sm'
                 : 'text-coffee-500 hover:text-coffee'}`}
           >
-            Out now · {groupedRides.length} {groupedRides.length === 1 ? 'car' : 'cars'}
+            {/* "drivers", not "cars".
+                This counts groupedRides, which groups ACTIVE RIDES BY DRIVER — so
+                it is the number of people currently out carrying riders. Fleet's
+                "In Use" counts vehicles a driver is holding, which includes every
+                car picked up but not yet dispatched.
+                Two different quantities under one word: on 2026-08-14 Fleet said 3
+                In Use while this said "Out now · 0 cars", and the disagreement
+                read as a display fault rather than as the plain fact that three
+                drivers were holding cars and none had riders. */}
+            Out now · {groupedRides.length} {groupedRides.length === 1 ? 'driver' : 'drivers'}
           </button>
         </div>
       </div>

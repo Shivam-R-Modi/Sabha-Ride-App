@@ -24,6 +24,15 @@ import { db } from '../firebase/config';
 export interface CurrentEvent {
     eventId: string | null;
     /**
+     * Which direction is open, straight from the server.
+     *
+     * Exposed so the manager's queue can be filtered exactly as dispatch filters
+     * it. Without it the two disagreed: dispatch refuses a leftover pickup during
+     * the drop-off window, while the Waiting tab went on counting it — so a
+     * manager saw riders queued that no tap could ever serve.
+     */
+    rideType?: 'home-to-sabha' | 'sabha-to-home' | null;
+    /**
      * 'no-scheduled-event' means the manager has cancelled everything inside the
      * generator's horizon — a deliberate shutdown, not a fault. Without this the
      * UI could only say "No rides available", which reads like a malfunction.
@@ -50,6 +59,7 @@ export function useCurrentEvent() {
                 const data = snap.exists() ? snap.data() : null;
                 setEvent({
                     eventId: data?.eventId ?? null,
+                    rideType: data?.rideType ?? null,
                     calendarStatus: data?.calendarStatus,
                     requestsOpenAt: data?.requestsOpenAt,
                     startsAt: data?.startsAt,
@@ -83,6 +93,7 @@ export function useCurrentEvent() {
     return {
         event,
         eventId: event?.eventId ?? null,
+        rideType: event?.rideType ?? null,
         calendarStatus: event?.calendarStatus,
         /** False when no sabha is scheduled — attendance and requests make no sense then. */
         hasEvent: !!event?.eventId,
