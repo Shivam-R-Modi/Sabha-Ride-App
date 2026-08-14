@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
+import { useNavigation } from '../contexts/NavigationContext';
 
 export const PWAPrompt: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPrompt, setShowPrompt] = useState(false);
+  // Rendered in App.tsx OUTSIDE ResponsiveLayout, so it inherits none of the
+  // layout's sidebar padding — but it is inside NavigationProvider, so it can
+  // read the same state the layout uses rather than duplicating it.
+  const { isSidebarCollapsed, isFocusMode } = useNavigation();
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -28,7 +33,20 @@ export const PWAPrompt: React.FC = () => {
   if (!showPrompt) return null;
 
   return (
-    <div className="fixed bottom-safe-nav left-4 right-4 z-sticky animate-in slide-in-from-bottom-10">
+    // Clears the sidebar instead of sliding under it. The banner is `fixed`, so
+    // `left-4` put it at the viewport edge and the sidebar — which is also fixed
+    // and on a higher rung — drew straight over its first 240px, hiding the
+    // heading and the start of the text.
+    //
+    // The offsets are the sidebar's own widths plus the 1rem gutter: w-20 (5rem)
+    // + 1rem = left-24, w-60 (15rem) + 1rem = left-64. They match the `lg:pl-20`
+    // / `lg:pl-60` the layout applies to page content, so the banner lines up
+    // with the content above it rather than merely avoiding the sidebar.
+    //
+    // Below `lg` the sidebar is `hidden`, so the mobile `left-4` is correct and
+    // stays. Focus mode hides the sidebar at every width, so it stays too.
+    <div className={`fixed bottom-safe-nav right-4 z-sticky animate-in slide-in-from-bottom-10 left-4 ${isFocusMode ? '' : isSidebarCollapsed ? 'lg:left-24' : 'lg:left-64'
+      }`}>
       <div className="bg-coffee text-white p-4 rounded-xl shadow-2xl flex items-center justify-between">
         <div>
           <h4 className="font-bold text-sm">Install App</h4>
