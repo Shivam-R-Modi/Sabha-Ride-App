@@ -3,9 +3,9 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-13**.
 
-`main` matches production exactly. Branch
-`claude/ride-app-ui-ux-optimization-86f88a` carries a complete UI/UX redesign and
-is **ahead of production and undeployed** — see below.
+**The UI/UX redesign is DEPLOYED.** Rules, all 16 functions and hosting went out
+on 2026-08-13; live bundle `index-EyuhruP1.js`, matched against `dist/` and
+verified. `main` is fast-forwarded to match.
 
 ## Changed 2026-08-13
 
@@ -31,18 +31,29 @@ is **ahead of production and undeployed** — see below.
 
 | | Deployed | Notes |
 |---|---|---|
-| Firestore rules | ✅ | seat validation, server-owned group keys |
-| Cloud Functions | ✅ | all 16 updated |
-| Hosting | ✅ | bundle `index-BZbh6r49.js`, verified live |
+| Firestore rules | ✅ | Unchanged by this release — byte-identical, Firebase skipped the upload |
+| Firestore indexes | ✅ | Redeployed |
+| Cloud Functions | ✅ | All 16 updated. No behaviour change in this release — one comment |
+| Hosting | ✅ | bundle `index-EyuhruP1.js`, matched against `dist/` and verified live |
 
-**Test suites, all green:** `functions` **245** · client **431** · rules **81** —
-**757 total**.
+So the release was **effectively hosting-only**: the whole UI redesign, against a
+backend that did not move. That is why it was safe to ship without the
+sign-in-gated hand testing — but see the caveat under Open items.
 
-`npm run typecheck` reports **55** errors total, of which **19** are outside
-`functions/`. That is the clean baseline, not a regression. It was 58 / 22 before
-this branch; Phase 4 removed three by deleting the code that held them. The
-figure quoted historically in CLAUDE.md was the client-only one, so both are
-recorded here to stop the next session thinking 36 errors appeared overnight.
+**Test suites, all green:** `functions` **245** · client **456** · rules **81** —
+**782 total**.
+
+`npm run typecheck` reports **19** errors, all client-side. That is the clean
+baseline. It was 22 before this branch; Phase 4 removed three by deleting the
+code that held them.
+
+**Corrected 2026-08-13.** This used to say "55 total, of which 19 are outside
+`functions/`". The extra 36 were **not real** — they were all
+`Cannot find module 'firebase-functions'`, and they appear only because
+`functions/node_modules` is gitignored and therefore absent from a fresh
+worktree. They vanish after `npm install` inside `functions/`. Nobody should
+spend time on them again, and no baseline should be quoted from a worktree that
+has not installed them.
 
 `node scripts/tenancy.cjs verify` reads **0 unstamped** (owner's Mac only — needs
 the Admin SDK key).
@@ -52,6 +63,15 @@ absent from every `git worktree`. `npm run build` fails there with "Missing
 Firebase environment variables" before compiling anything. Copy the file across,
 or pass throwaway values to prove compilation — the four variables are only
 asserted for presence.
+
+**Deploying from a worktree also needs `npm install` inside `functions/`.**
+Same reason — `node_modules` is gitignored. This is not cosmetic: `firebase.json`
+runs `tsc` as a functions predeploy hook, so without it the deploy **fails
+part-way through**, after rules and indexes have gone out and before functions
+and hosting. That happened on 2026-08-13. The failure was safe, because hosting
+is last and the half-deployed state was old-client-with-old-backend — which is
+exactly why the order is rules → functions → hosting and not one bare
+`firebase deploy`.
 
 ---
 
@@ -222,7 +242,16 @@ Full design and the rejected alternatives: [`plans/phase-3-seats.md`](plans/phas
 
 ## Open items
 
-Nothing is blocked. Nothing is half-finished.
+**The redesign shipped without hand testing behind sign-in.** Everything
+automated is green — 782 tests, contrast and tap-target audits clean on rider,
+driver and manager in both themes — and the backend did not move, so the blast
+radius is presentation only. But no human has walked a real ride end to end on
+the new UI: request → assign → complete. `plans/testing-plan.md` Suite A is that
+walk, 15 minutes. **Do it before the next sabha**, not after.
+
+The specific things automation cannot see: whether a driver standing in a dark
+car park can read the screen, whether the manager's dispatch flow still makes
+sense at speed, and how it behaves on a real phone on mobile data.
 
 **Fixed 2026-08-13 — the sign-in screen.** The redesign covered rider, driver and
 manager and never touched auth, so the screen every user reaches first kept the

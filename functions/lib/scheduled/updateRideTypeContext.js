@@ -122,8 +122,8 @@ async function announceIfWindowJustOpened(previousRideType, next) {
 /**
  * Seed the calendar on a brand-new project — once, ever.
  *
- * A daily job rather than a one-off script so a fresh staging or production
- * project cannot sit with an empty calendar. It does nothing at all once the
+ * A daily job rather than a one-off script so a fresh project cannot sit with
+ * an empty calendar. It does nothing at all once the
  * marker is set, which is what lets a manager delete a gathering and have it stay
  * deleted. How many sabhas exist after the first is the manager's decision.
  */
