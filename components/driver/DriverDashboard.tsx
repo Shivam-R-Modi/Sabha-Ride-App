@@ -16,6 +16,7 @@ import {
     CompleteRideResult
 } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl } from '../../src/utils/googleMaps';
+import { endShiftWithWarning } from '../../src/utils/endShift';
 import { useConfirm } from '../shared/useConfirm';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -201,6 +202,14 @@ export const DriverDashboard: React.FC = () => {
         }
     };
 
+    /**
+     * Shared by both exits (the shift card and the completion screen) so the
+     * "riders are still waiting" warning cannot be live on one route and missing
+     * on the other. The sequence itself is tested in src/utils/endShift.ts.
+     */
+    const endShift = async (): Promise<boolean> =>
+        !!currentUser && endShiftWithWarning(currentUser.uid, driverDoneForToday, ask);
+
     const handleEndShift = async () => {
         if (!currentUser) return;
         const ok = await ask({
@@ -213,7 +222,7 @@ export const DriverDashboard: React.FC = () => {
         if (!ok) return;
 
         try {
-            await driverDoneForToday(currentUser.uid);
+            if (!await endShift()) return;
             await refreshProfile();
             toast.success('Shift ended. Thank you for driving.');
         } catch (error: unknown) {
@@ -377,7 +386,10 @@ export const DriverDashboard: React.FC = () => {
         if (!currentUser) return;
 
         try {
-            await driverDoneForToday(currentUser.uid);
+            // Declining the warning leaves them on the completion screen with
+            // their car — which is exactly the state they need to be in to tap
+            // "Find my next riders" instead.
+            if (!await endShift()) return;
             await refreshProfile();
             setCompletedRideStats(null);
             setViewState('dashboard');

@@ -126,10 +126,24 @@ export interface DriverDoneResult {
     driverId: string;
     carReleased: boolean;
     message: string;
+    /**
+     * True when riders are still waiting and this driver is the last one holding
+     * a car. Nothing was released — ask, then call again with acknowledgeWaiting.
+     */
+    needsConfirmation?: boolean;
+    waitingCount?: number;
+    warning?: string;
 }
 
-export async function driverDoneForToday(driverId: string): Promise<DriverDoneResult> {
-    return callFunction<DriverDoneResult>('driverDoneForToday', { driverId });
+/**
+ * @param acknowledgeWaiting the driver has seen the "riders are still waiting"
+ * warning and is finishing anyway. Always their call to make.
+ */
+export async function driverDoneForToday(
+    driverId: string,
+    acknowledgeWaiting = false,
+): Promise<DriverDoneResult> {
+    return callFunction<DriverDoneResult>('driverDoneForToday', { driverId, acknowledgeWaiting });
 }
 
 export interface ManagerReleaseVehicleResult {
