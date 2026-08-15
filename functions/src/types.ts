@@ -15,7 +15,9 @@ export type StudentStatus =
     | 'in_ride'
     | 'at_sabha'
     | 'home_safe'
-    | 'missed_pickup';
+    | 'missed_pickup'
+    /** Request reached the end of the ride window with no driver. */
+    | 'missed_ride';
 
 export type DriverStatus =
     | 'offline'

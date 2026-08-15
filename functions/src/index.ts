@@ -16,6 +16,9 @@ export { updateRideTypeContext, manuallyUpdateRideContext, ensureSabhaEvents } f
 // fleet is an operational fault, and a named entry in the logs is what makes it
 // diagnosable at 19:00 on a Friday.
 export { releaseIdleVehicles } from './scheduled/releaseIdleVehicles';
+// Same 03:00 slot, same reasoning: requests nobody answered are the rider-side
+// equivalent of a stranded car, and they never expired on their own.
+export { expireStaleRequests } from './scheduled/expireStaleRequests';
 
 // ============================================
 // HTTP CALLABLE FUNCTIONS

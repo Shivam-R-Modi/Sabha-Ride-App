@@ -166,6 +166,9 @@ export function formatRideStatus(status: string): string {
         in_ride: 'In Ride',
         at_sabha: 'At Sabha',
         home_safe: 'Home Safe',
+        missed_pickup: 'Missed Pickup',
+        // Not "Cancelled" — nobody cancelled. The window closed with no driver.
+        missed_ride: 'No Driver Available',
     };
 
     return statusMap[status] || status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());

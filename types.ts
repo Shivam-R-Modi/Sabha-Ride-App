@@ -55,7 +55,11 @@ export type StudentStatus =
   | 'in_ride'
   | 'at_sabha'
   | 'home_safe'
-  | 'missed_pickup';
+  | 'missed_pickup'
+  // Their request reached the end of the ride window without a driver. Neither
+  // 'home_safe' (a lie) nor 'waiting_for_dropoff' (also a lie, and it leaves the
+  // manager's board showing riders who went home hours ago).
+  | 'missed_ride';
 
 export interface Student {
   id: string;
