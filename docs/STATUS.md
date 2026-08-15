@@ -1,11 +1,16 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-14**.
+at the end. Last updated **2026-08-14, late evening**.
 
-**The UI/UX redesign is DEPLOYED**, and so is the sabha-times fix that was
-developed in parallel on `main`. See the incident note directly below before
-doing anything else.
+**A full sabha ran end to end on 2026-08-14 — the first one this app has served
+in both directions.** 11 riders out, 4 home, one party of four split across two
+cars and reunited correctly. The dispatch overhaul that made that possible is
+deployed; see *Shipped 2026-08-14* below, which is the section that matters most
+to anyone picking this up.
+
+The UI/UX redesign and the sabha-times fix are also deployed. The incident note
+below is history, kept because its lesson is a standing deploy rule.
 
 ## Incident, 2026-08-13 — a fix was reverted in production for ~20 minutes
 
@@ -55,19 +60,20 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
+Last deploy `8f889f2`, 2026-08-14. `main` = branch = production.
+
 | | Deployed | Notes |
 |---|---|---|
-| Firestore rules | ✅ | Unchanged by this release — byte-identical, Firebase skipped the upload |
+| Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
-| Cloud Functions | ✅ | All 16 updated. No behaviour change in this release — one comment |
-| Hosting | ✅ | bundle `index-EyuhruP1.js`, matched against `dist/` and verified live |
+| Cloud Functions | ✅ | Dispatch overhaul phases 0–4 + driver-keeps-their-car |
+| Hosting | ✅ | bundle `index-Cd9ZozW0.js`, matched against `dist/` and verified live |
 
-So the release was **effectively hosting-only**: the whole UI redesign, against a
-backend that did not move. That is why it was safe to ship without the
-sign-in-gated hand testing — but see the caveat under Open items.
+**Test suites, all green:** `functions` **379** · client **549** · rules **81** —
+**1009 total**.
 
-**Test suites, all green:** `functions` **245** · client **471** · rules **81** —
-**797 total**.
+> ⚠️ **Two changes are written and tested but NOT yet deployed** — the last-driver
+> warning and the stale-request sweep. See *Built but not deployed* below.
 
 `npm run typecheck` reports **19** errors, all client-side. That is the clean
 baseline. It was 22 before this branch; Phase 4 removed three by deleting the
@@ -104,6 +110,152 @@ and hosting. That happened on 2026-08-13. The failure was safe, because hosting
 is last and the half-deployed state was old-client-with-old-backend — which is
 exactly why the order is rules → functions → hosting and not one bare
 `firebase deploy`.
+
+---
+
+## Shipped 2026-08-14: the dispatch overhaul
+
+Plans: [`plans/dispatch-workflow-audit.md`](plans/dispatch-workflow-audit.md),
+[`plans/dispatch-seed-and-grow.md`](plans/dispatch-seed-and-grow.md),
+[`plans/fleet-stuck-vehicles.md`](plans/fleet-stuck-vehicles.md).
+
+Started as "why is Car3 stuck?" and ended as a re-architecture of how riders are
+grouped. Everything here is deployed and was exercised by a real sabha the same
+evening.
+
+### The model that was wrong, and now is not
+
+**A driver keeps their car all evening.** `completeRide` and `releaseAssignment`
+used to release the vehicle on every completed run, which modelled one run as the
+end of the driver's relationship with the car. It caused two failures — a race
+where "Assign next" saw `currentVehicleId` nulled and demanded a car be picked
+again, and worse, another driver could take the car *between runs*. Only
+`driverDoneForToday` releases now. Verified in production: one driver did **4
+runs, 10 seats, one car, no re-picking**.
+
+**`in_use` means "held by a driver", not "carrying passengers".** A car goes
+`in_use` the moment it is picked. Three separate screens implied otherwise.
+
+**Pickup and drop-off are separate pools.** `globalAssignDriver` had no direction
+filter, so a leftover pickup request was swept into the drop-off run. Now
+`isValidPendingRide` checks both event key and `rideType`; absent `rideType`
+means `home-to-sabha`, so no backfill was needed.
+
+### Seed-and-grow replaced k-means
+
+`functions/src/utils/clustering.ts` exported `kMeansClustering` and
+`matchClustersToDrivers`, both tested, both **called by nothing**. Deleted (307
+lines + 162 of tests).
+
+`functions/src/utils/carload.ts` is the replacement. One tap fills one car:
+anchor on a seed rider, grow by proximity, hand ordering to `fillBySeats`. Seed
+priority is **remainders → long-waiters (90 min) → farthest from the venue**.
+
+Splitting a party across cars is accepted behaviour — confirmed with the owner:
+*"driver will manually make sure that child is not left alone and given
+preference with the adult."*
+
+**The return leg is deliberately NOT paired to the outbound driver.** Riders are
+matched by home proximity. This looks like a missing feature and is not one — all
+cars start at the temple, so grouping by destination is the only thing worth
+optimising, and pairing would idle cars and strand riders whose driver went home.
+Confirmed with the owner 2026-08-14. Do not "fix" it.
+
+### Security and safety fixes found on the way
+
+- **`globalAssignDriver` never authorised the tapping driver.** A revoked account
+  could pull a carload of children's names, phones and addresses. Now
+  `assertApprovedDriver`. Note the asymmetry that matters: the manager check uses
+  `hasRecordedRole`, the driver check uses `hasGrantedRole`, because every driver
+  here is *recorded* as a manager who drives.
+- **`adminDeleteUser` deleted `vehicles/{uid}`** — a key no vehicle uses. A
+  deleted account's car was unreachable by any code path; one had been stuck for
+  nine days. Now `releaseVehiclesHeldBy` queries both halves of the mirror.
+- **`driverDoneForToday` now checks the rides, not just `activeRideId`.** That
+  pointer names one ride; a carload is several documents, and it had been both
+  stale and wrong in production on the same day.
+- **`returnStudentToPool` left a dangling `activeRideId`.**
+
+### New escape hatches
+
+| | What |
+|---|---|
+| `managerReleaseVehicle` | Manager hands a stuck car back. Refuses while the holder has live rides. Audited. |
+| `releaseIdleVehicles` | Daily 03:00 sweep. **Never touches a car with a live ride.** Missing `updatedAt` counts as infinitely old — deliberately, or the most stuck cars are the ones it never fixes. |
+| `scripts/repair-fleet.cjs` | Dry-run-by-default production repair, three passes. |
+
+### What the live run proved
+
+Read directly from production, not inferred:
+
+| | |
+|---|---|
+| Pickup rides completed | 11 |
+| Drop-off rides completed | 4 |
+| Party of 4 split 3+1 | reunited, rider correctly ended `home_safe` |
+| Direction filter | no pickup leaked into the drop-off pool |
+
+The split is worth understanding because it looked like a bug at first glance: a
+rider had one `completed` drop-off ride and one `requested` one, and sat at
+`in_ride` in between. That is `completeRide`'s split-leg guard **working** — it
+refuses to mark somebody `home_safe` while a leg is outstanding. It resolved by
+itself when the remainder completed.
+
+### A recurring pattern, recorded because it cost time three times
+
+Three separate times a correct helper existed but **nothing proved the caller
+invoked it** — `releaseVehiclesHeldBy`, `isDispatchable`, and the seed query's
+`accountStatus` clause. Each time the fix was a test asserting *the call*, not
+the helper. Testing a helper in isolation says nothing about whether production
+reaches it.
+
+Every fix in this section was verified by reverting it and confirming the tests
+fail. That is the convention; keep it.
+
+---
+
+## Built but not deployed
+
+Two changes from the evening of 2026-08-14, written and fully tested, **not yet
+released**. Both came out of watching the live drop-off run.
+
+**1. The last driver out gets warned.** Both drivers tapped "Done for today"
+within four minutes of each other; two riders then requested drop-offs with
+nobody left who could serve them, and no screen said so.
+
+`driverDoneForToday` now returns `needsConfirmation` — **warn, never block** —
+when riders are waiting *and* nobody else holds a car. It releases nothing while
+asking; a second call with `acknowledgeWaiting` goes through. A volunteer is
+always allowed to go home.
+
+Client side lives in `src/utils/endShift.ts` rather than in the component, because
+the dangerous shape is a caller treating `needsConfirmation` as success: it would
+show "Shift ended, thank you for driving" while the driver is still on shift
+holding a car.
+
+**2. Unserved requests expire.** Nothing ever closed a request no driver
+answered. It stayed `requested` for ever — invisible to the next gathering's
+dispatch because the event key would not match, and permanently "waiting" on the
+rider's record and the manager's board.
+
+`expireStaleRequests` runs daily at 03:00 and only touches requests belonging to a
+gathering **strictly in the past** that are still `requested`. Today's queue is
+untouchable by construction. An *undateable* request is left alone — unlike a
+stranded car, unknown here means "might be real", and guessing wrong cancels
+somebody's lift.
+
+New rider status **`missed_ride`** ("No Driver Available"), because `home_safe`
+and `waiting_for_dropoff` would both be lies. The ride itself reuses `cancelled`
+plus `cancellationReason: 'window-closed'` — every list already filters
+`cancelled` out of "ongoing", so no UI changed.
+
+Both were checked by breaking them: 4 test failures for the pair server-side, 5
+more for the client sequence.
+
+**These are not urgent.** The dangerous half of the stale-request problem is
+already fixed — the event-key filter stops old rows being dispatched. What is left
+is untidy data and one missing courtesy prompt. At three cars they matter less
+than a human noticing.
 
 ---
 
@@ -317,16 +469,39 @@ Full design and the rejected alternatives: [`plans/phase-3-seats.md`](plans/phas
 
 ## Open items
 
-**The redesign shipped without hand testing behind sign-in.** Everything
-automated is green — 782 tests, contrast and tap-target audits clean on rider,
-driver and manager in both themes — and the backend did not move, so the blast
-radius is presentation only. But no human has walked a real ride end to end on
-the new UI: request → assign → complete. `plans/testing-plan.md` Suite A is that
-walk, 15 minutes. **Do it before the next sabha**, not after.
+**Superseded 2026-08-14 — a real sabha has now been walked end to end**, in both
+directions, with real accounts on real devices: request → assign → start →
+complete → next carload → drop-off → done for today. This entry used to say no
+human had done that. `plans/testing-plan.md` Suite A remains useful as a script,
+but it is no longer the blocking gap it was.
 
-The specific things automation cannot see: whether a driver standing in a dark
-car park can read the screen, whether the manager's dispatch flow still makes
-sense at speed, and how it behaves on a real phone on mobile data.
+Still unseen by anyone: how it behaves **in a dark car park on mobile data**, and
+whether the manager's dispatch flow holds up at speed with more than two drivers.
+
+### Known blank-screen branches — not yet fixed
+
+`DriverDashboard` has three `return null` branches: `preview` without
+`pendingAssignment`, `active` without `activeRide`, `completed` without stats.
+Each renders a **blank page with no way back**. Flagged three times across
+sessions and deferred each time. It is the same "silently does nothing" family
+this codebase keeps removing, and it is the oldest outstanding one.
+
+### Duplicate release paths
+
+Client-side `releaseVehicle` in `hooks/useVehicles.ts` (used by the
+ManagerDashboard hard-release) writes directly and does **not** clear
+`activeRideId` or refuse on live rides. The `managerReleaseVehicle` callable does
+both. Two paths, one of them weaker. Worth collapsing.
+
+### Deferred scaling ceilings
+
+Recorded, not actioned, all fine at three cars and blocking at five thousand
+users: a single global `system/assignmentLock`; three unbounded collection reads
+per tap; an N+1 at `globalAssignDriver:597`; `licensePlate` vs `plateNumber`
+hand-mapped in three or more places. Multi-city tenancy is deferred by the owner,
+with one `dispatchScope` seam noted in the plan.
+
+`OmWatermark` renders `null` and is still imported and rendered in `App.tsx`.
 
 **Fixed 2026-08-13 — the sign-in screen.** The redesign covered rider, driver and
 manager and never touched auth, so the screen every user reaches first kept the
@@ -384,23 +559,14 @@ component to confirm they fail (8 of 14 did).
 
 **For the owner, not code:**
 
-- 🔴 **RIDES ARE CLOSED RIGHT NOW.** No longer a suspicion — production was read
-  directly on 2026-08-14 and `system/rideContext` says:
-
-  ```
-  rideType: null
-  calendarStatus: "no-scheduled-event"
-  displayText: "No rides available"
-  ```
-
-  The whole `events` collection is 2026-08-07, 08-08, 08-09 and 08-13 (all past)
-  plus 2026-09-18 and 09-25 (both **cancelled**). There is no future sabha, so
-  nobody can request a ride until a manager adds one in **Setup → Sabha Calendar**.
-  Several of the past entries look like time-shift test events; they are harmless
-  but worth deleting.
-
-  This is surfaced rather than silent — the Calendar shows a "Rides are closed"
-  banner and `PickupForm` says so too — but it needs a human to act on it.
+- ✅ **Resolved 2026-08-14 — rides are open again.** This entry used to read
+  "RIDES ARE CLOSED RIGHT NOW". A sabha was added and ran in both directions the
+  same evening. The underlying condition still applies though: **there is no
+  standing schedule**, so once the calendar runs out nobody can request a ride
+  until a manager adds one in **Setup → Sabha Calendar**. Worth a look before each
+  Friday.
+- **Test events are still in the calendar.** Several past entries are time-shift
+  test sabhas from the 7th–14th. Harmless; worth deleting.
 - **Three UI surfaces have never been seen rendered** — covered by tests and
   confirmed present in the live bundle, but nobody has looked at them in a browser,
   because reaching them needs a sign-in. Rider → *Request Pickup* (seat stepper,
@@ -422,9 +588,11 @@ defects Phase 1 found by measuring rather than reading. Candidates, none started
 
 | | Phase | Why / why not |
 |---|---|---|
+| **Deploy what is built** | The last-driver warning and the stale-request sweep | Smallest item here. Written, tested, undeployed — see *Built but not deployed*. Not urgent. |
+| **Blank-screen branches** | `DriverDashboard`'s three `return null` paths | Oldest outstanding defect, and the cheapest real fix on this list. |
 | **Phase 3 part 2** | Named passengers — dependents, guests, guardians | **Blocked.** Needs roadmap §8 Q3 answered first: can a guest be a minor, and whose consent covers them? Do not design around this — ask. |
 | **Phase 2** | Cities and locations; scope every query by `cityId` | Invisible to users, but the gate before a second venue. **Gated on `node scripts/tenancy.cjs verify` reading zero** — a `cityId` filter against an unstamped document returns nothing rather than erroring, which looks exactly like "no rides tonight". |
-| **Phase 4** | Move dispatch out of the manager's browser to the server | Largest item, on the critical path. Two managers with the dashboard open today means two brains assigning the same riders. |
+| ~~Phase 4~~ | ~~Move dispatch to the server~~ | ✅ **Done 2026-08-14.** `globalAssignDriver` is server-side and serialised by `system/assignmentLock` (10s TTL). Two managers can no longer assign the same riders. |
 
 **Flagged, not scheduled:** there is no driver-vetting check anywhere in the
 assignment path, and volunteers drive minors. That is a policy decision for the
