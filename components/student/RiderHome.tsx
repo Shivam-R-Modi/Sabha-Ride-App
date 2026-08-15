@@ -11,6 +11,12 @@ import { useConfirm } from '../shared/useConfirm';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { submitWeeklyAttendance, updateAttendanceResponse } from '../../hooks/useFirestore';
 import { studentReadyToLeave } from '../../src/utils/cloudFunctions';
+import { useSettings } from '../../hooks/useSettings';
+import { getCurrentPosition } from '../../src/utils/location';
+import {
+    judgeFix, venueFor, PRESENCE_FIX_TIMEOUT_MS,
+    type PresenceClaim, type Verdict,
+} from '../../src/utils/presence';
 import type { RiderState, SplitInfo, DismissedInfo } from '../../src/utils/riderState';
 
 /**
@@ -65,7 +71,8 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
 }) => {
     const toast = useToast();
     const { ask, confirmDialog } = useConfirm();
-    const { eventId, hasEvent, canWithdraw } = useCurrentEvent();
+    const { eventId, hasEvent, canWithdraw, venue } = useCurrentEvent();
+    const { sabhaLocation } = useSettings();
 
     const [requestOpen, setRequestOpen] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -119,21 +126,100 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
         }
     };
 
-    const askToLeave = async () => {
-        const ok = await ask({
-            title: 'Ready for pickup?',
+    /**
+     * Establish that this rider is at the sabha, then join the drop-off queue.
+     *
+     * Three routes in, in order of how little they bother the rider:
+     *
+     *  1. Their pickup completed, so they are here by definition — no prompt.
+     *  2. A GPS fix inside 100m confirms it — no prompt.
+     *  3. Otherwise they are asked. This is the ordinary indoor path, not a
+     *     failure: a phone under a roof usually falls back to Wi-Fi positioning
+     *     accurate to tens of metres at best, and the venue pin is geocoded from
+     *     a street address.
+     *
+     * Route 3 is offered even when GPS is confident the rider is far away. That
+     * is deliberate and the whole reason this is advisory: a rider stranded at
+     * the temple with no way to ask for a lift is worse than a driver making one
+     * wasted stop. What GPS said is recorded either way, so an implausible claim
+     * is visible to a manager without anyone having been blocked.
+     */
+    const establishPresence = async (): Promise<PresenceClaim | null> => {
+        // Widened deliberately: the prop is `User | Driver`, and Driver's status
+        // union has no overlap with the rider statuses. The value on the wire is
+        // the same string either way.
+        if ((user as { status?: string }).status === 'at_sabha') return { method: 'pickup' };
+
+        // The gathering's own venue wins: a manager can move one sabha, and
+        // measuring that evening against the standing default would put every
+        // rider kilometres out and take the check down for the whole night.
+        const target = venueFor(venue, sabhaLocation);
+        let verdict: Verdict | null = null;
+
+        if (target) {
+            try {
+                const fix = await getCurrentPosition({
+                    enableHighAccuracy: true,
+                    // Short. A rider indoors should be asked, not left watching a
+                    // spinner while the phone hunts for satellites it cannot see.
+                    timeout: PRESENCE_FIX_TIMEOUT_MS,
+                    maximumAge: 0,
+                });
+                verdict = judgeFix(fix, target);
+            } catch (error) {
+                // Denied, unavailable or timed out. All the same to us: ask.
+                console.info('[RiderHome] No usable fix, asking instead:', error);
+            }
+        }
+
+        if (verdict?.confirmed) {
+            return { method: 'auto', distanceMeters: verdict.distanceMeters };
+        }
+
+        const here = await ask({
+            title: 'Are you at the sabha?',
             message: 'Your driver will be told to head for the pickup point.',
-            confirmLabel: 'Yes, tell them',
+            confirmLabel: 'Yes, I am here',
             cancelLabel: 'Not yet',
         });
-        if (!ok) return;
+        if (!here) return null;
 
+        return {
+            method: 'manual',
+            ...(verdict ? { distanceMeters: verdict.distanceMeters } : {}),
+        };
+    };
+
+    const askToLeave = async () => {
         setBusy(true);
         try {
-            await studentReadyToLeave(user.id);
+            const presence = await establishPresence();
+            if (!presence) return;
+
+            // Confirmed without asking, so they have not yet been told what this
+            // does. Everyone else answered "Are you at the sabha?", which said it.
+            if (presence.method !== 'manual') {
+                const ok = await ask({
+                    title: 'Ready for pickup?',
+                    message: 'Your driver will be told to head for the pickup point.',
+                    confirmLabel: 'Yes, tell them',
+                    cancelLabel: 'Not yet',
+                });
+                if (!ok) return;
+            }
+
+            await studentReadyToLeave(user.id, presence);
         } catch (error) {
+            // The server's own words, not a generic retry prompt.
+            //
+            // This used to be a flat "Could not let your driver know. Please try
+            // again." for every failure, which discarded the one thing the rider
+            // needed — "your home address is not set", "drop-off is not open yet"
+            // — and advised the single action that could never help.
             console.error('Error marking ready to leave:', error);
-            toast.error('Could not let your driver know. Please try again.');
+            toast.error(error instanceof Error && error.message
+                ? error.message
+                : 'Could not let your driver know. Please try again.');
         } finally {
             setBusy(false);
         }

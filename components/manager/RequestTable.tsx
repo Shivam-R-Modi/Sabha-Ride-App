@@ -5,6 +5,7 @@ import {
   Check, Trash2, UserPlus, AlertCircle, Users
 } from 'lucide-react';
 import { useMaxFleetSeats } from '../../hooks/useVehicles';
+import { describePresence } from '../../src/utils/presence';
 
 interface RequestTableProps {
   requests: StudentRequest[];
@@ -215,7 +216,18 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <img src={req.avatarUrl} className="w-8 h-8 rounded-full shadow-sm" alt="" />
-                        <span className="text-sm font-bold text-coffee">{req.name}</span>
+                        <div className="min-w-0">
+                          <span className="text-sm font-bold text-coffee">{req.name}</span>
+                          {/* How this rider established they were at the sabha.
+                              Presence is advisory — nobody is ever blocked — so
+                              this line is the only thing that makes an
+                              implausible claim visible rather than silent. */}
+                          {req.presence && (
+                            <p className="text-[11px] text-coffee-500 leading-tight">
+                              {describePresence(req.presence)}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="p-4">

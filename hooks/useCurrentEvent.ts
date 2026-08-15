@@ -95,6 +95,12 @@ export function useCurrentEvent() {
         eventId: event?.eventId ?? null,
         rideType: event?.rideType ?? null,
         calendarStatus: event?.calendarStatus,
+        /**
+         * This gathering's own venue, which the drop-off presence check measures
+         * against. A manager can move a single sabha, so measuring that evening
+         * against the standing default would put every rider kilometres out.
+         */
+        venue: event?.venue ?? null,
         /** False when no sabha is scheduled — attendance and requests make no sense then. */
         hasEvent: !!event?.eventId,
         canWithdraw,

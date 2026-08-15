@@ -1,3 +1,4 @@
+import type { PresenceClaim } from './src/utils/presence';
 // ============================================
 // SABHA RIDE SEVA - COMPLETE TYPE DEFINITIONS
 // ============================================
@@ -359,6 +360,12 @@ export interface StudentRequest {
   groupSeatsTotal?: number;
   /** This row is the leftover of an already part-served group. */
   isRemainder?: boolean;
+  /**
+   * How the rider established they were at the sabha, on a return request.
+   * Advisory only — nobody is blocked — so surfacing it is what makes an
+   * implausible claim visible instead of silent. Never carries coordinates.
+   */
+  presence?: PresenceClaim;
   // pickupLat/pickupLng were here for the dashboard map. Nothing renders a
   // request's coordinates now that it is gone. The same field names stay live on
   // the ride document, which is what the driver's route is built from.

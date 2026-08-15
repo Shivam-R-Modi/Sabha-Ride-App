@@ -140,6 +140,13 @@ export const usePendingRequests = () => {
                     // cars, so a part-served family is not mistaken for a new one.
                     groupSeatsTotal: data.groupSeatsTotal ?? undefined,
                     isRemainder: !!data.groupId,
+                    // How this rider established they were at the sabha, on a
+                    // return request. Presence is advisory — nobody is ever
+                    // blocked — so carrying it to the manager's board is the only
+                    // thing that makes an implausible claim visible rather than
+                    // silent. Absent on pickups and on anything an older client
+                    // created.
+                    presence: data.presence ?? undefined,
                     // pickupLat/pickupLng were carried here for the dashboard
                     // map to plot. The map is gone and RequestTable never read
                     // them, so they were being copied onto every request row for

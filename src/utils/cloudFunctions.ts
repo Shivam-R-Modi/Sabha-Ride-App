@@ -5,6 +5,7 @@
 
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
 import { app } from '@/firebase/config';
+import type { PresenceClaim } from './presence';
 
 const functions = getFunctions(app);
 
@@ -201,8 +202,17 @@ export interface ReadyToLeaveResult {
     status: string;
 }
 
-export async function studentReadyToLeave(studentId: string): Promise<ReadyToLeaveResult> {
-    return callFunction<ReadyToLeaveResult>('studentReadyToLeave', { studentId });
+/**
+ * @param presence how the rider's presence at the sabha was established. Recorded
+ * on the ride and shown to managers — never enforced, because the manual route is
+ * always available and a rider must never be stranded by a bad GPS fix.
+ * Coordinates are deliberately not sent; only the method and a rounded distance.
+ */
+export async function studentReadyToLeave(
+    studentId: string,
+    presence?: PresenceClaim,
+): Promise<ReadyToLeaveResult> {
+    return callFunction<ReadyToLeaveResult>('studentReadyToLeave', { studentId, presence });
 }
 
 // ============================================

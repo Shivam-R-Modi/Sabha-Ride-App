@@ -343,3 +343,41 @@ describe('RequestTable — bulk select on a phone', () => {
         expect(onDismiss).not.toHaveBeenCalled();
     });
 });
+
+/**
+ * How each rider got into the drop-off queue.
+ *
+ * The presence check is advisory by design — a rider is always offered the
+ * manual question, even when GPS is confident they are far away, because being
+ * stranded at the temple is worse than a driver making a wasted stop. That trade
+ * is only defensible if an implausible claim is VISIBLE somewhere. This row is
+ * that somewhere, which makes these assertions load-bearing rather than cosmetic.
+ */
+describe('RequestTable — how the rider said they were at sabha', () => {
+    it('shows that a rider arrived by ride', () => {
+        renderTable({ requests: [request({ presence: { method: 'pickup' } })] });
+
+        expect(screen.getAllByText(/Arrived by ride/i).length).toBeGreaterThan(0);
+    });
+
+    it('shows an automatic confirmation with its distance', () => {
+        renderTable({ requests: [request({ presence: { method: 'auto', distanceMeters: 40 } })] });
+
+        expect(screen.getAllByText(/Location confirmed \(40m\)/i).length).toBeGreaterThan(0);
+    });
+
+    it('SHOWS what GPS thought when a rider overrode it', () => {
+        // The case the whole design turns on. They were not blocked; the manager
+        // simply gets to see that GPS put them 5km away.
+        renderTable({ requests: [request({ presence: { method: 'manual', distanceMeters: 5100 } })] });
+
+        expect(screen.getAllByText(/5\.1km/).length).toBeGreaterThan(0);
+    });
+
+    it('says nothing at all for a pickup request, which has no presence', () => {
+        renderTable({ requests: [request()] });
+
+        expect(screen.queryByText(/Arrived by ride|Confirmed by rider|Location confirmed/i))
+            .not.toBeInTheDocument();
+    });
+});

@@ -15,10 +15,19 @@ vi.mock('firebase-functions', () => ({
         schedule: () => ({ timeZone: () => ({ onRun: (h: any) => h }) }),
     },
 }));
-vi.mock('firebase-admin', () => ({ firestore: () => db }));
+vi.mock('firebase-admin', () => ({
+    firestore: Object.assign(() => db, {
+        FieldValue: { delete: () => '__DELETE__' },
+    }),
+}));
 vi.mock('../utils/settings', () => ({ getTimeZone: async () => 'America/New_York' }));
 
-import { expireStaleRequests, shouldExpire, eventKeyOfRide } from './expireStaleRequests';
+import {
+    expireStaleRequests, shouldExpire, eventKeyOfRide, clearEndOfEveningStatuses,
+} from './expireStaleRequests';
+
+/** A sentinel standing in for admin.firestore.FieldValue.delete(). */
+const DELETE = '__DELETE__';
 
 /** Fixed, for the pure boundary tests — they take todayKey as an argument. */
 const TODAY = '2026-08-14';
@@ -101,15 +110,21 @@ function makeDb(rides: Array<{ id: string; data: any }>, riders: Record<string, 
                 set: async (row: any) => { recorder.audits.push(row); },
             }),
             where: () => chain,
-            get: async () => ({
-                empty: rides.length === 0,
-                size: rides.length,
-                docs: rides.map(r => ({
-                    id: r.id,
-                    ref: { path: `rides/${r.id}` },
-                    data: () => r.data,
-                })),
-            }),
+            get: async () => {
+                // The status sweep runs first and queries users. It has its own
+                // tests below; here it must find nobody, or every case in this
+                // block picks up writes that belong to the other feature.
+                if (name === 'users') return { empty: true, size: 0, docs: [] };
+                return {
+                    empty: rides.length === 0,
+                    size: rides.length,
+                    docs: rides.map(r => ({
+                        id: r.id,
+                        ref: { path: `rides/${r.id}` },
+                        data: () => r.data,
+                    })),
+                };
+            },
         };
         return chain;
     };
@@ -236,5 +251,97 @@ describe('expireStaleRequests — the sweep', () => {
         expect(rec.audits).toHaveLength(1);
         expect(rec.audits[0].actorUid).toBe('system:expireStaleRequests');
         expect(rec.audits[0].summary).toMatch(/Expired 1 unserved/);
+    });
+});
+
+// ── clearing the end-of-evening statuses ─────────────────────────
+
+/**
+ * `at_sabha` was never cleared by anything, so five riders still carried it the
+ * morning after 2026-08-14. That matters because the drop-off presence check
+ * short-circuits on it: a week-old flag waves a rider straight past this week's
+ * check without them having turned up, and a driver is sent to collect somebody
+ * sitting at home.
+ */
+function makeStatusDb(users: Array<{ id: string; status: string }>, liveRiderIds: string[] = []) {
+    const writes: Array<{ path: string; data: any }> = [];
+
+    const collection = (name: string) => {
+        const chain: any = {
+            doc: (id: string) => ({ path: `${name}/${id}` }),
+            where: () => chain,
+            get: async () => {
+                if (name === 'users') {
+                    return {
+                        empty: users.length === 0,
+                        docs: users.map(u => ({ id: u.id, ref: { path: `users/${u.id}` }, data: () => u })),
+                    };
+                }
+                return {
+                    empty: liveRiderIds.length === 0,
+                    docs: liveRiderIds.map(id => ({ id: `r_${id}`, data: () => ({ studentId: id }) })),
+                };
+            },
+        };
+        return chain;
+    };
+
+    db = {
+        collection,
+        batch: () => ({
+            update: (ref: any, data: any) => writes.push({ path: ref.path, data }),
+            set: (ref: any, data: any) => writes.push({ path: ref.path, data }),
+            commit: async () => undefined,
+        }),
+    };
+    return writes;
+}
+
+describe('clearEndOfEveningStatuses', () => {
+    it('clears at_sabha once the evening is over', async () => {
+        const writes = makeStatusDb([{ id: 's1', status: 'at_sabha' }]);
+
+        const cleared = await clearEndOfEveningStatuses(db);
+
+        expect(cleared).toBe(1);
+        expect(writes[0]!.data.status).toBe(DELETE);
+        expect(writes[0]!.data.currentRideId).toBeNull();
+    });
+
+    it('REMOVES the field rather than inventing a value', async () => {
+        // Signup writes no status at all, so absent is already what an idle rider
+        // looks like. 'home_safe' would be a plain lie — nobody knows they got
+        // home — and a new status would need a union, a formatter and a screen.
+        const writes = makeStatusDb([{ id: 's1', status: 'at_sabha' }]);
+
+        await clearEndOfEveningStatuses(db);
+
+        expect(writes[0]!.data.status).toBe(DELETE);
+    });
+
+    it('leaves a rider who is still travelling alone', async () => {
+        // A drop-off run can legitimately still be going at 03:00. Resetting
+        // somebody who is in the car makes the board contradict the driver.
+        const writes = makeStatusDb([{ id: 's1', status: 'in_ride' }], ['s1']);
+
+        expect(await clearEndOfEveningStatuses(db)).toBe(0);
+        expect(writes).toEqual([]);
+    });
+
+    it('clears one rider while sparing another mid-ride', async () => {
+        const writes = makeStatusDb(
+            [{ id: 's1', status: 'at_sabha' }, { id: 's2', status: 'in_ride' }],
+            ['s2'],
+        );
+
+        expect(await clearEndOfEveningStatuses(db)).toBe(1);
+        expect(writes.map(w => w.path)).toEqual(['users/s1']);
+    });
+
+    it('does nothing when nobody is lingering', async () => {
+        const writes = makeStatusDb([]);
+
+        expect(await clearEndOfEveningStatuses(db)).toBe(0);
+        expect(writes).toEqual([]);
     });
 });

@@ -41,9 +41,18 @@ function toRadians(degrees: number): number {
 
 /**
  * Get current position using browser geolocation API
- * @returns Promise with lat/lng coordinates
+ *
+ * `accuracy` is carried through, not discarded. Without it a caller cannot tell
+ * "you are 40m from the venue" from "you are 40m from the venue, give or take
+ * 400m" — and those two demand opposite decisions. See src/utils/presence.ts.
+ *
+ * @param options overrides the defaults; the presence check uses a short timeout
+ * so a rider indoors is asked rather than left watching a spinner.
+ * @returns Promise with lat/lng and the reported accuracy in metres
  */
-export function getCurrentPosition(): Promise<{ lat: number; lng: number }> {
+export function getCurrentPosition(
+    options: PositionOptions = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+): Promise<{ lat: number; lng: number; accuracy: number }> {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
             reject(new Error('Geolocation is not supported by this browser'));
@@ -55,6 +64,7 @@ export function getCurrentPosition(): Promise<{ lat: number; lng: number }> {
                 resolve({
                     lat: position.coords.latitude,
                     lng: position.coords.longitude,
+                    accuracy: position.coords.accuracy,
                 });
             },
             (error) => {
@@ -72,11 +82,7 @@ export function getCurrentPosition(): Promise<{ lat: number; lng: number }> {
                 }
                 reject(new Error(errorMessage));
             },
-            {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0,
-            }
+            options,
         );
     });
 }

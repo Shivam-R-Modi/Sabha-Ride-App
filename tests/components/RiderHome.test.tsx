@@ -16,12 +16,14 @@ const submitWeeklyAttendance = vi.fn().mockResolvedValue(undefined);
 const updateAttendanceResponse = vi.fn().mockResolvedValue({ success: true });
 const studentReadyToLeave = vi.fn().mockResolvedValue(undefined);
 const useCurrentEvent = vi.fn();
+const useSettings = vi.fn();
 
 vi.mock('../../hooks/useFirestore', () => ({
     submitWeeklyAttendance: (...a: unknown[]) => submitWeeklyAttendance(...a),
     updateAttendanceResponse: (...a: unknown[]) => updateAttendanceResponse(...a),
 }));
 vi.mock('../../hooks/useCurrentEvent', () => ({ useCurrentEvent: () => useCurrentEvent() }));
+vi.mock('../../hooks/useSettings', () => ({ useSettings: () => useSettings() }));
 vi.mock('../../src/utils/cloudFunctions', () => ({
     studentReadyToLeave: (...a: unknown[]) => studentReadyToLeave(...a),
 }));
@@ -39,6 +41,9 @@ const rider = {
     phone: '+15550001111', role: 'student',
 } as never;
 
+/** 360 Huntington Ave — the founding venue. */
+const VENUE = { lat: 42.339925, lng: -71.088182 };
+
 const driverRide = {
     id: 'r1', status: 'assigned', pickupAddress: '42 Oak Street', timeSlot: '6:45 PM',
     date: '2026-08-14',
@@ -48,11 +53,11 @@ const driverRide = {
     },
 } as never;
 
-const show = (state: RiderState, ride: unknown = null) =>
+const show = (state: RiderState, ride: unknown = null, userOverride: object = {}) =>
     render(
         <ToastProvider>
             <RiderHome
-                user={rider}
+                user={{ ...(rider as object), ...userOverride } as never}
                 state={state}
                 ride={ride as never}
                 onAttendanceAnswered={vi.fn()}
@@ -71,7 +76,11 @@ const primaryActions = () =>
     });
 
 beforeEach(() => {
-    useCurrentEvent.mockReturnValue({ eventId: '2026-08-14', hasEvent: true, canWithdraw: true });
+    useCurrentEvent.mockReturnValue({
+        eventId: '2026-08-14', hasEvent: true, canWithdraw: true, venue: VENUE,
+    });
+    useSettings.mockReturnValue({ sabhaLocation: VENUE });
+    delete (navigator as any).geolocation;
 });
 
 describe('RiderHome — one card, one action', () => {
@@ -280,25 +289,54 @@ describe('RiderHome — booking', () => {
     });
 });
 
+/**
+ * Going home no longer depends on how the rider got here.
+ *
+ * `studentReadyToLeave` used to refuse anyone whose status was not `at_sabha`,
+ * and that flag is only ever written when a home→sabha ride completes — so a
+ * rider who walked, drove, or got a lift from a friend was locked out for good
+ * while still being shown the button.
+ *
+ * Presence is now established on the way in: a completed pickup short-circuits
+ * it, a GPS fix inside 100m confirms it, and otherwise the rider is simply
+ * asked. jsdom has no geolocation, so every case here takes that third route —
+ * which is also the ordinary real-world path for anyone stood indoors.
+ */
 describe('RiderHome — going home', () => {
-    it('asks before telling the driver', async () => {
+    it('asks whether they are at the sabha before telling anyone', async () => {
         const user = userEvent.setup();
         show({ kind: 'ready-to-leave' });
 
         await user.click(screen.getByRole('button', { name: /ready to leave/i }));
 
-        expect(await screen.findByRole('dialog', { name: /Ready for pickup/i })).toBeInTheDocument();
+        expect(await screen.findByRole('dialog', { name: /Are you at the sabha/i })).toBeInTheDocument();
         expect(studentReadyToLeave).not.toHaveBeenCalled();
     });
 
-    it('tells the driver once confirmed', async () => {
+    it('joins the queue once the rider confirms, recording how', async () => {
         const user = userEvent.setup();
         show({ kind: 'ready-to-leave' });
 
         await user.click(screen.getByRole('button', { name: /ready to leave/i }));
-        await user.click(await screen.findByRole('button', { name: /Yes, tell them/i }));
+        await user.click(await screen.findByRole('button', { name: /Yes, I am here/i }));
 
-        await waitFor(() => expect(studentReadyToLeave).toHaveBeenCalledWith('rider-1'));
+        await waitFor(() => expect(studentReadyToLeave)
+            .toHaveBeenCalledWith('rider-1', { method: 'manual' }));
+    });
+
+    it('never sends coordinates', async () => {
+        // Precise location for a child is data this app should not hold, and the
+        // manual route means the verdict was never enforceable anyway.
+        const user = userEvent.setup();
+        show({ kind: 'ready-to-leave' });
+
+        await user.click(screen.getByRole('button', { name: /ready to leave/i }));
+        await user.click(await screen.findByRole('button', { name: /Yes, I am here/i }));
+
+        await waitFor(() => expect(studentReadyToLeave).toHaveBeenCalled());
+        const claim: any = studentReadyToLeave.mock.calls[0]![1];
+        expect(claim.lat).toBeUndefined();
+        expect(claim.lng).toBeUndefined();
     });
 
     it('does nothing if the rider backs out', async () => {
@@ -311,14 +349,103 @@ describe('RiderHome — going home', () => {
         expect(studentReadyToLeave).not.toHaveBeenCalled();
     });
 
-    it('reports a failure rather than leaving the rider thinking help is coming', async () => {
+    it('shows the server\'s OWN reason, not a generic retry prompt', async () => {
+        // This used to be a flat "Could not let your driver know. Please try
+        // again." for every failure, which threw away the one thing the rider
+        // needed and advised the single action that could never help.
         const user = userEvent.setup();
-        studentReadyToLeave.mockRejectedValueOnce(new Error('nope'));
+        studentReadyToLeave.mockRejectedValueOnce(
+            new Error('Your home address is not set. Please update your address in Profile.'));
+        show({ kind: 'ready-to-leave' });
+
+        await user.click(screen.getByRole('button', { name: /ready to leave/i }));
+        await user.click(await screen.findByRole('button', { name: /Yes, I am here/i }));
+
+        expect(await screen.findByText(/home address is not set/i)).toBeInTheDocument();
+    });
+
+    it('still says something when the failure carries no message', async () => {
+        const user = userEvent.setup();
+        studentReadyToLeave.mockRejectedValueOnce(new Error(''));
+        show({ kind: 'ready-to-leave' });
+
+        await user.click(screen.getByRole('button', { name: /ready to leave/i }));
+        await user.click(await screen.findByRole('button', { name: /Yes, I am here/i }));
+
+        expect(await screen.findByText(/Could not let your driver know/i)).toBeInTheDocument();
+    });
+});
+
+/**
+ * The two routes that spare the rider a question.
+ *
+ * Both matter because the manual prompt is the fallback, not the goal: someone
+ * whose pickup just completed should not be interrogated about whether they are
+ * where the app drove them.
+ */
+describe('RiderHome — establishing presence without asking', () => {
+    /** Stub the browser's geolocation with a fixed reading. */
+    const withFix = (coords: { latitude: number; longitude: number; accuracy: number }) => {
+        (navigator as any).geolocation = {
+            getCurrentPosition: (ok: PositionCallback) =>
+                ok({ coords } as GeolocationPosition),
+        };
+    };
+
+    it('skips the question entirely for a rider whose pickup completed', async () => {
+        // They are here by definition — the app drove them.
+        const user = userEvent.setup();
+        show({ kind: 'ready-to-leave' }, null, { status: 'at_sabha' });
+
+        await user.click(screen.getByRole('button', { name: /ready to leave/i }));
+
+        expect(await screen.findByRole('dialog', { name: /Ready for pickup/i })).toBeInTheDocument();
+        expect(screen.queryByText(/Are you at the sabha/i)).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: /Yes, tell them/i }));
+        await waitFor(() => expect(studentReadyToLeave)
+            .toHaveBeenCalledWith('rider-1', { method: 'pickup' }));
+    });
+
+    it('confirms automatically from a sharp fix at the venue', async () => {
+        const user = userEvent.setup();
+        withFix({ latitude: VENUE.lat, longitude: VENUE.lng, accuracy: 8 });
         show({ kind: 'ready-to-leave' });
 
         await user.click(screen.getByRole('button', { name: /ready to leave/i }));
         await user.click(await screen.findByRole('button', { name: /Yes, tell them/i }));
 
-        expect(await screen.findByText(/Could not let your driver know/i)).toBeInTheDocument();
+        await waitFor(() => expect(studentReadyToLeave)
+            .toHaveBeenCalledWith('rider-1', { method: 'auto', distanceMeters: 0 }));
+    });
+
+    it('asks anyway when the fix is too vague to judge', async () => {
+        // The ordinary indoor case: a phone under a roof falls back to Wi-Fi
+        // positioning. Treating that as a pass would let someone at home
+        // through; treating it as a fail would strand someone in the hall.
+        const user = userEvent.setup();
+        withFix({ latitude: VENUE.lat, longitude: VENUE.lng, accuracy: 400 });
+        show({ kind: 'ready-to-leave' });
+
+        await user.click(screen.getByRole('button', { name: /ready to leave/i }));
+
+        expect(await screen.findByRole('dialog', { name: /Are you at the sabha/i })).toBeInTheDocument();
+    });
+
+    it('ASKS rather than blocks when GPS is confident they are far away', async () => {
+        // The decision the whole design turns on. Being stranded at the temple
+        // is worse than a driver making one wasted stop, so nobody is ever
+        // refused — but what GPS thought is recorded for the manager.
+        const user = userEvent.setup();
+        withFix({ latitude: 42.4, longitude: -71.2, accuracy: 8 });
+        show({ kind: 'ready-to-leave' });
+
+        await user.click(screen.getByRole('button', { name: /ready to leave/i }));
+        await user.click(await screen.findByRole('button', { name: /Yes, I am here/i }));
+
+        await waitFor(() => expect(studentReadyToLeave).toHaveBeenCalled());
+        const claim: any = studentReadyToLeave.mock.calls[0]![1];
+        expect(claim.method).toBe('manual');
+        expect(claim.distanceMeters).toBeGreaterThan(1000);
     });
 });
