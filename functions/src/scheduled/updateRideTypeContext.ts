@@ -16,6 +16,7 @@ import { notifyEveryone } from '../utils/notifications';
 import { drainAttendanceDelete } from '../http/deleteSabhaEvent';
 import { SEED_MARKER_DOC } from '../utils/events';
 import { assertApprovedManager } from '../utils/authz';
+import { readRecurrence, topUpCalendar } from '../http/sabhaRecurrence';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -129,6 +130,31 @@ export const ensureSabhaEvents = functions.pubsub
             console.log(created.length > 0
                 ? `[events] Seeded ${created.join(', ')}`
                 : '[events] Already seeded — the calendar is the manager\'s');
+
+            // Then top up from the manager's recurring pattern, if they set one.
+            //
+            // Separate from the seed above and deliberately so: the seed exists
+            // once to stop a brand-new project sitting closed, while this is the
+            // standing schedule. Measured 2026-08-15, before this existed: the
+            // calendar ran dry and `calendarStatus` read 'no-scheduled-event',
+            // so nobody could request a ride until a manager hand-added a date.
+            //
+            // Its own try/catch — a broken pattern must not stop the seed, and
+            // neither must stop this job returning.
+            try {
+                const recurrence = await readRecurrence(db);
+                if (!recurrence) {
+                    console.log('[events] No usable recurring pattern — nothing to top up');
+                } else {
+                    const added = await topUpCalendar(db, recurrence, now, timeZone);
+                    console.log(added.length > 0
+                        ? `[events] Recurring schedule added ${added.join(', ')}`
+                        : '[events] Recurring schedule already satisfied');
+                }
+            } catch (recurrenceError) {
+                console.error('[events] Could not apply the recurring schedule:', recurrenceError);
+            }
+
             return null;
         } catch (error) {
             console.error('[events] Could not top up the calendar:', error);

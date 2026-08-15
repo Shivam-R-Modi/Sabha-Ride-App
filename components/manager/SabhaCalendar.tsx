@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CalendarDays, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUpcomingEvents, updateEvent, createEvent, SabhaEvent } from '../../hooks/useEvents';
+import { RecurringSabha } from './RecurringSabha';
 import { previewDeleteSabhaEvent, deleteSabhaEvent } from '../../src/utils/cloudFunctions';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { useSettings } from '../../hooks/useSettings';
@@ -352,6 +353,11 @@ export const SabhaCalendar: React.FC = () => {
     };
 
     return (
+        <>
+        {/* The pattern sits above the list: setting it is what stops the list
+            running dry, so it should be read first. */}
+        <RecurringSabha />
+
         <div className="bg-surface rounded-xl border border-hairline/20 shadow-sm overflow-hidden mb-4">
             <div className="px-4 py-3 border-b border-hairline/10 bg-cream-200">
                 <div className="flex items-center gap-2">
@@ -360,7 +366,7 @@ export const SabhaCalendar: React.FC = () => {
                 </div>
                 <p className="text-xs text-coffee-500 mt-1">
                     The calendar is yours. Add each sabha, change its time or venue, or
-                    delete one.
+                    delete one. Anything the repeating pattern adds appears here too.
                 </p>
             </div>
 
@@ -476,5 +482,6 @@ export const SabhaCalendar: React.FC = () => {
                 )}
             </div>
         </div>
+        </>
     );
 };

@@ -19,6 +19,9 @@ export { releaseIdleVehicles } from './scheduled/releaseIdleVehicles';
 // Same 03:00 slot, same reasoning: requests nobody answered are the rider-side
 // equivalent of a stranded car, and they never expired on their own.
 export { expireStaleRequests } from './scheduled/expireStaleRequests';
+// The manager's recurring pattern. ensureSabhaEvents applies it daily; this is
+// the control that sets it.
+export { updateSabhaRecurrence } from './http/sabhaRecurrence';
 
 // ============================================
 // HTTP CALLABLE FUNCTIONS

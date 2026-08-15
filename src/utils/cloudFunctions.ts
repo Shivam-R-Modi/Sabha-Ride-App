@@ -146,6 +146,33 @@ export async function driverDoneForToday(
     return callFunction<DriverDoneResult>('driverDoneForToday', { driverId, acknowledgeWaiting });
 }
 
+export interface SabhaRecurrence {
+    enabled: boolean;
+    /** 0 = Sunday … 6 = Saturday. */
+    daysOfWeek: number[];
+    startTime: string;
+    endTime: string;
+    weeksAhead: number;
+    /**
+     * Server-owned high-water mark. Never send it — it is the only thing keeping
+     * a date the manager deleted from reappearing.
+     */
+    generatedThrough?: string | null;
+}
+
+export interface UpdateRecurrenceResult {
+    config: SabhaRecurrence;
+    /** Dates created by this save, so the manager sees it took effect. */
+    created: string[];
+}
+
+/** A manager sets the recurring sabha pattern. Saving fills the calendar at once. */
+export async function updateSabhaRecurrence(
+    input: Omit<SabhaRecurrence, 'generatedThrough'>,
+): Promise<UpdateRecurrenceResult> {
+    return callFunction<UpdateRecurrenceResult>('updateSabhaRecurrence', input);
+}
+
 export interface ManagerReleaseVehicleResult {
     success: boolean;
     vehicleId: string;

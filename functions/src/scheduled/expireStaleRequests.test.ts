@@ -20,7 +20,19 @@ vi.mock('../utils/settings', () => ({ getTimeZone: async () => 'America/New_York
 
 import { expireStaleRequests, shouldExpire, eventKeyOfRide } from './expireStaleRequests';
 
+/** Fixed, for the pure boundary tests — they take todayKey as an argument. */
 const TODAY = '2026-08-14';
+
+/**
+ * Today, as the sweep itself will compute it.
+ *
+ * The scheduled wrapper reads the real clock, so any "this one is current" case
+ * has to be expressed relative to now. A literal date there passes on the day it
+ * is written and fails the next morning.
+ */
+const TODAY_REAL = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date());
 
 describe('shouldExpire — only what is genuinely past saving', () => {
     it('expires an unserved request from a past gathering', () => {
@@ -187,8 +199,11 @@ describe('expireStaleRequests — the sweep', () => {
     });
 
     it('commits nothing when every open request is current', async () => {
+        // Derived, not hardcoded. The sweep reads the real clock, so writing a
+        // literal date here makes the test pass on the day it was written and
+        // fail the next morning — which is exactly what this one did.
         const rec = makeDb(
-            [{ id: 'r1', data: { status: 'requested', eventId: '2026-08-14', studentId: 's1' } }],
+            [{ id: 'r1', data: { status: 'requested', eventId: TODAY_REAL, studentId: 's1' } }],
             { s1: { status: 'waiting_for_dropoff', currentRideId: 'r1' } },
         );
 

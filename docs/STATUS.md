@@ -69,11 +69,11 @@ Last deploy `8f889f2`, 2026-08-14. `main` = branch = production.
 | Cloud Functions | ✅ | Dispatch overhaul phases 0–4 + driver-keeps-their-car |
 | Hosting | ✅ | bundle `index-Cd9ZozW0.js`, matched against `dist/` and verified live |
 
-**Test suites, all green:** `functions` **379** · client **549** · rules **81** —
-**1009 total**.
+**Test suites, all green:** `functions` **417** · client **558** · rules **81** —
+**1056 total**.
 
-> ⚠️ **Two changes are written and tested but NOT yet deployed** — the last-driver
-> warning and the stale-request sweep. See *Built but not deployed* below.
+> ⚠️ **The recurring sabha schedule is written and tested but NOT yet deployed.**
+> Everything above it is live. See *Built but not deployed* below.
 
 `npm run typecheck` reports **19** errors, all client-side. That is the clean
 baseline. It was 22 before this branch; Phase 4 removed three by deleting the
@@ -216,8 +216,40 @@ fail. That is the convention; keep it.
 
 ## Built but not deployed
 
-Two changes from the evening of 2026-08-14, written and fully tested, **not yet
-released**. Both came out of watching the live drop-off run.
+**The recurring sabha schedule.** Written and fully tested on 2026-08-15,
+**not yet released**.
+
+Until this, `seedFirstEventIfNeeded` created exactly one gathering on a brand-new
+project and never ran again, so every sabha had to be hand-added. The calendar
+duly ran dry: measured 2026-08-15, `rideContext` read
+`calendarStatus: 'no-scheduled-event'` and nobody could request a ride at all.
+
+A manager now sets the pattern — which day(s), start and end, and how far ahead to
+keep the calendar filled (1–26 weeks, default 6). `ensureSabhaEvents` applies it
+daily at 03:00, and **saving applies it immediately** so the manager can see it
+worked rather than waiting overnight.
+
+**The invariant that governs the whole design: a date the manager removed must
+never come back.** An earlier seeder decided whether a slot had been dealt with by
+whether a document existed there, so deleting a date erased the evidence and the
+per-minute self-heal recreated it inside 60 seconds. Two independent guards now
+stand in the way, and `recurrence.test.ts` asserts that **neither alone is
+sufficient**:
+
+| Guard | Covers |
+|---|---|
+| `generatedThrough` high-water mark, forward-only | **deletion** — the document is gone, so nothing else can see it |
+| `occupied` set from the events collection | **cancellation** — the document survives as `status: 'cancelled'` |
+
+The watermark is **server-owned and never accepted from a client**. A client that
+could roll it back could resurrect every date a manager had deleted; both the
+callable and the component are tested against that specifically.
+
+The visible consequence, said in those words in the UI: *changes apply to dates
+not on the calendar yet*. A manager who expects editing the pattern to move next
+week's sabha would otherwise call the control broken.
+
+### Deployed 2026-08-14 (was in this section)
 
 **1. The last driver out gets warned.** Both drivers tapped "Done for today"
 within four minutes of each other; two riders then requested drop-offs with
@@ -252,10 +284,8 @@ plus `cancellationReason: 'window-closed'` — every list already filters
 Both were checked by breaking them: 4 test failures for the pair server-side, 5
 more for the client sequence.
 
-**These are not urgent.** The dangerous half of the stale-request problem is
-already fixed — the event-key filter stops old rows being dispatched. What is left
-is untidy data and one missing courtesy prompt. At three cars they matter less
-than a human noticing.
+Both shipped in `bae97ab`, bundle `index-4sizVUkL.js`, and `expireStaleRequests`
+was created as a new function.
 
 ---
 
@@ -594,9 +624,22 @@ defects Phase 1 found by measuring rather than reading. Candidates, none started
 | **Phase 2** | Cities and locations; scope every query by `cityId` | Invisible to users, but the gate before a second venue. **Gated on `node scripts/tenancy.cjs verify` reading zero** — a `cityId` filter against an unstamped document returns nothing rather than erroring, which looks exactly like "no rides tonight". |
 | ~~Phase 4~~ | ~~Move dispatch to the server~~ | ✅ **Done 2026-08-14.** `globalAssignDriver` is server-side and serialised by `system/assignmentLock` (10s TTL). Two managers can no longer assign the same riders. |
 
-**Flagged, not scheduled:** there is no driver-vetting check anywhere in the
-assignment path, and volunteers drive minors. That is a policy decision for the
-owner, not an engineering task.
+**Driver vetting is out of scope — permanently.** This used to be flagged here as
+an open policy question. The owner ruled on it on 2026-08-15: drivers are known
+volunteers within the congregation, the trust model is social and sits outside
+the app, and it is not to be raised again. This does not weaken anything else —
+`assertApprovedDriver`, `assertApprovedManager`, the Firestore rules and the
+audit rows all stand, because those protect children's PII rather than vet the
+volunteer.
+
+**Still open — a real defect found 2026-08-15, not yet fixed.** `at_sabha` is
+never cleared. `completeRide` sets it on a completed pickup and
+`studentReadyToLeave` reads it; nothing resets it. Five riders have been sitting
+at `at_sabha` since the 14th, which means **next Friday they can tap "Ready to
+leave" without ever having been picked up** and a driver is dispatched to collect
+somebody who is at home. Same rot as the stale requests, on the user record
+instead of the ride — and the natural fix is to fold it into
+`expireStaleRequests`, which already walks exactly these riders.
 
 ---
 
