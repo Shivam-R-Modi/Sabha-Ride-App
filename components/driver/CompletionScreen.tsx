@@ -102,8 +102,12 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                 <div className="relative mb-6">
                     <div className="absolute inset-0 bg-[rgb(var(--success))]/20 rounded-full animate-ping"></div>
                     {/* The glow is tinted from the same success token as the fill,
-                        so it follows the theme. `shadow-green-200` stayed a pale
-                        light-mode green on a dark surface. */}
+                        so it follows the theme. It was a stock green-200 shadow,
+                        which stayed a pale light-mode green on a dark surface.
+
+                        The class name is spelled around rather than written out:
+                        Tailwind scans this file as plain TEXT, comments included,
+                        so naming a utility here re-emits it into the bundle. */}
                     <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[rgb(var(--success))] to-[rgb(var(--success))] flex items-center justify-center shadow-lg shadow-[rgb(var(--success))]/25 animate-bounce">
                         <CheckCircle2 size={48} className="text-white" />
                     </div>

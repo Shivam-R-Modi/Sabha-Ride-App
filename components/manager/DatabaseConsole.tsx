@@ -139,9 +139,12 @@ export const DatabaseConsole: React.FC = () => {
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
       {/* Header Banner */}
-      {/* `via-amber-500` and `shadow-orange-500` were fixed light-mode colours in
-          a gradient whose other two stops were already tokens — the gold and
-          saffron ramps are the same hues, and they follow the theme. */}
+      {/* The via stop and the shadow were stock amber/orange — fixed light-mode
+          colours in a gradient whose other two stops were already tokens. The
+          gold and saffron ramps are the same hues and follow the theme.
+
+          Not writing those class names out: Tailwind scans this file as plain
+          TEXT, comments included, so naming a utility re-emits it. */}
       <div className="clay-card bg-gradient-to-r from-[rgb(var(--cta))]/10 via-gold/10 to-[rgb(var(--cta-dark))]/10 border-hairline/20/60 p-6 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="p-3.5 bg-saffron text-white rounded-2xl shadow-lg shadow-saffron/20">

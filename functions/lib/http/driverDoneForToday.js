@@ -42,6 +42,8 @@ exports.decideDoneWarning = decideDoneWarning;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const fleet_1 = require("../utils/fleet");
+// The dispatch pool's own filter. Shared deliberately — see surveyTheQueue.
+const globalAssignDriver_1 = require("./globalAssignDriver");
 /**
  * Should this driver be warned before they finish?
  *
@@ -74,25 +76,42 @@ function decideDoneWarning(waitingCount, otherDriversOnShift) {
  * lets a driver be assigned riders — globalAssignDriver refuses without one. So
  * the fleet is the register of who is available, and it is three documents.
  *
- * Requests are scoped to the current gathering. Counting every `requested` row
- * would fold in the stale residue of past sabhas and warn about riders who went
- * home weeks ago.
+ * WHY THIS SHARES isValidPendingRide RATHER THAN FILTERING ITS OWN WAY
+ * -------------------------------------------------------------------
+ * A "rider is still waiting" warning is only true if that rider CAN be picked
+ * up. The one thing that decides that is the dispatch pool, so the two have to
+ * be the same question — and when this counted for itself, they drifted.
+ *
+ * This used to match on the event key alone. `isValidPendingRide` also filters
+ * by DIRECTION, and a pickup request writes no `rideType` field while a drop-off
+ * stamps `sabha-to-home`. So during a drop-off run, a leftover pickup request
+ * from earlier the same evening counted here and was correctly excluded there.
+ *
+ * Observed on 2026-08-17: "End my shift" warned *1 rider is still waiting*, and
+ * "Find my next riders" answered *no one is left* — same driver, same second, two
+ * contradictory screens, and no way to tell which was lying. Staying on shift
+ * could not have helped, because the request was not dispatchable to anybody.
+ *
+ * Sharing the function also inherits its coordinate and studentId checks, which
+ * is the same argument: a request with no usable pickup point cannot be served
+ * by staying, so warning about it only teaches the driver to tap through.
+ *
+ * An absent `rideType` on the CONTEXT means no window is open, and
+ * globalAssignDriver refuses outright in that state — so nothing is dispatchable
+ * and there is nothing to warn about.
  */
 async function surveyTheQueue(db, driverId) {
     var _a;
     const ctx = (await db.collection('system').doc('rideContext').get()).data();
     const eventId = (_a = ctx === null || ctx === void 0 ? void 0 : ctx.eventId) !== null && _a !== void 0 ? _a : null;
+    const rideType = ctx === null || ctx === void 0 ? void 0 : ctx.rideType;
     const [requested, held] = await Promise.all([
         db.collection('rides').where('status', '==', 'requested').get(),
         db.collection('vehicles').where('status', '==', 'in_use').get(),
     ]);
-    const waitingCount = requested.docs.filter(d => {
-        var _a, _b;
-        if (!eventId)
-            return false;
-        const r = d.data();
-        return ((_b = (_a = r.eventId) !== null && _a !== void 0 ? _a : r.eventDate) !== null && _b !== void 0 ? _b : r.date) === eventId;
-    }).length;
+    const waitingCount = !eventId || !rideType
+        ? 0
+        : requested.docs.filter(d => (0, globalAssignDriver_1.isValidPendingRide)(d.data(), eventId, rideType)).length;
     const otherDriversOnShift = new Set(held.docs
         .map(d => { var _a; return (_a = d.data()) === null || _a === void 0 ? void 0 : _a.assignedDriverId; })
         .filter((uid) => typeof uid === 'string' && uid !== driverId)).size;
