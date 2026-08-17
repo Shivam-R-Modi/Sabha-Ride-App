@@ -399,11 +399,81 @@ export const DriverDashboard: React.FC = () => {
         }
     };
 
+    /**
+     * The shift card — and the fallback for every other view.
+     *
+     * NEVER RENDER NOTHING.
+     *
+     * Each case below needs data that `viewState` alone does not guarantee, and
+     * all three used to `return null` when it was missing. A driver then got a
+     * blank page with no nav (ActiveRide puts the app in focus mode) and no
+     * control of any kind — no way back, nothing to tap, no explanation. The only
+     * escape was force-quitting the app.
+     *
+     * One of the three is demonstrably reachable, and it is the reason this was
+     * worth fixing rather than tidying:
+     *
+     *  - **`preview` without `rideContext.rideType`.** The ride window closes on
+     *    its own — at midnight, or when a manager resets the override — and the
+     *    context subscription then publishes `rideType: null`. A driver reading a
+     *    proposed carload at that moment lost the screen. There is a test for
+     *    exactly this.
+     *
+     * The other two are defensive, and honestly so. Today `activeRide`/`viewState`
+     * and `completedRideStats`/`viewState` are always set and cleared together, so
+     * those branches should be unreachable. Nothing enforces it — they are four
+     * separate `useState` calls updated from five places — and the cost of being
+     * wrong once is a driver mid-shift with no screen and no way back. A fallback
+     * that is never hit costs one line.
+     *
+     * Falling back to the shift card is right in every case: it is a working
+     * screen with their car, their tally and "Find my riders". The stored
+     * `viewState` is deliberately NOT reset, so a value that was merely late —
+     * a snapshot round-trip — restores the real view when it arrives instead of
+     * dropping the driver out for good.
+     */
+    const shiftCard = (
+        <DriverShift
+            driverName={userProfile?.name || 'Driver'}
+            avatarUrl={userProfile?.avatarUrl}
+            onShift={isAvailable}
+            vehicleName={isAvailable ? userProfile?.currentVehicleName : undefined}
+            vehiclePlate={isAvailable ? userProfile?.currentVehiclePlate : undefined}
+            rideContextText={rideContext?.displayText}
+            ridesToday={(userProfile as any)?.ridesCompletedToday || 0}
+            peopleToday={(userProfile as any)?.totalStudentsToday || 0}
+            milesToday={(userProfile as any)?.totalDistanceToday || 0}
+            isAssigning={isAssigning}
+            isStartingShift={startingShift}
+            vehicles={availableVehicles}
+            vehiclesLoading={vehiclesLoading}
+            vehiclePickerOpen={showVehicleSelector}
+            selectingVehicle={selectingVehicle}
+            onGoOnShift={handleGoOnShift}
+            onEndShift={handleEndShift}
+            onFindRiders={handleAssignMe}
+            onOpenVehiclePicker={() => setShowVehicleSelector(true)}
+            onCloseVehiclePicker={() => setShowVehicleSelector(false)}
+            onSelectVehicle={handleSelectVehicle}
+        />
+    );
+
+    /** Log which guard fired, so a recurrence is diagnosable rather than a mystery. */
+    const fallback = (missing: string) => {
+        console.warn(
+            `[DriverDashboard] viewState '${viewState}' without ${missing} — `
+            + 'showing the shift card instead of a blank screen',
+        );
+        return shiftCard;
+    };
+
     // Render the appropriate view based on state
     const renderContent = () => {
         switch (viewState) {
             case 'preview':
-                if (!pendingAssignment || !rideContext?.rideType) return null;
+                if (!pendingAssignment || !rideContext?.rideType) {
+                    return fallback(pendingAssignment ? 'an open ride window' : 'an assignment');
+                }
                 return (
                     <AssignmentPreview
                         assignment={pendingAssignment}
@@ -415,7 +485,7 @@ export const DriverDashboard: React.FC = () => {
                 );
 
             case 'active':
-                if (!activeRide) return null;
+                if (!activeRide) return fallback('an active ride');
                 return (
                     <ActiveRide
                         ride={activeRide}
@@ -430,7 +500,7 @@ export const DriverDashboard: React.FC = () => {
                 );
 
             case 'completed':
-                if (!completedRideStats) return null;
+                if (!completedRideStats) return fallback('completion stats');
                 return (
                     <CompletionScreen
                         rideId={completedRideStats.rideId}
@@ -444,31 +514,7 @@ export const DriverDashboard: React.FC = () => {
 
             case 'dashboard':
             default:
-                return (
-                    <DriverShift
-                        driverName={userProfile?.name || 'Driver'}
-                        avatarUrl={userProfile?.avatarUrl}
-                        onShift={isAvailable}
-                        vehicleName={isAvailable ? userProfile?.currentVehicleName : undefined}
-                        vehiclePlate={isAvailable ? userProfile?.currentVehiclePlate : undefined}
-                        rideContextText={rideContext?.displayText}
-                        ridesToday={(userProfile as any)?.ridesCompletedToday || 0}
-                        peopleToday={(userProfile as any)?.totalStudentsToday || 0}
-                        milesToday={(userProfile as any)?.totalDistanceToday || 0}
-                        isAssigning={isAssigning}
-                        isStartingShift={startingShift}
-                        vehicles={availableVehicles}
-                        vehiclesLoading={vehiclesLoading}
-                        vehiclePickerOpen={showVehicleSelector}
-                        selectingVehicle={selectingVehicle}
-                        onGoOnShift={handleGoOnShift}
-                        onEndShift={handleEndShift}
-                        onFindRiders={handleAssignMe}
-                        onOpenVehiclePicker={() => setShowVehicleSelector(true)}
-                        onCloseVehiclePicker={() => setShowVehicleSelector(false)}
-                        onSelectVehicle={handleSelectVehicle}
-                    />
-                );
+                return shiftCard;
         }
     };
 
