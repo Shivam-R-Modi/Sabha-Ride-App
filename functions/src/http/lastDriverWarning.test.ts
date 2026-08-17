@@ -31,6 +31,7 @@ vi.mock('firebase-functions', () => {
 vi.mock('firebase-admin', () => ({ firestore: () => db }));
 
 import { driverDoneForToday, decideDoneWarning } from './driverDoneForToday';
+import { isValidPendingRide } from './globalAssignDriver';
 
 describe('decideDoneWarning — when to speak up', () => {
     it('warns when riders wait and nobody else is on shift', () => {
@@ -67,11 +68,14 @@ function makeDb(opts: {
     /** Vehicles held, i.e. who is on shift. */
     held?: Array<Record<string, unknown>>;
     eventId?: string | null;
+    /** The open window. Absent means no window is open at all. */
+    rideType?: string | null;
 }) {
     const writes: Array<{ path: string; data: any }> = [];
     const queue = opts.queue ?? [];
     const held = opts.held ?? [];
     const eventId = opts.eventId === undefined ? '2026-08-14' : opts.eventId;
+    const rideType = opts.rideType === undefined ? 'home-to-sabha' : opts.rideType;
 
     const collection = (name: string) => {
         // The two `where` calls this handler makes are distinguished by the
@@ -82,7 +86,7 @@ function makeDb(opts: {
                 get: async () => ({
                     exists: true,
                     data: () => {
-                        if (name === 'system') return { eventId };
+                        if (name === 'system') return rideType ? { eventId, rideType } : { eventId };
                         if (name === 'users') return DRIVER;
                         return undefined;
                     },
@@ -125,8 +129,27 @@ const call = (data: any = {}) =>
 
 beforeEach(() => vi.clearAllMocks());
 
+/**
+ * A request as the client actually writes one.
+ *
+ * The rows here used to be `{ status, eventId }` and nothing else — no
+ * coordinates, no studentId. That made every case in this file pass against a
+ * shape the dispatcher would have refused, which is exactly how the count here
+ * drifted from the count there. A fake that is easier to satisfy than production
+ * is a test that cannot see the bug.
+ */
+const pickup = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    status: 'requested',
+    eventId: '2026-08-14',
+    studentId: 'stu_1',
+    pickupLat: 42.36,
+    pickupLng: -71.06,
+    // No `rideType` field — this is what hooks/useRides.ts writes for a pickup.
+    ...over,
+});
+
 describe('driverDoneForToday — the warning path', () => {
-    const WAITING = [{ status: 'requested', eventId: '2026-08-14' }];
+    const WAITING = [pickup()];
     const ONLY_ME = [{ assignedDriverId: 'driver_1' }];
 
     it('asks for confirmation instead of finishing', async () => {
@@ -186,7 +209,7 @@ describe('driverDoneForToday — the warning path', () => {
         // Stale rows must not raise a warning about riders who went home a week
         // ago — that is the residue expireStaleRequests clears.
         makeDb({
-            queue: [{ status: 'requested', eventId: '2026-08-07' }],
+            queue: [pickup({ eventId: '2026-08-07' })],
             held: ONLY_ME,
             eventId: '2026-08-14',
         });
@@ -212,4 +235,101 @@ describe('driverDoneForToday — the warning path', () => {
     // BEFORE this warning, are covered in driverKeepsTheirCar.test.ts: its fake
     // returns assigned rides for every query, so a warning that fired first would
     // return instead of throwing and those cases would fail.
+});
+
+/**
+ * The warning must count the SAME riders the dispatcher would hand out.
+ *
+ * This is the bug, as a suite. `surveyTheQueue` filtered by event key alone while
+ * `isValidPendingRide` filtered by event key AND direction — so during a
+ * drop-off run, a leftover pickup request counted here and was excluded there.
+ *
+ * Reported on 2026-08-17: "End my shift" said *1 rider is still waiting*, then
+ * "Find my next riders" said *no one is left*. Two screens, one second apart,
+ * contradicting each other with no way to tell which was right. And the warning
+ * was the wrong one — staying could not have helped, because nothing in the pool
+ * was dispatchable to anybody.
+ *
+ * The fix is that both now call one function, so these cases hold by
+ * construction rather than by two lists being kept in step by hand.
+ */
+describe('the warning counts what dispatch would actually serve', () => {
+    const ONLY_ME = [{ assignedDriverId: 'driver_1' }];
+    const dropoff = (over: Record<string, unknown> = {}) =>
+        pickup({ rideType: 'sabha-to-home', ...over });
+
+    it('does NOT warn about a leftover pickup during a drop-off run', async () => {
+        // The production failure. An unserved pickup outlives its window every
+        // week, so before the fix this fired on every drop-off.
+        makeDb({ queue: [pickup()], held: ONLY_ME, rideType: 'sabha-to-home' });
+
+        const result = await call();
+
+        expect(result.needsConfirmation).toBe(false);
+        expect(result.success).toBe(true);
+    });
+
+    it('DOES warn about a drop-off request during a drop-off run', async () => {
+        // The other half — the fix must not silence the real case, which is the
+        // one the whole warning exists for.
+        makeDb({ queue: [dropoff()], held: ONLY_ME, rideType: 'sabha-to-home' });
+
+        const result = await call();
+
+        expect(result.needsConfirmation).toBe(true);
+        expect(result.waitingCount).toBe(1);
+    });
+
+    it('does NOT warn about a drop-off request during a pickup run', async () => {
+        // Symmetric, and reachable: a rider can tap "ready to leave" before the
+        // window has flipped.
+        makeDb({ queue: [dropoff()], held: ONLY_ME, rideType: 'home-to-sabha' });
+
+        const result = await call();
+
+        expect(result.success).toBe(true);
+    });
+
+    it('does not warn about a request no driver could be routed to', async () => {
+        // No usable pickup point, so the dispatcher refuses it. Warning "nobody
+        // can pick them up" about a ride that staying would not fix teaches the
+        // driver to tap the prompt through unread.
+        makeDb({
+            queue: [pickup({ pickupLat: 0, pickupLng: 0 })],
+            held: ONLY_ME,
+        });
+
+        const result = await call();
+
+        expect(result.success).toBe(true);
+    });
+
+    it('does not warn when no ride window is open', async () => {
+        // globalAssignDriver throws outright in this state, so nothing in the
+        // queue is dispatchable by anyone.
+        makeDb({ queue: [pickup()], held: ONLY_ME, rideType: null });
+
+        const result = await call();
+
+        expect(result.success).toBe(true);
+    });
+
+    it('agrees with isValidPendingRide row for row', () => {
+        // The drift guard. If the two ever answer differently for the same row,
+        // one of the two screens is lying to a driver — and this fails rather
+        // than waiting for somebody to notice in the field.
+        const rows = [
+            pickup(),
+            dropoff(),
+            pickup({ eventId: '2026-08-07' }),
+            pickup({ pickupLat: 0, pickupLng: 0 }),
+            pickup({ studentId: undefined }),
+            dropoff({ rideType: 'sabha-to-Home' }),
+        ];
+        const accepted = rows.filter(r => isValidPendingRide(r, '2026-08-14', 'sabha-to-home'));
+
+        // Exactly the one well-formed drop-off for this gathering.
+        expect(accepted).toHaveLength(1);
+        expect(accepted[0]!.rideType).toBe('sabha-to-home');
+    });
 });

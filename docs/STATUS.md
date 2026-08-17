@@ -74,11 +74,13 @@ Last deploy `7e8cc9c`, 2026-08-17. `main` = branch = production.
 | Cloud Functions | ✅ | 19 functions. `ensureSabhaEvents` **deleted** — see the rule model below |
 | Hosting | ✅ | bundle `index-CgaOikYs.js`, matched against `dist/` and verified live |
 
-**Test suites, all green:** `functions` **493** · client **658** · rules **81** —
-**1232 total**.
+**Test suites, all green:** `functions` **499** · client **660** · rules **81** —
+**1240 total**.
 
-**Everything in this file is deployed.** No code is waiting for a release — but see
-*OPEN BUGS* below for three diagnosed and unfixed defects.
+**Not everything in this file is deployed.** The three fixes described under
+*FIXED 2026-08-17 (late)* are committed and tested but **not yet released**. Both
+halves matter: the dark-mode and ratchet fixes need `hosting`, and until
+`functions` goes out the end-shift warning still miscounts riders.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
 (`at_sabha` no longer gates a ride home — GPS at 100m, advisory, manual fallback
@@ -132,61 +134,87 @@ exactly why the order is rules → functions → hosting and not one bare
 
 ---
 
-## OPEN BUGS — next session starts here
+## FIXED 2026-08-17 (late): the three drop-off bugs
 
-Three found on 2026-08-17 while hand-testing the drop-off run. All three are
-diagnosed; none is fixed. Nothing else is outstanding.
+Found while hand-testing the drop-off run, fixed the same evening. Kept here
+because each one has a test that fails if it returns, and because two of the three
+are the same shape: **a guard that was never asked the right question.**
 
-### 1. Two driver screens ignore dark mode
+### 1. Two driver screens ignored dark mode — FIXED
 
-`components/driver/AssignmentPreview.tsx` and
-`components/driver/CompletionScreen.tsx` paint their root element with **literal
-hex**:
+`AssignmentPreview` and `CompletionScreen` painted their root with literal hex
+(`from-[#FAF9F6] to-[#F5F0E8]`). A hex cannot follow `data-theme`, so both stayed
+cream while the rest of the app went dark — on the two screens a driver sees most
+during a run.
 
-```
-bg-gradient-to-br from-[#FAF9F6] to-[#F5F0E8]
-```
+Both stops had exact tokens: `#FAF9F6` is `cream`, `#F5F0E8` is `cream-200`. Now
+`from-cream to-cream-200`. Measured from the built stylesheet, both themes:
 
-Hex cannot respond to the theme, so both stay cream while the rest of the app goes
-dark. Reported from screenshots, with the sidebar dark and the content light.
-
-`ActiveRide` uses `bg-cream` and is correct — that is why only these two look
-wrong. Fix: the same token.
-
-### 2. The colour ratchet does not catch gradient stops
-
-The Phase 6 sweep removed ~200 hardcoded colours and a quality test fails the
-build if one returns. It did not catch `from-[#FAF9F6]`, so bug 1 shipped past it.
-Extend the check to arbitrary-value classes (`from-[#…]`, `to-[#…]`, `via-[#…]`),
-not just `bg-[#…]`. Fixing the two colours without fixing the ratchet leaves the
-hole open.
-
-### 3. `surveyTheQueue` is missing the direction filter — MINE
-
-`functions/src/http/driverDoneForToday.ts`. It counts waiting riders with
-`rides where status == 'requested'` filtered by **event key only**. It does not
-filter by `rideType`.
-
-`globalAssignDriver`'s `isValidPendingRide` filters by **both**. So during the
-drop-off window a leftover *pickup* request is counted by the end-shift warning and
-correctly ignored by dispatch:
-
-| | event | direction |
+| | from | to |
 |---|---|---|
-| "Find my next riders" | ✅ | ✅ → "Nobody is waiting right now" |
-| "End my shift" warning | ✅ | ❌ → "1 rider is still waiting" |
+| light | `rgb(250 249 246)` | `rgb(245 240 232)` | 
+| dark | `rgb(28 24 21)` | `rgb(33 29 25)` |
 
-Observed with Rebo Fe's stale request: `requested`, `eventDate 2026-08-17`,
-**`rideType` absent** (so `home-to-sabha` by the absent-means-default rule) while
-the window was `sabha-to-home`.
+Light is byte-identical to the old hardcoded gradient, so nothing changed visually
+for anyone in light mode.
 
-Fix: apply the same direction check dispatch uses —
-`(r.rideType ?? 'home-to-sabha') === rideContext.rideType`. I built that filter for
-this exact bug class and then failed to reuse it, which is the fourth time in this
-project that two correct halves have disagreed at the join.
+### 2. The colour ratchet had no hex rule at all — FIXED
 
-**Also worth knowing:** the stale request itself is real and still in production. It
-will be closed by `expireStaleRequests` at 03:00 once the gathering is past.
+Worth stating precisely, because the earlier note here was wrong: the ratchet did
+not "miss gradient stops". It had **no arbitrary-value hex check whatsoever**. It
+only matched Tailwind's *named* palette (`bg-blue-500`), so every `bg-[#…]`,
+`from-[#…]` and `text-[#…]` in `components/` was invisible to it. That is how
+bug 1 shipped past the very test built to prevent it.
+
+`tests/quality/theme-tokens.test.ts` now has `RAW_HEX`, plus a `HEX_ALLOWED` map
+with one entry — `LoginScreen`'s heading, which sits on a fixed background
+**photograph** and so is correctly a fixed colour. A third test fails if an
+allowlist entry outlives its reason.
+
+Closing the hole properly also meant adding `shadow`, `via` and `outline` to the
+named-palette rule, which immediately found two more real ones:
+
+- `CompletionScreen` — `shadow-green-200`, a pale light-mode glow under the
+  success circle, now `shadow-[rgb(var(--success))]/25`
+- `DatabaseConsole` — `via-amber-500/10` and `shadow-orange-500/20` in a gradient
+  whose other two stops were already tokens, now `via-gold/10` and
+  `shadow-saffron/20`
+
+### 3. `surveyTheQueue` was missing the direction filter — FIXED (was mine)
+
+The end-shift warning counted waiting riders by **event key only**;
+`globalAssignDriver`'s `isValidPendingRide` filters by event key **and
+direction**. A pickup request writes no `rideType` field at all, so during a
+drop-off run a leftover pickup counted in one place and not the other:
+
+| | event | direction | |
+|---|---|---|---|
+| "Find my next riders" | yes | yes | "Nobody is waiting right now" |
+| "End my shift" warning | yes | **no** | "1 rider is still waiting" |
+
+Two screens contradicting each other one second apart, with no way to tell which
+was lying — and the warning was the useless one, because staying on shift could
+not have served a request that was not dispatchable to anybody.
+
+**The fix is that `surveyTheQueue` now calls `isValidPendingRide` itself**, rather
+than filtering its own way. Copying the one missing condition across would have
+fixed the symptom and left two lists to be kept in step by hand; this way they
+cannot disagree. It also inherits the coordinate and `studentId` checks, which is
+the same argument — a request with no usable pickup point cannot be served by
+staying either.
+
+This was the fourth time in this project that two correct halves disagreed at the
+join. The lesson that keeps repeating: **share the predicate, do not restate it.**
+
+`lastDriverWarning.test.ts` covers all of it. Note that its queue fixtures had to
+be made realistic first — the rows were `{ status, eventId }` with no coordinates
+and no `studentId`, a shape the dispatcher would always have refused. **A fake
+easier to satisfy than production is a test that cannot see the bug**, and that is
+part of why this drifted unnoticed.
+
+Sweep after the three: **client 660 · functions 499 · rules 81 = 1240**, build
+clean, typecheck at its 19 baseline (verified by stashing — 19 with and without
+the changes).
 
 ---
 

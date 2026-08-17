@@ -76,8 +76,10 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
         }
     };
 
+    // Tokens, not hex — see the note in AssignmentPreview. #FAF9F6 is `cream`,
+    // #F5F0E8 is `cream-200`; identical in light, and themed in dark.
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#FAF9F6] to-[#F5F0E8] flex flex-col relative overflow-hidden">
+        <div className="min-h-screen bg-gradient-to-br from-cream to-cream-200 flex flex-col relative overflow-hidden">
             {/* Confetti Animation */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden z-base">
                 {confetti.map((piece) => (
@@ -99,7 +101,10 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                 {/* Success Icon */}
                 <div className="relative mb-6">
                     <div className="absolute inset-0 bg-[rgb(var(--success))]/20 rounded-full animate-ping"></div>
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[rgb(var(--success))] to-[rgb(var(--success))] flex items-center justify-center shadow-lg shadow-green-200 animate-bounce">
+                    {/* The glow is tinted from the same success token as the fill,
+                        so it follows the theme. `shadow-green-200` stayed a pale
+                        light-mode green on a dark surface. */}
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[rgb(var(--success))] to-[rgb(var(--success))] flex items-center justify-center shadow-lg shadow-[rgb(var(--success))]/25 animate-bounce">
                         <CheckCircle2 size={48} className="text-white" />
                     </div>
                     {/* Sparkles */}

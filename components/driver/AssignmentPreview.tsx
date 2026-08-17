@@ -111,8 +111,13 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
         }
     };
 
+    // from-cream/to-cream-200 are the TOKENS for #FAF9F6 and #F5F0E8, which this
+    // gradient used to name directly. A hex cannot follow data-theme, so in dark
+    // mode the whole screen stayed cream with dark text painted over it — on the
+    // two screens a driver sees most during a run. Same colours in light,
+    // correct in both. Guarded now by tests/quality/theme-tokens.test.ts.
     return (
-        <div className="min-h-screen pb-safe bg-gradient-to-br from-[#FAF9F6] to-[#F5F0E8]">
+        <div className="min-h-screen pb-safe bg-gradient-to-br from-cream to-cream-200">
             {/* Header */}
             <div className="bg-[rgb(var(--surface)/0.8)] backdrop-blur-md shadow-sm border-b border-hairline/10 sticky top-0 z-sticky">
                 <div className="p-4">

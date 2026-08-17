@@ -194,14 +194,51 @@ describe('components use themed colours, not Tailwind stock', () => {
      * which is the right tool for the question.
      */
     const OFFENDERS = new RegExp(
-        String.raw`(?<![\w/-])(?:bg|text|border|from|to|divide|ring)-` +
+        // `shadow` and `via` were missing from this list, which let
+        // `shadow-green-200` sit under the success circle on CompletionScreen —
+        // a green glow that stayed green on a dark surface. Same omission-shaped
+        // hole as the missing hex rule below.
+        String.raw`(?<![\w/-])(?:bg|text|border|from|via|to|divide|ring|shadow|outline)-` +
         String.raw`(?:gray|slate|zinc|neutral|stone|blue|green|red|orange|amber|` +
         String.raw`yellow|purple|teal|indigo|pink|rose|cyan|emerald|lime|violet|fuchsia|sky)` +
         String.raw`-\d{2,3}(?![\w-])`,
     );
 
+    /**
+     * A raw hex inside an arbitrary-value utility — `bg-[#FAF9F6]`,
+     * `from-[#F5F0E8]`, `text-[#B84318]`.
+     *
+     * This rule was missing, and the gap cost two screens. `AssignmentPreview`
+     * and `CompletionScreen` painted their root with
+     * `bg-gradient-to-br from-[#FAF9F6] to-[#F5F0E8]`, which is cream in BOTH
+     * themes — so a driver in dark mode got a cream page in the middle of an
+     * otherwise dark app, on the two screens they see most during a run.
+     * Reported from the field on 2026-08-17, after the theme work was supposedly
+     * finished, because nothing here looked for a hex in a component.
+     *
+     * Both stops had exact tokens (`cream`, `cream-200`). That is the usual case:
+     * the hex is a token somebody had not looked up.
+     */
+    const RAW_HEX = new RegExp(
+        String.raw`(?<![\w/-])(?:bg|text|border|from|to|via|ring|divide|outline|` +
+        String.raw`decoration|caret|accent|fill|stroke|shadow)-\[#[0-9A-Fa-f]{3,8}\]`,
+    );
+
+    /**
+     * Hexes that are correct in both themes, with the reason.
+     *
+     * A fixed colour is only defensible when what it sits on is also fixed. The
+     * login heading lies on a PHOTOGRAPH (`/assets/login-background.jpg`), which
+     * does not change with `data-theme` — so a token there would drift away from
+     * the image it has to stay legible against. Anything on a themed surface
+     * belongs in the ramps instead.
+     */
+    const HEX_ALLOWED = new Map<string, string>([
+        ['components/auth/LoginScreen.tsx', 'heading sits on a fixed background photo'],
+    ]);
+
     /** Inside a className, not in prose or a comment. */
-    function offences(): string[] {
+    function offences(pattern: RegExp, skip: (file: string) => boolean = () => false): string[] {
         const found: string[] = [];
         const walk = (dir: string) => {
             for (const entry of readdirSync(dir)) {
@@ -209,12 +246,15 @@ describe('components use themed colours, not Tailwind stock', () => {
                 if (statSync(full).isDirectory()) { walk(full); continue; }
                 if (!/\.tsx$/.test(entry)) continue;
 
+                const rel = path.relative(ROOT, full);
+                if (skip(rel)) continue;
+
                 readFileSync(full, 'utf8').split('\n').forEach((line, i) => {
                     const trimmed = line.trim();
                     if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
                     if (!/class(Name)?=|clsx|tone:|className:/.test(line) && !/^\s*['"`].*['"`],?\s*$/.test(line)) return;
-                    const hit = line.match(OFFENDERS);
-                    if (hit) found.push(`${path.relative(ROOT, full)}:${i + 1}  ${hit[0]}`);
+                    const hit = line.match(pattern);
+                    if (hit) found.push(`${rel}:${i + 1}  ${hit[0]}`);
                 });
             }
         };
@@ -223,7 +263,25 @@ describe('components use themed colours, not Tailwind stock', () => {
     }
 
     it('none are left', () => {
-        const hits = offences();
+        const hits = offences(OFFENDERS);
         expect(hits, `Fixed colours cannot follow the theme:\n  ${hits.join('\n  ')}`).toEqual([]);
+    });
+
+    it('no raw hex in an arbitrary-value utility, including gradient stops', () => {
+        const hits = offences(RAW_HEX, file => HEX_ALLOWED.has(file));
+        expect(
+            hits,
+            `A hex cannot follow data-theme. Use the ramp (bg-cream, text-coffee) or a ` +
+            `token (bg-[rgb(var(--success-bg))]). If the colour sits on something that ` +
+            `is itself fixed, add the file to HEX_ALLOWED with the reason:\n  ${hits.join('\n  ')}`,
+        ).toEqual([]);
+    });
+
+    it('the hex allowlist has no stale entries', () => {
+        // An allowed file that no longer contains a hex means the exemption has
+        // outlived its reason, and would silently cover the next one added.
+        const stale = [...HEX_ALLOWED.keys()]
+            .filter(file => offences(RAW_HEX, f => f !== file).length === 0);
+        expect(stale, `Allowlisted but clean — drop the entry:\n  ${stale.join('\n  ')}`).toEqual([]);
     });
 });
