@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.geocodeAddress = exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.updateSabhaRecurrence = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.geocodeAddress = exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.updateSabhaRecurrence = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -46,8 +46,10 @@ admin.initializeApp();
 var updateRideTypeContext_1 = require("./scheduled/updateRideTypeContext");
 Object.defineProperty(exports, "updateRideTypeContext", { enumerable: true, get: function () { return updateRideTypeContext_1.updateRideTypeContext; } });
 Object.defineProperty(exports, "manuallyUpdateRideContext", { enumerable: true, get: function () { return updateRideTypeContext_1.manuallyUpdateRideContext; } });
-Object.defineProperty(exports, "ensureSabhaEvents", { enumerable: true, get: function () { return updateRideTypeContext_1.ensureSabhaEvents; } });
-// Its own function rather than a side effect inside ensureSabhaEvents: a stranded
+// ensureSabhaEvents is gone. It seeded a first gathering and topped the calendar
+// up from the recurring pattern; under the rule model there is nothing to
+// materialise, so there is nothing for a nightly job to get wrong.
+// Its own named function rather than a side effect of another job: a stranded
 // fleet is an operational fault, and a named entry in the logs is what makes it
 // diagnosable at 19:00 on a Friday.
 var releaseIdleVehicles_1 = require("./scheduled/releaseIdleVehicles");
@@ -56,8 +58,8 @@ Object.defineProperty(exports, "releaseIdleVehicles", { enumerable: true, get: f
 // equivalent of a stranded car, and they never expired on their own.
 var expireStaleRequests_1 = require("./scheduled/expireStaleRequests");
 Object.defineProperty(exports, "expireStaleRequests", { enumerable: true, get: function () { return expireStaleRequests_1.expireStaleRequests; } });
-// The manager's recurring pattern. ensureSabhaEvents applies it daily; this is
-// the control that sets it.
+// The manager's recurring pattern — one rule, no horizon. findCurrentEvent
+// computes from it directly; this is the control that sets it.
 var sabhaRecurrence_1 = require("./http/sabhaRecurrence");
 Object.defineProperty(exports, "updateSabhaRecurrence", { enumerable: true, get: function () { return sabhaRecurrence_1.updateSabhaRecurrence; } });
 // ============================================

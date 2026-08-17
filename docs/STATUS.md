@@ -1,13 +1,18 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-14, late evening**.
+at the end. Last updated **2026-08-17**.
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
 cars and reunited correctly. The dispatch overhaul that made that possible is
 deployed; see *Shipped 2026-08-14* below, which is the section that matters most
 to anyone picking this up.
+
+Since then: the drop-off half was proven end to end, the sabha schedule became a
+single repeating rule, and **notifications were dropped from scope** — see
+*Notifications are OUT OF SCOPE*, which also records that push has never actually
+delivered anything in this app.
 
 The UI/UX redesign and the sabha-times fix are also deployed. The incident note
 below is history, kept because its lesson is a standing deploy rule.
@@ -60,20 +65,20 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `8f889f2`, 2026-08-14. `main` = branch = production.
+Last deploy `70b4a60`, 2026-08-17. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
-| Cloud Functions | ✅ | Dispatch overhaul phases 0–4 + driver-keeps-their-car |
-| Hosting | ✅ | bundle `index-Cd9ZozW0.js`, matched against `dist/` and verified live |
+| Cloud Functions | ✅ | 19 functions. `ensureSabhaEvents` **deleted** — see the rule model below |
+| Hosting | ✅ | bundle `index-9Hrssg9d.js`, matched against `dist/` and verified live |
 
-**Test suites, all green:** `functions` **417** · client **558** · rules **81** —
-**1056 total**.
+**Test suites, all green:** `functions` **477** · client **634** · rules **81** —
+**1192 total**.
 
-> ⚠️ **The recurring sabha schedule is written and tested but NOT yet deployed.**
-> Everything above it is live. See *Built but not deployed* below.
+**Everything in this file is deployed.** There is no pending work waiting for a
+release.
 
 `npm run typecheck` reports **19** errors, all client-side. That is the clean
 baseline. It was 22 before this branch; Phase 4 removed three by deleting the
@@ -214,10 +219,107 @@ fail. That is the convention; keep it.
 
 ---
 
-## Built but not deployed
+## Shipped 2026-08-17: the schedule is a rule
 
-**The recurring sabha schedule.** Written and fully tested on 2026-08-15,
-**not yet released**.
+Plan: [`plans/recurring-sabha-rule.md`](plans/recurring-sabha-rule.md).
+
+The recurring sabha is now **one rule that repeats until a manager changes it**,
+and `events/{date}` documents are only its exceptions — an edited week, a
+cancelled week, or a one-off on a date the rule does not cover.
+
+It replaced a version that MATERIALISED dates: one document per occurrence out to
+a chosen horizon, plus a `generatedThrough` high-water mark so a deleted date
+could not be recreated. That shipped on the 15th and was the wrong shape — a
+weekly sabha is one fact, and 26 near-identical rows made the manager trust that
+they were all the same.
+
+**The deletions are the point.** `topUpCalendar`, `advanceWatermark`,
+`generatedThrough`, `datesToGenerate`, `weeksAhead` and its three bounds,
+`seedFirstEventIfNeeded`, `weeklySlotDate`, `toEvent`, and the whole
+`ensureSabhaEvents` nightly job. 121 lines out of `events.ts` alone.
+
+**The resurrection bug class is now structurally impossible** rather than
+defended against. The old model needed two guards — the watermark for deletions,
+an `occupied` set for cancellations — because it created documents and had to
+remember which. Under a rule, "this Friday is cancelled" IS a document and
+persists by existing.
+
+`findCurrentEvent` still runs **the same single query**. Worth stating, because
+the change sounds like it should cost reads and does not.
+
+**Editing one week affects only that week** — the owner's requirement, and a named
+test. Overrides are full snapshots, so an edited week keeps its own time and venue
+and does not follow later changes to the rule. The calendar says so, because a
+manager cannot infer it.
+
+### The migration hazard, found by running it
+
+`scripts/migrate-recurrence-to-rule.cjs`, dry-run by default. The dry run found
+the case that mattered:
+
+```
+STAMP  2026-08-17  one-off  (23:00–23:30)  ← would VANISH without this
+```
+
+A document written before this model has no `kind`, so it reads as an override —
+and an override on a date the rule does not cover is inert. 2026-08-17 is a
+Monday and the rule is Fridays, so a gathering visible on the calendar would have
+silently disappeared. Both halves are tests: unmigrated off-pattern document
+vanishes, same document stamped `one-off` reappears.
+
+Applied the same day: 16 event documents down to 8, 8 generated dates deleted, 2
+already-cancelled Fridays left completely alone, 5 past dates kept as history.
+Verified afterwards — `rideContext` read `eventId 2026-08-17`, `calendarStatus
+ok`, computed from the rule with no stored Friday dates at all.
+
+### The drift guard, and why its first version was worthless
+
+The rule logic exists twice (client and functions have separate tsconfigs and no
+shared path), so both sides read `tests/fixtures/recurrence-vectors.json`. If they
+disagree, a rider sees one sabha date while dispatch works towards another.
+
+The first version of that guard **passed against a real defect.** It exercised
+`effectiveEvent` only through `upcomingOccurrences`, which builds candidates from
+the rule plus one-off dates — so an override off the pattern never reached
+`effectiveEvent` at all. Deleting the guard inside it left every vector green.
+Verified by doing exactly that. `effectiveEvent` now has direct vectors, and the
+same deletion fails two cases on both sides.
+
+---
+
+## Notifications are OUT OF SCOPE
+
+A "notify everyone on change" feature was planned on 2026-08-17 — manager-side
+checkboxes on Sabha Calendar, Ride Window and Venue, plus a drivers-only one on
+Fleet. **The owner dropped it the same day**, explicitly not deferred. Do not
+re-raise it.
+
+**But carry this fact forward, because it will mislead somebody otherwise: push
+notifications have never worked in this app**, and that is independent of the
+dropped feature.
+
+| Measured 2026-08-17 | |
+|---|---|
+| Users with an `fcmToken` | **0 of 13** |
+| Anything that calls `src/utils/fcm.ts` | **nothing** |
+| `public/firebase-messaging-sw.js` | **does not exist** |
+| VAPID key | read via `process.env` in `fcm.ts`, `undefined` under Vite |
+
+So every `notifyEveryone` call — the ride-window announcement, the sabha-deletion
+notice, driver and rider assignment alerts — runs, logs `No push tokens
+registered`, and delivers nothing. `src/utils/fcm.ts` and
+`src/utils/notifications.ts` are dead code, left in place rather than deleted in
+case push is wanted later.
+
+Nothing regressed here; it has always been this way. Just do not assume a
+notification reaches anyone.
+
+---
+
+## Superseded: the recurring schedule's first version
+
+Kept because the reasoning explains what the rule model replaced. Written
+2026-08-15, deployed, then superseded on the 17th.
 
 Until this, `seedFirstEventIfNeeded` created exactly one gathering on a brand-new
 project and never ran again, so every sabha had to be hand-added. The calendar
@@ -618,7 +720,6 @@ defects Phase 1 found by measuring rather than reading. Candidates, none started
 
 | | Phase | Why / why not |
 |---|---|---|
-| **Deploy what is built** | The last-driver warning and the stale-request sweep | Smallest item here. Written, tested, undeployed — see *Built but not deployed*. Not urgent. |
 | **Blank-screen branches** | `DriverDashboard`'s three `return null` paths | Oldest outstanding defect, and the cheapest real fix on this list. |
 | **Phase 3 part 2** | Named passengers — dependents, guests, guardians | **Blocked.** Needs roadmap §8 Q3 answered first: can a guest be a minor, and whose consent covers them? Do not design around this — ask. |
 | **Phase 2** | Cities and locations; scope every query by `cityId` | Invisible to users, but the gate before a second venue. **Gated on `node scripts/tenancy.cjs verify` reading zero** — a `cityId` filter against an unstamped document returns nothing rather than erroring, which looks exactly like "no rides tonight". |
