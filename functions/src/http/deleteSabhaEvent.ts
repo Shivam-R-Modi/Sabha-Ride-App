@@ -31,6 +31,7 @@ import { assertApprovedManager } from '../utils/authz';
 import { writeAuditLog } from '../utils/audit';
 // No cycle: sabhaRecurrence imports only pure helpers and authz/audit.
 import { readRecurrence } from './sabhaRecurrence';
+import { effectiveEvent, normaliseException } from '../utils/recurrence';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -78,10 +79,33 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     const now = new Date();
     const today = zonedDateKey(now, timeZone);
 
+    // ── Is this date actually on the calendar? ──────────────────────────
+    //
+    // This used to be `if (!eventSnap.exists) throw`, which assumed a gathering IS
+    // a document. Under the rule model most of them are not: a weekly sabha is
+    // computed from `settings/sabhaRecurrence`, and only divergences are stored.
+    //
+    // So the trash icon failed on every rule-derived row — nine of the ten on the
+    // manager's calendar — with "That sabha is no longer on the calendar" for a
+    // sabha plainly listed on it. A visible control that cannot work, which is the
+    // one failure this codebase keeps removing. I introduced it when deletion
+    // became a cancellation and this guard was left asking the old question.
+    //
+    // `effectiveEvent` is the single answer to "is there a gathering here", and it
+    // already handles all three ways there can be none: cancelled, inert
+    // off-pattern override, or simply not covered by the rule.
     const eventRef = db.collection(EVENTS_COLLECTION).doc(date);
     const eventSnap = await eventRef.get();
-    if (!eventSnap.exists) {
-        throw new functions.https.HttpsError('not-found', 'That sabha is no longer on the calendar.');
+    const existing = normaliseException(eventSnap.data());
+    const rule = await readRecurrence(db);
+
+    if (!effectiveEvent(date, rule, existing)) {
+        throw new functions.https.HttpsError(
+            'not-found',
+            existing?.status === 'cancelled'
+                ? 'That sabha is already cancelled.'
+                : 'That sabha is not on the calendar.',
+        );
     }
 
     // ── Guard: the past is history ──────────────────────────────────────
@@ -185,7 +209,10 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     // "remember not to regenerate".
     batch.set(eventRef, {
         date,
-        kind: 'override',
+        // Preserved where there was one. It makes little difference — a
+        // cancellation short-circuits `effectiveEvent` before `kind` is consulted —
+        // but a one-off that comes back via "Add a sabha" then reads consistently.
+        kind: existing?.kind ?? 'override',
         status: 'cancelled',
         cancelledAt: new Date().toISOString(),
         cancelledBy: uid,

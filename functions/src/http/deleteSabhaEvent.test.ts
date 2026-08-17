@@ -54,6 +54,8 @@ const NOW = new Date('2026-08-07T14:00:00Z');
 
 interface Fixture {
     caller?: Record<string, unknown>;
+    /** The weekly rule. `null` means no schedule is set at all. */
+    rule?: Record<string, unknown> | null;
     events?: Record<string, any>;
     rides?: Array<{ id: string; data: Record<string, unknown> }>;
     responses?: string[];
@@ -121,6 +123,15 @@ function makeDb(f: Fixture) {
                 if (path === 'system/rideContext') {
                     return snap(true, { eventId: f.contextEventId ?? null });
                 }
+                // The weekly rule. Without it every stored document reads as an
+                // override with nothing to override, and is therefore inert — so
+                // the fake has to carry a schedule the way production does. Every
+                // date in this file is a Friday.
+                if (path === 'settings/sabhaRecurrence') {
+                    return snap(f.rule !== null, f.rule ?? {
+                        enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00',
+                    });
+                }
                 return snap(false, {});
             },
             set: async (data: any) => { rec.sets.push({ path, data }); },
@@ -173,9 +184,50 @@ describe('deleteSabhaEvent — refusals', () => {
         await expect(call({})).rejects.toThrow(/date is required/i);
     });
 
-    it('refuses a date that is not on the calendar', async () => {
+    it('refuses a date the rule does not cover and has no document', async () => {
+        // 2026-08-24 is a Monday against a Friday rule. Nothing to cancel.
         makeDb({ events: {} });
-        await expect(call({ date: '2026-08-14' })).rejects.toThrow(/no longer on the calendar/i);
+        await expect(call({ date: '2026-08-24' })).rejects.toThrow(/not on the calendar/i);
+    });
+
+    it('refuses a date already cancelled, and says which', async () => {
+        makeDb({ events: { '2026-08-14': { date: '2026-08-14', status: 'cancelled' } } });
+        await expect(call({ date: '2026-08-14' })).rejects.toThrow(/already cancelled/i);
+    });
+
+    it('refuses everything once the rule is off and no document exists', async () => {
+        makeDb({ rule: null, events: {} });
+        await expect(call({ date: '2026-08-14' })).rejects.toThrow(/not on the calendar/i);
+    });
+
+    it('CANCELS a Friday that has no document — the rule-derived case', async () => {
+        // The bug this fixes. Nine of the ten rows on the manager's calendar are
+        // computed from the rule and have no document, and the trash icon failed on
+        // every one of them with "no longer on the calendar" for a sabha plainly
+        // listed on it.
+        const rec = makeDb({ events: {} });
+
+        const result: any = await call({ date: '2026-08-14' });
+
+        expect(result.deleted).toBe(true);
+        const write = rec.sets.find(w => w.path === 'events/2026-08-14')!;
+        expect(write.data.status).toBe('cancelled');
+        expect(write.data.kind).toBe('override');
+    });
+
+    it('keeps a one-off\'s kind when cancelling it', async () => {
+        const rec = makeDb({
+            events: {
+                '2026-08-14': {
+                    date: '2026-08-14', kind: 'one-off', status: 'scheduled',
+                    startTime: '19:00', endTime: '22:00',
+                },
+            },
+        });
+
+        await call({ date: '2026-08-14' });
+
+        expect(rec.sets.find(w => w.path === 'events/2026-08-14')!.data.kind).toBe('one-off');
     });
 
     it('refuses today, pointing at the alternative', async () => {
