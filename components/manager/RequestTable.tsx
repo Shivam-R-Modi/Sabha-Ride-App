@@ -177,11 +177,16 @@ export const RequestTable: React.FC<RequestTableProps> = ({
             <thead className="sticky top-0 bg-cream-200 z-raised">
               <tr className="border-b border-hairline/10">
                 <th className="p-4 w-12">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={selectedIds.length === sortedRequests.length && sortedRequests.length > 0}
                     onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded border-hairline/20 text-saffron focus:ring-saffron cursor-pointer" 
+                    // Both table checkboxes were unnamed: a screen reader
+                    // announced "checkbox" and nothing else, on the control that
+                    // decides who gets a ride. The mobile card already named its
+                    // own (`Select ${request.name}`) — the table was simply missed.
+                    aria-label="Select all requests"
+                    className="w-4 h-4 rounded border-hairline/20 text-saffron focus:ring-saffron cursor-pointer"
                   />
                 </th>
                 <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('name')}>
@@ -206,11 +211,12 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                     className={`border-b border-hairline/10 hover:bg-cream-300/30 transition-colors cursor-pointer group ${selectedIds.includes(req.id) ? 'bg-cream-300/50' : ''}`}
                   >
                     <td className="p-4" onClick={(e) => e.stopPropagation()}>
-                       <input 
-                        type="checkbox" 
+                       <input
+                        type="checkbox"
                         checked={selectedIds.includes(req.id)}
                         onChange={() => toggleSelect(req.id)}
-                        className="w-4 h-4 rounded border-hairline/20 text-saffron focus:ring-saffron cursor-pointer" 
+                        aria-label={`Select ${req.name}`}
+                        className="w-4 h-4 rounded border-hairline/20 text-saffron focus:ring-saffron cursor-pointer"
                       />
                     </td>
                     <td className="p-4">

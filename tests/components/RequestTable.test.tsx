@@ -25,7 +25,25 @@ vi.mock('../../hooks/useVehicles', () => ({ useMaxFleetSeats: () => useMaxFleetS
 import { RequestTable } from '../../components/manager/RequestTable';
 import type { StudentRequest } from '../../types';
 
-const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
+/**
+ * A single reference point, captured once.
+ *
+ * This was `Date.now()` evaluated inside the helper, so every `request()` call
+ * read the clock again. Two requests built on the same line therefore had
+ * timestamps that were usually identical and **occasionally one millisecond
+ * apart** — and the table sorts by wait time DESCENDING by default, so a
+ * one-millisecond gap silently reversed the row order.
+ *
+ * That made two tests fail about one run in ten. Reproduced deliberately by
+ * pinning the two requests a millisecond apart: both failed every time.
+ *
+ * Anchoring here makes equal timestamps genuinely equal, and Array.prototype.sort
+ * has been stable since ES2019, so insertion order is then guaranteed rather than
+ * lucky. The assertions below no longer depend on order either — belt and braces,
+ * because a future change to the default sort should not resurrect this.
+ */
+const NOW = Date.now();
+const minutesAgo = (n: number) => new Date(NOW - n * 60_000).toISOString();
 
 const request = (over: Partial<StudentRequest> = {}): StudentRequest => ({
     id: 'req-1',
@@ -232,9 +250,11 @@ describe('RequestTable — acting on a request', () => {
             onBulkAssign,
         });
 
-        const boxes = within(table()).getAllByRole('checkbox');
-        // boxes[0] is select-all; the rest are rows.
-        await user.click(boxes[1]);
+        // By NAME, not by position. `getAllByRole('checkbox')[1]` depended on the
+        // sort putting Anita's row first, which is exactly what the millisecond
+        // race broke. Both table checkboxes were unnamed until this fix, which is
+        // why the test had to count them in the first place.
+        await user.click(within(table()).getByRole('checkbox', { name: /select anita shah/i }));
         // Wait for the SELECTION to be committed, not merely for the button to
         // exist. The action bar mounts as soon as one row is ticked, and its
         // onClick closes over selectedIds — so clicking the instant it appears
@@ -253,11 +273,14 @@ describe('RequestTable — acting on a request', () => {
             onBulkAssign,
         });
 
-        await user.click(within(table()).getAllByRole('checkbox')[0]);
+        await user.click(within(table()).getByRole('checkbox', { name: /select all requests/i }));
         await screen.findByText('2 Selected');
         await user.click(screen.getByRole('button', { name: /assign bulk/i }));
 
-        await waitFor(() => expect(onBulkAssign).toHaveBeenCalledWith(['a', 'b']));
+        // A SET, because "every row currently shown" is a set claim. Asserting the
+        // exact array coupled this test to the default sort order for no gain.
+        await waitFor(() => expect(onBulkAssign).toHaveBeenCalledTimes(1));
+        expect([...onBulkAssign.mock.calls[0]![0]].sort()).toEqual(['a', 'b']);
     });
 });
 
@@ -280,6 +303,20 @@ describe('RequestTable — bulk select on a phone', () => {
         return node!;
     };
 
+    /**
+     * A card's own checkbox, scoped outside the table.
+     *
+     * Two tests below used a bare `screen.getByRole('checkbox', { name })` and
+     * passed only because the TABLE's checkboxes had no accessible name — so the
+     * name happened to select the mobile one. Naming them (a real fix: a screen
+     * reader announced "checkbox" on the control that decides who gets a ride)
+     * made that query ambiguous, which is the correct outcome and why these are
+     * scoped properly now, like every other mobile assertion in this file.
+     */
+    const mobileCheckbox = (name: RegExp) =>
+        screen.queryAllByRole('checkbox', { name })
+            .find(box => !table().contains(box)) ?? null;
+
     const longPress = async (element: HTMLElement) => {
         fireEvent.touchStart(element, { touches: [{ clientX: 0 }] });
         await act(() => new Promise(r => setTimeout(r, 500)));
@@ -300,7 +337,7 @@ describe('RequestTable — bulk select on a phone', () => {
 
         await longPress(mobileCard('Anita Shah'));
 
-        expect(screen.getByRole('checkbox', { name: /select anita shah/i })).toBeChecked();
+        expect(mobileCheckbox(/select anita shah/i)).toBeChecked();
     });
 
     it('bulk-assigns what was selected on the phone', async () => {
@@ -325,8 +362,7 @@ describe('RequestTable — bulk select on a phone', () => {
         await act(() => new Promise(r => setTimeout(r, 500)));
         fireEvent.touchEnd(card);
 
-        expect(screen.queryByRole('checkbox', { name: /select anita shah/i }))
-            .not.toBeInTheDocument();
+        expect(mobileCheckbox(/select anita shah/i)).toBeNull();
     });
 
     it('suspends swipe actions while selecting, so a sloppy tap cannot dismiss anyone', async () => {
