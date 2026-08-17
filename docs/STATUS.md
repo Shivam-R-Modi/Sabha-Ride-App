@@ -65,22 +65,21 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `7e8cc9c`, 2026-08-17. `main` = branch = production.
+Last deploy `bd59a08`, 2026-08-17 (late). `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | 19 functions. `ensureSabhaEvents` **deleted** — see the rule model below |
-| Hosting | ✅ | bundle `index-CgaOikYs.js`, matched against `dist/` and verified live |
+| Hosting | ✅ | bundle `index-mgzSeAni.js` / css `index-eP-DnHL3.css`, verified by CONTENT (see below) |
 
 **Test suites, all green:** `functions` **499** · client **660** · rules **81** —
 **1240 total**.
 
-**Not everything in this file is deployed.** The three fixes described under
-*FIXED 2026-08-17 (late)* are committed and tested but **not yet released**. Both
-halves matter: the dark-mode and ratchet fixes need `hosting`, and until
-`functions` goes out the end-shift warning still miscounts riders.
+**Everything in this file is deployed.** The three fixes below went out on
+2026-08-17 in the usual order, and `main` = `bd59a08` = production, local and on
+GitHub.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
 (`at_sabha` no longer gates a ride home — GPS at 100m, advisory, manual fallback
@@ -215,6 +214,25 @@ part of why this drifted unnoticed.
 Sweep after the three: **client 660 · functions 499 · rules 81 = 1240**, build
 clean, typecheck at its 19 baseline (verified by stashing — 19 with and without
 the changes).
+
+### 4. A comment re-emitted the classes it described — FIXED
+
+Caught only because the hosting deploy was verified by **content** rather than by
+bundle filename: `shadow-green-200`, `shadow-orange-500` and `via-amber-500` were
+still in the live CSS after being removed from every `className`.
+
+**Tailwind's content scanner is a plain regex over file TEXT.** It does not parse
+JSX and does not skip comments — so the comments written to explain which
+utilities had been removed regenerated those exact utilities. Nothing referenced
+them, so it was dead CSS and not a visual defect, but it silently resurrects the
+classes the ratchet exists to keep out.
+
+Both comments now spell the names around rather than writing them out, and say
+why. Bundle CSS 74.0 → 72.6 kB.
+
+> Worth remembering for the next colour cleanup: **matching a bundle filename
+> proves a release shipped, not that it shipped the change.** Grep the served
+> asset for the thing you removed.
 
 ---
 
