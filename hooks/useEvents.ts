@@ -1,15 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-    collection, doc, documentId, onSnapshot, orderBy, query, setDoc, updateDoc, where,
+    collection, doc, documentId, onSnapshot, orderBy, query, setDoc, where,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useCurrentEvent } from './useCurrentEvent';
+import {
+    EventException, Occurrence, RecurrenceRule,
+    addDaysToDateKey, normaliseException, normaliseRecurrence, upcomingOccurrences,
+} from '../src/utils/recurrence';
 
 /**
- * The sabha calendar.
+ * The sabha calendar — a rule, plus the exceptions to it.
  *
- * Documents are `events/{YYYY-MM-DD}`, keyed by their own date — the same key
- * attendance has always used, so the two line up without a migration.
+ * WHAT CHANGED, AND WHY THE OLD SHAPE WAS WRONG
+ * ---------------------------------------------
+ * This used to read `events/{YYYY-MM-DD}` documents and present each one as a
+ * gathering. That matched a server which materialised a document per occurrence
+ * out to a horizon, and it meant a weekly sabha appeared as up to 26 near-identical
+ * rows the manager had to trust were all the same.
+ *
+ * The schedule now lives in `settings/sabhaRecurrence` and repeats with no end
+ * date. Documents are only DIVERGENCES: an edited week, a cancelled week, or a
+ * one-off on a date the rule does not cover. So this hook reads both and computes
+ * what is actually happening, using the same pure functions the server uses —
+ * pinned to the same test vectors, because the two disagreeing would show a rider
+ * one date while dispatch worked towards another.
  *
  * Managers write here; everyone else reads. Enforced in firestore.rules, not
  * here: a check in the client is a hint, not a control.
@@ -23,42 +38,69 @@ export interface SabhaEvent {
     venue: { lat: number; lng: number; address: string } | null;
     status: 'scheduled' | 'cancelled';
     agenda: string;
-    autoCreated?: boolean;
+    /** Where this row came from, so the calendar can label what diverges. */
+    source: Occurrence['source'];
 }
 
 /**
- * Upcoming gatherings, soonest first.
+ * How far ahead to compute. A window, not a horizon.
  *
- * Cancelled documents are filtered out, matching `findCurrentEvent` on the server,
- * which has always skipped them. Cancelling was replaced by deleting, so nothing
- * creates them any more — but production still holds a couple from before the
- * change, and showing them as ordinary rows would be worse than hiding them: the
- * server would refuse to run rides for a gathering the calendar presented as
- * scheduled.
+ * The rule itself has no end date. This bounds what the manager's screen ASKS
+ * for, which is a different thing from the old `weeksAhead` — nothing is created,
+ * and scrolling further would simply compute further.
+ */
+const CALENDAR_WINDOW_DAYS = 120;
+
+export const RECURRENCE_DOC_PATH = 'settings/sabhaRecurrence';
+
+/** The live rule, already validated through the same function the server uses. */
+export function useRecurrenceRule() {
+    const [rule, setRule] = useState<RecurrenceRule | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const unsub = onSnapshot(
+            doc(db, RECURRENCE_DOC_PATH),
+            snap => {
+                setRule(normaliseRecurrence(snap.data()));
+                setLoading(false);
+            },
+            err => {
+                console.error('[useRecurrenceRule] Listener error:', err);
+                // Null reads as "nothing scheduled", which the calendar surfaces.
+                // Guessing a rule here would put sabha on a day nobody chose.
+                setRule(null);
+                setLoading(false);
+            },
+        );
+        return unsub;
+    }, []);
+
+    return { rule, loading };
+}
+
+/**
+ * Upcoming gatherings, soonest first, exceptions applied.
  *
- * Bounded by `documentId()`, matching `findCurrentEvent` on the server, and
- * anchored on the server-published `eventId` rather than the device clock. Both
- * details matter:
+ * Anchored on the server-published `eventId` rather than the device clock. That
+ * detail has bitten before: a lower bound of `new Date().toISOString().slice(0,10)`
+ * is a UTC date, and at 20:30 in Boston it is already tomorrow in UTC — so
+ * **today's sabha vanished from the manager's calendar during the sabha itself.**
  *
- *  - The previous version filtered on the `date` FIELD while the server filtered
- *    on the document id, so any event missing a `date` field was invisible here
- *    and visible to the server.
- *  - Its lower bound was `new Date().toISOString().slice(0, 10)` — a UTC date. At
- *    20:30 in Boston it is already tomorrow in UTC, so **today's sabha vanished
- *    from the manager's calendar during the sabha itself.**
+ * The exception query is bounded by `documentId()`, matching the server, because
+ * an earlier version filtered on the `date` FIELD while the server filtered on the
+ * id — so a document missing `date` was invisible here and visible to the server.
  */
 export function useUpcomingEvents(limitTo = 12) {
-    const [events, setEvents] = useState<SabhaEvent[]>([]);
+    const [exceptions, setExceptions] = useState<Map<string, EventException>>(new Map());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { eventId } = useCurrentEvent();
+    const { rule, loading: ruleLoading } = useRecurrenceRule();
+
+    const from = eventId ?? new Date().toLocaleDateString('en-CA');
 
     useEffect(() => {
-        // Anchor on the current gathering. Until the server has published one,
-        // fall back to the local date — only as a lower bound for a list, never
-        // to decide which gathering is current.
-        const from = eventId ?? new Date().toLocaleDateString('en-CA');
-
         const q = query(
             collection(db, 'events'),
             where(documentId(), '>=', from),
@@ -66,22 +108,12 @@ export function useUpcomingEvents(limitTo = 12) {
         );
 
         const unsub = onSnapshot(q, (snapshot) => {
-            setEvents(snapshot.docs
-                .filter(d => d.data()?.status !== 'cancelled')
-                .slice(0, limitTo)
-                .map((d) => {
-                    const data = d.data();
-                    return {
-                        id: d.id,
-                        date: data.date || d.id,
-                        startTime: data.startTime || '19:00',
-                        endTime: data.endTime || '22:00',
-                        venue: data.venue ?? null,
-                        status: 'scheduled' as const,
-                        agenda: data.agenda || '',
-                        autoCreated: data.autoCreated === true,
-                    };
-                }));
+            const next = new Map<string, EventException>();
+            for (const d of snapshot.docs) {
+                const exception = normaliseException(d.data());
+                if (exception) next.set(d.id, exception);
+            }
+            setExceptions(next);
             setLoading(false);
         }, (err) => {
             console.error('[useUpcomingEvents] Listener error:', err);
@@ -90,38 +122,71 @@ export function useUpcomingEvents(limitTo = 12) {
         });
 
         return unsub;
-    }, [limitTo, eventId]);
+    }, [from]);
 
-    return { events, loading, error };
+    const events = useMemo<SabhaEvent[]>(() => {
+        const to = addDaysToDateKey(from, CALENDAR_WINDOW_DAYS);
+        return upcomingOccurrences(rule, exceptions, from, to, limitTo).map(o => ({
+            id: o.date,
+            date: o.date,
+            startTime: o.startTime,
+            endTime: o.endTime,
+            venue: o.venue,
+            // upcomingOccurrences has already dropped cancellations. A row that
+            // reaches here is happening.
+            status: 'scheduled' as const,
+            agenda: o.agenda,
+            source: o.source,
+        }));
+    }, [rule, exceptions, from, limitTo]);
+
+    return { events, loading: loading || ruleLoading, error, rule };
 }
-
-/** Change a gathering's times, venue or agenda. */
-export async function updateEvent(
-    eventId: string,
-    changes: Partial<Pick<SabhaEvent, 'startTime' | 'endTime' | 'agenda' | 'venue'>>,
-    updatedByUid: string,
-): Promise<void> {
-    await updateDoc(doc(db, 'events', eventId), {
-        ...changes,
-        // Clears the auto-created marker: once a manager has touched it, the
-        // weekly template must never treat it as disposable.
-        autoCreated: false,
-        updatedBy: updatedByUid,
-        updatedAt: new Date().toISOString(),
-    });
-}
-
-// setEventStatus was here. Cancelling is now deleting — see deleteSabhaEvent in
-// src/utils/cloudFunctions.ts. A gathering is either on the calendar or it is not.
 
 /**
- * Add a one-off gathering on a date the weekly template would not generate.
+ * Change ONE week: its times, venue or agenda.
  *
- * The date is the document id, so adding the same date twice edits it rather
- * than creating a duplicate — which is the behaviour you want, since two
- * gatherings on one day is not something this model supports.
+ * Writes an exception for that date. Settled with the owner on 2026-08-17:
+ * editing one Friday affects only that Friday, and the rule and every other week
+ * stay exactly as they were. So this stores a FULL snapshot — the edited week
+ * keeps these values and will not follow a later change to the rule.
+ *
+ * `kind` distinguishes this from a one-off, which matters when the rule changes:
+ * an override on a date the rule no longer covers goes inert rather than becoming
+ * a gathering nobody scheduled.
  */
-export async function createEvent(
+export async function overrideEvent(
+    date: string,
+    values: Pick<SabhaEvent, 'startTime' | 'endTime' | 'agenda' | 'venue'>,
+    updatedByUid: string,
+): Promise<void> {
+    await setDoc(doc(db, 'events', date), {
+        date,
+        kind: 'override',
+        status: 'scheduled',
+        startTime: values.startTime,
+        endTime: values.endTime,
+        agenda: values.agenda,
+        // null means "use the rule's venue, or the default from settings/main".
+        // Only ever set with coordinates — an address without them poisons routing.
+        venue: values.venue,
+        updatedBy: updatedByUid,
+        updatedAt: new Date().toISOString(),
+    }, { merge: true });
+}
+
+/**
+ * Add a gathering on a date the rule does not cover.
+ *
+ * `kind: 'one-off'` is what makes it stand on its own: an override would be inert
+ * off-pattern, which is correct for an edited week and wrong for a deliberate
+ * extra date.
+ *
+ * The date is the document id, so adding the same date twice edits it rather than
+ * creating a duplicate — the behaviour you want, since two gatherings on one day
+ * is not something this model supports.
+ */
+export async function createOneOff(
     date: string,
     startTime: string,
     endTime: string,
@@ -131,15 +196,20 @@ export async function createEvent(
 ): Promise<void> {
     await setDoc(doc(db, 'events', date), {
         date,
+        kind: 'one-off',
+        status: 'scheduled',
         startTime,
         endTime,
-        // null means "use the default venue from settings/main". Only ever set
-        // with coordinates — an address without them would poison routing.
         venue,
-        status: 'scheduled',
         agenda,
-        autoCreated: false,
         createdBy: createdByUid,
         createdAt: new Date().toISOString(),
     }, { merge: true });
 }
+
+// `updateEvent` and `createEvent` were here. Both wrote documents that WERE the
+// gathering; under the rule model a document is an exception, and the two cases
+// are no longer the same write. `overrideEvent` changes one week of the rule;
+// `createOneOff` adds a date the rule does not cover. Cancelling a week is
+// `deleteSabhaEvent`, which writes a cancellation exception server-side so the
+// attendance and ride cascade runs with it.

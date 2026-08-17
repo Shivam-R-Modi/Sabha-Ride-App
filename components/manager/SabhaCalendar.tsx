@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { CalendarDays, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useUpcomingEvents, updateEvent, createEvent, SabhaEvent } from '../../hooks/useEvents';
+import { useUpcomingEvents, overrideEvent, createOneOff, SabhaEvent } from '../../hooks/useEvents';
+import { describeRule, labelForSource } from '../../src/utils/recurrence';
 import { RecurringSabha } from './RecurringSabha';
 import { previewDeleteSabhaEvent, deleteSabhaEvent } from '../../src/utils/cloudFunctions';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
@@ -21,17 +22,23 @@ import {
  * that was that. Each gathering now has its own date and times, and a manager can
  * move one, cancel one, or add a one-off.
  *
- * The app seeds ONE sabha on a brand-new project so the service is not closed on
- * day one, and never creates another. How many gatherings exist is the manager's
- * decision — generating eight meant one bad default time was copied eight times.
+ * WHAT THESE ROWS ARE
+ * -------------------
+ * Computed, not stored. The schedule is one rule in `settings/sabhaRecurrence`
+ * that repeats with no end date; each row below is an occurrence of it, with any
+ * exception for that date applied. Only the rows that DIVERGE carry a badge —
+ * "Edited" or "One-off" — because the old version listed up to 26 stored,
+ * near-identical dates and labelling all of them would be the same noise again.
  *
- * Deleting really deletes — the row goes and so does the record. That is only safe
- * because the app no longer generates events past the first one: it used to treat a
- * missing document as "needs creating", so a deleted date reappeared within 60
- * seconds. The work itself goes through the deleteSabhaEvent callable, because
- * removing a gathering also means removing its attendance responses (a subcollection
- * Firestore leaves behind), cancelling outstanding ride requests, and rewriting the
- * published ride window.
+ * Editing one week writes an exception for that week alone: it keeps its own time
+ * and venue and will not follow a later change to the rule. Cancelling goes
+ * through the deleteSabhaEvent callable, which writes the cancellation AND removes
+ * attendance responses (a subcollection Firestore leaves behind), cancels
+ * outstanding ride requests and rewrites the published ride window.
+ *
+ * Note that cancelling writes a document rather than deleting one. Under the rule
+ * model a missing document means "follows the schedule", so deleting would let the
+ * rule place the gathering again and the cancellation would evaporate.
  */
 
 /** "2026-08-14" -> "Friday 14 Aug". Uses the date parts directly, so no timezone shift. */
@@ -108,7 +115,7 @@ const EventRow: React.FC<{
                     ? null
                     : event.venue;
 
-            await updateEvent(
+            await overrideEvent(
                 event.id,
                 { startTime: start, endTime: end, agenda, venue },
                 currentUser.uid,
@@ -176,6 +183,15 @@ const EventRow: React.FC<{
                         {isNext && (
                             <span className="text-[10px] font-bold uppercase tracking-wider bg-saffron/15 text-saffron-800 px-1.5 py-0.5 rounded">
                                 Next
+                            </span>
+                        )}
+                        {/* Only rows that DIVERGE from the weekly schedule are
+                            badged. Labelling every row "from the schedule" is
+                            noise, and noise is what made 26 near-identical rows
+                            unreadable in the first place. */}
+                        {labelForSource(event.source) && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-cream-300 text-coffee-700 px-1.5 py-0.5 rounded">
+                                {labelForSource(event.source)}
                             </span>
                         )}
                     </div>
@@ -294,7 +310,7 @@ const EventRow: React.FC<{
 
 export const SabhaCalendar: React.FC = () => {
     const { currentUser } = useAuth();
-    const { events, loading, error } = useUpcomingEvents();
+    const { events, loading, error, rule } = useUpcomingEvents();
     const { calendarStatus } = useCurrentEvent();
 
     const { sabhaLocation, sabhaStartTime, sabhaEndTime } = useSettings();
@@ -332,7 +348,7 @@ export const SabhaCalendar: React.FC = () => {
         setBusy(true);
         setAddError(null);
         try {
-            await createEvent(
+            await createOneOff(
                 date, start, end, agenda, currentUser.uid,
                 newVenuePlace
                     ? {
@@ -364,9 +380,15 @@ export const SabhaCalendar: React.FC = () => {
                     <CalendarDays size={18} className="text-saffron" />
                     <h3 className="text-sm font-bold text-coffee">Sabha Calendar</h3>
                 </div>
+                {/* What the list IS, said once. These rows are computed from the
+                    repeating schedule above — they are not stored dates a manager
+                    has to maintain — and only the ones that diverge are badged. */}
                 <p className="text-xs text-coffee-500 mt-1">
-                    The calendar is yours. Add each sabha, change its time or venue, or
-                    delete one. Anything the repeating pattern adds appears here too.
+                    {rule?.enabled
+                        ? <>Coming up from <strong>{describeRule(rule)}</strong>. Change or
+                            cancel one week and the rest stay as they are.</>
+                        : <>Not repeating yet. Set the schedule above, or add a single date
+                            below.</>}
                 </p>
             </div>
 
