@@ -49,7 +49,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => useAuth() }));
 vi.mock('../../hooks/useFirestore', () => ({
-    releaseVehicle: vi.fn(),
+    handBackVehicle: vi.fn(),
     setDriverAvailability: vi.fn(),
     assignVehicleToDriver: vi.fn(),
     useAvailableVehicles: () => ({ vehicles: [], loading: false }),

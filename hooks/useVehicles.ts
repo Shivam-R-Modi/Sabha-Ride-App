@@ -205,41 +205,46 @@ export const assignVehicleToDriver = async (vehicle: Vehicle, driverId: string, 
     }
 };
 
-export const releaseVehicle = async (vehicleId: string, driverId: string) => {
+/**
+ * Hand a vehicle back to the fleet. Touches the VEHICLE only.
+ *
+ * WHAT THIS REPLACES
+ * ------------------
+ * `releaseVehicle(vehicleId, driverId)` used to serve two callers that wanted
+ * different things, and it did the second one harm:
+ *
+ *  - **A manager hard-releasing a driver.** That writes another user's document,
+ *    so it needs a manager check, an audit row, and a refusal while that driver
+ *    still has riders in the car. None of which a client write can do. It now goes
+ *    through the `managerReleaseVehicle` callable, which does all three.
+ *
+ *  - **A driver swapping cars.** This one was actively broken. The shared function
+ *    set `status: 'offline'` and reset `ridesCompletedToday`, `totalStudentsToday`
+ *    and `totalDistanceToday` to zero — and nothing restored them. So a volunteer
+ *    who changed cars halfway through an evening silently lost their whole day's
+ *    tally, and the manager's board lost it too.
+ *
+ * A swap does not need the user document touched at all: `assignVehicleToDriver`
+ * runs immediately afterwards and overwrites `currentVehicleId`, the name, the
+ * plate and the status. All that is left over is the OLD vehicle, still marked as
+ * held. So that is the only thing this writes.
+ *
+ * Both halves of the mirror, because the fleet lives in `vehicles` AND `cars`.
+ */
+export const handBackVehicle = async (vehicleId: string) => {
     try {
-        // 1. Mark vehicle as available in both 'vehicles' and 'cars' collections safely
-        const vehicleUpdates = {
+        const released = {
             status: 'available',
             assignedDriverId: null,
             assignedDriverName: null,
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
         };
         await Promise.all([
-            setDoc(doc(db, 'vehicles', vehicleId), vehicleUpdates, { merge: true }),
-            setDoc(doc(db, 'cars', vehicleId), vehicleUpdates, { merge: true })
+            setDoc(doc(db, 'vehicles', vehicleId), released, { merge: true }),
+            setDoc(doc(db, 'cars', vehicleId), released, { merge: true }),
         ]);
-
-        // 2. Clear from driver profile and reset daily counters
-        const userRef = doc(db, 'users', driverId);
-        await updateDoc(userRef, {
-            currentVehicleId: null as any,
-            // Clearing only currentVehicleId left driverDoneForToday a stale
-            // currentCarId to fall back to, and it would release a car another
-            // driver had since been given.
-            currentCarId: null as any,
-            currentVehicleName: null as any,
-            currentVehiclePlate: null as any,
-            carModel: null as any,
-            carColor: null as any,
-            plateNumber: null as any,
-            capacity: 0,
-            status: 'offline', // Set driver offline when vehicle is released
-            ridesCompletedToday: 0,
-            totalStudentsToday: 0,
-            totalDistanceToday: 0
-        });
     } catch (error) {
-        console.error("Error releasing vehicle:", error);
+        console.error('Error handing back vehicle:', error);
         throw error;
     }
 };

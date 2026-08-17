@@ -5,7 +5,7 @@ import { AssignmentPreview } from './AssignmentPreview';
 import { ActiveRide } from './ActiveRide';
 import { DriverShift } from './DriverShift';
 import { CompletionScreen } from './CompletionScreen';
-import { releaseVehicle, setDriverAvailability, useAvailableVehicles, assignVehicleToDriver } from '../../hooks/useFirestore';
+import { handBackVehicle, setDriverAvailability, useAvailableVehicles, assignVehicleToDriver } from '../../hooks/useFirestore';
 import { collection, doc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import {
@@ -235,9 +235,14 @@ export const DriverDashboard: React.FC = () => {
         if (!currentUser) return;
         setSelectingVehicle(true);
         try {
-            // First release current vehicle if any
+            // Hand the old car back first — the VEHICLE only. This used to call
+            // a shared release that also set the driver offline and zeroed
+            // ridesCompletedToday, totalStudentsToday and totalDistanceToday,
+            // and nothing restored them: swapping cars mid-evening silently wiped
+            // the volunteer's whole day. assignVehicleToDriver below overwrites
+            // everything on the user record that a swap actually changes.
             if (userProfile?.currentVehicleId) {
-                await releaseVehicle(userProfile.currentVehicleId, currentUser.uid);
+                await handBackVehicle(userProfile.currentVehicleId);
             }
             // Assign new vehicle
             await assignVehicleToDriver(vehicle, currentUser.uid, userProfile?.name || 'Driver');

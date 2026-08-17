@@ -17,12 +17,13 @@ import {
   LogOut
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, useWeeklyAttendanceCount, downloadAttendanceCSV, returnStudentToPool, releaseVehicle, setDriverAvailability } from '../../hooks/useFirestore';
+import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, useWeeklyAttendanceCount, downloadAttendanceCSV, returnStudentToPool, setDriverAvailability } from '../../hooks/useFirestore';
 import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { useConfirm } from '../shared/useConfirm';
 import { useToast } from '../../contexts/ToastContext';
 import { seatsOnRide } from '../../src/constants/seats';
+import { managerReleaseVehicle } from '../../src/utils/cloudFunctions';
 import { DriverPicker } from './DriverPicker';
 
 // Grouped Ride Card Component
@@ -353,13 +354,25 @@ export const ManagerDashboard: React.FC = () => {
       // 1. Return all students to pool
       await Promise.all(pendingReleaseDriver.rideIds.map(id => returnStudentToPool(id)));
 
-      // 2. Release the driver's vehicle and set them offline
+      // 2. Release the driver's vehicle and set them offline.
+      //
+      // Through the callable, not a client write. This touches ANOTHER user's
+      // document, so it needs the three things a browser cannot do: a manager
+      // check, an audit row naming who released what, and a refusal while that
+      // driver still has riders in the car. The client path it replaced did none
+      // of them, and it also left `activeRideId` dangling — which is what made
+      // driverDoneForToday refuse for a driver who had nothing left to do.
+      //
+      // Students are returned to the pool above, so by the time this runs the
+      // driver has no live rides and the refusal does not fire. If it ever does,
+      // that means step 1 did not finish — and stopping is right: releasing a car
+      // mid-run makes the driver's screen disagree with their passengers.
       const driver = pendingReleaseDriver.driver;
       const vehicleId = driver?.currentVehicleId || (driver as any)?.currentCarId || (driver as any)?.carId;
       const driverId = driver?.id || pendingReleaseDriver.driverId;
 
       if (vehicleId) {
-        await releaseVehicle(vehicleId, driverId);
+        await managerReleaseVehicle(vehicleId);
       } else {
         // If no vehicle ID found, set driver offline
         await setDriverAvailability(driverId, 'offline');
@@ -368,8 +381,13 @@ export const ManagerDashboard: React.FC = () => {
       setShowReleaseModal(false);
       setPendingReleaseDriver(null);
     } catch (error) {
+      // The server's own words. The callable refuses for good reasons — a driver
+      // still carrying riders — and "please try again" would send the manager
+      // round a loop that cannot succeed.
       console.error("Failed to fully release driver:", error);
-      toast.error('Could not release the driver. Please try again.');
+      toast.error(error instanceof Error && error.message
+        ? error.message
+        : 'Could not release the driver. Please try again.');
     } finally {
       setReleaseLoading(false);
     }
