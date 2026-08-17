@@ -38,6 +38,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.attendanceHeaderChanged = attendanceHeaderChanged;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const time_1 = require("../utils/time");
@@ -50,6 +51,51 @@ const authz_1 = require("../utils/authz");
 const sabhaRecurrence_1 = require("../http/sabhaRecurrence");
 const CONTEXT_DOC = 'system/rideContext';
 /**
+ * Does the attendance header need rewriting?
+ *
+ * THE BUG THIS FIXES
+ * ------------------
+ * The caller used to ask only `current?.eventId !== event.eventId` — rewrite when
+ * the gathering CHANGES. So editing the current gathering's time never reached the
+ * attendance record, and this function's own comment claimed the opposite:
+ * "manager edits to the venue mid-week are picked up". They were not.
+ *
+ * Measured in production on 2026-08-17. `weeklyAttendance/2026-08-17` said the
+ * sabha started at **4:00 AM**; it actually started at 11:00 PM — nineteen hours
+ * out. `2026-08-14` said 3:15 PM for a gathering that ran at 7:45 PM. Two of five
+ * headers were wrong, on the one record whose entire purpose is remembering what
+ * people were coming to.
+ *
+ * `attendanceLocksAt` agreed in both cases, which is why it went unnoticed: it is
+ * derived from the DATE, so it stays right while the times drift.
+ *
+ * Compared against `system/rideContext`, which is read at the top of every tick
+ * and carries the same fields — so this costs no extra reads, and still writes
+ * only when something really moved rather than 1,440 times a day.
+ *
+ * Pure and exported: the guard is the whole of the defect.
+ */
+function attendanceHeaderChanged(current, event) {
+    var _a, _b;
+    if (!current)
+        return true;
+    if (current.eventId !== event.eventId)
+        return true;
+    for (const field of ['startsAt', 'endsAt', 'attendanceLocksAt']) {
+        if (current[field] !== event[field])
+            return true;
+    }
+    // Structural, because a venue is an object. Absent and null are the same
+    // thing here — "use the default" — and must not read as a change.
+    const before = ((_a = current.venue) !== null && _a !== void 0 ? _a : null);
+    const after = ((_b = event.venue) !== null && _b !== void 0 ? _b : null);
+    if (!before !== !after)
+        return true;
+    if (before && after && (before.lat !== after.lat || before.lng !== after.lng))
+        return true;
+    return false;
+}
+/**
  * Stamp the gathering's own details onto its attendance record.
  *
  * Attendance lives at `weeklyAttendance/{eventId}/responses/{uid}`, and the
@@ -58,8 +104,7 @@ const CONTEXT_DOC = 'system/rideContext';
  * change week to week, "the 7th of August" alone stops being enough to
  * reconstruct what happened.
  *
- * set+merge, so re-running is harmless and manager edits to the venue mid-week
- * are picked up.
+ * set+merge, so re-running is harmless.
  */
 async function recordEventDetails(db, event, venue) {
     try {
@@ -202,8 +247,10 @@ exports.updateRideTypeContext = functions.pubsub
             // Lets the manager UI say "you cancelled everything" instead of
             // leaving "No rides available" looking like a malfunction.
             calendarStatus: event ? 'ok' : 'no-scheduled-event', overrideUntil: null, lastUpdated: now.toISOString() }));
-        // Only when the gathering changes, not every minute.
-        if (event && (current === null || current === void 0 ? void 0 : current.eventId) !== event.eventId) {
+        // When the gathering changes OR when its details do — see
+        // attendanceHeaderChanged. Comparing eventId alone left the attendance
+        // record showing a 4:00 AM start for an 11:00 PM sabha.
+        if (event && attendanceHeaderChanged(current, event)) {
             await recordEventDetails(db, event, (_a = event.venue) !== null && _a !== void 0 ? _a : venue);
         }
         await announceIfWindowJustOpened(current === null || current === void 0 ? void 0 : current.rideType, window);

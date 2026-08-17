@@ -144,25 +144,42 @@ export function useUpcomingEvents(limitTo = 12) {
 }
 
 /**
- * Change ONE week: its times, venue or agenda.
+ * Change ONE date: its times, venue or agenda.
  *
  * Writes an exception for that date. Settled with the owner on 2026-08-17:
  * editing one Friday affects only that Friday, and the rule and every other week
- * stay exactly as they were. So this stores a FULL snapshot — the edited week
+ * stay exactly as they were. So this stores a FULL snapshot — the edited date
  * keeps these values and will not follow a later change to the rule.
  *
- * `kind` distinguishes this from a one-off, which matters when the rule changes:
- * an override on a date the rule no longer covers goes inert rather than becoming
- * a gathering nobody scheduled.
+ * `source` IS NOT OPTIONAL, AND HERE IS WHY
+ * -----------------------------------------
+ * This function used to hardcode `kind: 'override'`, and it cost a live sabha.
+ *
+ * An override on a date the rule does not cover is deliberately INERT — that is
+ * the mechanism that lets a manager switch the weekly rule off without stray
+ * gatherings reappearing. So editing a ONE-OFF (a Monday, say, against a Friday
+ * rule) converted it to an override and made it vanish.
+ *
+ * Observed in production on 2026-08-17: a manager changed the end time of that
+ * evening's Monday gathering, and the app rolled forward to the following Friday
+ * with two riders already marked `at_sabha` against a gathering that was no
+ * longer current. Four minutes, and nothing on any screen said so.
+ *
+ * Editing a row must preserve WHAT KIND OF ROW IT WAS. The caller already knows —
+ * `SabhaEvent.source` — so it is required rather than defaulted, because a
+ * default here is what silently deleted a gathering.
  */
-export async function overrideEvent(
+export async function editOccurrence(
     date: string,
     values: Pick<SabhaEvent, 'startTime' | 'endTime' | 'agenda' | 'venue'>,
     updatedByUid: string,
+    source: SabhaEvent['source'],
 ): Promise<void> {
     await setDoc(doc(db, 'events', date), {
         date,
-        kind: 'override',
+        // A one-off stays a one-off. Anything derived from the rule — or already an
+        // override — is an override.
+        kind: source === 'one-off' ? 'one-off' : 'override',
         status: 'scheduled',
         startTime: values.startTime,
         endTime: values.endTime,
@@ -209,7 +226,7 @@ export async function createOneOff(
 
 // `updateEvent` and `createEvent` were here. Both wrote documents that WERE the
 // gathering; under the rule model a document is an exception, and the two cases
-// are no longer the same write. `overrideEvent` changes one week of the rule;
+// are no longer the same write. `editOccurrence` changes one date;
 // `createOneOff` adds a date the rule does not cover. Cancelling a week is
 // `deleteSabhaEvent`, which writes a cancellation exception server-side so the
 // attendance and ride cascade runs with it.

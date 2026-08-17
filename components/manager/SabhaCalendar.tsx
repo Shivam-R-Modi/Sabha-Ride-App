@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CalendarDays, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useUpcomingEvents, overrideEvent, createOneOff, SabhaEvent } from '../../hooks/useEvents';
+import { useUpcomingEvents, editOccurrence, createOneOff, SabhaEvent } from '../../hooks/useEvents';
 import { describeRule, labelForSource } from '../../src/utils/recurrence';
 import { RecurringSabha } from './RecurringSabha';
 import { previewDeleteSabhaEvent, deleteSabhaEvent } from '../../src/utils/cloudFunctions';
@@ -115,10 +115,14 @@ const EventRow: React.FC<{
                     ? null
                     : event.venue;
 
-            await overrideEvent(
+            await editOccurrence(
                 event.id,
                 { startTime: start, endTime: end, agenda, venue },
                 currentUser.uid,
+                // Carried through so a one-off stays a one-off. Without it this
+                // wrote `override` for every row, and an override off the weekly
+                // pattern is inert — which silently removed the gathering.
+                event.source,
             );
             setEditing(false);
             setVenuePlace(null);
