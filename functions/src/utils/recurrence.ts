@@ -1,85 +1,128 @@
 // ============================================
-// The manager's recurring sabha schedule.
+// The manager's recurring sabha, as a RULE.
 // ============================================
 
 /**
- * A congregation that meets every Friday should not need somebody to remember.
+ * The schedule is a rule. Documents are only the exceptions to it.
  *
- * Until this existed, `seedFirstEventIfNeeded` created exactly one gathering on a
- * brand-new project and then never ran again — deliberately, because the calendar
- * belongs to the manager. The consequence was that the calendar ran dry: measured
- * on 2026-08-15, `system/rideContext` read `calendarStatus:
- * 'no-scheduled-event'` and nobody could request a ride at all until a manager
- * hand-added a date.
+ * WHAT THIS REPLACES, AND WHY
+ * ---------------------------
+ * The first version of this file MATERIALISED dates: it wrote one
+ * `events/{date}` document per occurrence out to a horizon (`weeksAhead`, 1–26),
+ * and kept a `generatedThrough` high-water mark so a date the manager deleted
+ * could not be recreated on the next run.
  *
- * So the pattern is now the manager's to set, and topping the calendar up from it
- * is the machine's job.
+ * That worked, and it was the wrong shape. A weekly sabha is one fact — "every
+ * Friday, 7:30 to 10" — and turning it into 26 rows meant the calendar showed 26
+ * things a manager had to trust were all the same, a horizon that had to be
+ * chosen for no reason, and a watermark whose only job was undoing the damage of
+ * having generated at all.
  *
- * THE INVARIANT THIS MUST NOT BREAK
- * ---------------------------------
- * **A date the manager removed must never come back.** An earlier version of the
- * seeder decided whether a slot had been "dealt with" by whether a document
- * existed there, so deleting a date erased the evidence and the per-minute
- * self-heal recreated it within 60 seconds. Two separate guards keep that from
- * returning:
+ * Now the rule is the source of truth and `events/{date}` documents are
+ * exceptions: this Friday is cancelled, that Friday moved hall, or there is a
+ * one-off on a Tuesday. Everything the manager did not touch follows the rule,
+ * for ever, with no horizon.
  *
- *  1. `generatedThrough` — a high-water mark that only ever moves forward. A date
- *     at or before it has already been offered once and is never offered again,
- *     whatever the calendar now looks like.
- *  2. `occupied` — any date that already holds a document is skipped, which covers
- *     *cancelled* gatherings (the document survives with `status: 'cancelled'`)
- *     and also keeps `batch.create`'s ALREADY_EXISTS precondition from rejecting
- *     a whole commit.
+ * THE BUG CLASS THIS DELETES
+ * --------------------------
+ * The old model needed TWO guards against resurrection — the watermark for
+ * deletions and an `occupied` set for cancellations — because it created
+ * documents and therefore had to remember which it had already offered.
  *
- * Guard 1 covers deletion, guard 2 covers cancellation. Neither is redundant.
+ * Under a rule, "this Friday is cancelled" IS a document, and it persists by
+ * existing. There is nothing to remember and nothing to resurrect. `weeksAhead`,
+ * `generatedThrough`, `datesToGenerate`, `advanceWatermark` and `topUpCalendar`
+ * are gone, and with them the whole class of bug where a deleted date came back
+ * within 60 seconds.
  *
- * Because the watermark never rolls backwards, **editing the pattern affects
- * dates not yet on the calendar** — it does not retroactively add or move ones
- * already decided. The UI says so in those words.
+ * OVERRIDES ARE FULL SNAPSHOTS
+ * ----------------------------
+ * Settled with the owner on 2026-08-17: editing or cancelling one Friday affects
+ * **only that week**, and the rule and every other week stay exactly as they
+ * were. So an exception carries its own complete times and venue and does not
+ * follow later changes to the rule. The alternative — storing only the fields
+ * that differ, so an edited date still picks up a later rule time change — is
+ * defensible, but needs the UI to track which fields were touched. The calendar
+ * copy states which behaviour this is, because a manager cannot infer it.
  */
 
-import { zonedDateKey, addDaysToDateKey } from './time';
+import { addDaysToDateKey } from './time';
 import { parseTimeToMinutes } from './schedule';
 
-export interface RecurrenceConfig {
+export interface Venue {
+    lat: number;
+    lng: number;
+    address: string;
+}
+
+/** The rule. One record, no horizon, repeats until a manager changes it. */
+export interface RecurrenceRule {
     enabled: boolean;
     /** 0 = Sunday … 6 = Saturday. More than one is allowed. */
     daysOfWeek: number[];
     startTime: string;
     endTime: string;
-    /** How far ahead to keep the calendar filled. */
-    weeksAhead: number;
-    /** High-water mark. Dates at or before this are never generated again. */
-    generatedThrough?: string | null;
+    /** Default venue for occurrences. Null means fall back to settings/main. */
+    venue: Venue | null;
+    agenda: string;
 }
 
-/**
- * Upper bound on the horizon.
- *
- * Six months. Not a performance limit — it is how far ahead it is honest to claim
- * a gathering will happen. A calendar filled two years out is a promise nobody
- * made, and every one of those dates is a document a manager may have to cancel
- * by hand.
- */
-export const MAX_WEEKS_AHEAD = 26;
-export const MIN_WEEKS_AHEAD = 1;
-export const DEFAULT_WEEKS_AHEAD = 6;
+/** How a date diverges from the rule. */
+export type ExceptionKind =
+    /** A rule occurrence the manager edited or cancelled. */
+    | 'override'
+    /** A gathering on a date the rule does not cover. */
+    | 'one-off';
 
-/** Day-of-week for a `YYYY-MM-DD` key, read at UTC noon so no DST edge can shift it. */
+export interface EventException {
+    kind: ExceptionKind;
+    status: 'scheduled' | 'cancelled';
+    startTime: string;
+    endTime: string;
+    venue: Venue | null;
+    agenda: string;
+}
+
+/** What is actually happening on a given date. */
+export interface Occurrence {
+    date: string;
+    startTime: string;
+    endTime: string;
+    venue: Venue | null;
+    agenda: string;
+    /** Where this came from — for the calendar to label, and for debugging. */
+    source: 'rule' | 'override' | 'one-off';
+}
+
+/** Day-of-week for a `YYYY-MM-DD` key, read at UTC noon so no DST edge shifts it. */
 export function dayOfWeekForKey(dateKey: string): number {
     const [year, month, day] = dateKey.split('-').map(Number);
     return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
 }
 
+/** A venue needs both coordinates, and 0,0 is not a venue. */
+export function toVenue(raw: unknown): Venue | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const v = raw as Record<string, unknown>;
+    if (typeof v.lat !== 'number' || typeof v.lng !== 'number') return null;
+    if (!Number.isFinite(v.lat) || !Number.isFinite(v.lng)) return null;
+    if (v.lat === 0 && v.lng === 0) return null;
+    return {
+        lat: v.lat,
+        lng: v.lng,
+        address: typeof v.address === 'string' ? v.address : '',
+    };
+}
+
 /**
- * Validate and clean whatever is in the settings document.
+ * Validate and clean the stored rule.
  *
- * Returns null rather than a partly-repaired object when the pattern could not be
- * understood. This runs inside a scheduled job, and a half-read config that
- * generates gatherings on the wrong day is worse than one that generates none:
- * a missing date is visible to a manager, a wrong one sends drivers out.
+ * Returns null rather than a partly-repaired object when the pattern cannot be
+ * understood. This is read by the per-minute scheduler, and a half-read rule that
+ * puts sabha on the wrong day is worse than one that puts it nowhere: a missing
+ * gathering is visible to a manager, a wrong one sends drivers out.
  */
-export function normaliseRecurrence(raw: unknown): RecurrenceConfig | null {
+export function normaliseRecurrence(raw: unknown): RecurrenceRule | null {
     if (!raw || typeof raw !== 'object') return null;
     const r = raw as Record<string, unknown>;
 
@@ -96,77 +139,172 @@ export function normaliseRecurrence(raw: unknown): RecurrenceConfig | null {
     const end = parseTimeToMinutes(endTime);
     if (start === null || end === null || end <= start) return null;
 
-    const weeksRaw = typeof r.weeksAhead === 'number' ? Math.floor(r.weeksAhead) : DEFAULT_WEEKS_AHEAD;
-    const weeksAhead = Math.min(MAX_WEEKS_AHEAD, Math.max(MIN_WEEKS_AHEAD, weeksRaw));
-
-    const mark = r.generatedThrough;
-    const generatedThrough = typeof mark === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(mark)
-        ? mark
-        : null;
-
     return {
         enabled: r.enabled === true,
         daysOfWeek: days,
         startTime,
         endTime,
-        weeksAhead,
-        generatedThrough,
+        venue: toVenue(r.venue),
+        agenda: typeof r.agenda === 'string' ? r.agenda : '',
     };
 }
 
+/** Normalise a stored exception document. Null when it cannot be used. */
+export function normaliseException(raw: unknown): EventException | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const e = raw as Record<string, unknown>;
+
+    const start = typeof e.startTime === 'string' ? e.startTime : '';
+    const end = typeof e.endTime === 'string' ? e.endTime : '';
+    const startMin = parseTimeToMinutes(start);
+    const endMin = parseTimeToMinutes(end);
+    const usableTimes = startMin !== null && endMin !== null && endMin > startMin;
+
+    const status = e.status === 'cancelled' ? 'cancelled' : 'scheduled';
+
+    // A cancellation needs no usable times — it cancels. Anything else without
+    // them cannot describe a gathering, so it is not treated as one.
+    if (status === 'scheduled' && !usableTimes) return null;
+
+    return {
+        // Absent `kind` means a document written before this model existed.
+        // Treated as an override, the conservative reading: it then only affects a
+        // date the rule already covers, and on any other date it is inert rather
+        // than silently creating a gathering nobody scheduled.
+        kind: e.kind === 'one-off' ? 'one-off' : 'override',
+        status,
+        startTime: usableTimes ? start : '',
+        endTime: usableTimes ? end : '',
+        venue: toVenue(e.venue),
+        agenda: typeof e.agenda === 'string' ? e.agenda : '',
+    };
+}
+
+/** Does the rule place a gathering on this date? */
+export function coversDate(rule: RecurrenceRule | null, dateKey: string): boolean {
+    if (!rule?.enabled) return false;
+    return rule.daysOfWeek.includes(dayOfWeekForKey(dateKey));
+}
+
 /**
- * Which dates should be created right now.
+ * Every date the rule covers in `[fromKey, toKey]`, inclusive.
  *
- * Pure, and the whole of the risk: this decides what appears on a congregation's
- * calendar. Asserted directly rather than through the scheduled wrapper.
- *
- * @param occupied every date already holding a document, cancelled ones included.
+ * Replaces `datesToGenerate`. Note what is not here: no watermark, no set of
+ * occupied dates, no side effects. It answers a question about a rule instead of
+ * deciding what to write.
  */
-export function datesToGenerate(
-    config: RecurrenceConfig,
-    now: Date,
-    timeZone: string,
-    occupied: ReadonlySet<string>,
+export function occurrencesBetween(
+    rule: RecurrenceRule | null,
+    fromKey: string,
+    toKey: string,
 ): string[] {
-    if (!config.enabled) return [];
+    if (!rule?.enabled) return [];
+    if (fromKey > toKey) return [];
 
-    const today = zonedDateKey(now, timeZone);
-    const horizon = addDaysToDateKey(today, config.weeksAhead * 7);
-
-    // Start the day after the watermark, or today if there is none. Today itself
-    // is eligible: a manager enabling this on a Friday afternoon should get that
-    // evening's sabha, not next week's.
-    const mark = config.generatedThrough;
-    const from = mark && mark >= today ? addDaysToDateKey(mark, 1) : today;
-
-    const wanted = new Set(config.daysOfWeek);
+    const wanted = new Set(rule.daysOfWeek);
     const out: string[] = [];
 
-    for (let cursor = from; cursor <= horizon; cursor = addDaysToDateKey(cursor, 1)) {
-        if (!wanted.has(dayOfWeekForKey(cursor))) continue;
-        if (occupied.has(cursor)) continue;
-        out.push(cursor);
+    for (let cursor = fromKey; cursor <= toKey; cursor = addDaysToDateKey(cursor, 1)) {
+        if (wanted.has(dayOfWeekForKey(cursor))) out.push(cursor);
     }
 
     return out;
 }
 
 /**
- * Where the watermark should sit after a run.
+ * What is actually happening on this date, rule and exception combined.
  *
- * The horizon, not the last date created — otherwise a week the manager had
- * already filled by hand would leave the mark short, and the dates between it and
- * the horizon would be offered again on the next run.
+ * Pure, and the whole of the risk — the single answer to "is there a sabha, and
+ * when". Asserted directly rather than through a Firestore fake.
  *
- * Never moves backwards. A shrunk `weeksAhead` must not re-open dates that were
- * already decided.
+ * Priority:
+ *
+ *  1. a cancellation beats everything — nothing happens that day
+ *  2. a one-off stands alone, whether or not the rule covers the date
+ *  3. an override replaces the rule occurrence: times, venue and all
+ *  4. otherwise the rule, if it covers the date
+ *  5. otherwise nothing
+ *
+ * An override on a date the rule does NOT cover is inert. That is what makes
+ * turning the rule off safe — overrides stop applying rather than becoming
+ * phantom gatherings, and they apply again if the rule comes back.
  */
-export function advanceWatermark(
-    config: RecurrenceConfig,
-    now: Date,
-    timeZone: string,
-): string {
-    const horizon = addDaysToDateKey(zonedDateKey(now, timeZone), config.weeksAhead * 7);
-    const current = config.generatedThrough;
-    return current && current > horizon ? current : horizon;
+export function effectiveEvent(
+    dateKey: string,
+    rule: RecurrenceRule | null,
+    exception: EventException | null,
+): Occurrence | null {
+    if (exception?.status === 'cancelled') return null;
+
+    if (exception?.kind === 'one-off') {
+        return {
+            date: dateKey,
+            startTime: exception.startTime,
+            endTime: exception.endTime,
+            venue: exception.venue,
+            agenda: exception.agenda,
+            source: 'one-off',
+        };
+    }
+
+    const covered = coversDate(rule, dateKey);
+
+    if (exception?.kind === 'override') {
+        if (!covered) return null; // inert off-pattern — see the note above
+        return {
+            date: dateKey,
+            startTime: exception.startTime,
+            endTime: exception.endTime,
+            venue: exception.venue,
+            agenda: exception.agenda,
+            source: 'override',
+        };
+    }
+
+    if (!covered || !rule) return null;
+
+    return {
+        date: dateKey,
+        startTime: rule.startTime,
+        endTime: rule.endTime,
+        venue: rule.venue,
+        agenda: rule.agenda,
+        source: 'rule',
+    };
+}
+
+/**
+ * The next occurrences from `fromKey` onward, exceptions applied, cancellations
+ * removed.
+ *
+ * Used by the scheduler to find the current gathering AND by the manager's
+ * calendar to list what is coming — one function, so the two cannot disagree
+ * about what the schedule says. The scheduler asks for 1, the calendar for ~8.
+ *
+ * @param exceptions keyed by date, as read from the events collection.
+ */
+export function upcomingOccurrences(
+    rule: RecurrenceRule | null,
+    exceptions: ReadonlyMap<string, EventException>,
+    fromKey: string,
+    toKey: string,
+    limit: number,
+): Occurrence[] {
+    // Rule dates and one-off dates together, in order, de-duplicated. A one-off
+    // sits on a date the rule does not cover, so a walk driven by the rule alone
+    // would never see it.
+    const candidates = new Set(occurrencesBetween(rule, fromKey, toKey));
+    for (const [date, exception] of exceptions) {
+        if (date >= fromKey && date <= toKey && exception.kind === 'one-off') {
+            candidates.add(date);
+        }
+    }
+
+    const out: Occurrence[] = [];
+    for (const date of [...candidates].sort()) {
+        const occurrence = effectiveEvent(date, rule, exceptions.get(date) ?? null);
+        if (occurrence) out.push(occurrence);
+        if (out.length >= limit) break;
+    }
+    return out;
 }

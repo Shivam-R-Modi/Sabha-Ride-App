@@ -36,11 +36,8 @@ import { RecurringSabha } from '../../components/manager/RecurringSabha';
 
 beforeEach(() => {
     vi.clearAllMocks();
-    storedDoc = {
-        enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00',
-        weeksAhead: 6, generatedThrough: '2026-09-26',
-    };
-    updateSabhaRecurrence.mockResolvedValue({ config: storedDoc, created: ['2026-08-21'] });
+    storedDoc = { enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00' };
+    updateSabhaRecurrence.mockResolvedValue({ rule: storedDoc });
 });
 
 const save = () => screen.getByRole('button', { name: /save schedule/i });
@@ -55,14 +52,25 @@ describe('RecurringSabha', () => {
         expect(screen.getByRole('checkbox')).toBeChecked();
     });
 
-    it('says plainly that changes do not rewrite existing dates', async () => {
-        // The single most misreadable thing about this feature. A manager who
-        // expects a pattern change to move next week's sabha would call it broken.
+    it('says it repeats with no end date, and what an edited week keeps', async () => {
+        // The two things a manager cannot infer. The first version of this card
+        // asked for a number of weeks; now there is no horizon at all, and a week
+        // edited individually keeps its own arrangements rather than following a
+        // later change to the pattern.
         render(<RecurringSabha />);
 
         await waitFor(() => expect(save()).toBeInTheDocument());
-        expect(screen.getByText(/not on the calendar yet/i)).toBeInTheDocument();
-        expect(screen.getByText(/will not come back/i)).toBeInTheDocument();
+        expect(screen.getByText(/until you change it/i)).toBeInTheDocument();
+        expect(screen.getByText(/keep their own arrangements/i)).toBeInTheDocument();
+    });
+
+    it('offers NO horizon input — the generator is gone', async () => {
+        // A spinbutton here would mean the materialising version came back.
+        render(<RecurringSabha />);
+
+        await waitFor(() => expect(save()).toBeInTheDocument());
+        expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+        expect(screen.queryByText(/weeks ahead/i)).not.toBeInTheDocument();
     });
 
     it('sends the edited pattern', async () => {
@@ -82,9 +90,9 @@ describe('RecurringSabha', () => {
         });
     });
 
-    it('NEVER sends generatedThrough', async () => {
-        // Server-owned. A client that can move the watermark can resurrect every
-        // date the manager deleted.
+    it('sends NO horizon and NO watermark', async () => {
+        // Both belonged to the generator. Sending either would be the client
+        // asking for behaviour the server has deleted.
         const user = userEvent.setup();
         render(<RecurringSabha />);
         await waitFor(() => expect(save()).toBeInTheDocument());
@@ -92,7 +100,10 @@ describe('RecurringSabha', () => {
         await user.click(save());
 
         await waitFor(() => expect(updateSabhaRecurrence).toHaveBeenCalled());
-        expect(updateSabhaRecurrence.mock.calls[0]![0]).not.toHaveProperty('generatedThrough');
+        const sent = updateSabhaRecurrence.mock.calls[0]![0];
+        expect(sent).not.toHaveProperty('generatedThrough');
+        expect(sent).not.toHaveProperty('weeksAhead');
+        expect(Object.keys(sent).sort()).toEqual(['daysOfWeek', 'enabled', 'endTime', 'startTime']);
     });
 
     it('refuses to save an enabled pattern with no days, and says why', async () => {
@@ -122,16 +133,19 @@ describe('RecurringSabha', () => {
         expect(updateSabhaRecurrence.mock.calls[0]![0].enabled).toBe(false);
     });
 
-    it('reports how many dates were actually created', async () => {
+    it('reports the rule the SERVER stored, not what was on screen', async () => {
+        // If the two ever disagree, the manager should see the server's version.
         const user = userEvent.setup();
-        updateSabhaRecurrence.mockResolvedValue({ config: storedDoc, created: ['a', 'b', 'c'] });
+        updateSabhaRecurrence.mockResolvedValue({
+            rule: { enabled: true, daysOfWeek: [0], startTime: '10:00', endTime: '12:00' },
+        });
         render(<RecurringSabha />);
         await waitFor(() => expect(save()).toBeInTheDocument());
 
         await user.click(save());
 
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith(
-            expect.stringMatching(/Added 3 dates/)));
+            expect.stringMatching(/Every Sunday, 10:00–12:00, repeating until you change it/)));
     });
 
     it('does not claim success when the server refuses', async () => {

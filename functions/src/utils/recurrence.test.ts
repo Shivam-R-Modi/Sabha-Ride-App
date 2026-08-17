@@ -1,210 +1,313 @@
 /**
- * The recurring schedule must never resurrect a date a manager removed.
+ * The schedule is a rule; documents are only its exceptions.
  *
- * An earlier seeder decided whether a slot had been dealt with by whether a
- * document existed there, so deleting a date erased the evidence and the
- * per-minute self-heal recreated it within 60 seconds. Two guards now stand in
- * the way — the `generatedThrough` watermark for deletions, and the `occupied`
- * set for cancellations — and both are asserted here separately, because either
- * one alone leaves a hole.
+ * The load-bearing property, settled with the owner on 2026-08-17: **editing or
+ * cancelling one Friday affects only that week.** The rule and every other week
+ * must come out untouched. That is asserted directly, because it is the whole
+ * reason this model replaced the generator.
+ *
+ * The generator's own hazard is gone with it: there is no watermark and no
+ * `occupied` set, because nothing is created ahead of time. A cancelled date is a
+ * document, and it persists by existing. The tests that used to guard
+ * resurrection are deleted rather than ported — there is nothing left to
+ * resurrect.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
-    normaliseRecurrence, datesToGenerate, advanceWatermark, dayOfWeekForKey,
-    MAX_WEEKS_AHEAD, DEFAULT_WEEKS_AHEAD, RecurrenceConfig,
+    normaliseRecurrence, normaliseException, coversDate, occurrencesBetween,
+    effectiveEvent, upcomingOccurrences, dayOfWeekForKey, toVenue,
+    RecurrenceRule, EventException,
 } from './recurrence';
 
-const TZ = 'America/New_York';
-/** A Saturday. 2026-08-15 is a Saturday; noon local keeps the key unambiguous. */
-const NOW = new Date('2026-08-15T16:00:00Z');
-
-const FRIDAYS: RecurrenceConfig = {
+const FRIDAYS: RecurrenceRule = {
     enabled: true,
     daysOfWeek: [5],
-    startTime: '19:00',
+    startTime: '19:30',
     endTime: '22:00',
-    weeksAhead: 3,
-    generatedThrough: null,
+    venue: null,
+    agenda: '',
 };
 
-const none = new Set<string>();
+const HALL = { lat: 42.3, lng: -71.1, address: 'Other Hall' };
+
+const scheduled = (over: Partial<EventException> = {}): EventException => ({
+    kind: 'override', status: 'scheduled',
+    startTime: '18:00', endTime: '20:00', venue: null, agenda: '',
+    ...over,
+});
+
+const cancelled = (kind: EventException['kind'] = 'override'): EventException => ({
+    kind, status: 'cancelled', startTime: '', endTime: '', venue: null, agenda: '',
+});
 
 describe('dayOfWeekForKey', () => {
     it('reads the weekday without a DST edge shifting it', () => {
-        expect(dayOfWeekForKey('2026-08-14')).toBe(5); // Friday
-        expect(dayOfWeekForKey('2026-08-15')).toBe(6); // Saturday
-        expect(dayOfWeekForKey('2026-08-16')).toBe(0); // Sunday
-        // The US spring-forward Sunday, historically where naive maths slips.
+        expect(dayOfWeekForKey('2026-08-21')).toBe(5); // Friday
+        expect(dayOfWeekForKey('2026-08-22')).toBe(6);
+        expect(dayOfWeekForKey('2026-08-23')).toBe(0);
+        // The US spring-forward and fall-back Sundays.
         expect(dayOfWeekForKey('2026-03-08')).toBe(0);
         expect(dayOfWeekForKey('2026-11-01')).toBe(0);
     });
 });
 
-describe('datesToGenerate', () => {
-    it('fills every matching weekday out to the horizon', () => {
-        expect(datesToGenerate(FRIDAYS, NOW, TZ, none))
+describe('occurrencesBetween', () => {
+    it('lists every matching date in the range, with no horizon of its own', () => {
+        expect(occurrencesBetween(FRIDAYS, '2026-08-17', '2026-09-07'))
             .toEqual(['2026-08-21', '2026-08-28', '2026-09-04']);
     });
 
-    it('does nothing at all while disabled', () => {
-        expect(datesToGenerate({ ...FRIDAYS, enabled: false }, NOW, TZ, none)).toEqual([]);
+    it('handles several days a week, in date order', () => {
+        const twice = { ...FRIDAYS, daysOfWeek: [0, 5] };
+
+        expect(occurrencesBetween(twice, '2026-08-17', '2026-08-24'))
+            .toEqual(['2026-08-21', '2026-08-23']);
     });
 
-    it('NEVER regenerates a date at or before the watermark', () => {
-        // The deletion guard. The manager deleted 2026-08-21; it is behind the
-        // mark, so it must not come back however empty the calendar looks.
-        const config = { ...FRIDAYS, generatedThrough: '2026-08-28' };
-
-        const dates = datesToGenerate(config, NOW, TZ, none);
-
-        expect(dates).not.toContain('2026-08-21');
-        expect(dates).toEqual(['2026-09-04']);
+    it('returns nothing while the rule is off', () => {
+        expect(occurrencesBetween({ ...FRIDAYS, enabled: false }, '2026-08-17', '2026-12-31'))
+            .toEqual([]);
     });
 
-    it('skips a date that already holds a document', () => {
-        // The cancellation guard. A cancelled gathering keeps its document, and
-        // regenerating over it would both un-cancel it and reject the batch.
-        const occupied = new Set(['2026-08-28']);
-
-        expect(datesToGenerate(FRIDAYS, NOW, TZ, occupied))
-            .toEqual(['2026-08-21', '2026-09-04']);
+    it('returns nothing for a null rule or a backwards range', () => {
+        expect(occurrencesBetween(null, '2026-08-17', '2026-12-31')).toEqual([]);
+        expect(occurrencesBetween(FRIDAYS, '2026-09-07', '2026-08-17')).toEqual([]);
     });
 
-    it('needs BOTH guards — the watermark alone does not cover cancellation', () => {
-        // A cancelled date ahead of the watermark is only protected by `occupied`.
-        const config = { ...FRIDAYS, generatedThrough: null };
-
-        expect(datesToGenerate(config, NOW, TZ, new Set(['2026-08-21'])))
-            .not.toContain('2026-08-21');
+    it('includes both ends of the range', () => {
+        expect(occurrencesBetween(FRIDAYS, '2026-08-21', '2026-08-21')).toEqual(['2026-08-21']);
     });
 
-    it('needs BOTH guards — occupied alone does not cover deletion', () => {
-        // A deleted date leaves no document, so `occupied` cannot see it.
-        const config = { ...FRIDAYS, generatedThrough: '2026-08-21' };
-
-        expect(datesToGenerate(config, NOW, TZ, none)).not.toContain('2026-08-21');
-    });
-
-    it('includes today when today matches the pattern', () => {
-        // Enabling this on a Friday afternoon should offer that evening, not make
-        // the congregation wait a week.
-        const saturdays = { ...FRIDAYS, daysOfWeek: [6] };
-
-        expect(datesToGenerate(saturdays, NOW, TZ, none)[0]).toBe('2026-08-15');
-    });
-
-    it('never offers a date in the past', () => {
-        const dates = datesToGenerate({ ...FRIDAYS, weeksAhead: 26 }, NOW, TZ, none);
-
-        expect(dates.every(d => d >= '2026-08-15')).toBe(true);
-    });
-
-    it('handles several days a week, in order', () => {
-        // Two weeks from Sat 2026-08-15 is a horizon of 2026-08-29, so Sunday the
-        // 30th falls outside it — the horizon is a date, not a count of weeks of
-        // each day.
-        const twice = { ...FRIDAYS, daysOfWeek: [0, 5], weeksAhead: 2 };
-
-        expect(datesToGenerate(twice, NOW, TZ, none))
-            .toEqual(['2026-08-16', '2026-08-21', '2026-08-23', '2026-08-28']);
-    });
-
-    it('ignores a watermark that is already in the past', () => {
-        // A calendar left alone for months must start filling from today, not
-        // from wherever it stopped.
-        const stale = { ...FRIDAYS, generatedThrough: '2026-01-01' };
-
-        expect(datesToGenerate(stale, NOW, TZ, none))
-            .toEqual(['2026-08-21', '2026-08-28', '2026-09-04']);
+    it('keeps working across a year boundary', () => {
+        expect(occurrencesBetween(FRIDAYS, '2026-12-28', '2027-01-04'))
+            .toEqual(['2027-01-01']);
     });
 });
 
-describe('advanceWatermark', () => {
-    it('moves to the horizon, not the last date created', () => {
-        // Otherwise a week the manager already filled leaves the mark short and
-        // those dates get offered again next run.
-        expect(advanceWatermark(FRIDAYS, NOW, TZ)).toBe('2026-09-05');
+describe('effectiveEvent — the priority table', () => {
+    it('1. a cancellation beats everything', () => {
+        expect(effectiveEvent('2026-08-21', FRIDAYS, cancelled())).toBeNull();
+        expect(effectiveEvent('2026-08-25', FRIDAYS, cancelled('one-off'))).toBeNull();
     });
 
-    it('never moves backwards when the horizon shrinks', () => {
-        const shrunk = { ...FRIDAYS, weeksAhead: 1, generatedThrough: '2026-12-01' };
+    it('2. a one-off stands alone, on a date the rule does not cover', () => {
+        const out = effectiveEvent('2026-08-25', FRIDAYS, scheduled({ kind: 'one-off' }));
 
-        expect(advanceWatermark(shrunk, NOW, TZ)).toBe('2026-12-01');
+        expect(out).toMatchObject({ date: '2026-08-25', startTime: '18:00', source: 'one-off' });
+    });
+
+    it('3. an override replaces the rule occurrence entirely', () => {
+        const out = effectiveEvent('2026-08-21', FRIDAYS, scheduled({ venue: HALL }));
+
+        expect(out).toMatchObject({
+            startTime: '18:00', endTime: '20:00', venue: HALL, source: 'override',
+        });
+    });
+
+    it('4. otherwise the rule, where it covers the date', () => {
+        const out = effectiveEvent('2026-08-21', FRIDAYS, null);
+
+        expect(out).toMatchObject({ startTime: '19:30', endTime: '22:00', source: 'rule' });
+    });
+
+    it('5. otherwise nothing', () => {
+        expect(effectiveEvent('2026-08-25', FRIDAYS, null)).toBeNull();
+        expect(effectiveEvent('2026-08-21', null, null)).toBeNull();
+    });
+
+    it('an override off the pattern is INERT, not a phantom gathering', () => {
+        // This is what makes turning the rule off safe. The document survives, so
+        // re-enabling the rule brings the edit back.
+        expect(effectiveEvent('2026-08-25', FRIDAYS, scheduled())).toBeNull();
+        expect(effectiveEvent('2026-08-21', { ...FRIDAYS, enabled: false }, scheduled())).toBeNull();
+    });
+});
+
+describe('editing one week affects ONLY that week', () => {
+    // The property the owner asked for, stated as a test rather than a comment.
+    const exceptions = new Map<string, EventException>([
+        ['2026-08-28', scheduled({ startTime: '17:00', endTime: '19:00', venue: HALL })],
+    ]);
+
+    it('the edited week takes its own times and venue', () => {
+        const out = upcomingOccurrences(FRIDAYS, exceptions, '2026-08-17', '2026-09-30', 8);
+        const edited = out.find(o => o.date === '2026-08-28')!;
+
+        expect(edited).toMatchObject({ startTime: '17:00', venue: HALL, source: 'override' });
+    });
+
+    it('every other week is completely unchanged', () => {
+        const out = upcomingOccurrences(FRIDAYS, exceptions, '2026-08-17', '2026-09-30', 8);
+
+        for (const o of out.filter(x => x.date !== '2026-08-28')) {
+            expect(o).toMatchObject({ startTime: '19:30', endTime: '22:00', source: 'rule' });
+        }
+    });
+
+    it('cancelling one week removes only that week', () => {
+        const out = upcomingOccurrences(
+            FRIDAYS, new Map([['2026-08-28', cancelled()]]), '2026-08-17', '2026-09-30', 8);
+
+        expect(out.map(o => o.date)).not.toContain('2026-08-28');
+        expect(out.map(o => o.date)).toEqual(
+            ['2026-08-21', '2026-09-04', '2026-09-11', '2026-09-18', '2026-09-25']);
+    });
+
+    it('the rule itself is never mutated by any of this', () => {
+        const before = JSON.stringify(FRIDAYS);
+        upcomingOccurrences(FRIDAYS, exceptions, '2026-08-17', '2026-12-31', 20);
+        expect(JSON.stringify(FRIDAYS)).toBe(before);
+    });
+});
+
+describe('upcomingOccurrences', () => {
+    it('stops at the limit', () => {
+        const out = upcomingOccurrences(FRIDAYS, new Map(), '2026-08-17', '2026-12-31', 3);
+        expect(out).toHaveLength(3);
+    });
+
+    it('sees a one-off the rule would never reach', () => {
+        // Driven by the rule alone, a Tuesday gathering is invisible.
+        const out = upcomingOccurrences(
+            FRIDAYS,
+            new Map([['2026-08-18', scheduled({ kind: 'one-off' })]]),
+            '2026-08-17', '2026-08-24', 8,
+        );
+
+        expect(out.map(o => o.date)).toEqual(['2026-08-18', '2026-08-21']);
+    });
+
+    it('ignores exceptions outside the range', () => {
+        const out = upcomingOccurrences(
+            FRIDAYS,
+            new Map([['2027-01-05', scheduled({ kind: 'one-off' })]]),
+            '2026-08-17', '2026-08-24', 8,
+        );
+
+        expect(out.map(o => o.date)).toEqual(['2026-08-21']);
+    });
+
+    it('returns one-offs even with the rule switched off', () => {
+        // A manager who turns the weekly schedule off but keeps a special date
+        // should still have that date.
+        const out = upcomingOccurrences(
+            { ...FRIDAYS, enabled: false },
+            new Map([['2026-08-18', scheduled({ kind: 'one-off' })]]),
+            '2026-08-17', '2026-08-31', 8,
+        );
+
+        expect(out.map(o => o.date)).toEqual(['2026-08-18']);
+    });
+
+    it('returns nothing when the rule is off and there are no one-offs', () => {
+        expect(upcomingOccurrences(
+            { ...FRIDAYS, enabled: false }, new Map(), '2026-08-17', '2026-12-31', 8,
+        )).toEqual([]);
     });
 });
 
 describe('normaliseRecurrence', () => {
-    it('accepts a well-formed config', () => {
-        const out = normaliseRecurrence({
-            enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00', weeksAhead: 4,
-        });
+    it('accepts a well-formed rule', () => {
+        expect(normaliseRecurrence({
+            enabled: true, daysOfWeek: [5], startTime: '19:30', endTime: '22:00',
+        })).toMatchObject({ enabled: true, daysOfWeek: [5], startTime: '19:30' });
+    });
 
-        expect(out).toMatchObject({ enabled: true, daysOfWeek: [5], weeksAhead: 4 });
+    it('no longer carries a horizon or a watermark', () => {
+        // Both deleted with the generator. A stored value must be ignored rather
+        // than quietly resurrecting the old behaviour.
+        const out = normaliseRecurrence({
+            enabled: true, daysOfWeek: [5], startTime: '19:30', endTime: '22:00',
+            weeksAhead: 10, generatedThrough: '2026-10-26',
+        }) as unknown as Record<string, unknown>;
+
+        expect(out.weeksAhead).toBeUndefined();
+        expect(out.generatedThrough).toBeUndefined();
     });
 
     it('refuses a pattern with no days rather than guessing one', () => {
-        // A scheduled job that guesses the day sends drivers out on the wrong
-        // evening. A missing date is visible; a wrong one is not.
-        expect(normaliseRecurrence({ enabled: true, daysOfWeek: [], startTime: '19:00', endTime: '22:00' })).toBeNull();
-        expect(normaliseRecurrence({ enabled: true, startTime: '19:00', endTime: '22:00' })).toBeNull();
+        expect(normaliseRecurrence({ enabled: true, daysOfWeek: [], startTime: '19:30', endTime: '22:00' })).toBeNull();
+        expect(normaliseRecurrence({ enabled: true, startTime: '19:30', endTime: '22:00' })).toBeNull();
     });
 
-    it('drops days that are not real weekdays, and de-duplicates', () => {
-        const out = normaliseRecurrence({
-            enabled: true, daysOfWeek: [5, 5, 9, -1, 0, 2.5], startTime: '19:00', endTime: '22:00',
-        });
-
-        expect(out!.daysOfWeek).toEqual([0, 5]);
+    it('drops days that are not weekdays, and de-duplicates', () => {
+        expect(normaliseRecurrence({
+            enabled: true, daysOfWeek: [5, 5, 9, -1, 0, 2.5], startTime: '19:30', endTime: '22:00',
+        })!.daysOfWeek).toEqual([0, 5]);
     });
 
-    it('refuses an end that is not after the start', () => {
-        expect(normaliseRecurrence({ enabled: true, daysOfWeek: [5], startTime: '22:00', endTime: '19:00' })).toBeNull();
-        expect(normaliseRecurrence({ enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '19:00' })).toBeNull();
+    it('refuses an end at or before the start, and an unparseable time', () => {
+        for (const times of [
+            { startTime: '22:00', endTime: '19:30' },
+            { startTime: '19:30', endTime: '19:30' },
+            { startTime: '25:99', endTime: '22:00' },
+            { startTime: '', endTime: '22:00' },
+        ]) {
+            expect(normaliseRecurrence({ enabled: true, daysOfWeek: [5], ...times })).toBeNull();
+        }
     });
 
-    it('refuses an unparseable time rather than defaulting it', () => {
-        expect(normaliseRecurrence({ enabled: true, daysOfWeek: [5], startTime: '25:99', endTime: '22:00' })).toBeNull();
-        expect(normaliseRecurrence({ enabled: true, daysOfWeek: [5], startTime: '', endTime: '22:00' })).toBeNull();
-    });
-
-    it('clamps the horizon instead of accepting a two-year promise', () => {
-        const far = normaliseRecurrence({
-            enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00', weeksAhead: 500,
-        });
-        expect(far!.weeksAhead).toBe(MAX_WEEKS_AHEAD);
-
-        const tiny = normaliseRecurrence({
-            enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00', weeksAhead: 0,
-        });
-        expect(tiny!.weeksAhead).toBe(1);
-    });
-
-    it('defaults a missing horizon', () => {
-        const out = normaliseRecurrence({
-            enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00',
-        });
-        expect(out!.weeksAhead).toBe(DEFAULT_WEEKS_AHEAD);
-    });
-
-    it('treats a malformed watermark as absent rather than trusting it', () => {
-        const out = normaliseRecurrence({
-            enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00',
-            generatedThrough: 'whenever',
-        });
-        expect(out!.generatedThrough).toBeNull();
-    });
-
-    it('defaults enabled to false — an unreadable flag must not start generating', () => {
-        const out = normaliseRecurrence({
-            daysOfWeek: [5], startTime: '19:00', endTime: '22:00',
-        });
-        expect(out!.enabled).toBe(false);
+    it('defaults enabled to false — an unreadable flag must not start scheduling', () => {
+        expect(normaliseRecurrence({
+            daysOfWeek: [5], startTime: '19:30', endTime: '22:00',
+        })!.enabled).toBe(false);
     });
 
     it('survives junk', () => {
         expect(normaliseRecurrence(null)).toBeNull();
-        expect(normaliseRecurrence('friday')).toBeNull();
+        expect(normaliseRecurrence('fridays')).toBeNull();
         expect(normaliseRecurrence(42)).toBeNull();
+    });
+});
+
+describe('normaliseException', () => {
+    it('reads an override', () => {
+        expect(normaliseException({
+            kind: 'override', status: 'scheduled', startTime: '18:00', endTime: '20:00',
+        })).toMatchObject({ kind: 'override', status: 'scheduled', startTime: '18:00' });
+    });
+
+    it('reads a cancellation without needing usable times', () => {
+        // A cancellation cancels. Requiring times would make the most important
+        // exception the one most likely to be discarded.
+        expect(normaliseException({ status: 'cancelled' }))
+            .toMatchObject({ status: 'cancelled' });
+    });
+
+    it('treats a document with no kind as an OVERRIDE, the conservative reading', () => {
+        // Documents predating this model have no `kind`. As an override they only
+        // affect dates the rule already covers; as a one-off they would invent
+        // gatherings nobody scheduled.
+        expect(normaliseException({
+            status: 'scheduled', startTime: '18:00', endTime: '20:00',
+        })!.kind).toBe('override');
+    });
+
+    it('refuses a scheduled exception with no usable times', () => {
+        expect(normaliseException({ status: 'scheduled' })).toBeNull();
+        expect(normaliseException({ status: 'scheduled', startTime: '20:00', endTime: '18:00' })).toBeNull();
+    });
+
+    it('survives junk', () => {
+        expect(normaliseException(null)).toBeNull();
+        expect(normaliseException('cancelled')).toBeNull();
+    });
+});
+
+describe('coversDate and toVenue', () => {
+    it('coversDate follows the rule and its enabled flag', () => {
+        expect(coversDate(FRIDAYS, '2026-08-21')).toBe(true);
+        expect(coversDate(FRIDAYS, '2026-08-22')).toBe(false);
+        expect(coversDate({ ...FRIDAYS, enabled: false }, '2026-08-21')).toBe(false);
+        expect(coversDate(null, '2026-08-21')).toBe(false);
+    });
+
+    it('toVenue rejects null island and half-written coordinates', () => {
+        expect(toVenue({ lat: 0, lng: 0, address: 'x' })).toBeNull();
+        expect(toVenue({ lat: 42.3, address: 'x' })).toBeNull();
+        expect(toVenue({ lat: NaN, lng: -71.1 })).toBeNull();
+        expect(toVenue(null)).toBeNull();
+        expect(toVenue({ lat: 42.3, lng: -71.1 })).toEqual({ lat: 42.3, lng: -71.1, address: '' });
     });
 });

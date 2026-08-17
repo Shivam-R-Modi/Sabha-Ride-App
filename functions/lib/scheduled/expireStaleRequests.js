@@ -40,6 +40,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.expireStaleRequests = void 0;
 exports.eventKeyOfRide = eventKeyOfRide;
 exports.shouldExpire = shouldExpire;
+exports.clearEndOfEveningStatuses = clearEndOfEveningStatuses;
 /**
  * Requests do not expire, and that turns out to be permanent.
  *
@@ -73,6 +74,23 @@ const settings_1 = require("../utils/settings");
 const UNSERVED = 'requested';
 /** Waiting statuses a rider can be left stranded in. */
 const WAITING_STATUSES = ['waiting_for_pickup', 'waiting_for_dropoff'];
+/**
+ * Statuses that describe where a rider was DURING a gathering that is now over.
+ *
+ * `at_sabha` was never cleared by anything. It is set when a home→sabha ride
+ * completes and then simply stays, so on 2026-08-15 five riders still carried it
+ * from the night before. That matters because the drop-off presence check
+ * short-circuits on `at_sabha`: a week-old flag would wave a rider straight past
+ * this week's check without them ever having turned up, and a driver would be
+ * sent to collect somebody sitting at home.
+ *
+ * `home_safe` is deliberately NOT here. It is a terminal, truthful state — they
+ * got home — and resetting it would erase the only record that the evening
+ * finished properly.
+ */
+const END_OF_EVENING_STATUSES = ['at_sabha', 'in_ride'];
+/** A ride in any of these means the rider is still travelling — leave them be. */
+const OPEN_RIDE_STATUSES = ['requested', 'assigned', 'driver_en_route', 'arriving', 'in_progress'];
 /**
  * ponytail: one batch per run, so at most ~200 requests are closed per night
  * (2 writes each, against Firestore's 500-write batch limit). A backlog larger
@@ -116,6 +134,52 @@ function shouldExpire(ride, todayKey) {
  * transition minute, or a gathering nobody opened. A dated sweep catches all of
  * them, and re-running it is harmless.
  */
+/**
+ * Put down the "where they were tonight" statuses once the evening is over.
+ *
+ * Runs on its own, unconditionally — NOT folded into the stale-request pass
+ * below. The five riders that prompted this had no open requests at all, so any
+ * version of this gated on finding stale rides would have skipped exactly the
+ * people it exists for.
+ *
+ * A rider with a live ride is left alone: a drop-off run can legitimately still
+ * be going at 03:00, and resetting a rider who is in the car would make the
+ * manager's board contradict the driver's screen. One query answers that for
+ * everybody, rather than one per rider.
+ *
+ * Exported for tests.
+ */
+async function clearEndOfEveningStatuses(db) {
+    const [lingering, live] = await Promise.all([
+        db.collection('users').where('status', 'in', END_OF_EVENING_STATUSES).get(),
+        db.collection('rides').where('status', 'in', OPEN_RIDE_STATUSES).get(),
+    ]);
+    if (lingering.empty)
+        return 0;
+    const travelling = new Set(live.docs.map(d => { var _a; return (_a = d.data()) === null || _a === void 0 ? void 0 : _a.studentId; }).filter((id) => typeof id === 'string'));
+    const batch = db.batch();
+    let cleared = 0;
+    for (const doc of lingering.docs) {
+        if (travelling.has(doc.id))
+            continue;
+        // The field is REMOVED, not set to something new.
+        //
+        // Signup writes no status at all, so absent is already what a rider with
+        // nothing going on looks like — this returns them to exactly that, and
+        // needs no new value in the union, the formatter, or any screen. Setting
+        // 'home_safe' was the alternative and it is a plain lie: nobody knows
+        // whether they got home, and inventing that is the same class of untruth
+        // this whole sweep exists to remove.
+        batch.update(doc.ref, {
+            status: admin.firestore.FieldValue.delete(),
+            currentRideId: null,
+        });
+        cleared++;
+    }
+    if (cleared > 0)
+        await batch.commit();
+    return cleared;
+}
 exports.expireStaleRequests = functions.pubsub
     .schedule('every day 03:00')
     .timeZone(time_1.DEFAULT_TIME_ZONE)
@@ -124,6 +188,19 @@ exports.expireStaleRequests = functions.pubsub
     try {
         const timeZone = await (0, settings_1.getTimeZone)();
         const todayKey = (0, time_1.zonedDateKey)(new Date(), timeZone);
+        // First, and regardless of what the request sweep finds. `at_sabha`
+        // short-circuits the drop-off presence check, so a flag left over from
+        // last week would wave a rider past this week's check without them
+        // having turned up — and a driver would be sent for somebody at home.
+        try {
+            const cleared = await clearEndOfEveningStatuses(db);
+            console.log(cleared > 0
+                ? `[expireStaleRequests] Cleared ${cleared} end-of-evening status(es)`
+                : '[expireStaleRequests] No lingering end-of-evening statuses');
+        }
+        catch (statusError) {
+            console.error('[expireStaleRequests] Could not clear statuses:', statusError);
+        }
         const snap = await db.collection('rides').where('status', '==', UNSERVED).get();
         if (snap.empty) {
             console.log('[expireStaleRequests] No open requests — nothing to do');

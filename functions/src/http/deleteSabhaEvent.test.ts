@@ -213,7 +213,9 @@ describe('deleteSabhaEvent — refusals', () => {
         const result: any = await call({ date: '2026-08-14' });
 
         expect(result.deleted).toBe(true);
-        expect(rec.deletes).toContain('events/2026-08-14');
+        // Cancelled rather than removed — see the note on the commit test below.
+        expect(rec.sets.find(s => s.path === 'events/2026-08-14')!.data.status)
+            .toBe('cancelled');
     });
 });
 
@@ -247,7 +249,7 @@ describe('deleteSabhaEvent — preview', () => {
 // ── the happy path, asserted on the batch ──────────────────────────────
 
 describe('deleteSabhaEvent — what actually gets written', () => {
-    it('deletes the event, cancels requests, parks the cascade — in one commit', async () => {
+    it('CANCELS the event, cancels requests, parks the cascade — in one commit', async () => {
         const rec = makeDb({
             responses: ['stu-a'],
             rides: [
@@ -259,7 +261,15 @@ describe('deleteSabhaEvent — what actually gets written', () => {
         await call({ date: '2026-08-14', acknowledge: true });
 
         expect(rec.committed).toBe(true);
-        expect(rec.deletes).toEqual(['events/2026-08-14']);
+
+        // A cancellation EXCEPTION, not a delete. Under the rule model the
+        // schedule lives in settings/sabhaRecurrence, so removing this document
+        // would let the rule place the gathering again and the manager's
+        // cancellation would evaporate on the next tick.
+        expect(rec.deletes).toEqual([]);
+        const eventWrite = rec.sets.find(s => s.path === 'events/2026-08-14')!;
+        expect(eventWrite.data.status).toBe('cancelled');
+        expect(eventWrite.data.kind).toBe('override');
 
         // Requested rides cancelled — NOT deleted, so the rider keeps a record,
         // and 'cancelled' is what takes them out of the assignment pool.

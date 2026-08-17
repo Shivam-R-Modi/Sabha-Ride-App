@@ -6,6 +6,7 @@
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
 import { app } from '@/firebase/config';
 import type { PresenceClaim } from './presence';
+import type { RecurrenceRule } from './recurrence';
 
 const functions = getFunctions(app);
 
@@ -147,29 +148,24 @@ export async function driverDoneForToday(
     return callFunction<DriverDoneResult>('driverDoneForToday', { driverId, acknowledgeWaiting });
 }
 
-export interface SabhaRecurrence {
-    enabled: boolean;
-    /** 0 = Sunday … 6 = Saturday. */
-    daysOfWeek: number[];
-    startTime: string;
-    endTime: string;
-    weeksAhead: number;
-    /**
-     * Server-owned high-water mark. Never send it — it is the only thing keeping
-     * a date the manager deleted from reappearing.
-     */
-    generatedThrough?: string | null;
-}
-
 export interface UpdateRecurrenceResult {
-    config: SabhaRecurrence;
-    /** Dates created by this save, so the manager sees it took effect. */
-    created: string[];
+    /** The stored rule, as the server understood it. */
+    rule: RecurrenceRule;
 }
 
-/** A manager sets the recurring sabha pattern. Saving fills the calendar at once. */
+/**
+ * A manager sets the recurring sabha pattern.
+ *
+ * No `weeksAhead`, and nothing is created: the rule IS the schedule now, and
+ * `findCurrentEvent` computes occurrences from it. Both fields the generator used
+ * — `weeksAhead` and `generatedThrough` — are actively deleted server-side, so a
+ * stale value cannot bring the old behaviour back.
+ *
+ * A single date is changed by writing an exception for that date, not by
+ * re-generating a window. See src/utils/recurrence.ts.
+ */
 export async function updateSabhaRecurrence(
-    input: Omit<SabhaRecurrence, 'generatedThrough'>,
+    input: Pick<RecurrenceRule, 'enabled' | 'daysOfWeek' | 'startTime' | 'endTime'>,
 ): Promise<UpdateRecurrenceResult> {
     return callFunction<UpdateRecurrenceResult>('updateSabhaRecurrence', input);
 }

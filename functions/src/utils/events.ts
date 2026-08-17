@@ -19,10 +19,10 @@
  */
 
 import * as admin from 'firebase-admin';
-import { zonedDateKey, addDaysToDateKey, getZonedParts } from './time';
+import { zonedDateKey, addDaysToDateKey } from './time';
 import {
-    DEFAULT_SABHA_START, DEFAULT_SABHA_END, SABHA_DAY, parseTimeToMinutes,
-} from './schedule';
+    RecurrenceRule, EventException, normaliseException, upcomingOccurrences,
+} from './recurrence';
 
 export const EVENTS_COLLECTION = 'events';
 
@@ -44,9 +44,6 @@ export const SEED_MARKER_DOC = 'system/eventGenerator';
  * anything meaningful.
  */
 const LOOKAHEAD_DAYS = 90;
-
-/** How far the one-off seed will look for a free weekly slot. Bounds the loop. */
-const SEED_SEARCH_DAYS = 56;
 
 /** An event id is the gathering's own date. */
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -93,38 +90,6 @@ export interface SabhaEvent {
     autoCreated?: boolean;
 }
 
-/** Normalise a Firestore document into a usable event, or null if unusable. */
-function toEvent(id: string, data: any): SabhaEvent | null {
-    if (!data) return null;
-
-    const startTime = typeof data.startTime === 'string' && parseTimeToMinutes(data.startTime) !== null
-        ? data.startTime
-        : DEFAULT_SABHA_START;
-    const endTime = typeof data.endTime === 'string' && parseTimeToMinutes(data.endTime) !== null
-        ? data.endTime
-        : DEFAULT_SABHA_END;
-
-    const venue = data.venue
-        && typeof data.venue.lat === 'number'
-        && typeof data.venue.lng === 'number'
-        ? {
-            lat: data.venue.lat,
-            lng: data.venue.lng,
-            address: typeof data.venue.address === 'string' ? data.venue.address : '',
-        }
-        : null;
-
-    return {
-        date: typeof data.date === 'string' ? data.date : id,
-        startTime,
-        endTime,
-        venue,
-        status: data.status === 'cancelled' ? 'cancelled' : 'scheduled',
-        agenda: typeof data.agenda === 'string' ? data.agenda : '',
-        autoCreated: data.autoCreated === true,
-    };
-}
-
 /**
  * The gathering the app should currently be working towards.
  *
@@ -144,26 +109,52 @@ export async function findCurrentEvent(
     db: admin.firestore.Firestore,
     now: Date,
     timeZone: string,
+    rule: RecurrenceRule | null = null,
 ): Promise<SabhaEvent | null> {
     const today = zonedDateKey(now, timeZone);
+    const horizon = addDaysToDateKey(today, LOOKAHEAD_DAYS);
 
     try {
-        // Both bounds on documentId(), so no composite index is needed. Adding
-        // a status equality here would force one, for no gain — the loop below
-        // filters by status anyway.
+        // THE SAME SINGLE QUERY AS BEFORE.
+        //
+        // Worth stating plainly, because moving from "documents are gatherings" to
+        // "a rule, with documents as its exceptions" sounds like it should cost
+        // more reads and does not. It reads the same date range; those documents
+        // are now exceptions rather than the schedule itself, and the schedule is
+        // computed. This runs every minute, so the cost mattered.
+        //
+        // Both bounds on documentId(), so no composite index is needed. Adding a
+        // status equality would force one for no gain — `normaliseException` and
+        // `effectiveEvent` decide what each document means anyway.
         const snapshot = await db.collection(EVENTS_COLLECTION)
             .where(admin.firestore.FieldPath.documentId(), '>=', today)
-            .where(admin.firestore.FieldPath.documentId(), '<=',
-                addDaysToDateKey(today, LOOKAHEAD_DAYS))
+            .where(admin.firestore.FieldPath.documentId(), '<=', horizon)
             .orderBy(admin.firestore.FieldPath.documentId())
             .get();
 
+        const exceptions = new Map<string, EventException>();
         for (const doc of snapshot.docs) {
-            const event = toEvent(doc.id, doc.data());
-            if (event && event.status === 'scheduled') return event;
+            const exception = normaliseException(doc.data());
+            if (exception) exceptions.set(doc.id, exception);
         }
 
-        return null;
+        // One occurrence is all this needs; the manager's calendar asks the same
+        // function for more. Sharing it is what keeps the scheduler and the
+        // calendar from disagreeing about what the schedule says.
+        const [occurrence] = upcomingOccurrences(rule, exceptions, today, horizon, 1);
+        if (!occurrence) return null;
+
+        return {
+            date: occurrence.date,
+            startTime: occurrence.startTime,
+            endTime: occurrence.endTime,
+            venue: occurrence.venue,
+            status: 'scheduled',
+            agenda: occurrence.agenda,
+            // "Not created by hand" now means "came from the rule", which is the
+            // same distinction under a different mechanism.
+            autoCreated: occurrence.source === 'rule',
+        };
     } catch (error) {
         console.error('[events] Could not read events:', error);
         return null;
@@ -171,141 +162,20 @@ export async function findCurrentEvent(
 }
 
 /**
- * The date of the Nth upcoming occurrence of the weekly slot.
+ * The seeding machinery that used to live here is gone.
  *
- * Offset 0 is the next one, counting today if today is the day.
+ * `weeklySlotDate` and `seedFirstEventIfNeeded` existed to create ONE gathering
+ * on a brand-new project so the service was not closed on day one, plus the
+ * `toEvent` reader that turned a document into a gathering. All three assumed
+ * documents ARE the schedule.
+ *
+ * Under the rule model the schedule is `settings/sabhaRecurrence`, and a project
+ * with no rule is honestly closed — `calendarStatus: 'no-scheduled-event'` says
+ * so on the manager's calendar, next to the control that fixes it. Seeding a
+ * gathering nobody asked for, to avoid admitting that, was papering over exactly
+ * the thing the manager needs to see.
+ *
+ * SEED_MARKER_DOC stays. It is no longer a seed marker — it carries
+ * `pendingAttendanceDeletes`, drained by the scheduler. Deleting the constant
+ * would orphan that queue.
  */
-export function weeklySlotDate(
-    now: Date,
-    timeZone: string,
-    dayOfWeek: number,
-    weeksAhead: number,
-): string {
-    const { dayOfWeek: todayDow } = getZonedParts(now, timeZone);
-    const daysUntil = (dayOfWeek - todayDow + 7) % 7;
-    return addDaysToDateKey(zonedDateKey(now, timeZone), daysUntil + weeksAhead * 7);
-}
-
-/**
- * Seed the very first gathering — once, ever.
- *
- * A brand-new project has an empty calendar, and an empty calendar means no rides
- * at all with no error shown to anyone. So one gathering is created so the service
- * is never closed on day one. After that the calendar belongs to the manager: how
- * many sabhas exist is their decision, not a cron job's.
- *
- * `seededAt` in system/eventGenerator is what makes "once, ever" true, and it is
- * what makes DELETION possible. The previous version worked out whether a slot had
- * been "decided" by whether a document existed on that date — so deleting a date
- * removed the evidence and the date was recreated as freshly scheduled within 60
- * seconds by the per-minute self-heal. A marker outside the events collection
- * cannot be erased by deleting an event.
- *
- * Failure is biased towards seeding, never towards closing: a missing or malformed
- * marker is treated as "not yet seeded". This runs inside a scheduled job whose
- * failure mode is "no rides at all", and stranding a congregation is worse than
- * creating one gathering a manager then deletes.
- *
- * Returns the dates it created — at most one, and only on the very first run.
- */
-export async function seedFirstEventIfNeeded(
-    db: admin.firestore.Firestore,
-    now: Date,
-    timeZone: string,
-    defaults: { startTime: string; endTime: string },
-    dayOfWeek: number = SABHA_DAY,
-): Promise<string[]> {
-    try {
-        const markerRef = db.doc(SEED_MARKER_DOC);
-        const marker = await markerRef.get();
-        const seededAt = marker.exists ? marker.data()?.seededAt : undefined;
-
-        // Already seeded. Never create again, whatever the calendar looks like —
-        // an empty calendar from here on is the manager's choice and is surfaced
-        // as `calendarStatus: 'no-scheduled-event'` rather than papered over.
-        if (typeof seededAt === 'string' && seededAt.length > 0) return [];
-
-        // A calendar the manager has already filled needs no seed. Still record
-        // the marker, so a later deletion cannot make this run again.
-        const alreadyScheduled = await findCurrentEvent(db, now, timeZone);
-        if (alreadyScheduled) {
-            await markerRef.set({
-                seededAt: new Date().toISOString(),
-                seededDate: null,
-                note: 'Calendar was already populated; marker recorded without seeding.',
-            }, { merge: true });
-            return [];
-        }
-
-        // Seed the first weekly slot that has no document at all.
-        //
-        // Slot 0 is usually free, but not always: a legacy CANCELLED document
-        // sitting on it is skipped by findCurrentEvent above, so we get here — and
-        // then batch.create would hit its ALREADY_EXISTS precondition, reject the
-        // whole commit, and leave a project whose only events are cancelled with
-        // no sabha and no marker, retrying forever.
-        const today = zonedDateKey(now, timeZone);
-        const occupied = new Set<string>();
-        const scan = await db.collection(EVENTS_COLLECTION)
-            .where(admin.firestore.FieldPath.documentId(), '>=', today)
-            .where(admin.firestore.FieldPath.documentId(), '<=',
-                addDaysToDateKey(today, SEED_SEARCH_DAYS))
-            .orderBy(admin.firestore.FieldPath.documentId())
-            .get();
-        scan.docs.forEach(doc => occupied.add(doc.id));
-
-        let date: string | null = null;
-        for (let week = 0; week * 7 <= SEED_SEARCH_DAYS; week++) {
-            const candidate = weeklySlotDate(now, timeZone, dayOfWeek, week);
-            if (!occupied.has(candidate)) {
-                date = candidate;
-                break;
-            }
-        }
-
-        if (!date) {
-            // Every slot in the search window is taken by a document, none of them
-            // scheduled. Nothing sensible to seed; leave it to the manager and let
-            // calendarStatus say so.
-            console.warn('[events] No free weekly slot to seed — leaving it to a manager');
-            return [];
-        }
-
-        // One batch, so the event and the marker land together or not at all.
-        // Split across two writes, a crash in between would leave the event
-        // created and the marker unset — and then deleting that event would seed
-        // it straight back, which is the exact loop this marker removes.
-        //
-        // batch.create keeps the ALREADY_EXISTS precondition, so if a concurrent
-        // run won the race this whole commit rejects and neither write lands.
-        const batch = db.batch();
-        batch.create(db.collection(EVENTS_COLLECTION).doc(date), {
-            date,
-            startTime: defaults.startTime,
-            endTime: defaults.endTime,
-            venue: null,
-            status: 'scheduled',
-            agenda: '',
-            autoCreated: true,
-            createdAt: new Date().toISOString(),
-        });
-        batch.set(markerRef, {
-            seededAt: new Date().toISOString(),
-            seededDate: date,
-        }, { merge: true });
-
-        try {
-            await batch.commit();
-            return [date];
-        } catch (error: any) {
-            // ALREADY_EXISTS (6): a concurrent run created it first, so a
-            // gathering exists either way and its marker was written with it.
-            if (error?.code === 6) return [];
-            console.error(`[events] Could not seed ${date}:`, error);
-            return [];
-        }
-    } catch (error) {
-        console.error('[events] Could not seed the calendar:', error);
-        return [];
-    }
-}

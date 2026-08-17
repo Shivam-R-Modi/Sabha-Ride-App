@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { findCurrentEvent, eventKeyFromRide } from './events';
+import type { RecurrenceRule } from './recurrence';
+
 vi.mock('firebase-admin', () => ({
     firestore: Object.assign(() => ({}), {
         // findCurrentEvent orders by document id.
@@ -7,9 +10,6 @@ vi.mock('firebase-admin', () => ({
     }),
 }));
 
-import {
-    findCurrentEvent, seedFirstEventIfNeeded, weeklySlotDate, eventKeyFromRide,
-} from './events';
 
 const ZONE = 'America/New_York';
 const boston = (day: string, hhmm: string) => new Date(`2026-08-${day}T${hhmm}:00-04:00`);
@@ -131,104 +131,128 @@ const scheduled = (date: string, extra: Record<string, any> = {}) => ({
     date, startTime: '19:00', endTime: '22:00', status: 'scheduled', ...extra,
 });
 
-describe('findCurrentEvent', () => {
-    it('returns today\'s gathering', async () => {
-        const { db } = fakeDb({ '2026-08-07': scheduled('2026-08-07') });
-        const event = await findCurrentEvent(db, boston(FRI, '10:00'), ZONE);
-        expect(event?.date).toBe('2026-08-07');
+/**
+ * A document is an EXCEPTION now, not a gathering.
+ *
+ * `findCurrentEvent` used to answer from the events collection alone: the first
+ * scheduled document ahead of today was the next sabha. Under the rule model the
+ * schedule lives in `settings/sabhaRecurrence` and these documents only say how a
+ * particular date DIVERGES from it.
+ *
+ * The consequence worth testing: a bare document with no `kind` is read as an
+ * override, so it is inert on a date the rule does not cover. That is the
+ * conservative direction — a stale document cannot invent a gathering nobody
+ * scheduled — and it is why the old expectations here could not simply be ported.
+ */
+describe('findCurrentEvent — rule plus exceptions', () => {
+    /** Every Friday, 19:00–22:00. */
+    const fridays: RecurrenceRule = {
+        enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00',
+        venue: null, agenda: '',
+    };
+
+    it('returns today\'s gathering from the rule, with no documents at all', async () => {
+        const { db } = fakeDb({});
+        const event = await findCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays);
+        expect(event).toMatchObject({ date: '2026-08-07', startTime: '19:00', autoCreated: true });
     });
 
     it('keeps today\'s gathering current after it has ended', async () => {
         // Drop-off rides are still running, and rolling the eventId over would
         // move the attendance key out from under them.
-        const { db } = fakeDb({
-            '2026-08-07': scheduled('2026-08-07'),
-            '2026-08-14': scheduled('2026-08-14'),
-        });
-        const event = await findCurrentEvent(db, boston(FRI, '23:30'), ZONE);
+        const { db } = fakeDb({});
+        const event = await findCurrentEvent(db, boston(FRI, '23:30'), ZONE, fridays);
         expect(event?.date).toBe('2026-08-07');
     });
 
     it('rolls on to the next once the day is over', async () => {
-        const { db } = fakeDb({
-            '2026-08-07': scheduled('2026-08-07'),
-            '2026-08-14': scheduled('2026-08-14'),
-        });
-        const event = await findCurrentEvent(db, boston(SAT, '00:30'), ZONE);
-        expect(event?.date).toBe('2026-08-14');
-    });
-
-    it('skips a cancelled gathering', async () => {
-        // Cancelling next Friday must roll everything on, not close the service.
-        const { db } = fakeDb({
-            '2026-08-07': scheduled('2026-08-07', { status: 'cancelled' }),
-            '2026-08-14': scheduled('2026-08-14'),
-        });
-        const event = await findCurrentEvent(db, boston(MON, '10:00'), ZONE);
-        expect(event?.date).toBe('2026-08-14');
-    });
-
-    it('returns null when the calendar is empty', async () => {
         const { db } = fakeDb({});
-        expect(await findCurrentEvent(db, boston(FRI, '10:00'), ZONE)).toBeNull();
+        const event = await findCurrentEvent(db, boston(SAT, '00:30'), ZONE, fridays);
+        expect(event?.date).toBe('2026-08-14');
     });
 
-    it('returns null when everything ahead is cancelled', async () => {
+    it('skips a cancelled week and rolls to the following one', async () => {
+        const { db } = fakeDb({ '2026-08-07': { status: 'cancelled' } });
+        const event = await findCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays);
+        expect(event?.date).toBe('2026-08-14');
+    });
+
+    it('takes an override\'s own times for that week only', async () => {
         const { db } = fakeDb({
-            '2026-08-07': scheduled('2026-08-07', { status: 'cancelled' }),
+            '2026-08-07': {
+                kind: 'override', status: 'scheduled', startTime: '17:00', endTime: '19:00',
+            },
         });
-        expect(await findCurrentEvent(db, boston(MON, '10:00'), ZONE)).toBeNull();
+        const event = await findCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays);
+        expect(event).toMatchObject({ startTime: '17:00', endTime: '19:00', autoCreated: false });
     });
 
-    it('ignores gatherings already in the past', async () => {
-        const { db } = fakeDb({ '2026-07-31': scheduled('2026-07-31') });
-        expect(await findCurrentEvent(db, boston(FRI, '10:00'), ZONE)).toBeNull();
+    it('returns null when no rule is set and there are no one-offs', async () => {
+        // Honestly closed. The calendar says so beside the control that fixes it,
+        // rather than a seeded date nobody asked for.
+        const { db } = fakeDb({});
+        expect(await findCurrentEvent(db, boston(FRI, '10:00'), ZONE, null)).toBeNull();
     });
 
-    it('carries the venue override and agenda through', async () => {
+    it('returns null while the rule is switched off', async () => {
+        const { db } = fakeDb({});
+        expect(await findCurrentEvent(db, boston(FRI, '10:00'), ZONE,
+            { ...fridays, enabled: false })).toBeNull();
+    });
+
+    it('finds a one-off with no rule at all', async () => {
         const { db } = fakeDb({
-            '2026-08-07': scheduled('2026-08-07', {
-                venue: { lat: 42.1, lng: -71.1, address: 'Hall B' },
-                agenda: 'Youth sabha',
-            }),
+            '2026-08-05': {
+                kind: 'one-off', status: 'scheduled', startTime: '18:00', endTime: '20:00',
+            },
         });
-        const event = await findCurrentEvent(db, boston(FRI, '10:00'), ZONE);
-        expect(event?.venue).toEqual({ lat: 42.1, lng: -71.1, address: 'Hall B' });
-        expect(event?.agenda).toBe('Youth sabha');
+        const event = await findCurrentEvent(db, boston(WED, '10:00'), ZONE, null);
+        // `source` lives on Occurrence, not on the SabhaEvent this returns.
+        expect(event).toMatchObject({ date: '2026-08-05', startTime: '18:00', endTime: '20:00' });
     });
 
-    it('repairs a malformed time rather than propagating it', async () => {
+    it('prefers a one-off earlier in the week over the rule\'s Friday', async () => {
         const { db } = fakeDb({
-            '2026-08-07': scheduled('2026-08-07', { startTime: 'evening', endTime: null }),
+            '2026-08-05': {
+                kind: 'one-off', status: 'scheduled', startTime: '18:00', endTime: '20:00',
+            },
         });
-        const event = await findCurrentEvent(db, boston(FRI, '10:00'), ZONE);
-        expect(event?.startTime).toBe('19:00');
-        expect(event?.endTime).toBe('22:00');
+        const event = await findCurrentEvent(db, boston(MON, '10:00'), ZONE, fridays);
+        expect(event?.date).toBe('2026-08-05');
     });
 
-    it('drops a venue override missing coordinates', async () => {
-        // A venue with no lat/lng would poison clustering and routing.
+    it('treats a document with no kind as an override — INERT off the pattern', async () => {
+        // A Wednesday document predating this model must not become a gathering.
         const { db } = fakeDb({
-            '2026-08-07': scheduled('2026-08-07', { venue: { address: 'Somewhere' } }),
+            '2026-08-05': { status: 'scheduled', startTime: '18:00', endTime: '20:00' },
         });
-        const event = await findCurrentEvent(db, boston(FRI, '10:00'), ZONE);
+        const event = await findCurrentEvent(db, boston(WED, '10:00'), ZONE, fridays);
+        expect(event?.date).toBe('2026-08-07');
+    });
+
+    it('ignores dates already in the past', async () => {
+        const { db } = fakeDb({});
+        const event = await findCurrentEvent(db, boston(SAT, '12:00'), ZONE, fridays);
+        expect(event?.date).toBe('2026-08-14');
+    });
+
+    it('carries the rule\'s venue and agenda through', async () => {
+        const venue = { lat: 42.3, lng: -71.1, address: 'Hall' };
+        const { db } = fakeDb({});
+        const event = await findCurrentEvent(
+            db, boston(FRI, '10:00'), ZONE, { ...fridays, venue, agenda: 'Kirtan' });
+        expect(event).toMatchObject({ venue, agenda: 'Kirtan' });
+    });
+
+    it('drops a venue override missing coordinates rather than passing junk on', async () => {
+        const { db } = fakeDb({
+            '2026-08-07': {
+                kind: 'override', status: 'scheduled', startTime: '19:00', endTime: '22:00',
+                venue: { address: 'no coordinates' },
+            },
+        });
+        const event = await findCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays);
         expect(event?.venue).toBeNull();
-    });
-});
-
-describe('weeklySlotDate', () => {
-    it('finds the next Friday, counting today', () => {
-        expect(weeklySlotDate(boston(WED, '10:00'), ZONE, 5, 0)).toBe('2026-08-07');
-        expect(weeklySlotDate(boston(FRI, '10:00'), ZONE, 5, 0)).toBe('2026-08-07');
-    });
-
-    it('steps a week at a time', () => {
-        expect(weeklySlotDate(boston(WED, '10:00'), ZONE, 5, 1)).toBe('2026-08-14');
-        expect(weeklySlotDate(boston(WED, '10:00'), ZONE, 5, 4)).toBe('2026-09-04');
-    });
-
-    it('rolls past the weekend on Saturday', () => {
-        expect(weeklySlotDate(boston(SAT, '10:00'), ZONE, 5, 0)).toBe('2026-08-14');
     });
 });
 
@@ -267,106 +291,10 @@ describe('eventKeyFromRide', () => {
     });
 });
 
-describe('seedFirstEventIfNeeded', () => {
-    const defaults = { startTime: '19:00', endTime: '22:00' };
-    const run = (
-        day: string,
-        events: Record<string, any>,
-        other: Record<string, Record<string, any>> = {},
-        dow = 5,
-    ) => {
-        const f = fakeDb(events, other);
-        return seedFirstEventIfNeeded(f.db, boston(day, '03:00'), ZONE, defaults, dow)
-            .then(dates => ({ dates, ...f }));
-    };
-
-    it('seeds exactly one gathering on a fresh project', async () => {
-        const { dates, created, store } = await run(WED, {});
-
-        expect(dates).toEqual(['2026-08-07']);
-        expect(Object.keys(created)).toEqual(['2026-08-07']);
-        expect(created['2026-08-07'].autoCreated).toBe(true);
-        expect(created['2026-08-07'].status).toBe('scheduled');
-        // And the marker landed in the same commit.
-        expect(store.system['eventGenerator'].seededAt).toBeTruthy();
-        expect(store.system['eventGenerator'].seededDate).toBe('2026-08-07');
-    });
-
-    it('never seeds again once the marker is set — even with an empty calendar', async () => {
-        // The whole point. This is what makes deletion stick: previously an empty
-        // slot was recreated within 60 seconds by the per-minute self-heal.
-        const { dates, created } = await run(WED, {}, {
-            system: { eventGenerator: { seededAt: '2026-08-01T00:00:00.000Z' } },
-        });
-
-        expect(dates).toEqual([]);
-        expect(created).toEqual({});
-    });
-
-    it('does not seed when the manager has already filled the calendar', async () => {
-        const { dates, created, store } = await run(WED, {
-            '2026-08-14': scheduled('2026-08-14'),
-        });
-
-        expect(dates).toEqual([]);
-        expect(created).toEqual({});
-        // But it records the marker, so a later deletion cannot make it seed.
-        expect(store.system['eventGenerator'].seededAt).toBeTruthy();
-    });
-
-    it('treats a missing marker as not-yet-seeded rather than closing the service', async () => {
-        const { dates } = await run(WED, {}, { system: {} });
-        expect(dates).toEqual(['2026-08-07']);
-    });
-
-    it('treats a malformed marker as not-yet-seeded, and does not throw', async () => {
-        // Biased towards seeding. This runs in a job whose failure mode is "no
-        // rides at all", so a corrupt marker must not strand anyone.
-        for (const bad of [{ seededAt: null }, { seededAt: 42 }, { seededAt: '' }, {}]) {
-            const { dates } = await run(WED, {}, { system: { eventGenerator: bad } });
-            expect(dates).toEqual(['2026-08-07']);
-        }
-    });
-
-    it('seeds today when today is the sabha day', async () => {
-        // weeklySlotDate(..., 0) returns today on the slot day. Skipping it would
-        // mean a fresh deploy on a Friday morning closes rides for a sabha that
-        // evening.
-        const { dates } = await run(FRI, {});
-        expect(dates).toEqual(['2026-08-07']);
-    });
-
-    it('leaves the marker unset when the commit loses a race', async () => {
-        // The event already exists, so batch.create's precondition rejects the
-        // whole commit — neither the event nor the marker is written, and the next
-        // run sees a populated calendar and records the marker properly.
-        const { dates, created, store } = await run(WED, {
-            '2026-08-07': scheduled('2026-08-07'),
-        });
-
-        expect(dates).toEqual([]);
-        expect(created).toEqual({});
-        // findCurrentEvent found it first, so this took the already-populated path.
-        expect(store.system['eventGenerator'].seededAt).toBeTruthy();
-    });
-
-    it('uses the default times it is given', async () => {
-        const { created } = await run(WED, {}, {}, 5);
-        expect(created['2026-08-07'].startTime).toBe('19:00');
-        expect(created['2026-08-07'].endTime).toBe('22:00');
-    });
-
-    it('can seed a slot other than Friday', async () => {
-        const { dates } = await run(MON, {}, {}, 2); // Tuesday
-        expect(dates).toEqual(['2026-08-04']);
-    });
-
-    it('ignores a cancelled event when deciding whether to seed', async () => {
-        // A legacy cancelled document must not be mistaken for a populated
-        // calendar, or a fresh project with only cancelled events never seeds.
-        const { dates } = await run(WED, {
-            '2026-08-07': scheduled('2026-08-07', { status: 'cancelled' }),
-        });
-        expect(dates).toEqual(['2026-08-14']);
-    });
-});
+/**
+ * `weeklySlotDate` and `seedFirstEventIfNeeded` had 15 tests between them. Both
+ * functions are gone: they existed to place and materialise gatherings, and the
+ * rule places them without writing anything. The tests are deleted rather than
+ * ported because there is no behaviour left to assert — see the note at the foot
+ * of utils/events.ts.
+ */

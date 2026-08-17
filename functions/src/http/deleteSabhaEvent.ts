@@ -29,6 +29,8 @@ import { sendMulticastNotification } from '../utils/notifications';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { assertApprovedManager } from '../utils/authz';
 import { writeAuditLog } from '../utils/audit';
+// No cycle: sabhaRecurrence imports only pure helpers and authz/audit.
+import { readRecurrence } from './sabhaRecurrence';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -172,7 +174,22 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     // ── One batch: everything that must be all-or-nothing ───────────────
     const batch = db.batch();
 
-    batch.delete(eventRef);
+    // A CANCELLATION EXCEPTION, not a delete.
+    //
+    // Under the rule model the schedule is `settings/sabhaRecurrence`, so deleting
+    // this document would not remove the gathering — the rule would simply place it
+    // again, and the manager's cancellation would evaporate on the next tick. The
+    // document IS the cancellation, and it persists by existing.
+    //
+    // That also retires the old high-water mark: there is nothing left to
+    // "remember not to regenerate".
+    batch.set(eventRef, {
+        date,
+        kind: 'override',
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+        cancelledBy: uid,
+    }, { merge: true });
 
     // Cancelled, not deleted: the rider keeps a visible record and an explanation,
     // and `status: 'cancelled'` is what takes them out of globalAssignDriver's
@@ -242,12 +259,18 @@ async function findNextEventExcluding(
     timeZone: string,
     excluded: string,
 ) {
-    const found = await findCurrentEvent(db, now, timeZone);
+    // The rule has to come along. Without it this reads the exceptions alone,
+    // which under the rule model is almost always empty — so it would report "no
+    // sabha scheduled" to a manager cancelling one week out of a standing weekly
+    // schedule.
+    const rule = await readRecurrence(db);
+
+    const found = await findCurrentEvent(db, now, timeZone, rule);
     if (found && found.date !== excluded) return found;
 
     // The excluded one was first. Look again from the day after it.
     const after = new Date(new Date(`${excluded}T12:00:00Z`).getTime() + 24 * 3600 * 1000);
-    return findCurrentEvent(db, after, timeZone);
+    return findCurrentEvent(db, after, timeZone, rule);
 }
 
 /**

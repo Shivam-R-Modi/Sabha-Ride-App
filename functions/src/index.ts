@@ -11,16 +11,19 @@ admin.initializeApp();
 // SCHEDULED FUNCTIONS
 // ============================================
 
-export { updateRideTypeContext, manuallyUpdateRideContext, ensureSabhaEvents } from './scheduled/updateRideTypeContext';
-// Its own function rather than a side effect inside ensureSabhaEvents: a stranded
+export { updateRideTypeContext, manuallyUpdateRideContext } from './scheduled/updateRideTypeContext';
+// ensureSabhaEvents is gone. It seeded a first gathering and topped the calendar
+// up from the recurring pattern; under the rule model there is nothing to
+// materialise, so there is nothing for a nightly job to get wrong.
+// Its own named function rather than a side effect of another job: a stranded
 // fleet is an operational fault, and a named entry in the logs is what makes it
 // diagnosable at 19:00 on a Friday.
 export { releaseIdleVehicles } from './scheduled/releaseIdleVehicles';
 // Same 03:00 slot, same reasoning: requests nobody answered are the rider-side
 // equivalent of a stranded car, and they never expired on their own.
 export { expireStaleRequests } from './scheduled/expireStaleRequests';
-// The manager's recurring pattern. ensureSabhaEvents applies it daily; this is
-// the control that sets it.
+// The manager's recurring pattern — one rule, no horizon. findCurrentEvent
+// computes from it directly; this is the control that sets it.
 export { updateSabhaRecurrence } from './http/sabhaRecurrence';
 
 // ============================================

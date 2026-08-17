@@ -2,23 +2,28 @@ import React, { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { Repeat, Loader2, AlertCircle, Check } from 'lucide-react';
 import { db } from '../../firebase/config';
-import { updateSabhaRecurrence, SabhaRecurrence } from '../../src/utils/cloudFunctions';
+import { updateSabhaRecurrence } from '../../src/utils/cloudFunctions';
+import { normaliseRecurrence, describeRule } from '../../src/utils/recurrence';
 import { useToast } from '../../contexts/ToastContext';
 import { isUsableDuration } from '../../src/constants/schedule';
 
 /**
- * The recurring sabha pattern.
+ * The recurring sabha pattern — ONE record, no horizon.
  *
  * Before this existed every gathering had to be added by hand, so the calendar
  * ran dry and the whole app went quiet — measured on 2026-08-15, `rideContext`
  * read `no-scheduled-event` and nobody could request a ride.
  *
- * The one thing worth knowing while reading this: **editing the pattern only
- * affects dates not already on the calendar.** The server keeps a high-water mark
- * so a date the manager deleted never comes back, which necessarily means a
- * changed pattern applies going forward rather than rewriting what is there. The
- * copy below says so in those words, because a manager who expects otherwise
- * would think the control was broken.
+ * The first version of this card asked how many weeks ahead to fill, because the
+ * server materialised that many `events/{date}` documents. That is gone: the rule
+ * IS the schedule, it repeats until a manager changes it, and there is no horizon
+ * to choose. See src/utils/recurrence.ts.
+ *
+ * What the copy below has to make clear, because a manager cannot infer it:
+ * editing the pattern changes every week that has not been edited individually,
+ * while a week they DID edit or cancel keeps its own arrangements. That is the
+ * behaviour the owner asked for — one week diverging leaves the rest alone — and
+ * it is the opposite of the old "applies to dates not on the calendar yet".
  */
 
 const DAYS = [
@@ -32,8 +37,6 @@ const DAYS = [
 ];
 
 const RECURRENCE_DOC = 'settings/sabhaRecurrence';
-const MIN_WEEKS = 1;
-const MAX_WEEKS = 26;
 
 export const RecurringSabha: React.FC = () => {
     const toast = useToast();
@@ -46,8 +49,6 @@ export const RecurringSabha: React.FC = () => {
     const [days, setDays] = useState<number[]>([5]);
     const [start, setStart] = useState('19:00');
     const [end, setEnd] = useState('22:00');
-    const [weeks, setWeeks] = useState(6);
-    const [generatedThrough, setGeneratedThrough] = useState<string | null>(null);
 
     // Live, because a second manager changing this must not be silently overwritten
     // by whatever was on screen when this one opened the page.
@@ -55,14 +56,14 @@ export const RecurringSabha: React.FC = () => {
         const unsub = onSnapshot(
             doc(db, RECURRENCE_DOC),
             snap => {
-                const data = snap.data() as SabhaRecurrence | undefined;
-                if (data) {
-                    setEnabled(data.enabled === true);
-                    if (Array.isArray(data.daysOfWeek) && data.daysOfWeek.length) setDays(data.daysOfWeek);
-                    if (data.startTime) setStart(data.startTime);
-                    if (data.endTime) setEnd(data.endTime);
-                    if (data.weeksAhead) setWeeks(data.weeksAhead);
-                    setGeneratedThrough(data.generatedThrough ?? null);
+                // Read through the same validator the server uses, so the form
+                // cannot show a rule the server would refuse.
+                const rule = normaliseRecurrence(snap.data());
+                if (rule) {
+                    setEnabled(rule.enabled);
+                    setDays(rule.daysOfWeek);
+                    setStart(rule.startTime);
+                    setEnd(rule.endTime);
                 }
                 setLoading(false);
             },
@@ -86,13 +87,11 @@ export const RecurringSabha: React.FC = () => {
         ? 'Pick at least one day.'
         : !isUsableDuration(start, end)
             ? 'The end time must be later than the start, with enough room for drop-off.'
-            : weeks < MIN_WEEKS || weeks > MAX_WEEKS
-                ? `Fill between ${MIN_WEEKS} and ${MAX_WEEKS} weeks ahead.`
-                : null;
+            : null;
 
     const handleSave = async () => {
         // Turning the pattern OFF is always allowed, whatever else is on screen —
-        // otherwise a manager with a half-edited form cannot stop it generating.
+        // otherwise a manager with a half-edited form cannot stop it repeating.
         if (enabled && problem) {
             setError(problem);
             return;
@@ -106,16 +105,13 @@ export const RecurringSabha: React.FC = () => {
                 daysOfWeek: days,
                 startTime: start,
                 endTime: end,
-                weeksAhead: weeks,
             });
 
-            toast.success(
-                !enabled
-                    ? 'Recurring sabha turned off. Dates already on the calendar stay.'
-                    : result.created.length > 0
-                        ? `Saved. Added ${result.created.length} date${result.created.length === 1 ? '' : 's'} to the calendar.`
-                        : 'Saved. The calendar is already filled to that horizon.',
-            );
+            // Reports the rule the SERVER stored, not what was on screen. If the
+            // two ever disagree the manager should see the server's version.
+            toast.success(!enabled
+                ? 'Repeating turned off. Dates you edited individually are kept.'
+                : `Saved. ${describeRule(result.rule)}, repeating until you change it.`);
         } catch (err: unknown) {
             console.error('[RecurringSabha] Save failed:', err);
             const message = err instanceof Error ? err.message : 'Could not save the schedule.';
@@ -149,8 +145,8 @@ export const RecurringSabha: React.FC = () => {
                     </h3>
                 </div>
                 <p className="text-xs text-coffee-500 mt-1">
-                    Set the pattern once and the calendar fills itself. Without this,
-                    a week nobody adds is a week with no rides.
+                    Set it once and every week is scheduled. Without this, a week
+                    nobody adds by hand is a week with no rides.
                 </p>
             </div>
 
@@ -215,32 +211,13 @@ export const RecurringSabha: React.FC = () => {
                         </label>
                     </div>
 
-                    <label className="block">
-                        <span className="text-xs font-semibold text-coffee-700">
-                            Fill the calendar this far ahead
-                        </span>
-                        <div className="flex items-center gap-3 mt-1">
-                            <input
-                                type="number"
-                                min={MIN_WEEKS}
-                                max={MAX_WEEKS}
-                                value={weeks}
-                                onChange={e => setWeeks(Number(e.target.value))}
-                                className="w-24 min-h-11 px-3 rounded-xl border-2 border-hairline/30
-                                           bg-surface text-sm text-coffee"
-                            />
-                            <span className="text-xs text-coffee-500">weeks</span>
-                        </div>
-                    </label>
                 </fieldset>
 
-                {/* The one thing a manager would otherwise misread as a bug. */}
+                {/* The one thing a manager cannot infer, so it is stated. */}
                 <p className="text-xs text-coffee-500 border-l-2 border-hairline/30 pl-3">
-                    Changes apply to dates that are not on the calendar yet. A sabha you
-                    already cancelled or deleted will not come back.
-                    {generatedThrough && (
-                        <> The calendar is filled through <strong>{generatedThrough}</strong>.</>
-                    )}
+                    This repeats <strong>until you change it</strong> — there is no end date.
+                    Changing it here updates every week except the ones you have edited or
+                    cancelled individually; those keep their own arrangements.
                 </p>
 
                 {error && (

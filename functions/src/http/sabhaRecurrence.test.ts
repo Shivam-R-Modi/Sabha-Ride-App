@@ -1,16 +1,26 @@
 /**
- * Setting the pattern is a manager action, and the watermark is not theirs to move.
+ * Setting the recurring sabha now stores a rule and nothing else.
  *
- * `generatedThrough` is the only thing keeping a deleted date deleted. If a client
- * could send it, a manager could roll it back — accidentally or otherwise — and
- * every date they had removed would reappear on the next run. So it is read from
- * the stored document and carried across, never taken from the request.
+ * WHAT THESE TESTS USED TO GUARD, AND WHY IT IS GONE
+ * -------------------------------------------------
+ * The previous version of this suite spent most of its cases on
+ * `generatedThrough`, the high-water mark that stopped a deleted date being
+ * regenerated — including one asserting that a client could not roll it back and
+ * resurrect every date a manager had removed.
+ *
+ * None of that exists any more. `topUpCalendar` is deleted and nothing is
+ * materialised, so there is no watermark to protect and nothing to resurrect. The
+ * cases are removed rather than ported, and the one that mattered most is
+ * preserved as a ratchet: the callable must NOT write a horizon or a watermark,
+ * because a stored value read by anything not yet updated would quietly bring the
+ * generator's behaviour back.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 let db: any;
 const assertApprovedManager = vi.fn(async (_db: any, _uid: string, _action: string) => undefined);
+const writeAuditLog = vi.fn(async () => null);
 
 vi.mock('firebase-functions', () => {
     class FakeHttpsError extends Error {
@@ -22,67 +32,50 @@ vi.mock('firebase-functions', () => {
     return { https: { onCall: (h: any) => h, HttpsError: FakeHttpsError } };
 });
 vi.mock('firebase-admin', () => ({
-    firestore: Object.assign(() => db, { FieldPath: { documentId: () => '__name__' } }),
+    firestore: Object.assign(() => db, {
+        FieldPath: { documentId: () => '__name__' },
+        FieldValue: { delete: () => '__DELETE__' },
+    }),
 }));
 vi.mock('../utils/authz', () => ({
-    assertApprovedManager: (db: any, uid: string, action: string) =>
-        assertApprovedManager(db, uid, action),
+    assertApprovedManager: (d: any, u: string, a: string) => assertApprovedManager(d, u, a),
 }));
-vi.mock('../utils/settings', () => ({ getTimeZone: async () => 'America/New_York' }));
-vi.mock('../utils/audit', () => ({ writeAuditLog: vi.fn(async () => null) }));
+vi.mock('../utils/audit', () => ({ writeAuditLog: (...a: any[]) => writeAuditLog() }));
 
-import { updateSabhaRecurrence, topUpCalendar, RECURRENCE_DOC } from './sabhaRecurrence';
+import { updateSabhaRecurrence, readRecurrence, describeRule, RECURRENCE_DOC } from './sabhaRecurrence';
 
-interface Recorder {
-    creates: Array<{ path: string; data: any }>;
-    sets: Array<{ path: string; data: any }>;
-    /** Direct (non-batch) document writes — where the pattern itself is saved. */
-    saved: Array<{ path: string; data: any }>;
-}
+const DELETE = '__DELETE__';
 
-function makeDb(opts: { stored?: any; existingEvents?: string[] } = {}) {
-    const rec: Recorder = { creates: [], sets: [], saved: [] };
-    const events = opts.existingEvents ?? [];
-
-    const docRef = (path: string) => ({
-        path,
-        get: async () => ({
-            exists: path === RECURRENCE_DOC ? opts.stored !== undefined : false,
-            data: () => (path === RECURRENCE_DOC ? opts.stored : undefined),
-        }),
-        set: async (data: any) => { rec.saved.push({ path, data }); },
-    });
+function makeDb(stored?: any) {
+    const saved: Array<{ path: string; data: any }> = [];
 
     db = {
-        doc: docRef,
-        collection: (name: string) => {
-            const chain: any = {
-                doc: (id: string) => docRef(`${name}/${id}`),
-                where: () => chain,
-                get: async () => ({ docs: events.map(id => ({ id })) }),
-            };
-            return chain;
-        },
-        batch: () => ({
-            create: (ref: any, data: any) => rec.creates.push({ path: ref.path, data }),
-            set: (ref: any, data: any) => rec.sets.push({ path: ref.path, data }),
-            update: (ref: any, data: any) => rec.sets.push({ path: ref.path, data }),
-            commit: async () => undefined,
+        doc: (path: string) => ({
+            path,
+            get: async () => ({
+                exists: path === RECURRENCE_DOC ? stored !== undefined : false,
+                data: () => (path === RECURRENCE_DOC ? stored : undefined),
+            }),
+            set: async (data: any) => { saved.push({ path, data }); },
+        }),
+        collection: (name: string) => ({
+            doc: (id: string) => ({ path: `${name}/${id}` }),
         }),
     };
-    return rec;
+    return saved;
 }
 
-const GOOD = { enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00', weeksAhead: 2 };
-const ctx = { auth: { uid: 'mgr_1' } };
-const call = (data: any) => (updateSabhaRecurrence as any)(data, ctx);
+const GOOD = { enabled: true, daysOfWeek: [5], startTime: '19:30', endTime: '22:00' };
+const call = (data: any) => (updateSabhaRecurrence as any)(data, { auth: { uid: 'mgr_1' } });
+const rule = (saved: Array<{ path: string; data: any }>) =>
+    saved.find(s => s.path === RECURRENCE_DOC)!.data;
 
 beforeEach(() => {
     vi.clearAllMocks();
     assertApprovedManager.mockResolvedValue(undefined);
 });
 
-describe('updateSabhaRecurrence — authorisation', () => {
+describe('authorisation', () => {
     it('refuses an unauthenticated caller', async () => {
         makeDb();
         await expect((updateSabhaRecurrence as any)(GOOD, {})).rejects.toThrow(/authenticated/i);
@@ -94,16 +87,16 @@ describe('updateSabhaRecurrence — authorisation', () => {
         expect(assertApprovedManager).toHaveBeenCalledWith(db, 'mgr_1', 'change the sabha schedule');
     });
 
-    it('does not write when the manager check throws', async () => {
-        const rec = makeDb();
+    it('writes nothing when the manager check throws', async () => {
+        const saved = makeDb();
         assertApprovedManager.mockRejectedValue(new Error('not a manager'));
 
         await expect(call(GOOD)).rejects.toThrow(/not a manager/);
-        expect(rec.creates).toEqual([]);
+        expect(saved).toEqual([]);
     });
 });
 
-describe('updateSabhaRecurrence — validation', () => {
+describe('validation', () => {
     it('refuses a pattern with no days', async () => {
         makeDb();
         await expect(call({ ...GOOD, daysOfWeek: [] })).rejects.toThrow(/at least one day/i);
@@ -111,125 +104,145 @@ describe('updateSabhaRecurrence — validation', () => {
 
     it('refuses an end time at or before the start', async () => {
         makeDb();
-        await expect(call({ ...GOOD, startTime: '22:00', endTime: '19:00' }))
+        await expect(call({ ...GOOD, startTime: '22:00', endTime: '19:30' }))
             .rejects.toThrow(/later than the start/i);
     });
 
-    it('refuses a horizon outside the allowed range', async () => {
+    it('validates through the same function the scheduler reads with', async () => {
+        // A rule the scheduler would refuse must not be saveable, or the manager
+        // sees a stored setting that silently schedules nothing.
         makeDb();
-        await expect(call({ ...GOOD, weeksAhead: 500 })).rejects.toThrow(/between 1 and 26/i);
-        await expect(call({ ...GOOD, weeksAhead: 0 })).rejects.toThrow(/between 1 and 26/i);
+        await expect(call({ ...GOOD, startTime: '25:99' })).rejects.toThrow(/later than the start/i);
     });
 });
 
-describe('updateSabhaRecurrence — the watermark is server-owned', () => {
-    it('ignores a generatedThrough sent by the client', async () => {
-        // The attack this closes: rolling the mark back re-opens every date the
-        // manager had deleted.
-        const rec = makeDb({ stored: { generatedThrough: '2026-12-31' } });
-
-        await call({ ...GOOD, generatedThrough: '2020-01-01' });
-
-        const mark = rec.sets.find(s => s.path === RECURRENCE_DOC)!.data.generatedThrough;
-        expect(mark).toBe('2026-12-31');
-    });
-
-    it('keeps the stored mark, so deleted dates stay deleted', async () => {
-        const rec = makeDb({ stored: { generatedThrough: '2026-12-31' } });
+describe('storing the rule', () => {
+    it('saves the pattern', async () => {
+        const saved = makeDb();
 
         await call(GOOD);
 
-        // Nothing inside the horizon can be created, because the mark is beyond it.
-        expect(rec.creates).toEqual([]);
-    });
-
-    it('starts from nothing when no mark is stored yet', async () => {
-        const rec = makeDb();
-
-        const result = await call(GOOD);
-
-        expect(result.created.length).toBeGreaterThan(0);
-        expect(rec.creates.length).toBe(result.created.length);
-    });
-});
-
-describe('updateSabhaRecurrence — saving takes effect immediately', () => {
-    it('creates the missing dates rather than waiting for 03:00', async () => {
-        // A setting whose effect is invisible until tomorrow is one nobody trusts.
-        const rec = makeDb();
-
-        const result = await call(GOOD);
-
-        expect(result.created.length).toBeGreaterThan(0);
-        for (const c of rec.creates) {
-            expect(c.path.startsWith('events/')).toBe(true);
-            expect(c.data.status).toBe('scheduled');
-            expect(c.data.fromRecurrence).toBe(true);
-            expect(c.data.startTime).toBe('19:00');
-        }
-    });
-
-    it('creates nothing while disabled, but STILL saves the pattern', async () => {
-        // Turning it off must persist. A save button that quietly saves nothing
-        // is this codebase's oldest failure mode.
-        const rec = makeDb();
-
-        const result = await call({ ...GOOD, enabled: false });
-
-        expect(result.created).toEqual([]);
-        expect(rec.creates).toEqual([]);
-
-        const saved = rec.saved.find(s => s.path === RECURRENCE_DOC);
-        expect(saved).toBeDefined();
-        expect(saved!.data.enabled).toBe(false);
-        expect(saved!.data.daysOfWeek).toEqual([5]);
+        expect(rule(saved)).toMatchObject({
+            enabled: true, daysOfWeek: [5], startTime: '19:30', endTime: '22:00',
+        });
     });
 
     it('records who changed it and when', async () => {
-        const rec = makeDb();
+        const saved = makeDb();
 
         await call(GOOD);
 
-        const saved = rec.saved.find(s => s.path === RECURRENCE_DOC)!;
-        expect(saved.data.updatedBy).toBe('mgr_1');
-        expect(saved.data.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+        expect(rule(saved).updatedBy).toBe('mgr_1');
+        expect(rule(saved).updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it('turning it off persists', async () => {
+        // A save button that quietly saves nothing is this repo's oldest bug.
+        const saved = makeDb();
+
+        await call({ ...GOOD, enabled: false });
+
+        expect(rule(saved).enabled).toBe(false);
+        expect(rule(saved).daysOfWeek).toEqual([5]);
+    });
+
+    it('accepts several days a week', async () => {
+        const saved = makeDb();
+
+        await call({ ...GOOD, daysOfWeek: [0, 5] });
+
+        expect(rule(saved).daysOfWeek).toEqual([0, 5]);
+    });
+
+    it('records an audit row', async () => {
+        makeDb();
+        await call(GOOD);
+        expect(writeAuditLog).toHaveBeenCalledTimes(1);
     });
 });
 
-describe('topUpCalendar', () => {
-    const config = {
-        enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00',
-        weeksAhead: 2, generatedThrough: null,
-    };
-    const NOW = new Date('2026-08-15T16:00:00Z');
+describe('the generator stays deleted', () => {
+    it('never stores a horizon or a watermark — it REMOVES them', async () => {
+        // The ratchet. A stored `weeksAhead` or `generatedThrough` read by
+        // anything not yet updated would quietly restore the old behaviour, so
+        // saving actively deletes both rather than merely omitting them.
+        const saved = makeDb({ weeksAhead: 10, generatedThrough: '2026-10-26' });
 
-    it('skips dates that already hold a document', async () => {
-        const rec = makeDb({ existingEvents: ['2026-08-21'] });
+        await call(GOOD);
 
-        const created = await topUpCalendar(db, config, NOW, 'America/New_York');
-
-        expect(created).not.toContain('2026-08-21');
-        expect(rec.creates.map(c => c.path)).not.toContain('events/2026-08-21');
+        expect(rule(saved).weeksAhead).toBe(DELETE);
+        expect(rule(saved).generatedThrough).toBe(DELETE);
     });
 
-    it('moves the watermark even when it created nothing', async () => {
-        // Otherwise a horizon the manager already filled by hand leaves the mark
-        // short, and those dates are offered again for ever.
-        const rec = makeDb({ existingEvents: ['2026-08-21', '2026-08-28'] });
+    it('ignores a horizon sent by a client', async () => {
+        const saved = makeDb();
 
-        const created = await topUpCalendar(db, config, NOW, 'America/New_York');
+        await call({ ...GOOD, weeksAhead: 26, generatedThrough: '2027-01-01' });
 
-        expect(created).toEqual([]);
-        expect(rec.sets.find(s => s.path === RECURRENCE_DOC)!.data.generatedThrough)
-            .toBe('2026-08-29');
+        expect(rule(saved).weeksAhead).toBe(DELETE);
+        expect(rule(saved).generatedThrough).toBe(DELETE);
     });
 
-    it('does nothing at all while disabled', async () => {
-        const rec = makeDb();
+    it('creates no event documents at all', async () => {
+        // The whole point. Saving a schedule writes one document: the rule.
+        const saved = makeDb();
 
-        expect(await topUpCalendar(db, { ...config, enabled: false }, NOW, 'America/New_York'))
-            .toEqual([]);
-        expect(rec.creates).toEqual([]);
-        expect(rec.sets).toEqual([]);
+        await call(GOOD);
+
+        expect(saved.map(s => s.path)).toEqual([RECURRENCE_DOC]);
+    });
+
+    it('returns the rule, not a list of created dates', async () => {
+        makeDb();
+
+        const result = await call(GOOD);
+
+        expect(result.rule).toMatchObject({ daysOfWeek: [5] });
+        expect(result.created).toBeUndefined();
+    });
+});
+
+describe('readRecurrence', () => {
+    it('returns null when nothing is stored', async () => {
+        makeDb();
+        expect(await readRecurrence(db)).toBeNull();
+    });
+
+    it('returns null for a stored rule that cannot be understood', async () => {
+        makeDb({ enabled: true, daysOfWeek: [], startTime: '19:30', endTime: '22:00' });
+        expect(await readRecurrence(db)).toBeNull();
+    });
+
+    it('ignores a leftover horizon on a stored rule', async () => {
+        makeDb({ ...GOOD, weeksAhead: 10, generatedThrough: '2026-10-26' });
+
+        const out = await readRecurrence(db) as unknown as Record<string, unknown>;
+
+        expect(out.weeksAhead).toBeUndefined();
+        expect(out.generatedThrough).toBeUndefined();
+        expect(out.daysOfWeek).toEqual([5]);
+    });
+});
+
+describe('describeRule', () => {
+    it('reads as a schedule, for the audit row and the screen', () => {
+        expect(describeRule({
+            enabled: true, daysOfWeek: [5], startTime: '19:30', endTime: '22:00',
+            venue: null, agenda: '',
+        })).toBe('Every Friday, 19:30–22:00');
+    });
+
+    it('names every day when there are several', () => {
+        expect(describeRule({
+            enabled: true, daysOfWeek: [0, 5], startTime: '19:30', endTime: '22:00',
+            venue: null, agenda: '',
+        })).toMatch(/Sunday, Friday/);
+    });
+
+    it('says plainly when it is off', () => {
+        expect(describeRule({
+            enabled: false, daysOfWeek: [5], startTime: '19:30', endTime: '22:00',
+            venue: null, agenda: '',
+        })).toMatch(/turned off/i);
     });
 });

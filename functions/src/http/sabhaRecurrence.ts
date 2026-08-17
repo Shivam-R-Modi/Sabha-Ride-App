@@ -1,99 +1,59 @@
 // ============================================
-// The manager's recurring sabha schedule: read, write, and top up.
+// The manager's recurring sabha schedule: read and write the rule.
 // ============================================
+
+/**
+ * One record, no horizon.
+ *
+ * `topUpCalendar` used to live here and wrote one `events/{date}` document per
+ * occurrence out to a chosen horizon. It is gone. The rule in
+ * `settings/sabhaRecurrence` IS the schedule now, and `findCurrentEvent` computes
+ * from it — see the long note at the top of utils/recurrence.ts for why that is
+ * both simpler and one whole bug class smaller.
+ *
+ * So this file has one job: validate and store the rule. Nothing is generated,
+ * which is why nothing here needs a watermark, an `occupied` set, or a batch.
+ */
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { assertApprovedManager } from '../utils/authz';
 import { writeAuditLog } from '../utils/audit';
-import { getTimeZone } from '../utils/settings';
-import { EVENTS_COLLECTION } from '../utils/events';
-import { zonedDateKey, addDaysToDateKey } from '../utils/time';
-import {
-    RecurrenceConfig, normaliseRecurrence, datesToGenerate, advanceWatermark,
-    MIN_WEEKS_AHEAD, MAX_WEEKS_AHEAD, DEFAULT_WEEKS_AHEAD,
-} from '../utils/recurrence';
+import { RecurrenceRule, normaliseRecurrence } from '../utils/recurrence';
 
 export const RECURRENCE_DOC = 'settings/sabhaRecurrence';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /**
- * Read the pattern, already validated.
+ * Read the rule, already validated.
  *
- * A config that cannot be understood returns null and generates nothing — see the
+ * A rule that cannot be understood returns null and schedules nothing — see the
  * note on `normaliseRecurrence` for why guessing is worse than stopping.
  */
 export async function readRecurrence(
     db: admin.firestore.Firestore,
-): Promise<RecurrenceConfig | null> {
+): Promise<RecurrenceRule | null> {
     const snap = await db.doc(RECURRENCE_DOC).get();
     return snap.exists ? normaliseRecurrence(snap.data()) : null;
 }
 
-/**
- * Create whatever the pattern says is missing, and move the watermark.
- *
- * Shared by the daily job and the manager's "Fill the calendar now" button, so the
- * button cannot drift from what the cron actually does — the usual way a manual
- * trigger ends up testing a different code path from the real one.
- *
- * Reads the existing documents across the whole horizon *including cancelled
- * ones*, because a cancelled gathering keeps its document and regenerating over
- * it would both un-cancel it and reject the batch on ALREADY_EXISTS.
- */
-export async function topUpCalendar(
-    db: admin.firestore.Firestore,
-    config: RecurrenceConfig,
-    now: Date,
-    timeZone: string,
-): Promise<string[]> {
-    if (!config.enabled) return [];
-
-    const today = zonedDateKey(now, timeZone);
-    const horizon = addDaysToDateKey(today, config.weeksAhead * 7);
-
-    const scan = await db.collection(EVENTS_COLLECTION)
-        .where(admin.firestore.FieldPath.documentId(), '>=', today)
-        .where(admin.firestore.FieldPath.documentId(), '<=', horizon)
-        .get();
-    const occupied = new Set(scan.docs.map(d => d.id));
-
-    const dates = datesToGenerate(config, now, timeZone, occupied);
-    const mark = advanceWatermark(config, now, timeZone);
-
-    // The watermark moves whether or not anything was created. If it only moved
-    // on a successful create, a horizon already filled by hand would leave the
-    // mark short and those dates would be offered again for ever.
-    const batch = db.batch();
-    for (const date of dates) {
-        batch.create(db.collection(EVENTS_COLLECTION).doc(date), {
-            date,
-            startTime: config.startTime,
-            endTime: config.endTime,
-            venue: null,
-            status: 'scheduled',
-            agenda: '',
-            autoCreated: true,
-            fromRecurrence: true,
-            createdAt: now.toISOString(),
-        });
-    }
-    batch.set(db.doc(RECURRENCE_DOC), { generatedThrough: mark }, { merge: true });
-
-    await batch.commit();
-    return dates;
+/** How the schedule reads on a manager's screen and in an audit row. */
+export function describeRule(rule: RecurrenceRule): string {
+    if (!rule.enabled) return 'Recurring sabha turned off';
+    const days = rule.daysOfWeek.map(d => DAY_NAMES[d]).join(', ');
+    return `Every ${days}, ${rule.startTime}–${rule.endTime}`;
 }
 
 /**
  * HTTP Callable: a manager sets the recurring pattern.
  *
- * Input: { enabled, daysOfWeek, startTime, endTime, weeksAhead }
- * Output: { config, created: string[] }
+ * Input: { enabled, daysOfWeek, startTime, endTime }
+ * Output: { rule }
  *
- * Saving fills the calendar immediately rather than waiting for 03:00, so the
- * manager sees the dates appear and can tell the setting worked. A control whose
- * effect is invisible until tomorrow is one nobody trusts.
+ * No `weeksAhead`. There is no horizon any more: the rule repeats until a manager
+ * changes it, and a single date is changed by writing an exception for that date
+ * rather than by re-generating a window.
  */
 export const updateSabhaRecurrence = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -102,78 +62,54 @@ export const updateSabhaRecurrence = functions.https.onCall(async (data, context
 
     const db = admin.firestore();
 
-    // Changing when a whole congregation gathers, and creating documents that
-    // drive every ride window. Manager only.
+    // Changing when a whole congregation gathers. Manager only.
     await assertApprovedManager(db, context.auth.uid, 'change the sabha schedule');
 
-    const enabled = data?.enabled === true;
-
-    // Validate through the same function the scheduled job uses. A pattern the
-    // job would refuse must not be saveable — otherwise the manager sees a saved
-    // setting that silently never generates anything.
-    const candidate = normaliseRecurrence({
-        enabled,
+    // Validated through the same function the scheduler uses, so a rule the
+    // scheduler would refuse cannot be saved — otherwise the manager sees a saved
+    // setting that silently schedules nothing.
+    const rule = normaliseRecurrence({
+        enabled: data?.enabled === true,
         daysOfWeek: data?.daysOfWeek,
         startTime: data?.startTime,
         endTime: data?.endTime,
-        weeksAhead: data?.weeksAhead ?? DEFAULT_WEEKS_AHEAD,
-        // Preserved below from the stored document; never accepted from a client,
-        // or a manager could roll it back and resurrect dates they had deleted.
-        generatedThrough: null,
+        venue: data?.venue ?? null,
+        agenda: data?.agenda ?? '',
     });
 
-    if (!candidate) {
+    if (!rule) {
         throw new functions.https.HttpsError(
             'invalid-argument',
             'Pick at least one day, and an end time later than the start time.',
         );
     }
-    if (typeof data?.weeksAhead === 'number'
-        && (data.weeksAhead < MIN_WEEKS_AHEAD || data.weeksAhead > MAX_WEEKS_AHEAD)) {
-        throw new functions.https.HttpsError(
-            'invalid-argument',
-            `Fill the calendar between ${MIN_WEEKS_AHEAD} and ${MAX_WEEKS_AHEAD} weeks ahead.`,
-        );
-    }
-
-    // The watermark is server-owned. Carry the existing one across untouched: it
-    // is the only thing keeping a deleted date deleted.
-    const existing = await db.doc(RECURRENCE_DOC).get();
-    const previousMark = existing.data()?.generatedThrough;
-    const config: RecurrenceConfig = {
-        ...candidate,
-        generatedThrough: typeof previousMark === 'string' ? previousMark : null,
-    };
 
     const now = new Date();
-    const timeZone = await getTimeZone();
 
     await db.doc(RECURRENCE_DOC).set({
-        enabled: config.enabled,
-        daysOfWeek: config.daysOfWeek,
-        startTime: config.startTime,
-        endTime: config.endTime,
-        weeksAhead: config.weeksAhead,
-        generatedThrough: config.generatedThrough,
+        enabled: rule.enabled,
+        daysOfWeek: rule.daysOfWeek,
+        startTime: rule.startTime,
+        endTime: rule.endTime,
+        venue: rule.venue,
+        agenda: rule.agenda,
         updatedAt: now.toISOString(),
         updatedBy: context.auth.uid,
+        // Deleted along with the generator. Removed rather than left behind, so a
+        // stale value cannot be read back by anything that has not been updated.
+        weeksAhead: admin.firestore.FieldValue.delete(),
+        generatedThrough: admin.firestore.FieldValue.delete(),
     }, { merge: true });
 
-    const created = await topUpCalendar(db, config, now, timeZone);
-
-    const pattern = config.daysOfWeek.map(d => DAY_NAMES[d]).join(', ');
     await writeAuditLog(db, {
         action: 'doc.update',
         actorUid: context.auth.uid,
         actorName: 'Manager',
         targetCollection: 'settings',
         targetDocumentId: 'sabhaRecurrence',
-        summary: config.enabled
-            ? `Recurring sabha set to ${pattern} ${config.startTime}–${config.endTime}, `
-                + `${config.weeksAhead} weeks ahead (created ${created.length})`
-            : 'Recurring sabha turned off',
-        details: { ...config, created },
+        summary: describeRule(rule),
+        details: { ...rule },
     });
 
-    return { config, created };
+    return { rule };
 });

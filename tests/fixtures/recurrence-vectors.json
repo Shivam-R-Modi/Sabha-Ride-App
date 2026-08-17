@@ -1,0 +1,242 @@
+{
+  "_comment": [
+    "Shared test vectors for the recurring-sabha rule.",
+    "",
+    "The logic lives twice — functions/src/utils/recurrence.ts and",
+    "src/utils/recurrence.ts — because the client and the functions have separate",
+    "tsconfigs and no shared path. The repo already mirrors constants this way",
+    "(src/constants/seats.ts), but occurrence maths is far easier to get subtly",
+    "wrong than three integers, and the two copies disagreeing means a rider sees",
+    "one date while dispatch uses another.",
+    "",
+    "So both test suites read THIS file and assert their own implementation",
+    "produces these answers. A drift in either copy fails on both sides.",
+    "",
+    "Dates chosen deliberately: 2026-08-21 is a Friday, 2026-08-23 a Sunday,",
+    "2026-08-18 a Tuesday. 2026-03-08 and 2026-11-01 are the US DST switch",
+    "Sundays, where naive date maths slips."
+  ],
+
+  "dayOfWeek": [
+    { "date": "2026-08-21", "expected": 5 },
+    { "date": "2026-08-22", "expected": 6 },
+    { "date": "2026-08-23", "expected": 0 },
+    { "date": "2026-03-08", "expected": 0 },
+    { "date": "2026-11-01", "expected": 0 },
+    { "date": "2027-01-01", "expected": 5 }
+  ],
+
+  "occurrencesBetween": [
+    {
+      "name": "every Friday over three weeks",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "from": "2026-08-17", "to": "2026-09-07",
+      "expected": ["2026-08-21", "2026-08-28", "2026-09-04"]
+    },
+    {
+      "name": "twice a week, in date order",
+      "rule": { "enabled": true, "daysOfWeek": [0, 5] },
+      "from": "2026-08-17", "to": "2026-08-24",
+      "expected": ["2026-08-21", "2026-08-23"]
+    },
+    {
+      "name": "disabled rule yields nothing",
+      "rule": { "enabled": false, "daysOfWeek": [5] },
+      "from": "2026-08-17", "to": "2026-12-31",
+      "expected": []
+    },
+    {
+      "name": "backwards range yields nothing",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "from": "2026-09-07", "to": "2026-08-17",
+      "expected": []
+    },
+    {
+      "name": "both ends inclusive",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "from": "2026-08-21", "to": "2026-08-21",
+      "expected": ["2026-08-21"]
+    },
+    {
+      "name": "across a year boundary",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "from": "2026-12-28", "to": "2027-01-04",
+      "expected": ["2027-01-01"]
+    },
+    {
+      "name": "across the spring DST switch",
+      "rule": { "enabled": true, "daysOfWeek": [0] },
+      "from": "2026-03-01", "to": "2026-03-15",
+      "expected": ["2026-03-01", "2026-03-08", "2026-03-15"]
+    }
+  ],
+
+  "_effectiveEventComment": [
+    "effectiveEvent is exercised DIRECTLY, not only through upcomingOccurrences.",
+    "",
+    "It has to be. upcomingOccurrences builds its candidate dates from the rule",
+    "plus one-off dates, so an OVERRIDE on a date the rule does not cover is never",
+    "passed to effectiveEvent at all — it is inert because it is not a candidate,",
+    "not because of the guard inside effectiveEvent. Deleting that guard was",
+    "verified to leave the upcomingOccurrences vectors entirely green.",
+    "",
+    "These cases close that hole on both sides."
+  ],
+
+  "effectiveEvent": [
+    {
+      "name": "a cancellation beats a rule occurrence",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "date": "2026-08-21",
+      "exception": { "status": "cancelled" },
+      "expected": null
+    },
+    {
+      "name": "a cancelled one-off is still cancelled",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "date": "2026-08-18",
+      "exception": { "kind": "one-off", "status": "cancelled" },
+      "expected": null
+    },
+    {
+      "name": "a one-off stands alone off the pattern",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "date": "2026-08-18",
+      "exception": { "kind": "one-off", "status": "scheduled", "startTime": "18:00", "endTime": "20:00" },
+      "expected": { "date": "2026-08-18", "startTime": "18:00", "source": "one-off" }
+    },
+    {
+      "name": "an override replaces the rule occurrence entirely",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "date": "2026-08-21",
+      "exception": { "kind": "override", "status": "scheduled", "startTime": "17:00", "endTime": "19:00" },
+      "expected": { "date": "2026-08-21", "startTime": "17:00", "source": "override" }
+    },
+    {
+      "name": "an override OFF the pattern is inert — the guard these vectors exist for",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "date": "2026-08-18",
+      "exception": { "kind": "override", "status": "scheduled", "startTime": "18:00", "endTime": "20:00" },
+      "expected": null
+    },
+    {
+      "name": "an override is inert while the rule is switched off",
+      "rule": { "enabled": false, "daysOfWeek": [5] },
+      "date": "2026-08-21",
+      "exception": { "kind": "override", "status": "scheduled", "startTime": "18:00", "endTime": "20:00" },
+      "expected": null
+    },
+    {
+      "name": "no exception, rule covers the date",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "date": "2026-08-21",
+      "exception": null,
+      "expected": { "date": "2026-08-21", "startTime": "19:30", "source": "rule" }
+    },
+    {
+      "name": "no exception, rule does not cover the date",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "date": "2026-08-18",
+      "exception": null,
+      "expected": null
+    }
+  ],
+
+  "upcomingOccurrences": [
+    {
+      "name": "editing one week leaves every other week alone",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "exceptions": {
+        "2026-08-28": { "kind": "override", "status": "scheduled", "startTime": "17:00", "endTime": "19:00" }
+      },
+      "from": "2026-08-17", "to": "2026-09-15", "limit": 8,
+      "expected": [
+        { "date": "2026-08-21", "startTime": "19:30", "source": "rule" },
+        { "date": "2026-08-28", "startTime": "17:00", "source": "override" },
+        { "date": "2026-09-04", "startTime": "19:30", "source": "rule" },
+        { "date": "2026-09-11", "startTime": "19:30", "source": "rule" }
+      ]
+    },
+    {
+      "name": "cancelling one week removes only that week",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "exceptions": { "2026-08-28": { "status": "cancelled" } },
+      "from": "2026-08-17", "to": "2026-09-15", "limit": 8,
+      "expected": [
+        { "date": "2026-08-21", "startTime": "19:30", "source": "rule" },
+        { "date": "2026-09-04", "startTime": "19:30", "source": "rule" },
+        { "date": "2026-09-11", "startTime": "19:30", "source": "rule" }
+      ]
+    },
+    {
+      "name": "a one-off on a Tuesday the rule never reaches",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "exceptions": {
+        "2026-08-18": { "kind": "one-off", "status": "scheduled", "startTime": "18:00", "endTime": "20:00" }
+      },
+      "from": "2026-08-17", "to": "2026-08-24", "limit": 8,
+      "expected": [
+        { "date": "2026-08-18", "startTime": "18:00", "source": "one-off" },
+        { "date": "2026-08-21", "startTime": "19:30", "source": "rule" }
+      ]
+    },
+    {
+      "name": "an override off the pattern is inert, not a phantom gathering",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "exceptions": {
+        "2026-08-18": { "kind": "override", "status": "scheduled", "startTime": "18:00", "endTime": "20:00" }
+      },
+      "from": "2026-08-17", "to": "2026-08-24", "limit": 8,
+      "expected": [
+        { "date": "2026-08-21", "startTime": "19:30", "source": "rule" }
+      ]
+    },
+    {
+      "name": "a document with no kind reads as an override, so it is inert off-pattern",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "exceptions": {
+        "2026-08-18": { "status": "scheduled", "startTime": "18:00", "endTime": "20:00" }
+      },
+      "from": "2026-08-17", "to": "2026-08-24", "limit": 8,
+      "expected": [
+        { "date": "2026-08-21", "startTime": "19:30", "source": "rule" }
+      ]
+    },
+    {
+      "name": "rule off, but a one-off survives",
+      "rule": { "enabled": false, "daysOfWeek": [5] },
+      "exceptions": {
+        "2026-08-18": { "kind": "one-off", "status": "scheduled", "startTime": "18:00", "endTime": "20:00" }
+      },
+      "from": "2026-08-17", "to": "2026-08-31", "limit": 8,
+      "expected": [
+        { "date": "2026-08-18", "startTime": "18:00", "source": "one-off" }
+      ]
+    },
+    {
+      "name": "the limit is respected",
+      "rule": { "enabled": true, "daysOfWeek": [5] },
+      "exceptions": {},
+      "from": "2026-08-17", "to": "2026-12-31", "limit": 2,
+      "expected": [
+        { "date": "2026-08-21", "startTime": "19:30", "source": "rule" },
+        { "date": "2026-08-28", "startTime": "19:30", "source": "rule" }
+      ]
+    },
+    {
+      "name": "no rule and no one-offs means nothing is scheduled",
+      "rule": { "enabled": false, "daysOfWeek": [5] },
+      "exceptions": {},
+      "from": "2026-08-17", "to": "2026-12-31", "limit": 8,
+      "expected": []
+    }
+  ],
+
+  "_ruleDefaults": {
+    "_comment": "Every `rule` above is completed with these before use.",
+    "startTime": "19:30",
+    "endTime": "22:00",
+    "venue": null,
+    "agenda": ""
+  }
+}

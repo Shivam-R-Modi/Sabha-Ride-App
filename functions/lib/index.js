@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.geocodeAddress = exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.geocodeAddress = exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.updateSabhaRecurrence = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.ensureSabhaEvents = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -56,6 +56,10 @@ Object.defineProperty(exports, "releaseIdleVehicles", { enumerable: true, get: f
 // equivalent of a stranded car, and they never expired on their own.
 var expireStaleRequests_1 = require("./scheduled/expireStaleRequests");
 Object.defineProperty(exports, "expireStaleRequests", { enumerable: true, get: function () { return expireStaleRequests_1.expireStaleRequests; } });
+// The manager's recurring pattern. ensureSabhaEvents applies it daily; this is
+// the control that sets it.
+var sabhaRecurrence_1 = require("./http/sabhaRecurrence");
+Object.defineProperty(exports, "updateSabhaRecurrence", { enumerable: true, get: function () { return sabhaRecurrence_1.updateSabhaRecurrence; } });
 // ============================================
 // HTTP CALLABLE FUNCTIONS
 // ============================================

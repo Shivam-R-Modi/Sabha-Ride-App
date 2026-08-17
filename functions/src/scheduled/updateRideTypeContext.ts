@@ -9,14 +9,13 @@ import { RideType } from '../types';
 import { DEFAULT_TIME_ZONE } from '../utils/time';
 import {
     resolveScheduleWindow, buildCurrentEvent, ScheduleWindow, CurrentEvent,
-    DEFAULT_SABHA_START, DEFAULT_SABHA_END,
 } from '../utils/schedule';
-import { findCurrentEvent, seedFirstEventIfNeeded } from '../utils/events';
+import { findCurrentEvent } from '../utils/events';
 import { notifyEveryone } from '../utils/notifications';
 import { drainAttendanceDelete } from '../http/deleteSabhaEvent';
 import { SEED_MARKER_DOC } from '../utils/events';
 import { assertApprovedManager } from '../utils/authz';
-import { readRecurrence, topUpCalendar } from '../http/sabhaRecurrence';
+import { readRecurrence } from '../http/sabhaRecurrence';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -105,62 +104,18 @@ async function announceIfWindowJustOpened(
 }
 
 /**
- * Seed the calendar on a brand-new project — once, ever.
+ * `ensureSabhaEvents` is gone.
  *
- * A daily job rather than a one-off script so a fresh project cannot sit with
- * an empty calendar. It does nothing at all once the
- * marker is set, which is what lets a manager delete a gathering and have it stay
- * deleted. How many sabhas exist after the first is the manager's decision.
+ * It did two things, and the rule model removed the need for both. It seeded ONE
+ * gathering on a brand-new project so the service was not closed on day one — now
+ * an unset rule is honestly closed, and the calendar says so beside the control
+ * that fixes it. And it topped the calendar up from the recurring pattern — now
+ * there is nothing to top up, because the pattern IS the schedule and
+ * `findCurrentEvent` reads it directly.
+ *
+ * A scheduled job that exists to materialise what can be computed is a scheduled
+ * job that can be wrong at 03:00 and stay wrong all day.
  */
-export const ensureSabhaEvents = functions.pubsub
-    .schedule('every day 03:00')
-    .timeZone(DEFAULT_TIME_ZONE)
-    .onRun(async () => {
-        const db = admin.firestore();
-        const now = new Date();
-
-        try {
-            const { sabhaStart, sabhaEnd, timeZone } = await readSabhaTimes(db);
-
-            const created = await seedFirstEventIfNeeded(db, now, timeZone, {
-                startTime: typeof sabhaStart === 'string' ? sabhaStart : DEFAULT_SABHA_START,
-                endTime: typeof sabhaEnd === 'string' ? sabhaEnd : DEFAULT_SABHA_END,
-            });
-
-            console.log(created.length > 0
-                ? `[events] Seeded ${created.join(', ')}`
-                : '[events] Already seeded — the calendar is the manager\'s');
-
-            // Then top up from the manager's recurring pattern, if they set one.
-            //
-            // Separate from the seed above and deliberately so: the seed exists
-            // once to stop a brand-new project sitting closed, while this is the
-            // standing schedule. Measured 2026-08-15, before this existed: the
-            // calendar ran dry and `calendarStatus` read 'no-scheduled-event',
-            // so nobody could request a ride until a manager hand-added a date.
-            //
-            // Its own try/catch — a broken pattern must not stop the seed, and
-            // neither must stop this job returning.
-            try {
-                const recurrence = await readRecurrence(db);
-                if (!recurrence) {
-                    console.log('[events] No usable recurring pattern — nothing to top up');
-                } else {
-                    const added = await topUpCalendar(db, recurrence, now, timeZone);
-                    console.log(added.length > 0
-                        ? `[events] Recurring schedule added ${added.join(', ')}`
-                        : '[events] Recurring schedule already satisfied');
-                }
-            } catch (recurrenceError) {
-                console.error('[events] Could not apply the recurring schedule:', recurrenceError);
-            }
-
-            return null;
-        } catch (error) {
-            console.error('[events] Could not top up the calendar:', error);
-            return null;
-        }
-    });
 
 /**
  * Drain dates whose attendance cascade did not finish.
@@ -209,31 +164,20 @@ export const updateRideTypeContext = functions.pubsub
             // exists to prevent. The date is parked; this drains it.
             await sweepPendingAttendanceDeletes(db);
 
-            const { sabhaStart, sabhaEnd, timeZone, venue } = await readSabhaTimes(db);
+            const { timeZone, venue } = await readSabhaTimes(db);
 
-            // The gathering now comes from the events collection. No event means
-            // nothing is scheduled — closed, and said plainly.
-            let scheduled = await findCurrentEvent(db, now, timeZone);
-
-            // Seed on the very first run, so a fresh deploy does not sit with the
-            // service closed until 03:00. Once the marker is set this does
-            // nothing — an empty calendar from then on is the manager's choice,
-            // and `calendarStatus` below publishes it so the UI can say so rather
-            // than leaving "No rides available" looking like a fault.
+            // The gathering is computed from the manager's rule, with any
+            // exception for that date applied. No rule and no one-off means
+            // nothing is scheduled — closed, and said plainly rather than papered
+            // over by seeding a date nobody asked for.
             //
-            // This is also what makes deletion stick. The previous version treated
-            // a missing document as "needs creating", so a deleted date reappeared
-            // on the very next tick — within 60 seconds.
-            if (!scheduled) {
-                const created = await seedFirstEventIfNeeded(db, now, timeZone, {
-                    startTime: typeof sabhaStart === 'string' ? sabhaStart : DEFAULT_SABHA_START,
-                    endTime: typeof sabhaEnd === 'string' ? sabhaEnd : DEFAULT_SABHA_END,
-                });
-                if (created.length > 0) {
-                    console.log(`[events] Seeded the calendar: ${created.join(', ')}`);
-                    scheduled = await findCurrentEvent(db, now, timeZone);
-                }
-            }
+            // A rule that cannot be parsed reads as null here, which closes the
+            // service. That is deliberate and it is the safer direction: a missing
+            // gathering is visible on the manager's calendar, a wrongly-placed one
+            // sends drivers out.
+            const rule = await readRecurrence(db);
+            const scheduled = await findCurrentEvent(db, now, timeZone, rule);
+
             const event = scheduled
                 ? buildCurrentEvent(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
                     venue: scheduled.venue,
@@ -289,7 +233,8 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
     await assertApprovedManager(db, context.auth.uid, 'change the ride window');
 
     const { timeZone } = await readSabhaTimes(db);
-    const scheduled = await findCurrentEvent(db, now, timeZone);
+    const rule = await readRecurrence(db);
+    const scheduled = await findCurrentEvent(db, now, timeZone, rule);
     const event = scheduled
         ? buildCurrentEvent(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
             venue: scheduled.venue,

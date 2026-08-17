@@ -38,6 +38,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.studentReadyToLeave = void 0;
+exports.normalisePresence = normalisePresence;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 // getZonedParts is gone from here deliberately: this function no longer decides
@@ -46,6 +47,41 @@ const time_1 = require("../utils/time");
 const coords_1 = require("../utils/coords");
 const tenancy_1 = require("../constants/tenancy");
 const seats_1 = require("../constants/seats");
+const METHODS = ['pickup', 'auto', 'manual', 'unknown'];
+/**
+ * Clean the client's presence claim into something worth storing.
+ *
+ * Exported and pure. The rule that matters: this NEVER rejects. Every branch
+ * yields a record, because the only thing a rejection here could achieve is
+ * stranding a rider whose phone or cached bundle disagreed with the server.
+ *
+ * A claim of `pickup` is the one thing the server can check for itself, so it
+ * does: a client claiming to have arrived by ride when the user record does not
+ * say `at_sabha` is downgraded to `manual`. Not to punish it — the rider still
+ * gets their lift — but so the manager's board reflects what actually happened.
+ *
+ * Coordinates are deliberately not accepted. Only a rounded distance is, so no
+ * precise location for a child ever reaches the database.
+ */
+function normalisePresence(raw, storedStatus) {
+    const claim = (raw && typeof raw === 'object' ? raw : {});
+    const asked = typeof claim.method === 'string' && METHODS.includes(claim.method)
+        ? claim.method
+        : 'unknown';
+    // The only claim the server can verify. Downgrade rather than refuse.
+    const method = asked === 'pickup' && storedStatus !== 'at_sabha'
+        ? 'manual'
+        : asked;
+    const num = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : undefined;
+    const record = { method };
+    const distance = num(claim.distanceMeters);
+    const accuracy = num(claim.accuracyMeters);
+    if (distance !== undefined)
+        record.distanceMeters = distance;
+    if (accuracy !== undefined)
+        record.accuracyMeters = accuracy;
+    return record;
+}
 /**
  * HTTP Callable: Student ready to leave Sabha
  * Updates student status for drop-off assignment
@@ -73,10 +109,28 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
         if (studentId !== context.auth.uid) {
             throw new functions.https.HttpsError('permission-denied', 'Only the student can mark themselves ready');
         }
-        // Check if student is at Sabha (must have completed pickup)
-        if ((student === null || student === void 0 ? void 0 : student.status) !== 'at_sabha') {
-            throw new functions.https.HttpsError('failed-precondition', 'You must be at Sabha to request drop-off');
-        }
+        // HOW THEY GOT HERE IS RECORDED, NOT ENFORCED.
+        //
+        // This used to be `if (student?.status !== 'at_sabha') throw`. Since
+        // `at_sabha` is written in exactly one place — when a home→sabha ride
+        // completes — the real rule was "you may request a ride home only if this
+        // app drove you here". Every rider who walked, drove themselves, or got a
+        // lift from a friend was permanently locked out, and the client showed
+        // them the button anyway, surfacing the refusal as "Please try again" —
+        // advice that could never work.
+        //
+        // The client now establishes presence instead: `at_sabha` short-circuits
+        // it, otherwise a GPS fix inside 100m confirms it, and failing both the
+        // rider is simply asked. That last path means none of this is enforceable,
+        // and it is not meant to be — a rider stranded at the temple with no way
+        // to ask for a lift is worse than a driver making one wasted stop.
+        //
+        // So the claim is recorded on the ride and shown to managers, which makes
+        // an implausible one visible without anybody having been blocked. A
+        // MISSING claim is an older cached bundle, not an attack: it is stamped
+        // 'unknown' rather than refused, because nobody should be stranded by
+        // their own service worker.
+        const presence = normalisePresence(data === null || data === void 0 ? void 0 : data.presence, student === null || student === void 0 ? void 0 : student.status);
         // Is the drop-off window open?
         //
         // This used to be `if (dayOfWeek !== 5 || hour < 22) throw` — Friday after
@@ -153,7 +207,11 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
         let rideId;
         if (existing) {
             rideId = existing.id;
-            console.log(`[studentReadyToLeave] Reusing existing return ride ${rideId} for ${studentId}`);
+            // Refresh the claim even on a reused ride. A rider who was asked and
+            // then re-taps once GPS has settled should show the better evidence,
+            // not the first guess.
+            await existing.ref.update({ presence });
+            console.log(`[studentReadyToLeave] Reusing existing return ride ${rideId} for ${studentId} (${presence.method})`);
         }
         else {
             const rideRef = db.collection('rides').doc();
@@ -184,9 +242,12 @@ exports.studentReadyToLeave = functions.https.onCall(async (data, context) => {
                 // from activeRide.dropoffRequested. Without this the student
                 // taps the button, the ride is created, and the UI still shows
                 // an un-pressed button — no feedback that it worked.
-                dropoffRequested: true
+                dropoffRequested: true,
+                // Never coordinates — only how presence was established and, if
+                // GPS had an opinion, how far off it thought they were.
+                presence,
             });
-            console.log(`[studentReadyToLeave] Created return ride ${rideId} for ${studentId}`);
+            console.log(`[studentReadyToLeave] Created return ride ${rideId} for ${studentId} (${presence.method})`);
         }
         // Update student status
         await db.collection('users').doc(studentId).update({
