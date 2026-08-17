@@ -65,20 +65,34 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `70b4a60`, 2026-08-17. `main` = branch = production.
+Last deploy `7e8cc9c`, 2026-08-17. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | 19 functions. `ensureSabhaEvents` **deleted** — see the rule model below |
-| Hosting | ✅ | bundle `index-9Hrssg9d.js`, matched against `dist/` and verified live |
+| Hosting | ✅ | bundle `index-CgaOikYs.js`, matched against `dist/` and verified live |
 
-**Test suites, all green:** `functions` **477** · client **634** · rules **81** —
-**1192 total**.
+**Test suites, all green:** `functions` **493** · client **658** · rules **81** —
+**1232 total**.
 
-**Everything in this file is deployed.** There is no pending work waiting for a
-release.
+**Everything in this file is deployed.** No code is waiting for a release — but see
+*OPEN BUGS* below for three diagnosed and unfixed defects.
+
+Also shipped 2026-08-17, after the rule model: the drop-off presence check
+(`at_sabha` no longer gates a ride home — GPS at 100m, advisory, manual fallback
+always offered), `at_sabha` cleared nightly, three `DriverDashboard` blank-screen
+branches, the release path split (`handBackVehicle` vs the `managerReleaseVehicle`
+callable — a car swap was silently zeroing the driver's day), named checkboxes on
+the manager queue (an a11y fix that was also the root cause of a 10% test flake),
+the attendance header (`weeklyAttendance` said 4:00 AM for an 11:00 PM sabha),
+`editOccurrence` preserving a one-off's kind, and `deleteSabhaEvent` working on a
+date with no document.
+
+**A drop-off run completed end to end on 2026-08-17 under the rule model** —
+Sabha → Home, 2 people in one car, 2 runs / 4 people on the day. Verified from the
+screens and from production reads.
 
 `npm run typecheck` reports **19** errors, all client-side. That is the clean
 baseline. It was 22 before this branch; Phase 4 removed three by deleting the
@@ -115,6 +129,81 @@ and hosting. That happened on 2026-08-13. The failure was safe, because hosting
 is last and the half-deployed state was old-client-with-old-backend — which is
 exactly why the order is rules → functions → hosting and not one bare
 `firebase deploy`.
+
+---
+
+## OPEN BUGS — next session starts here
+
+Three found on 2026-08-17 while hand-testing the drop-off run. All three are
+diagnosed; none is fixed. Nothing else is outstanding.
+
+### 1. Two driver screens ignore dark mode
+
+`components/driver/AssignmentPreview.tsx` and
+`components/driver/CompletionScreen.tsx` paint their root element with **literal
+hex**:
+
+```
+bg-gradient-to-br from-[#FAF9F6] to-[#F5F0E8]
+```
+
+Hex cannot respond to the theme, so both stay cream while the rest of the app goes
+dark. Reported from screenshots, with the sidebar dark and the content light.
+
+`ActiveRide` uses `bg-cream` and is correct — that is why only these two look
+wrong. Fix: the same token.
+
+### 2. The colour ratchet does not catch gradient stops
+
+The Phase 6 sweep removed ~200 hardcoded colours and a quality test fails the
+build if one returns. It did not catch `from-[#FAF9F6]`, so bug 1 shipped past it.
+Extend the check to arbitrary-value classes (`from-[#…]`, `to-[#…]`, `via-[#…]`),
+not just `bg-[#…]`. Fixing the two colours without fixing the ratchet leaves the
+hole open.
+
+### 3. `surveyTheQueue` is missing the direction filter — MINE
+
+`functions/src/http/driverDoneForToday.ts`. It counts waiting riders with
+`rides where status == 'requested'` filtered by **event key only**. It does not
+filter by `rideType`.
+
+`globalAssignDriver`'s `isValidPendingRide` filters by **both**. So during the
+drop-off window a leftover *pickup* request is counted by the end-shift warning and
+correctly ignored by dispatch:
+
+| | event | direction |
+|---|---|---|
+| "Find my next riders" | ✅ | ✅ → "Nobody is waiting right now" |
+| "End my shift" warning | ✅ | ❌ → "1 rider is still waiting" |
+
+Observed with Rebo Fe's stale request: `requested`, `eventDate 2026-08-17`,
+**`rideType` absent** (so `home-to-sabha` by the absent-means-default rule) while
+the window was `sabha-to-home`.
+
+Fix: apply the same direction check dispatch uses —
+`(r.rideType ?? 'home-to-sabha') === rideContext.rideType`. I built that filter for
+this exact bug class and then failed to reuse it, which is the fourth time in this
+project that two correct halves have disagreed at the join.
+
+**Also worth knowing:** the stale request itself is real and still in production. It
+will be closed by `expireStaleRequests` at 03:00 once the gathering is past.
+
+---
+
+## Reading production without guessing
+
+Admin-SDK scripts live in the session scratchpad (regenerate as needed; they are
+~20 lines each and not tracked):
+
+| script | what it answers |
+|---|---|
+| `watch.cjs` | window, fleet, drivers on shift, open rides, rider statuses |
+| `rulecheck.cjs` | runs production data through the **deployed** `functions/lib` rule code |
+| `cal.cjs` | every events document vs what the calendar computes |
+| `drift.cjs` / `ev17.cjs` | rideContext vs weeklyAttendance header |
+| `act.cjs <uid> <fn> <json>` | call a callable AS a user, via an admin-minted custom token |
+
+`act.cjs` is how a full ride was driven end to end without touching a password.
 
 ---
 
