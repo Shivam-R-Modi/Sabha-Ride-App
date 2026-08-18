@@ -72,14 +72,13 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-DUZMBZsz.js` / css `index-DjHnHlyk.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-BZOSUz-K.js` / css `index-CO8GBe2B.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **508** · client **769** · rules **89** —
 **1366 total**.
 
-**Everything in this file is deployed EXCEPT the last section** — *Installing on
-iOS*, which is committed and swept but **not released**. `main` = production;
-`HEAD` is one commit ahead of it. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed.** `main` = `5b8bfa1` = production, local
+and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1054,6 +1053,17 @@ called `preventDefault()`.
 banner lives in the authenticated tree, and the browser pane cannot present itself
 as iOS. The DOM assertions cover the wording and the absent Install button; the
 appearance on a physical device has not been seen.
+
+### Deployed
+
+Released hosting-only on 2026-08-18 (rules and functions untouched by this
+change). Live bundle `index-BZOSUz-K.js`, verified by content: the live file
+contains `beforeinstallprompt`, `sabha-install-dismissed`, and both per-browser
+Share strings.
+
+Clients already running the previous build pick this up **on their own** — that
+build carries `applyUpdateWhenUnobserved`, which applies a waiting worker while
+the tab is hidden. No cache-clearing instructions needed this time.
 
 ### Still open
 
