@@ -77,10 +77,15 @@ export const UpdateBanner: React.FC = () => {
             className={`fixed bottom-safe-nav right-4 z-sticky animate-in slide-in-from-bottom-10 left-4 ${isFocusMode ? '' : isSidebarCollapsed ? 'lg:left-24' : 'lg:left-64'
                 }`}
         >
-            <div className="bg-coffee text-white p-4 rounded-xl shadow-2xl flex items-center justify-between gap-3">
+            {/* `bg-coffee text-cream`, an INVERTED PAIR. `bg-coffee` is `--text-strong`, a
+                TEXT token, and the text ramp inverts between themes — 61 41 20 in light,
+                232 227 220 in dark. So `text-white` on it measured 13.76:1 in light and
+                **1.28:1** in dark: white on near-white. `text-cream` is `--canvas`, which
+                inverts in step, giving 13.07:1 and 13.82:1. */}
+            <div className="bg-coffee text-cream p-4 rounded-xl shadow-2xl flex items-center justify-between gap-3">
                 <div>
                     <h4 className="font-bold text-sm">Update available</h4>
-                    <p className="text-xs text-white/70">
+                    <p className="text-xs text-cream/70">
                         Reload to get the latest version. Safe to finish what you are doing first.
                     </p>
                 </div>

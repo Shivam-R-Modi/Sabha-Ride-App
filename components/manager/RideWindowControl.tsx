@@ -119,7 +119,7 @@ export const RideWindowControl: React.FC = () => {
                         { rideType: 'sabha-to-home' },
                     )}
                     disabled={!!busy}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-coffee text-white rounded-lg font-semibold text-sm hover:bg-coffee/90 disabled:opacity-50 transition-all"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-coffee text-cream rounded-lg font-semibold text-sm hover:bg-coffee/90 disabled:opacity-50 transition-all"
                 >
                     {busy === 'dropoff' ? <Loader2 size={16} className="animate-spin" /> : <Clock size={16} />}
                     Open drop-off now

@@ -135,7 +135,9 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                     </div>
 
                     {/* Today's Stats */}
-                    <div className="border-t border-[rgb(var(--success))]/40/50 pt-4 mt-4">
+                    {/* `/40/50` was two opacity modifiers. Tailwind emits NOTHING for that, so
+                        this divider simply did not exist. */}
+                    <div className="border-t border-[rgb(var(--success))]/40 pt-4 mt-4">
                         <p className="text-xs text-coffee-500 uppercase tracking-wider text-center mb-3">Today's Seva</p>
                         <div className="grid grid-cols-3 gap-4">
                             <div className="text-center">

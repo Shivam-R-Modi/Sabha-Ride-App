@@ -47,10 +47,11 @@ export const PWAPrompt: React.FC = () => {
     // stays. Focus mode hides the sidebar at every width, so it stays too.
     <div className={`fixed bottom-safe-nav right-4 z-sticky animate-in slide-in-from-bottom-10 left-4 ${isFocusMode ? '' : isSidebarCollapsed ? 'lg:left-24' : 'lg:left-64'
       }`}>
-      <div className="bg-coffee text-white p-4 rounded-xl shadow-2xl flex items-center justify-between">
+      {/* Inverted pair — see the note in components/UpdateBanner.tsx. */}
+      <div className="bg-coffee text-cream p-4 rounded-xl shadow-2xl flex items-center justify-between">
         <div>
           <h4 className="font-bold text-sm">Install App</h4>
-          <p className="text-xs text-white/70">Add to home screen for better experience</p>
+          <p className="text-xs text-cream/70">Add to home screen for better experience</p>
         </div>
         <div className="flex gap-3 items-center">
             <button 
@@ -59,7 +60,7 @@ export const PWAPrompt: React.FC = () => {
             >
                 <Download size={14} /> Install
             </button>
-            <button onClick={() => setShowPrompt(false)} className="text-white/50 hover:text-white">
+            <button onClick={() => setShowPrompt(false)} className="text-cream/50 hover:text-cream">
                 <X size={18} />
             </button>
         </div>

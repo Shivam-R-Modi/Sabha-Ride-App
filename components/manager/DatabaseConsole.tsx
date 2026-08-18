@@ -129,29 +129,32 @@ export const DatabaseConsole: React.FC = () => {
 
           Not writing those class names out: Tailwind scans this file as plain
           TEXT, comments included, so naming a utility re-emits it. */}
-      <div className="clay-card bg-gradient-to-r from-[rgb(var(--cta))]/10 via-gold/10 to-[rgb(var(--cta-dark))]/10 border-hairline/20/60 p-6 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="p-3.5 bg-saffron text-white rounded-2xl shadow-lg shadow-saffron/20">
-            <Database size={28} />
+      {/* `border-hairline/20/60` was two opacity modifiers — no CSS, no border.
+          Now `/20`.
+
+          The TITLE and SUBTITLE that used to sit here are gone. This console became
+          its own page on 2026-08-18 (components/manager/ManagerRecords.tsx), which
+          supplies the `<h1>` and the danger warning — so the banner was repeating
+          the page heading directly beneath it. What is left is what only this
+          component can say: the mode badge and the action. */}
+      <div className="clay-card bg-gradient-to-r from-[rgb(var(--cta))]/10 via-gold/10 to-[rgb(var(--cta-dark))]/10 border border-hairline/20 p-4 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-saffron text-[rgb(var(--text-on-accent))] rounded-2xl shadow-lg shadow-saffron/20">
+            <Database size={20} />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold text-coffee font-header">Database Management Console</h2>
-              <span className="bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-[rgb(var(--success))]/40">
-                Live Admin Mode
-              </span>
-            </div>
-            <p className="text-xs text-coffee-500 mt-1">
-              Direct administrative access to inspect, query, edit, and audit system data collections.
-            </p>
-          </div>
+          <span className="bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-[rgb(var(--success))]/40">
+            Live Admin Mode
+          </span>
         </div>
 
         <div className="flex items-center gap-2 w-full md:w-auto justify-end">
           <button
             onClick={() => setIsCreatingNew(true)}
             disabled={activeTab === 'auditLogs'}
-            className={`clay-btn-cta text-xs px-4 py-2.5 flex items-center gap-2 ${
+            // `clay-btn-cta` does not exist in any stylesheet — only
+            // `clay-btn-cta-large` does — so this was unstyled text with a plus
+            // icon, not a button. `clay-btn-primary` is the defined CTA fill.
+            className={`clay-btn-primary text-xs px-4 py-2.5 flex items-center gap-2 ${
               activeTab === 'auditLogs' ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           >
@@ -187,7 +190,7 @@ export const DatabaseConsole: React.FC = () => {
               }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap ${
                 isActive
-                  ? 'bg-coffee text-white shadow-md scale-105'
+                  ? 'bg-coffee text-cream shadow-md scale-105'
                   : 'bg-surface text-coffee-500 hover:bg-cream-300 border border-hairline/10'
               }`}
             >
@@ -205,19 +208,19 @@ export const DatabaseConsole: React.FC = () => {
 
       {/* Floating Bulk Action Bar */}
       {selectedDocIds.length > 0 && activeTab !== 'auditLogs' && (
-        <div className="clay-card bg-coffee text-white p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in slide-in-from-bottom duration-200">
+        <div className="clay-card bg-coffee text-cream p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in slide-in-from-bottom duration-200">
           <div className="flex items-center gap-3">
             <span className="bg-saffron text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
               {selectedDocIds.length} Selected
             </span>
-            <span className="text-xs text-coffee-400">
-              Bulk actions ready for collection <strong className="text-white capitalize">{activeTab}</strong>
+            <span className="text-xs text-cream/70">
+              Bulk actions ready for collection <strong className="text-cream capitalize">{activeTab}</strong>
             </span>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               onClick={() => setSelectedDocIds([])}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-coffee-400 hover:text-white hover:bg-surface/10 transition-colors"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-cream/70 hover:text-cream hover:bg-surface/10 transition-colors"
             >
               Deselect All
             </button>
@@ -246,7 +249,11 @@ export const DatabaseConsole: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto">
+        {/* `no-scrollbar`: the global thumb is a 10px saffron gradient, which on a
+              short strip like this draws a solid orange bar under the filters. The
+              tab row above already had it; this one was missed. The TABLE below
+              keeps its scrollbar on purpose — there, scrolling is real. */}
+          <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto no-scrollbar">
           {activeTab === 'users' && (
             <div className="flex items-center gap-1.5 bg-cream-200 p-1.5 rounded-xl border border-hairline/10">
               <Filter size={14} className="text-coffee-500 ml-1" />

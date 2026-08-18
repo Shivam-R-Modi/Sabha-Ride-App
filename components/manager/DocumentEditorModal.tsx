@@ -242,7 +242,9 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             <button
               type="submit"
               disabled={isSaving}
-              className="clay-btn-cta text-xs px-5 py-2.5 flex items-center gap-2"
+              // `clay-btn-cta` is undefined — see DatabaseConsole. This is the primary
+              // action of the dialog that edits live records, so it must look like one.
+              className="clay-btn-primary text-xs px-5 py-2.5 flex items-center gap-2"
             >
               {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
               <span>{isSaving ? 'Saving...' : 'Save Document'}</span>

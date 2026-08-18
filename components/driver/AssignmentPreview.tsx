@@ -175,7 +175,9 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-hairline/20/50">
+                    {/* `/20/50` — two opacity modifiers, so no rule was generated and the
+                        divider was absent. */}
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-hairline/20">
                         <div className="flex items-center gap-2">
                             <Navigation size={16} className="text-saffron" />
                             <div>
