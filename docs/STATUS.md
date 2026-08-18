@@ -72,7 +72,7 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-DXdbR3BD.js` / css `index-Vpg4cdQl.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-DuHkD1EE.js` / css `index-DXyTT9ex.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **508** · client **794** · rules **89** —
 **1391 total**.
@@ -1248,7 +1248,11 @@ entry it was on the path **every single time**. The guard now matches the elemen
 the finger STARTED on: the synthetic click a swipe produces always targets its
 origin, and anything else is a real tap.
 
-Released the same day as bundle `index-DXdbR3BD.js` / css `index-Vpg4cdQl.css`.
+Released as bundle `index-DuHkD1EE.js` / css `index-DXyTT9ex.css`. Verified
+against the LIVE files: the touch handlers are present, the seam rule
+`.clay-bottom-nav.is-expanded{border-radius:0;box-shadow:none}` is in the
+stylesheet, and both "More destinations" and the three-dot glyph appear ZERO
+times.
 Verified against the LIVE stylesheet, which carries
 `.clay-bottom-nav.is-expanded{border-radius:0;box-shadow:none}` and the drawer's
 flat `background:rgb(var(--surface))`, and the LIVE bundle, which carries the
