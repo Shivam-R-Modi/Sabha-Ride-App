@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.geocodeAddress = exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.updateSabhaRecurrence = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.updateSabhaRecurrence = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -107,6 +107,17 @@ Object.defineProperty(exports, "adminDeleteUser", { enumerable: true, get: funct
 var managerReleaseVehicle_1 = require("./http/managerReleaseVehicle");
 Object.defineProperty(exports, "managerReleaseVehicle", { enumerable: true, get: function () { return managerReleaseVehicle_1.managerReleaseVehicle; } });
 // Utility Functions
-var geocodeAddress_1 = require("./http/geocodeAddress");
-Object.defineProperty(exports, "geocodeAddress", { enumerable: true, get: function () { return geocodeAddress_1.geocodeAddress; } });
+// geocodeAddress was exported here. Deleted 2026-08-18: it returned 500 for every
+// call for its whole life, because GOOGLE_MAPS_API_KEY in functions/.env is an
+// HTTP-referer-restricted key and referer restrictions are a browser mechanism —
+// a server sends no referer, so such a key can never work server-to-server.
+//
+// Fixing it needed a SECOND, unrestricted key: another credential to store,
+// rotate and leak. The browser key already geocodes (verified against production
+// against this very address), so the client does it directly now — see
+// geocodeAddressInBrowser in hooks/useGooglePlaces.ts. Nothing calls this any
+// more, and a deployed endpoint that always fails is a control that cannot work.
+//
+// GOOGLE_MAPS_API_KEY is no longer read by any function and can be dropped from
+// functions/.env.
 //# sourceMappingURL=index.js.map

@@ -65,17 +65,17 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `810d19c`, 2026-08-18. `main` = branch = production.
+Last deploy `54b85f0`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
-| Cloud Functions | ✅ | 19 functions. `ensureSabhaEvents` **deleted** — see the rule model below |
-| Hosting | ✅ | bundle `index-B0wDa7Wb.js` / css `index-CDJzSYvQ.css`, verified by CONTENT |
+| Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
+| Hosting | ✅ | bundle `index-ClYBm2JW.js` / css `index-CDJzSYvQ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **688** · rules **89** —
-**1285 total**.
+**Test suites, all green:** `functions` **508** · client **692** · rules **89** —
+**1289 total**.
 
 **Everything in this file is deployed.** `main` = `307c9dc` = production, local
 and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
@@ -346,32 +346,59 @@ because the app's own geocoder is broken — see below. Worth confirming once in
 Settings, where `AddressAutocomplete` will show Google's own pin: if it differs by
 more than a few metres, re-save from the UI and it will overwrite this.
 
-### NEW BUG: `geocodeAddress` always fails in production
+### FIXED: `geocodeAddress` always failed, and is now gone
 
-Found while trying to geocode the venue through the app's own function:
+It returned 500 for every call it ever received:
 
 ```
-Geocoding error: REQUEST_DENIED – API keys with referer restrictions
-cannot be used with this API.
+REQUEST_DENIED – API keys with referer restrictions
+                 cannot be used with this API.
 ```
 
-`GOOGLE_MAPS_API_KEY` in `functions/.env` is an HTTP-referer-restricted key. Those
-work from a browser and **never** work server-to-server, so this callable has been
-returning 500 for every call. It is a different key from the client's
-`VITE_GOOGLE_MAPS_API_KEY`, so fixing it means giving the function an unrestricted
-or IP-restricted key — a Google Cloud console action, not a code change.
+`GOOGLE_MAPS_API_KEY` in `functions/.env` is HTTP-referer-restricted. **Referer
+restrictions are a browser mechanism — a server sends no referer**, so such a key
+can never work server-to-server.
 
-**Not a data-integrity risk, which is why it went unnoticed.** Two callers:
+The obvious fix is a second, unrestricted or IP-restricted key. That is another
+credential to store, rotate and leak, and it needs a console action. So the fix
+taken was to **stop needing a server key**.
 
-- `components/shared/ProfileEditor.tsx:91` — the fallback when a rider types an
-  address instead of picking a suggestion. On failure it refuses to save and says
-  *"Please select an address from the suggestions"*. Loud and correct: nobody ends
-  up with an address that has no coordinates. Autocomplete is the normal path and
-  supplies its own coordinates, so most riders never touch this.
-- `hooks/useAdminDatabase.ts:113` — the manager creating a user by hand.
+**Verified before acting, not assumed.** Loaded the Maps JS SDK on the production
+origin with each key in the bundle and actually called `geocode()`:
 
-So the effect is a degraded fallback, not corruption. Still worth fixing: the
-whole point of that fallback is the rider who does not use autocomplete.
+| key | result |
+|---|---|
+| the Firebase key | loads, then times out — not authorised for Maps |
+| `VITE_GOOGLE_MAPS_API_KEY` | **OK** → `42.339362, -71.0878001` |
+
+That is the key already powering autocomplete, and `hooks/useGooglePlaces.ts` says
+so in its own header: *"works with referer-restricted API keys"*.
+
+So `geocodeAddressInBrowser()` now lives in that hook, reusing its single SDK
+load, and the two callers moved to it — `ProfileEditor`'s fallback for a typed
+address, and the manager's admin edit. The callable, its two client wrappers and
+its `GeocodeResult` type are **deleted**; `firebase functions:list` is now 18, and
+the endpoint returns **404**. A deployed endpoint that always fails is a control
+that cannot work.
+
+**`GOOGLE_MAPS_API_KEY` is no longer read by anything and can be dropped from
+`functions/.env`.** One fewer credential.
+
+The trust model is unchanged: autocomplete has always produced coordinates in the
+browser and `ProfileEditor` has always written them, so client-supplied
+coordinates were already accepted. This closed the one path that was broken.
+
+`tests/quality/geocoding-stays-client-side.test.ts` pins the decision, because the
+tempting fix for the next person who wants server-side geocoding is that second
+key. It matches `process.env.` rather than the bare key name, since the name
+appears in `functions/src/index.ts` explaining the deletion — the same trap as
+naming a Tailwind class in a comment and having it re-emitted.
+
+**Venue coordinates corrected as a side effect.** They had come from OpenStreetMap,
+because the app's own geocoder did not work at the time. They are now Google's own
+value — **19.7 m** from the previous point, with an audit row recording it. Both
+were well inside the 100 m presence radius, so nothing behaved differently; the
+stored value now simply matches what the Settings UI would write.
 
 ### The original problem, for the record: the venue was a developer placeholder
 
