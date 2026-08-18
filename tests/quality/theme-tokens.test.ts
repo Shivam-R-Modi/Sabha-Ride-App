@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -180,7 +180,7 @@ describe('no colour literals survive outside theme.css', () => {
  * them gone. Use the brand ramps (`text-coffee`, `bg-cream-300`, `text-saffron`)
  * or a semantic token (`bg-[rgb(var(--success-bg))]`).
  */
-describe('components use themed colours, not Tailwind stock', () => {
+describe('the app uses themed colours, not Tailwind stock', () => {
     /**
      * The NUMBERED scales only — `gray-500`, `blue-100` and so on. Those are
      * fixed lightness steps chosen for a light background and are simply wrong
@@ -192,6 +192,9 @@ describe('components use themed colours, not Tailwind stock', () => {
      * label on a saffron button and a white label on a surface. Those are
      * measured in tests/quality/theme-contrast.test.ts and in Phase 6's audit,
      * which is the right tool for the question.
+     *
+     * GRADIENT STOPS are the exception, and they get their own rule below: a
+     * `via-white` is never a label, it is a surface.
      */
     const OFFENDERS = new RegExp(
         // `shadow` and `via` were missing from this list, which let
@@ -237,28 +240,85 @@ describe('components use themed colours, not Tailwind stock', () => {
         ['components/auth/LoginScreen.tsx', 'heading sits on a fixed background photo'],
     ]);
 
+    /**
+     * `white` and `black` as a GRADIENT STOP.
+     *
+     * The rule above deliberately ignores bare `text-white` / `bg-black`, because
+     * a white label on a saturated saffron fill is correct in both themes and a
+     * regex cannot tell that apart from white-on-a-surface.
+     *
+     * A gradient stop carries no such ambiguity. `from-`/`via-`/`to-` paint a
+     * BACKGROUND, and a fixed white band in a background is wrong in dark mode
+     * every single time.
+     *
+     * Found on 2026-08-17 by grepping the DEPLOYED bundle rather than the source,
+     * while chasing a different report: five screens carried one —
+     * `from-saffron/10 via-white to-gold/10` on four onboarding screens
+     * (role selection, email verification, pending approval, profile setup) and
+     * `from-cream to-white` on the manager's driver header. In dark mode each one
+     * is a white stripe across an otherwise dark screen.
+     *
+     * All five had an exact token: `--surface` is `255 255 255` in light, so
+     * `white` → `surface` is byte-identical in light mode and correct in dark.
+     */
+    const FIXED_GRADIENT_STOP = new RegExp(
+        String.raw`(?<![\w/-])(?:from|via|to)-(?:white|black)(?![\w-])`,
+    );
+
+    /**
+     * Gradient stops over something that is itself fixed.
+     *
+     * `LoginScreen` darkens a PHOTOGRAPH with `from-black/20 to-black/30` so the
+     * heading stays legible against it. The image does not change with the theme,
+     * so neither should the scrim — a token there would lighten the overlay in
+     * dark mode and make white text sit on a bright photo.
+     */
+    const GRADIENT_ALLOWED = new Map<string, string>([
+        ['components/auth/LoginScreen.tsx', 'scrim darkens a fixed background photo'],
+    ]);
+
+    /**
+     * Every .tsx that can carry a className — not just `components/`.
+     *
+     * This walked ONLY `components/`, which meant the app's own root file was
+     * never checked. `App.tsx` had `from-amber-50 to-orange-50` on the
+     * account-rejected screen and `from-red-400 to-red-500` on its sign-out
+     * button, both invisible to this test for as long as it has existed.
+     */
+    const ROOTS = ['components', 'src', 'hooks', 'contexts'];
+
     /** Inside a className, not in prose or a comment. */
     function offences(pattern: RegExp, skip: (file: string) => boolean = () => false): string[] {
         const found: string[] = [];
+
+        const inspect = (full: string) => {
+            if (!/\.tsx$/.test(full)) return;
+            const rel = path.relative(ROOT, full);
+            if (skip(rel)) return;
+
+            readFileSync(full, 'utf8').split('\n').forEach((line, i) => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
+                if (!/class(Name)?=|clsx|tone:|className:/.test(line) && !/^\s*['"`].*['"`],?\s*$/.test(line)) return;
+                const hit = line.match(pattern);
+                if (hit) found.push(`${rel}:${i + 1}  ${hit[0]}`);
+            });
+        };
+
         const walk = (dir: string) => {
             for (const entry of readdirSync(dir)) {
                 const full = path.join(dir, entry);
-                if (statSync(full).isDirectory()) { walk(full); continue; }
-                if (!/\.tsx$/.test(entry)) continue;
-
-                const rel = path.relative(ROOT, full);
-                if (skip(rel)) continue;
-
-                readFileSync(full, 'utf8').split('\n').forEach((line, i) => {
-                    const trimmed = line.trim();
-                    if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
-                    if (!/class(Name)?=|clsx|tone:|className:/.test(line) && !/^\s*['"`].*['"`],?\s*$/.test(line)) return;
-                    const hit = line.match(pattern);
-                    if (hit) found.push(`${rel}:${i + 1}  ${hit[0]}`);
-                });
+                if (statSync(full).isDirectory()) walk(full);
+                else inspect(full);
             }
         };
-        walk(path.join(ROOT, 'components'));
+
+        // Root-level .tsx (App.tsx, index.tsx) plus every source directory.
+        for (const entry of readdirSync(ROOT)) inspect(path.join(ROOT, entry));
+        for (const dir of ROOTS) {
+            const full = path.join(ROOT, dir);
+            if (existsSync(full)) walk(full);
+        }
         return found;
     }
 
@@ -275,6 +335,27 @@ describe('components use themed colours, not Tailwind stock', () => {
             `token (bg-[rgb(var(--success-bg))]). If the colour sits on something that ` +
             `is itself fixed, add the file to HEX_ALLOWED with the reason:\n  ${hits.join('\n  ')}`,
         ).toEqual([]);
+    });
+
+    it('no fixed white/black gradient stop', () => {
+        const hits = offences(FIXED_GRADIENT_STOP, f => GRADIENT_ALLOWED.has(f));
+        expect(
+            hits,
+            `A gradient stop paints a BACKGROUND, so a fixed white or black band is ` +
+            `wrong in one of the two themes. \`--surface\` is pure white in light, so ` +
+            `\`white\` -> \`surface\` usually changes nothing in light mode. If the ` +
+            `gradient sits over something itself fixed (a photo), add the file to ` +
+            `GRADIENT_ALLOWED with the reason:\n  ${hits.join('\n  ')}`,
+        ).toEqual([]);
+    });
+
+    it('scans the app root, not only components/', () => {
+        // A guard on the guard. `App.tsx` carried two stock-palette gradients for
+        // the whole life of this test because the walk started at components/.
+        // If this file ever stops being reachable, the rules above go quiet
+        // without failing.
+        const seen = offences(/className=/);
+        expect(seen.some(h => h.startsWith('App.tsx:'))).toBe(true);
     });
 
     it('the hex allowlist has no stale entries', () => {

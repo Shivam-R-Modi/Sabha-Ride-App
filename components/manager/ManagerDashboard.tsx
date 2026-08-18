@@ -38,7 +38,7 @@ const RideAssignmentCard: React.FC<{
   return (
     <div className="clay-card bg-surface overflow-hidden flex flex-col h-full">
       {/* Driver Header */}
-      <div className="p-4 bg-gradient-to-br from-cream to-white border-b border-hairline/10 flex items-center gap-4">
+      <div className="p-4 bg-gradient-to-br from-cream to-surface border-b border-hairline/10 flex items-center gap-4">
         <div className="relative">
           <img
             src={driver?.avatarUrl || `https://ui-avatars.com/api/?name=${driver?.name || 'Driver'}&background=FF6B35&color=fff`}

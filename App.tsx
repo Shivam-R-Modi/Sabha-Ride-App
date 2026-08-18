@@ -55,12 +55,12 @@ export default function App() {
 
   if (userProfile.accountStatus === 'rejected') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50 p-6">
+      <div className="min-h-screen flex items-center justify-center bg-cream p-6">
         <div className="clay-card p-8 text-center max-w-md">
           <div className="text-6xl mb-4">🚫</div>
           <h2 className="text-2xl font-header font-bold text-coffee mb-2">Account Not Approved</h2>
           <p className="text-coffee-500 mb-6">Your account registration was not approved. If you believe this is an error, please contact the seva coordinator.</p>
-          <button onClick={logout} className="clay-button w-full py-3 text-white bg-gradient-to-r from-red-400 to-red-500 rounded-xl font-bold">
+          <button onClick={logout} className="clay-button w-full py-3 text-white bg-gradient-to-r from-[rgb(var(--danger))] to-[rgb(var(--danger))] rounded-xl font-bold">
             Sign Out
           </button>
         </div>
