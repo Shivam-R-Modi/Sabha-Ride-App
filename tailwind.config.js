@@ -47,6 +47,26 @@ export default {
       //
       // Contrast ratios below are for LIGHT mode, measured on cream #FAF9F6.
       // The dark equivalents are held to the same AA floor in theme.css.
+      /**
+       * Tailwind's preflight paints EVERY element `border-color: #e5e7eb` at zero
+       * width. That fixed light grey is invisible in light mode and bright on a
+       * dark panel, and it becomes visible the moment anything animates a border.
+       *
+       * That is exactly what happened in the sidebar: the selected nav item adds
+       * `border border-hairline/10` while the unselected one has no border
+       * utility, so with `transition-all` a click animated width 0 -> 1px AND
+       * colour #e5e7eb -> 10% white. For 150ms both the clicked item and the
+       * previously selected one drew a near-opaque light line on a 46 40 34 panel
+       * — reported as "a white border blinking in sequence", and invisible in
+       * light mode because #e5e7eb on cream is nothing.
+       *
+       * `transparent` is the right default for a themed app: a border nobody
+       * coloured should not appear, rather than appear in a colour that cannot
+       * follow the theme. Verified before changing it that NO element in
+       * components/ sets a border width without also setting a colour, so nothing
+       * relied on the grey.
+       */
+      borderColor: { DEFAULT: 'transparent' },
       colors: {
         saffron: {
           DEFAULT: 'rgb(var(--accent) / <alpha-value>)',

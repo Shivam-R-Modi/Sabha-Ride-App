@@ -337,7 +337,12 @@ describe('the app uses themed colours, not Tailwind stock', () => {
         // `shadow-green-200` sit under the success circle on CompletionScreen —
         // a green glow that stayed green on a dark surface. Same omission-shaped
         // hole as the missing hex rule below.
-        String.raw`(?<![\w/-])(?:bg|text|border|from|via|to|divide|ring|shadow|outline)-` +
+        // The DIRECTIONAL forms matter: `border-l-blue-500` does not match
+        // `border-` followed by a palette name, so two fixed stock colours sat in
+        // DriverHistory's stat stripes for the whole life of this test — right next
+        // to a themed `border-l-saffron`, and with the numbers beside them already
+        // using --info-text and --success-text.
+        String.raw`(?<![\w/-])(?:bg|text|border(?:-[trblxy])?|from|via|to|divide(?:-[xy])?|ring|shadow|outline)-` +
         String.raw`(?:gray|slate|zinc|neutral|stone|blue|green|red|orange|amber|` +
         String.raw`yellow|purple|teal|indigo|pink|rose|cyan|emerald|lime|violet|fuchsia|sky)` +
         String.raw`-\d{2,3}(?![\w-])`,
@@ -359,8 +364,10 @@ describe('the app uses themed colours, not Tailwind stock', () => {
      * the hex is a token somebody had not looked up.
      */
     const RAW_HEX = new RegExp(
-        String.raw`(?<![\w/-])(?:bg|text|border|from|to|via|ring|divide|outline|` +
-        String.raw`decoration|caret|accent|fill|stroke|shadow)-\[#[0-9A-Fa-f]{3,8}\]`,
+        // Directional forms included for the same reason as OFFENDERS above.
+        String.raw`(?<![\w/-])(?:bg|text|border(?:-[trblxy])?|from|to|via|ring|` +
+        String.raw`divide(?:-[xy])?|outline|decoration|caret|accent|fill|stroke|shadow)-` +
+        String.raw`\[#[0-9A-Fa-f]{3,8}\]`,
     );
 
     /**
@@ -435,9 +442,26 @@ describe('the app uses themed colours, not Tailwind stock', () => {
             readFileSync(full, 'utf8').split('\n').forEach((line, i) => {
                 const trimmed = line.trim();
                 if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
-                if (!/class(Name)?=|clsx|tone:|className:/.test(line) && !/^\s*['"`].*['"`],?\s*$/.test(line)) return;
-                const hit = line.match(pattern);
-                if (hit) found.push(`${rel}:${i + 1}  ${hit[0]}`);
+
+                // Test inside QUOTED SPANS, rather than requiring `className=` on
+                // the same line.
+                //
+                // That requirement was a real hole. Class lists in this codebase are
+                // routinely built across several lines:
+                //
+                //     className={`... border-2 border-mocha/20 ... ${
+                //         validation.isValid ? 'pr-10 border-green-500/50' : ''
+                //     }`}
+                //
+                // The continuation line holds the offending class and mentions
+                // neither `className` nor sits alone in quotes, so it was skipped
+                // outright — which is how a stock `border-green-500/50` survived in
+                // PhoneNumberInput next to a checkmark already using --success-text.
+                // Quoted spans catch the class wherever the expression puts it.
+                for (const [span] of line.matchAll(/'[^']*'|"[^"]*"|`[^`]*`/g)) {
+                    const hit = span.match(pattern);
+                    if (hit) { found.push(`${rel}:${i + 1}  ${hit[0]}`); return; }
+                }
             });
         };
 
@@ -490,7 +514,10 @@ describe('the app uses themed colours, not Tailwind stock', () => {
         // the whole life of this test because the walk started at components/.
         // If this file ever stops being reachable, the rules above go quiet
         // without failing.
-        const seen = offences(/className=/);
+        // Probes for a class App.tsx genuinely contains, INSIDE a quoted span —
+        // the walker no longer looks at bare `className=` text, so probing for
+        // that would silently match nothing and this guard would pass vacuously.
+        const seen = offences(/bg-cream/);
         expect(seen.some(h => h.startsWith('App.tsx:'))).toBe(true);
     });
 

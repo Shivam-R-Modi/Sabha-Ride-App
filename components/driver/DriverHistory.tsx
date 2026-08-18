@@ -67,11 +67,11 @@ export const DriverHistory: React.FC = () => {
                     <p className="text-[10px] text-coffee-500 uppercase font-bold tracking-wider">Total Rides</p>
                     <p className="text-2xl font-bold text-saffron-800">{rides.length}</p>
                 </div>
-                <div className="clay-card p-4 border-l-4 border-l-blue-500">
+                <div className="clay-card p-4 border-l-4 border-l-[rgb(var(--info))]">
                     <p className="text-[10px] text-coffee-500 uppercase font-bold tracking-wider">Students Moved</p>
                     <p className="text-2xl font-bold text-[rgb(var(--info-text))]">{totalStudents}</p>
                 </div>
-                <div className="clay-card p-4 border-l-4 border-l-green-500">
+                <div className="clay-card p-4 border-l-4 border-l-[rgb(var(--success))]">
                     <p className="text-[10px] text-coffee-500 uppercase font-bold tracking-wider">Total Miles</p>
                     <p className="text-2xl font-bold text-[rgb(var(--success-text))]">{totalDistance.toFixed(0)}</p>
                 </div>

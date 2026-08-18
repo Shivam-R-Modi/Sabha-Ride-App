@@ -273,7 +273,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = () => {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className={`clay-input pl-10 pr-10 ${
-                      confirmPassword && confirmPassword !== password ? 'border-red-400 focus:border-red-500' : ''
+                      confirmPassword && confirmPassword !== password ? 'border-[rgb(var(--danger))] focus:border-[rgb(var(--danger))]' : ''
                     }`}
                     required
                   />

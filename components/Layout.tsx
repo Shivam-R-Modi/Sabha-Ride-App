@@ -136,7 +136,13 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
               // `--surface` in both themes. See tests/quality/theme-tokens.test.ts.
               className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all group relative btn-feedback ${isActive
                 ? 'bg-cream-400 text-saffron shadow-sm border border-hairline/10'
-                : 'text-coffee-500 hover:bg-cream-200 hover:text-coffee'
+                // `border border-transparent`, not "no border": with transition-all
+                // a border that appears only when selected animates its WIDTH from
+                // 0 to 1px on every click. Holding the width constant removes the
+                // animation entirely — and with it the 1px content nudge, since
+                // box-sizing is border-box so the icon and label shifted inward
+                // each time you changed tab.
+                : 'border border-transparent text-coffee-500 hover:bg-cream-200 hover:text-coffee'
                 }`}
             >
               <Icon size={22} className={`${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />

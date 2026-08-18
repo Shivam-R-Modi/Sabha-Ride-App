@@ -130,7 +130,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
                         disabled={disabled}
                         required={required}
                         className={`w-full px-4 py-3 rounded-r-xl border-2 border-mocha/20 focus:border-saffron focus:outline-none transition-colors text-coffee font-medium placeholder-mocha/30 disabled:opacity-50 ${
-                            validation.isValid ? 'pr-10 border-green-500/50' : ''
+                            validation.isValid ? 'pr-10 border-[rgb(var(--success))]/50' : ''
                         }`}
                     />
 

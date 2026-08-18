@@ -127,7 +127,7 @@ export const VehicleForm: React.FC<VehicleFormProps> = ({ vehicle, onClose, onSu
     };
 
     const commonInputClass = "w-full px-4 py-3 bg-surface border border-mocha/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-saffron focus:border-transparent transition-all";
-    const errorInputClass = "border-red-300 focus:ring-red-300";
+    const errorInputClass = "border-[rgb(var(--danger))]/60 focus:ring-[rgb(var(--danger))]/60";
     const labelClass = "block text-sm font-semibold text-coffee mb-1.5";
     const errorClass = "text-xs text-[rgb(var(--danger-text))] mt-1";
 
