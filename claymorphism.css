@@ -725,18 +725,41 @@
   left: 0;
   right: 0;
 
-  background: linear-gradient(180deg,
-      rgb(var(--surface)) 0%,
-      rgb(var(--surface-mid)) 100%);
+  /* FLAT --surface, deliberately not the nav's gradient. The nav starts at
+     --surface and ends at --surface-mid, so a drawer carrying the same gradient
+     ended on the darker stop and then the nav restarted on the lighter one —
+     a visible tonal step exactly at the join. Flat means the drawer's bottom
+     edge is the same colour as the nav's top edge, and the two read as one
+     continuous panel. */
+  background: rgb(var(--surface));
 
-  padding: 12px 16px;
+  padding: 8px 16px 12px;
   border-radius: 24px 24px 0 0;
 
-  box-shadow: 0 -8px 24px 0 rgb(var(--shadow-cast) / 0.12);
+  /* The drawer is now the top edge of the chrome, so it takes the lift and the
+     inset highlight the nav gives up below. */
+  box-shadow:
+    0 -8px 24px 0 rgb(var(--shadow-cast) / 0.12),
+    inset 0 4px 8px 0 rgb(var(--shadow-glow) / 0.9);
 
   /* `dropdown` rung — it must clear the two bottom banners, which sit on
      `sticky` in this same strip. See the ladder in tailwind.config.js. */
   z-index: 1000;
+}
+
+/* While the drawer is open the nav is no longer the topmost surface, and every
+   decoration that says "this is a top edge" has to go or the two stack as two
+   cards instead of one panel:
+
+     border-radius  left the nav's rounded corners cut into the drawer above,
+                    showing two notches of drawer colour at the join — the most
+                    visible part of the seam.
+     box-shadow     the upward cast darkened the drawer's bottom edge, drawing
+                    a line across the join, and the inset highlight drew a
+                    second, lighter one just under it. */
+.clay-bottom-nav.is-expanded {
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /* Hide on desktop */

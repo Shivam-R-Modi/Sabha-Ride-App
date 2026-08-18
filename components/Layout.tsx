@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LotusIcon } from '../constants';
 import { TabView, UserRole } from '../types';
 import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, ChevronDown, MoreHorizontal, UserCheck, Settings, Database } from 'lucide-react';
@@ -253,6 +253,16 @@ const DockButton: React.FC<{
   );
 };
 
+/** Past this many pixels of vertical travel, a touch was a swipe and not a tap. */
+const SWIPE_THRESHOLD = 24;
+
+/** The pull affordance. Decorative — the More button is the real control. */
+const GrabHandle: React.FC = () => (
+  <div className="flex justify-center pb-2" aria-hidden="true">
+    <span className="h-1 w-9 rounded-full bg-hairline/25" />
+  </div>
+);
+
 /**
  * The mobile dock.
  *
@@ -304,6 +314,49 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
     setExpanded(false);
   };
 
+  // ── Swipe up to open, down to close ──────────────────────────────────────
+  //
+  // An ADDITION to the More button, never a replacement: a gesture with no
+  // visible control is undiscoverable and unreachable by keyboard, so the
+  // button stays and does the same job.
+  const swipeStartY = useRef<number | null>(null);
+  const swiped = useRef(false);
+
+  const onTouchStart = (event: React.TouchEvent) => {
+    swipeStartY.current = event.touches[0]?.clientY ?? null;
+    swiped.current = false;
+  };
+
+  const onTouchEnd = (event: React.TouchEvent) => {
+    const start = swipeStartY.current;
+    swipeStartY.current = null;
+    const end = event.changedTouches[0]?.clientY;
+    if (start === null || end === undefined) return;
+
+    // A tap drifts a few pixels; anything past the threshold was meant.
+    const travelled = end - start;
+    if (travelled <= -SWIPE_THRESHOLD) {
+      swiped.current = true;
+      setExpanded(true);
+    } else if (travelled >= SWIPE_THRESHOLD) {
+      swiped.current = true;
+      setExpanded(false);
+    }
+  };
+
+  // A swipe that STARTS on a nav button still fires that button's click when
+  // the finger lifts — so swiping up from Fleet would open the drawer and
+  // navigate to Fleet at the same time. Capture phase runs before the button's
+  // own handler, which is the only place this can be stopped.
+  const onClickCapture = (event: React.MouseEvent) => {
+    if (!swiped.current) return;
+    swiped.current = false;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const gestures = hasOverflow ? { onTouchStart, onTouchEnd, onClickCapture } : {};
+
   return (
     <>
       {expanded && (
@@ -319,7 +372,8 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
             onClick={() => setExpanded(false)}
             aria-hidden="true"
           />
-          <div className="clay-bottom-drawer animate-in slide-in-from-bottom-4">
+          <div className="clay-bottom-drawer animate-in slide-in-from-bottom-4" {...gestures}>
+            <GrabHandle />
             <div className="max-w-md mx-auto grid grid-cols-3 gap-1">
               {overflow.map(item => (
                 <DockButton
@@ -336,7 +390,18 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
         </>
       )}
 
-      <nav className="clay-bottom-nav">
+      {/* `is-expanded` drops the rounded top, the cast shadow and the inset
+          highlight while the drawer is up — see claymorphism.css. Without it the
+          nav's own corners cut two notches into the drawer and its shadow drew a
+          line across the join, so the two read as stacked cards. */}
+      <nav className={`clay-bottom-nav${expanded ? ' is-expanded' : ''}`} {...gestures}>
+        {/* Positioned absolutely inside the nav's existing 8px of top padding,
+            so it adds NO height. --bottom-nav-h is what every other element
+            clears by, and growing the nav for a decoration would put the two
+            out of step. Hidden while open, where the drawer carries it. */}
+        {hasOverflow && !expanded && (
+          <span className="absolute left-1/2 -translate-x-1/2 top-0.5 h-1 w-9 rounded-full bg-hairline/25" aria-hidden="true" />
+        )}
         <div className="max-w-md mx-auto flex justify-around items-center h-16 gap-0.5">
           {docked.map(item => (
             <DockButton
@@ -355,7 +420,10 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
               className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${overflowIsActive || expanded ? 'text-saffron-800' : 'text-coffee-500'
                 }`}
             >
-              <div className={`p-1 rounded-xl transition-all ${overflowIsActive || expanded ? 'bg-cream-400' : ''}`}>
+              {/* The chip marks CURRENT, matching every other item. Tinting it
+                  merely because the drawer is open made More look selected while
+                  Dispatch also looked selected. */}
+              <div className={`p-1 rounded-xl transition-all ${overflowIsActive ? 'bg-cream-400' : ''}`}>
                 {expanded
                   ? <ChevronDown className="w-6 h-6 stroke-2" />
                   : <MoreHorizontal className={`w-6 h-6 ${overflowIsActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />}

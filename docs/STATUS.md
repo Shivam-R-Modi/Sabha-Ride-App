@@ -74,8 +74,8 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-CBEY3OUO.js` / css `index-FZb-2q1w.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **783** · rules **89** —
-**1380 total**.
+**Test suites, all green:** `functions` **508** · client **791** · rules **89** —
+**1388 total**.
 
 **Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
@@ -1162,6 +1162,43 @@ choice (1). Every new utility was confirmed present in the built stylesheet —
 **Not seen on a real phone.** The dock is mobile-only and behind auth, so the
 browser pane cannot reach it; the DOM structure and the theme colours are
 measured, the appearance is not.
+
+### Follow-up, same day: the seam, and swipe-to-open
+
+A screenshot from the phone showed the drawer and the dock reading as two
+stacked cards rather than one panel. Three things caused it, all of them the nav
+still claiming to be the top edge of the chrome while the drawer sat above it:
+
+- its `border-radius` cut two notches of drawer colour into the join — the most
+  visible part of the seam;
+- its upward cast shadow drew a dark line across the join;
+- its inset highlight drew a second, lighter line just under that.
+
+`.clay-bottom-nav.is-expanded` drops all three, and the drawer takes the lift and
+the highlight instead. The drawer is also **flat `--surface` rather than the
+nav's gradient**: carrying the same gradient meant it ended on `--surface-mid`
+and the nav restarted on `--surface`, a tonal step exactly at the join.
+
+**Swipe up to open, down to close**, past 24px of travel. It is an ADDITION to
+the More button, never a replacement — a gesture with no visible control is
+undiscoverable and unreachable by keyboard. A grab handle sits in the nav's
+existing 8px of top padding, positioned absolutely so it adds NO height;
+`--bottom-nav-h` is what everything else clears by, and growing the nav for a
+decoration would put the two out of step.
+
+The non-obvious part is the click guard. A swipe that STARTS on a nav button
+still fires that button's click when the finger lifts, so swiping up from Fleet
+would open the drawer *and* navigate to Fleet. A capture-phase handler on the
+nav stops it before the button's own handler — the only place it can be stopped.
+
+The grab handle first used `bg-coffee-400`, which the silent-CSS guard rejected:
+`coffee-400` is `--text-faint`, a TEXT-ramp token, and the guard bans those as
+backgrounds. Rather than widen its allowlist it moved to `--hairline`, which is
+what a decorative rule is for. No guard was touched.
+
+8 more tests (client **783 → 791**), four more deliberate breakages each
+confirmed to fail: no click guard, no swipe threshold, the nav keeping its top
+edge, and gestures attached to a dock with nothing to overflow.
 
 ### Deployed
 

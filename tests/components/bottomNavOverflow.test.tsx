@@ -20,7 +20,7 @@
  */
 
 import React from 'react';
-import { render, screen, act, within } from '@testing-library/react';
+import { render, screen, act, within, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../contexts/AuthContext', () => ({
@@ -167,5 +167,111 @@ describe('roles with nothing to overflow', () => {
 
         expect(dockLabels()).toEqual(['Home', 'My Rides', 'Profile']);
         expect(within(dock()).queryByRole('button', { name: /more destinations/i })).toBeNull();
+    });
+});
+
+describe('swipe to open and close', () => {
+    /**
+     * An ADDITION to the More button, never a replacement — a gesture with no
+     * visible control is undiscoverable and unreachable by keyboard.
+     *
+     * The case that needs a test is the third one: a swipe that STARTS on a nav
+     * button still fires that button's click when the finger lifts, so without
+     * the capture-phase guard, swiping up from Fleet would open the drawer AND
+     * navigate to Fleet.
+     */
+
+    const swipe = (element: HTMLElement, from: number, to: number) => act(() => {
+        fireEvent.touchStart(element, { touches: [{ clientY: from }] });
+        fireEvent.touchEnd(element, { changedTouches: [{ clientY: to }] });
+    });
+
+    it('opens when the dock is swiped up', () => {
+        renderLayout('manager');
+
+        swipe(dock(), 800, 740);
+
+        expect(drawer()).not.toBeNull();
+    });
+
+    it('closes when the drawer is swiped down', () => {
+        renderLayout('manager');
+        act(() => { moreButton().click(); });
+
+        swipe(drawer()!, 700, 780);
+
+        expect(drawer()).toBeNull();
+    });
+
+    it('ignores the few pixels a tap drifts', () => {
+        // Below the threshold. If this opened the drawer, every tap on a
+        // destination would open it on the way through.
+        renderLayout('manager');
+
+        swipe(dock(), 800, 790);
+
+        expect(drawer()).toBeNull();
+    });
+
+    it('a swipe starting on a destination does not also navigate to it', () => {
+        renderLayout('manager', 'home');
+        act(() => { screen.getByText('goto-home').click(); });
+
+        const fleet = within(dock()).getByText('Fleet').closest('button')!;
+        act(() => {
+            fireEvent.touchStart(fleet, { touches: [{ clientY: 800 }] });
+            fireEvent.touchEnd(fleet, { changedTouches: [{ clientY: 740 }] });
+            fireEvent.click(fleet);
+        });
+
+        // Drawer opened, but the tab did NOT change to Fleet.
+        expect(drawer()).not.toBeNull();
+        expect(within(dock()).getByText('Dispatch').closest('button')!.className).toMatch(/text-saffron-800/);
+        expect(fleet.className).not.toMatch(/text-saffron-800/);
+    });
+
+    it('a real tap still navigates', () => {
+        // The guard must only suppress clicks that followed a swipe.
+        renderLayout('manager');
+
+        const fleet = within(dock()).getByText('Fleet').closest('button')!;
+        act(() => {
+            fireEvent.touchStart(fleet, { touches: [{ clientY: 800 }] });
+            fireEvent.touchEnd(fleet, { changedTouches: [{ clientY: 800 }] });
+            fleet.click();
+        });
+
+        expect(fleet.className).toMatch(/text-saffron-800/);
+    });
+
+    it('does nothing on a dock with nothing to overflow', () => {
+        // A driver has three destinations. Swiping must not conjure a drawer.
+        renderLayout('driver');
+
+        swipe(dock(), 800, 720);
+
+        expect(drawer()).toBeNull();
+    });
+});
+
+describe('the drawer and the dock read as one panel', () => {
+    it('the dock gives up its top edge while the drawer is open', () => {
+        // Its rounded corners cut two notches of drawer colour into the join,
+        // and its cast shadow drew a line across it. That was the seam.
+        renderLayout('manager');
+        expect(dock().className).not.toMatch(/is-expanded/);
+
+        act(() => { moreButton().click(); });
+
+        expect(dock().className).toMatch(/is-expanded/);
+    });
+
+    it('takes its top edge back when the drawer closes', () => {
+        renderLayout('manager');
+        act(() => { moreButton().click(); });
+
+        act(() => { moreButton().click(); });
+
+        expect(dock().className).not.toMatch(/is-expanded/);
     });
 });
