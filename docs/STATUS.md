@@ -65,17 +65,17 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `a3fb098`, 2026-08-18. `main` = branch = production.
+Last deploy `4fcad12`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-CAaQLf5o.js` / css `index-BrrVnZ4V.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-W2cZdaQk.js` / css `index-B3yFn3wF.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **697** · rules **89** —
-**1294 total**.
+**Test suites, all green:** `functions` **508** · client **715** · rules **89** —
+**1312 total**.
 
 **Everything in this file is deployed.** `main` = `307c9dc` = production, local
 and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
@@ -759,6 +759,74 @@ vacuously forever. It now probes for a class `App.tsx` really contains.
 > always break the thing on purpose and watch it fail.
 
 `#e5e7eb` no longer appears anywhere in the shipped CSS.
+
+---
+
+## 2026-08-18: manager navigation reorganised
+
+Three things moved out of places nobody would look for them.
+
+| what | from | to |
+|---|---|---|
+| **Fleet** | a section in Setup's accordion | sidebar, 4th |
+| **Raw records** | a section in Setup's accordion | sidebar, **last, behind a divider** |
+| **Manager invites** | inside Setup → **Venue** | the **People** page |
+
+Setup keeps the three things that actually describe a sabha: calendar, ride window,
+venue. Fleet is an operational list touched most weeks, not configuration. Invites
+were filed under a heading about where drivers are routed to; granting someone
+manager rights is a people decision.
+
+### Records is last and separated on purpose
+
+It edits live documents holding riders' names, phone numbers and home addresses,
+with no undo, so it must not sit beside the button a manager presses every Friday.
+The `danger` warning Setup drew above it **moved with it**, verbatim, into
+`components/manager/ManagerRecords.tsx` — losing that while making the tool easier
+to reach would have been strictly worse than leaving it in the accordion.
+
+`ManagerRecords` exists as a wrapper for a second reason: `DatabaseConsole`'s root
+is `space-y-6 pb-12` with **no horizontal padding**, because it borrowed the
+accordion's `p-4`. Rendered directly it would run to both viewport edges.
+`FleetManagement` had the same gap and gains `max-w-3xl mx-auto` so it does not
+stretch the full width of a desktop window while every sibling page stays in one
+column.
+
+### The bottom nav went 5 → 7, and the labels are why it fits
+
+**Measured, not assumed.** At a 343px row — a real 375px iPhone minus the nav's
+padding — the seven labels total **306px**, so nothing truncates. But only because
+they read `Fleet` and `Records`: `RAW RECORDS` at `text-[10px]` uppercase does not
+fit, which is why the nav label differs from the old section title.
+
+One caveat left deliberately: last in the sidebar means bottom, but in the bottom
+nav last means **rightmost** — a comfortable thumb position. If that turns out to
+matter, moving it is one line.
+
+### Incidental cleanups this made possible
+
+- `NavItem` is a real type, so `id` is a `TabView` and the two `item.id as TabView`
+  casts are gone.
+- The `danger` machinery in Setup's `Section` went with Raw records — 8 references,
+  and that was its only caller. Restore from git if a genuinely destructive setting
+  ever lands there.
+- `preview/cloud-functions-stub.ts` gained `createManagerInvite` and lost
+  `geocodeAddressViaCloud`, which no longer exists in the real module.
+
+### Two traps the tests pin
+
+- **Invites must render OUTSIDE People's `total === 0` branch.** That branch returns
+  an "All caught up" card *instead of* the sections, so nesting invites there would
+  make the feature vanish for most of the week and look deleted. Verified by moving
+  it in and watching the test fail.
+- **Every nav id needs a `case` in App.tsx.** A nav item with no case renders
+  `ManagerDashboard`, so the button "works" and shows the wrong page. Also verified
+  by deletion.
+
+> Self-correction worth recording: the first attempt appended "Invite a manager
+> below." to People's subtitle, and an existing test caught it. That was the right
+> call — the sentence made the approval-queue line a run-on when the invites section
+> already carries its own heading. Reverted rather than updating the test to match.
 
 ---
 
