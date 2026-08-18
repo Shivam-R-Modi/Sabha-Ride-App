@@ -23,6 +23,20 @@
         "--strictPort"
       ],
       "port": 4174
+    },
+    {
+      "name": "prod-build",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--outDir",
+        "dist",
+        "--port",
+        "4175",
+        "--strictPort"
+      ],
+      "port": 4175
     }
   ]
 }
