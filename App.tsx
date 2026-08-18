@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { TabView, Driver } from './types';
+import React, { useState } from 'react';
+
 import { SplashScreen } from './components/auth/SplashScreen';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { EmailVerificationScreen } from './components/auth/EmailVerificationScreen';

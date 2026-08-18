@@ -40,7 +40,7 @@ vi.mock('firebase-admin', () => ({
 vi.mock('../utils/authz', () => ({
     assertApprovedManager: (d: any, u: string, a: string) => assertApprovedManager(d, u, a),
 }));
-vi.mock('../utils/audit', () => ({ writeAuditLog: (...a: any[]) => writeAuditLog() }));
+vi.mock('../utils/audit', () => ({ writeAuditLog: (..._a: any[]) => writeAuditLog() }));
 
 import { updateSabhaRecurrence, readRecurrence, describeRule, RECURRENCE_DOC } from './sabhaRecurrence';
 

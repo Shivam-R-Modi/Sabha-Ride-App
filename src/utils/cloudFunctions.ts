@@ -3,10 +3,11 @@
 // Helper to call Firebase Cloud Functions
 // ============================================
 
-import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '@/firebase/config';
 import type { PresenceClaim } from './presence';
 import type { RecurrenceRule } from './recurrence';
+import { codeOf, messageOf } from './errorText';
 
 const functions = getFunctions(app);
 
@@ -23,14 +24,20 @@ async function callFunction<T = any>(name: string, data?: any): Promise<T> {
         return result.data as T;
     } catch (error: unknown) {
         console.error(`Error calling ${name}:`, error);
-        // Log more details about the error
-        if (error?.message) {
-            console.error(`${name} error message:`, error.message);
-        }
-        if (error?.code) {
-            console.error(`${name} error code:`, error.code);
-        }
-        throw new Error(error.message || `Failed to call ${name}`);
+
+        // Narrowed through the shared helper rather than `error?.message` on an
+        // `unknown`, which did not compile and was five of the standing typecheck
+        // errors. Behaviour is unchanged, and one part of it is load-bearing: the
+        // SERVER'S message is what gets rethrown. studentReadyToLeave relies on
+        // that — "your home address is not set" reaches the rider instead of a
+        // generic "please try again" they cannot act on.
+        const message = messageOf(error);
+        const code = codeOf(error);
+
+        if (message) console.error(`${name} error message:`, message);
+        if (code) console.error(`${name} error code:`, code);
+
+        throw new Error(message || `Failed to call ${name}`);
     }
 }
 

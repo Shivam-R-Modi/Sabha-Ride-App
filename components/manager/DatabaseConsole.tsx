@@ -1,21 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import {
-  Database,
-  Search,
-  Plus,
-  Edit2,
-  Trash2,
-  ShieldAlert,
-  Loader2,
-  RefreshCw,
-  FileText,
-  Users,
-  Car,
-  Navigation,
-  CheckCircle2,
-  Clock,
-  Filter
-} from 'lucide-react';
+import { Database, Search, Plus, Edit2, Trash2, ShieldAlert, Loader2, FileText, Users, Car, Navigation, Clock, Filter } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAdminDatabase, SupportedCollection } from '../../hooks/useAdminDatabase';
 import { DocumentEditorModal } from './DocumentEditorModal';

@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, onSnapshot, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { User, Driver, UserRole } from '../types';
 import { grantedRoles } from '../src/roles';
@@ -35,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const profileUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // Subscribe to real-time profile updates via onSnapshot
-  const subscribeToProfile = (uid: string, authUser?: import('firebase/auth').User | null) => {
+  const subscribeToProfile = (uid: string, _authUser?: import('firebase/auth').User | null) => {
     // Clean up any existing listener
     if (profileUnsubscribeRef.current) {
       profileUnsubscribeRef.current();

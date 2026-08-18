@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StudentRequest, RideStatus } from '../../types';
+import React, { useState } from 'react';
+import { StudentRequest } from '../../types';
 import {
   Search, CheckCircle, ChevronDown, ChevronUp, MapPin, Clock, ArrowUpDown,
   Check, Trash2, UserPlus, AlertCircle, Users

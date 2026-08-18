@@ -8,6 +8,7 @@ import { createManagerInvite, CreateInviteResult } from '../../src/utils/cloudFu
 import {
     isUsableDuration, DROPOFF_LEAD_MINUTES, PICKUP_LEAD_DAYS,
 } from '../../src/constants/schedule';
+import { messageOf } from '../../src/utils/errorText';
 
 /** Must match INVITE_TTL_DAYS in functions/src/utils/invites.ts. */
 const INVITE_TTL_DAYS = 7;
@@ -115,7 +116,7 @@ export const LocationSettings: React.FC = () => {
             setTimeout(() => setSavedSuccess(false), 3000);
         } catch (err: unknown) {
             console.error('[LocationSettings] Save error:', err);
-            setErrorMsg(err.message || 'Failed to save. Are you a manager?');
+            setErrorMsg(messageOf(err, 'Failed to save. Are you a manager?'));
         } finally {
             setSaving(false);
         }

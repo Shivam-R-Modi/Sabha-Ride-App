@@ -8,7 +8,7 @@ interface EmailVerificationScreenProps {
 }
 
 export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = ({ onBack }) => {
-    const { currentUser, logout, refreshProfile } = useAuth();
+    const { currentUser, refreshProfile } = useAuth();
     const [cooldown, setCooldown] = useState(0);
     const [isResending, setIsResending] = useState(false);
     const [isChecking, setIsChecking] = useState(false);

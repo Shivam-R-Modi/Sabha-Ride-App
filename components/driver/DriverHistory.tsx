@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Ride } from '../../types';
-import { CheckCircle2, Calendar, Users, Navigation, Clock, Loader2, Car } from 'lucide-react';
+import { CheckCircle2, Calendar, Users, Navigation, Loader2, Car } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';

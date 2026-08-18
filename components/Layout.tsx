@@ -1,20 +1,7 @@
 import React from 'react';
 import { LotusIcon } from '../constants';
 import { TabView, UserRole } from '../types';
-import {
-  Home,
-  Car,
-  User as UserIcon,
-  History,
-  LayoutDashboard,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-  Menu,
-  ShieldCheck,
-  UserCheck,
-  Settings
-} from 'lucide-react';
+import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { RoleSwitcher } from './RoleSwitcher';
@@ -71,7 +58,7 @@ export const ResponsiveLayout: React.FC<LayoutProps> = ({ children, role }) => {
   );
 };
 
-const MobileHeader: React.FC<{ userName: string; role: UserRole }> = ({ userName, role }) => {
+const MobileHeader: React.FC<{ userName: string; role: UserRole }> = () => {
   const { logout } = useAuth();
 
   return (

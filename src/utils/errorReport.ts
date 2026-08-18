@@ -28,6 +28,7 @@
 
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../../firebase/config';
+import { messageOf } from './errorText';
 
 /** Truncation limits. A stack is diagnostic, not an archive. */
 export const MAX_MESSAGE = 500;
@@ -84,7 +85,8 @@ export function buildErrorReport(
     context: { pathname: string; userAgent: string; uid: string | null; bundle: string | null },
 ): ClientErrorReport {
     const err = error instanceof Error ? error : null;
-    const raw = err?.message ?? (typeof error === 'string' ? error : String(error ?? 'Unknown error'));
+    // Same narrowing rule as everywhere else — see src/utils/errorText.ts.
+    const raw = messageOf(error, 'Unknown error');
 
     return {
         kind,

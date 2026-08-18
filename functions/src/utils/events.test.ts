@@ -10,7 +10,6 @@ vi.mock('firebase-admin', () => ({
     }),
 }));
 
-
 const ZONE = 'America/New_York';
 const boston = (day: string, hhmm: string) => new Date(`2026-08-${day}T${hhmm}:00-04:00`);
 
@@ -127,9 +126,9 @@ function fakeDb(
     return { db, created, marked, store };
 }
 
-const scheduled = (date: string, extra: Record<string, any> = {}) => ({
-    date, startTime: '19:00', endTime: '22:00', status: 'scheduled', ...extra,
-});
+// A `scheduled(date)` helper lived here with zero call sites. It built a
+// document that WAS a gathering, which is the model this file was rewritten away
+// from — every case below now works through the rule plus exceptions.
 
 /**
  * A document is an EXCEPTION now, not a gathering.

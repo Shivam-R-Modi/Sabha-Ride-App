@@ -1,6 +1,6 @@
 import React from 'react';
 import { Ride, RideStatus } from '../types';
-import { Phone, MessageSquare, MapPin, Navigation, Clock } from 'lucide-react';
+import { Phone, MessageSquare, Clock } from 'lucide-react';
 
 interface RideStatusCardProps {
   ride: Ride;

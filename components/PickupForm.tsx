@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, Driver } from '../types';
-import { MapPin, ChevronLeft, CheckCircle2, AlertCircle, Minus, Plus, Users } from 'lucide-react';
+import { MapPin, ChevronLeft, AlertCircle, Minus, Plus, Users } from 'lucide-react';
 import { createRideRequest } from '../hooks/useRides';
 import { MIN_SEATS, MAX_SEATS, DEFAULT_SEATS } from '../src/constants/seats';
 import { useSettings, formatTime } from '../hooks/useSettings';

@@ -22,15 +22,31 @@ const roleConfig: Record<UserRole, { label: string; icon: React.ReactNode; color
 };
 
 export const RoleSwitcher: React.FC = () => {
-    const { activeRole, setActiveRole, getAvailableRoles, userProfile } = useAuth();
+    const { activeRole, setActiveRole, getAvailableRoles } = useAuth();
     const availableRoles = getAvailableRoles();
 
-    // Don't show switcher if only one role available (students)
+    // Every hook runs before the early return below. It used to sit after it,
+    // which is a `react-hooks/rules-of-hooks` violation: `availableRoles` comes
+    // from the live user document, so this component rendered ZERO hooks for a
+    // rider with one role and ONE the moment a manager granted them `driver`.
+    //
+    // MEASURED, so the next person does not have to guess: React 19 tolerates
+    // this today. Going from the early return to calling `useState` throws
+    // nothing and logs nothing — the state is simply re-initialised. So this was
+    // latent fragility, not a live crash, and the fix is cheap insurance rather
+    // than an incident. It is still worth doing: hook order that depends on data
+    // is behaviour React explicitly does not support, and StrictMode's double
+    // render and future concurrent features are exactly where it would surface.
+    //
+    // Found by `npm run lint` on the day the project first had a config to run.
+    const [isOpen, setIsOpen] = React.useState(false);
+
+    // Nothing to switch between, so nothing to show. Safe here: the hooks above
+    // have already run, so the count is the same either way.
     if (availableRoles.length <= 1) {
         return null;
     }
 
-    const [isOpen, setIsOpen] = React.useState(false);
     const currentConfig = activeRole ? roleConfig[activeRole] : null;
 
     const handleRoleSelect = (role: UserRole) => {

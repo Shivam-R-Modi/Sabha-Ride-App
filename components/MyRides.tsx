@@ -10,7 +10,7 @@ interface MyRidesProps {
   loadingMore?: boolean;
 }
 
-const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride, isHistory = false }) => {
+const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride }) => {
   // "Details ›" had no onClick at all. There is no ride-detail screen to route
   // to, but the ride document already carries the pickup address and the
   // vehicle — so the button reveals them in place rather than promising a

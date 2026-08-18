@@ -10,6 +10,7 @@ import { Sheet } from '../shared/Sheet';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { seatsOnRide } from '../../src/constants/seats';
+import { messageOf } from '../../src/utils/errorText';
 
 interface ActiveRideProps {
     ride: {
@@ -77,7 +78,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
 
     // Calculate progress
     const pickupDropoffWaypoints = ride.route.filter(wp => wp.type === 'pickup' || wp.type === 'dropoff');
-    const visitedCount = pickupDropoffWaypoints.filter((wp, idx) => {
+    const visitedCount = pickupDropoffWaypoints.filter((wp) => {
         const routeIdx = ride.route.indexOf(wp);
         return visitedWaypoints.has(`${wp.type}-${routeIdx}`);
     }).length;
@@ -155,7 +156,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
             );
         } catch (err: unknown) {
             console.error('Error completing ride:', err);
-            setError(err.message || 'Failed to complete ride. Please try again.');
+            setError(messageOf(err, 'Failed to complete ride. Please try again.'));
         } finally {
             setIsCompleting(false);
         }
@@ -290,7 +291,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
             <div className="px-4 mt-6">
                 <h3 className="text-sm font-bold text-coffee-500 uppercase tracking-wider mb-3">Students</h3>
                 <div className="space-y-3">
-                    {ride.students.map((student, idx) => {
+                    {ride.students.map((student) => {
                         const routePoint = ride.route.find(r => r.studentId === student.id);
                         const routeIdx = routePoint ? ride.route.indexOf(routePoint) : -1;
                         const isVisited = routeIdx >= 0 ? visitedWaypoints.has(`${routePoint?.type}-${routeIdx}`) : false;

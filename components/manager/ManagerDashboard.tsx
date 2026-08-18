@@ -1,25 +1,9 @@
 import React, { useState } from 'react';
 import { RequestTable } from './RequestTable';
-import {
-  Bell,
-  Car,
-  X,
-  Users,
-  Phone,
-  MapPin,
-  Clock,
-  User,
-  CheckCircle2,
-  AlertCircle,
-  Navigation,
-  Download,
-  UserMinus,
-  LogOut
-} from 'lucide-react';
+import { Car, X, Users, Phone, MapPin, Clock, CheckCircle2, Navigation, UserMinus, LogOut } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePendingDrivers, usePendingRiders, updateUserStatus, useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, useWeeklyAttendanceCount, downloadAttendanceCSV, returnStudentToPool, setDriverAvailability } from '../../hooks/useFirestore';
-import { Driver, Ride, StudentRequest, User as UserType } from '../../types';
-import { useCurrentEvent } from '../../hooks/useCurrentEvent';
+import { useAutoDispatch, usePendingRequests, useAllActiveRides, assignRideToDriver, unassignRide, useAvailableDrivers, returnStudentToPool, setDriverAvailability } from '../../hooks/useFirestore';
+import { Driver, Ride } from '../../types';
 import { useConfirm } from '../shared/useConfirm';
 import { useToast } from '../../contexts/ToastContext';
 import { seatsOnRide } from '../../src/constants/seats';
@@ -161,7 +145,6 @@ const RideAssignmentCard: React.FC<{
   );
 };
 
-
 // Empty State Component
 const EmptyState: React.FC<{ title: string; message: string }> = ({ title, message }) => (
   <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
@@ -174,7 +157,7 @@ const EmptyState: React.FC<{ title: string; message: string }> = ({ title, messa
 );
 
 export const ManagerDashboard: React.FC = () => {
-  const { currentUser, userProfile, logout } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   // Two tabs, not three. The Database Console moved to Setup → Raw records: it
   // edits live documents with none of the app's checks, and had no business
   // being a peer of Friday-evening dispatch.
@@ -193,17 +176,14 @@ export const ManagerDashboard: React.FC = () => {
 
   useAutoDispatch();
 
-  // Attendance is per gathering, keyed by the server-published eventId.
-  //
-  // The venue used to be read here too (settings/main, overridden by the
-  // gathering) purely so the map had something to plot relative to. With the map
-  // gone this screen has no use for it: every venue-dependent surface —
-  // LocationSettings, the sabha calendar, the rider's pickup form, the driver's
-  // route — reads it where it is used.
-  const { eventId } = useCurrentEvent();
+  // useCurrentEvent was read here for the attendance CSV, which now lives in
+  // ManagerReports. Nothing on this screen is per-gathering any more, so the
+  // subscription went with it — as did the venue read before it, for the same
+  // reason: every venue-dependent surface reads it where it is used.
 
-  const { pendingDrivers } = usePendingDrivers();
-  const { pendingRiders } = usePendingRiders();
+  // usePendingDrivers/usePendingRiders were called here and never read — two live
+  // Firestore listeners on every manager's dashboard, feeding nothing. The
+  // approvals UI is components/manager/ManagerPeople.tsx, which subscribes itself.
   const { requests: pendingRequests, loading: requestsLoading } = usePendingRequests();
   const { rides: activeRides } = useAllActiveRides();
   const { drivers: availableDrivers, loading: driversLoading } = useAvailableDrivers();
@@ -255,22 +235,9 @@ export const ManagerDashboard: React.FC = () => {
     [pendingRequests],
   );
 
-  // Weekly attendance count for download badge
-  const { yesCount: attendanceYesCount, loading: attendanceCountLoading } = useWeeklyAttendanceCount();
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  const handleDownloadAttendance = async () => {
-    if (isDownloading) return;
-    setIsDownloading(true);
-    try {
-      await downloadAttendanceCSV(eventId!);
-    } catch (error) {
-      console.error('Error downloading attendance:', error);
-      toast.error(error instanceof Error ? error.message : 'Could not download the attendance list.');
-    } finally {
-      setIsDownloading(false);
-    }
-  };
+  // The attendance count and its CSV download used to live here too. Both moved
+  // to components/manager/ManagerReports.tsx; these copies were left behind and
+  // wired to nothing.
 
   /**
    * Opens the picker. It used to take `availableDrivers.find(...)` — whoever
@@ -393,7 +360,6 @@ export const ManagerDashboard: React.FC = () => {
     }
   };
 
-
   const handleBulkAssign = async (ids: string[]) => {
     const available = availableDrivers.find(d => d.status === 'available');
     if (!available) {
@@ -436,59 +402,14 @@ export const ManagerDashboard: React.FC = () => {
   // does not exist yet. Making the Assign button correct meant fixing
   // assignRideToDriver instead — see hooks/useRides.ts.
 
-  const handleApproveDriver = async (driverId: string) => {
-    try {
-      await updateUserStatus(driverId, 'approved');
-      toast.success('Driver approved. They can now volunteer.');
-    } catch (error: any) {
-      console.error('Error approving driver:', error);
-      toast.error(`Could not approve the driver: ${error?.message || error}`);
-    }
-  };
-
-  const handleDenyDriver = async (driverId: string) => {
-    if (await ask({
-      title: 'Deny this driver?',
-      message: 'They will not be able to volunteer until approved.',
-      confirmLabel: 'Deny',
-      destructive: true,
-    })) {
-      try {
-        await updateUserStatus(driverId, 'rejected');
-        toast.success('Driver denied.');
-      } catch (error: any) {
-        console.error('Error denying driver:', error);
-        toast.error(`Could not deny the driver: ${error?.message || error}`);
-      }
-    }
-  };
-
-  const handleApproveRider = async (riderId: string) => {
-    try {
-      await updateUserStatus(riderId, 'approved');
-      toast.success('Rider approved. They can now request rides.');
-    } catch (error: any) {
-      console.error('Error approving rider:', error);
-      toast.error(`Could not approve the rider: ${error?.message || error}`);
-    }
-  };
-
-  const handleDenyRider = async (riderId: string) => {
-    if (await ask({
-      title: 'Deny this rider?',
-      message: 'They will not be able to request rides until approved.',
-      confirmLabel: 'Deny',
-      destructive: true,
-    })) {
-      try {
-        await updateUserStatus(riderId, 'rejected');
-        toast.success('Rider denied.');
-      } catch (error: any) {
-        console.error('Error denying rider:', error);
-        toast.error(`Could not deny the rider: ${error?.message || error}`);
-      }
-    }
-  };
+  // handleApproveDriver / handleDenyDriver / handleApproveRider / handleDenyRider
+  // were defined here and referenced nowhere — ~55 lines of approve/deny logic
+  // with no button attached, left over from before people management was split
+  // into components/manager/ManagerPeople.tsx. That component owns the flow and
+  // calls the same `updateUserStatus`, so nothing is lost by deleting these.
+  //
+  // Worth stating plainly: this was NOT a missing feature. Approvals work. It was
+  // a second, unreachable copy of them.
 
   return (
     <div className="app-panel flex flex-col bg-cream relative overflow-hidden">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, Users, Navigation, Loader2, AlertCircle, Car, Sparkles, Home } from 'lucide-react';
+import { messageOf } from '../../src/utils/errorText';
 
 interface CompletionScreenProps {
     rideId: string;
@@ -27,7 +28,7 @@ interface ConfettiPiece {
 }
 
 export const CompletionScreen: React.FC<CompletionScreenProps> = ({
-    rideId,
+    // `rideId` is passed but not shown — the heading uses the short `rideNumber`.
     rideNumber,
     stats,
     driverStats,
@@ -58,7 +59,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
         try {
             onAssignNext();
         } catch (err: unknown) {
-            setError(err.message || 'Failed to get next assignment.');
+            setError(messageOf(err, 'Failed to get next assignment.'));
         } finally {
             setIsAssigning(false);
         }
@@ -70,7 +71,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
         try {
             await onDoneForToday();
         } catch (err: unknown) {
-            setError(err.message || 'Failed to finish for today.');
+            setError(messageOf(err, 'Failed to finish for today.'));
         } finally {
             setIsFinishing(false);
         }

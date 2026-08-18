@@ -105,7 +105,11 @@ export function useAdminDatabase(targetCollection: SupportedCollection) {
     managerInfo: { id: string; name: string }
   ) => {
     try {
-      const updates = { ...data, updatedAt: new Date().toISOString() };
+      // Annotated, because spreading a `Record<string, any>` into an object
+      // literal loses the index signature — TypeScript inferred plain
+      // `{ updatedAt: string }`, so the geocode fields assigned below did not
+      // compile. Three of the standing typecheck errors were this one line.
+      const updates: Record<string, any> = { ...data, updatedAt: new Date().toISOString() };
 
       // Geocode address if user or setting address field was updated
       if (data.address && typeof data.address === 'string' && data.address.trim().length > 5) {

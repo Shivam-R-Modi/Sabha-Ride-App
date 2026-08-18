@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Driver, AssignmentType, RideStudent, Waypoint, Vehicle } from '../../types';
+import { RideStudent, Waypoint } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { AssignmentPreview } from './AssignmentPreview';
 import { ActiveRide } from './ActiveRide';
@@ -8,13 +8,7 @@ import { CompletionScreen } from './CompletionScreen';
 import { handBackVehicle, setDriverAvailability, useAvailableVehicles, assignVehicleToDriver } from '../../hooks/useFirestore';
 import { collection, doc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import {
-    globalAssignDriver,
-    driverDoneForToday,
-    AssignStudentsResult,
-    GlobalAssignResult,
-    CompleteRideResult
-} from '../../src/utils/cloudFunctions';
+import { globalAssignDriver, driverDoneForToday, AssignStudentsResult, GlobalAssignResult } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl } from '../../src/utils/googleMaps';
 import { endShiftWithWarning } from '../../src/utils/endShift';
 import { useConfirm } from '../shared/useConfirm';
@@ -28,7 +22,7 @@ type DriverViewState =
     | 'completed';          // Show CompletionScreen after ride
 
 export const DriverDashboard: React.FC = () => {
-    const { userProfile, currentUser, refreshProfile, activeRole } = useAuth();
+    const { userProfile, currentUser, refreshProfile } = useAuth();
     const [isAssigning, setIsAssigning] = useState(false);
     const [rideContext, setRideContext] = useState<{ rideType: 'home-to-sabha' | 'sabha-to-home' | null; displayText: string } | null>(null);
     const [viewState, setViewState] = useState<DriverViewState>('dashboard');
@@ -57,7 +51,6 @@ export const DriverDashboard: React.FC = () => {
     const { vehicles: availableVehicles, loading: vehiclesLoading } = useAvailableVehicles();
 
     // Cast userProfile to Driver to safely access driver-specific properties
-    const driverProfile = activeRole === 'driver' ? (userProfile as Driver) : null;
     const isAvailable = userProfile?.status === 'available';
 
     // Subscribe to driver's active ride in Firestore (preserves state across role switches)

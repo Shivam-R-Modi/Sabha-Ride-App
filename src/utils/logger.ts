@@ -4,7 +4,6 @@
  * Prevents sensitive data logging in production
  */
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogContext {
   [key: string]: any;

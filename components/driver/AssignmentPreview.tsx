@@ -4,6 +4,7 @@ import { startRide, releaseAssignment } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
 import { useConfirm } from '../shared/useConfirm';
 import { seatsOf } from '../../src/constants/seats';
+import { messageOf } from '../../src/utils/errorText';
 
 interface AssignmentPreviewProps {
     assignment: {
@@ -82,7 +83,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
             onAccept();
         } catch (err: unknown) {
             console.error('Error starting ride:', err);
-            setError(err.message || 'Failed to start ride. Please try again.');
+            setError(messageOf(err, 'Failed to start ride. Please try again.'));
         } finally {
             setIsAccepting(false);
         }
@@ -105,7 +106,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
             onRelease();
         } catch (err: unknown) {
             console.error('Error releasing assignment:', err);
-            setError(err.message || 'Failed to release assignment. Please try again.');
+            setError(messageOf(err, 'Failed to release assignment. Please try again.'));
         } finally {
             setIsReleasing(false);
         }

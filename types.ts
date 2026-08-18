@@ -153,6 +153,8 @@ export type RideStatus = 'requested' | 'assigned' | 'driver_en_route' | 'arrivin
 export interface RideStudent {
   id: string;
   name: string;
+  /** Profile picture, when the rider has one. Rendered by components/RideStatus.tsx. */
+  avatarUrl?: string;
   phone?: string;
   studentPhone?: string;
   location: GeoLocation;
@@ -221,6 +223,13 @@ export interface Ride {
   // Additional properties from legacy/firestore structure
   studentId?: string;
   studentName?: string;
+  /**
+   * The rider's phone, denormalised onto the ride so a driver or manager can call
+   * without a second read. Written by hooks/useRides.ts and by
+   * studentReadyToLeave, and read by ManagerDashboard's call button — it was
+   * simply missing from this interface, which is why that button needed a cast.
+   */
+  studentPhone?: string;
   timeSlot?: string;
   pickupAddress?: string;
   driver?: Driver;

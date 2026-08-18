@@ -1,18 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import {
-    Download,
-    Users,
-    Car,
-    TrendingUp,
-    Calendar,
-    CheckCircle2,
-    XCircle,
-    Clock,
-    FileSpreadsheet,
-    Loader2
-} from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Download, Users, Car, TrendingUp, Calendar, CheckCircle2, XCircle, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { db } from '../../firebase/config';
-import { collection, query, getDocs, where, orderBy, limit } from 'firebase/firestore';
+import { collection, query, getDocs, where } from 'firebase/firestore';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { downloadAttendanceCSV } from '../../hooks/useFirestore';
 import '../../claymorphism.css';
@@ -48,13 +37,12 @@ export const ManagerReports: React.FC = () => {
     // with what students wrote whatever timezone their devices are in.
     const { eventId } = useCurrentEvent();
 
-    useEffect(() => {
-        if (eventId) fetchStats();
-        // Refetch when the gathering rolls over, so the numbers are never for
-        // last week's sabha.
-    }, [eventId]);
-
-    const fetchStats = async () => {
+    // `fetchStats` is memoised on `eventId` so it can be a real dependency
+    // below. Without useCallback it is a new function every render, and listing
+    // it would refetch on every render — which is why the dependency was
+    // originally just omitted. Memoising is the honest fix: the effect now
+    // declares everything it uses.
+    const fetchStats = useCallback(async () => {
         setLoading(true);
         try {
             // Attendance for the current gathering, keyed by the eventId the
@@ -116,7 +104,13 @@ export const ManagerReports: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [eventId]);
+
+    // Refetch when the gathering rolls over, so the numbers are never for last
+    // week's sabha.
+    useEffect(() => {
+        if (eventId) fetchStats();
+    }, [eventId, fetchStats]);
 
     const handleDownloadAttendance = async () => {
         if (isDownloading) return;

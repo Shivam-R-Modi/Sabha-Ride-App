@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     CountryCode,
     SUPPORTED_COUNTRIES,
@@ -32,14 +32,27 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
     const [selectedCountry, setSelectedCountry] = useState<CountryCode>(parsed.country);
     const [rawDigits, setRawDigits] = useState<string>(parsed.localDigits);
 
-    // Re-sync when value changes externally (and differs from current internal state)
+    /**
+     * The digits as they stand, readable without becoming a dependency.
+     *
+     * The sync below compares against them so it does not clobber what someone is
+     * mid-way through typing — but it must run when the PROP changes, not on every
+     * keystroke. Listing `rawDigits` as a dependency would do the latter and fight
+     * the caret; omitting it silently is what the lint rule objects to, correctly.
+     * A ref is the honest third option: the effect reads the current value and
+     * still depends only on `value`.
+     */
+    const rawDigitsRef = useRef(rawDigits);
+    rawDigitsRef.current = rawDigits;
+
+    // Re-sync when `value` changes externally and differs from what is typed.
     useEffect(() => {
         if (!value) {
             setRawDigits('');
             return;
         }
         const updated = parsePhoneNumber(value);
-        if (updated.localDigits !== rawDigits) {
+        if (updated.localDigits !== rawDigitsRef.current) {
             setSelectedCountry(updated.country);
             setRawDigits(updated.localDigits);
         }

@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { Ride, DriverAssignment } from '../types';
 import { handleSnapshotError } from '../src/utils/firestoreErrors';
 import { useSettings } from './useSettings';
@@ -118,7 +118,20 @@ export const useDriverAssignments = (driverId: string) => {
         }, handleSnapshotError('useDriverDashboard', () => setLoading(false)));
 
         return unsubscribe;
-    }, [driverId]);
+        // `venueAddress` belongs here, and leaving it out was a real bug rather
+        // than a lint technicality.
+        //
+        // It resolves through useSettings(), which starts at
+        // DEFAULT_SABHA_LOCATION and only becomes the real venue once the
+        // settings snapshot lands. With `[driverId]` alone this effect captured
+        // whatever the address was at subscribe time — in practice the
+        // placeholder — and never re-ran, so a drop-off ride carrying no venue of
+        // its own showed the driver 360 Huntington Ave for the life of the
+        // listener. That placeholder was live in production until 2026-08-18.
+        //
+        // Re-subscribing on a venue change is cheap: it is a string, so this fires
+        // when settings first load and again only if a manager moves the venue.
+    }, [driverId, venueAddress]);
 
     return { assignments, loading };
 };
