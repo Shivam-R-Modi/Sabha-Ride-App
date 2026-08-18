@@ -65,17 +65,17 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `4fcad12`, 2026-08-18. `main` = branch = production.
+Last deploy `a70b9eb`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-W2cZdaQk.js` / css `index-B3yFn3wF.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-LibDBCX6.js` / css `index-CtU1YqIi.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **715** · rules **89** —
-**1312 total**.
+**Test suites, all green:** `functions` **508** · client **722** · rules **89** —
+**1319 total**.
 
 **Everything in this file is deployed.** `main` = `307c9dc` = production, local
 and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
@@ -827,6 +827,66 @@ matter, moving it is one line.
 > below." to People's subtitle, and an existing test caught it. That was the right
 > call — the sentence made the approval-queue line a run-on when the invites section
 > already carries its own heading. Reverted rather than updating the test to match.
+
+---
+
+## 2026-08-18: four classes of silently-dead CSS
+
+All four came out of **one screenshot** of the Raw records page. None errored, none
+warned, and every one looked fine in light mode.
+
+| # | shape | count | effect |
+|---|---|---|---|
+| 1 | `border-hairline/20/60` — two `/alpha` modifiers | 3 | not a Tailwind class, so **no rule at all** — the border never existed |
+| 2 | `clay-btn-cta` — never defined | 2 | buttons rendered as **unstyled text** |
+| 3 | `bg-coffee text-white` — a TEXT token as a background | 6 | **1.28:1** in dark; white on near-white |
+| 4 | `overflow-x-auto` without `no-scrollbar` | 1 | a solid **orange bar**: the global thumb is a 10px saffron gradient |
+
+### Why #3 is the interesting one
+
+`bg-coffee` is `--text-strong`, and **the text ramp inverts between themes** —
+`61 41 20` in light, `232 227 220` in dark. So `text-white` on it measured 13.76:1
+in light and **1.28:1** in dark, against a 4.5 floor. That was the unreadable active
+tab in the screenshot, both toasts (including the UpdateBanner written the same day,
+where the pattern was copied without checking), a `RideWindowControl` button, and the
+bulk-delete bar — whose secondary text was `text-coffee-400` *on* `bg-coffee`, low
+contrast in **both** themes.
+
+Fixed as an **inverted pair**: `bg-coffee text-cream`, where both tokens flip
+together — **13.07:1** light, **13.82:1** dark. `RideStatus` keeps a bare `bg-coffee`
+dot and is allowlisted: with nothing rendered on it, "the strongest text colour" is
+exactly the right maximum-contrast mark.
+
+### Also: the Records page had two titles
+
+`DatabaseConsole`'s banner repeated the page heading directly beneath
+`ManagerRecords`' `<h1>` — a consequence of moving it out of Setup without stripping
+the old header. The banner now carries only what that component alone can say: the
+mode badge and the action.
+
+### The guards, and how the first draft of them was wrong
+
+`tests/quality/silent-css.test.ts`, one guard per shape. Two properties matter more
+than the rules themselves:
+
+**It strips comments before scanning.** Every fix left the offending string in a
+comment explaining it, and this project has *twice* shipped a guard that matched its
+own prose — a Tailwind class named in a comment got re-emitted into the bundle, and a
+key name in a comment failed a "nothing reads this" test.
+
+**Its first draft passed with two of the four bugs reintroduced**, and only
+reintroducing them found it:
+
+- the span reader worked **line by line**, so a multi-line template literal
+  (`` className={`clay-btn-cta … ${ ``) was invisible and guard 2 passed with the bug
+  in plain sight. It now reads whole-file spans.
+- guard 4 allowlisted by **file**, and `DatabaseConsole` holds both a legitimate
+  table wrapper *and* the buggy strip — so the allowlist excused both. It now
+  allowlists the **exact class string**.
+
+All four fire on reintroduction. That is now three separate occasions in this project
+where a pattern-matching guard quietly matched nothing; the rule stands — break the
+thing on purpose and watch it fail.
 
 ---
 
