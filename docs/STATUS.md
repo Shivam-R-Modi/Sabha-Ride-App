@@ -315,7 +315,65 @@ car all evening — so the car stays held until they end the shift or
 
 Four items were agreed. Three are code and deployed; the fourth was a data reset.
 
-### BLOCKING: the sabha venue is a developer placeholder
+### RESOLVED: the venue is set to 346 Huntington Ave
+
+`settings/main.sabhaLocation` is now:
+
+```json
+{ "lat": 42.3395281, "lng": -71.087883, "address": "346 Huntington Ave, Boston, MA 02115" }
+```
+
+Written in exactly the shape `hooks/useSettings.ts → updateSabhaLocation` writes,
+so the Settings UI reads it back as its own value, with an audit row recording
+the change and the reason. Verified through the **deployed** server helper, not
+just by reading the document back:
+
+| check | result |
+|---|---|
+| `getSabhaLocation()` | returns 346 Huntington, no "using default" warning |
+| `resolveVenue(rule.venue = null, default)` | 346 Huntington |
+| next gathering from the rule | `2026-08-21` 15:45, venue resolves to 346 Huntington |
+
+**346 Huntington Ave is Blackman Auditorium / Ell Hall, Northeastern** — which is
+why this was so easy to miss: the hardcoded placeholder `360 Huntington Ave` is
+about **50 m away**, the same campus entrance. That is *inside* the 100 m presence
+radius, so the drop-off GPS check would have passed happily; only the address
+drivers navigate to would have been wrong. A wrong venue that still passes its own
+proximity test is the worst kind.
+
+Coordinates came from **OpenStreetMap Nominatim** (the Blackman Auditorium node),
+because the app's own geocoder is broken — see below. Worth confirming once in
+Settings, where `AddressAutocomplete` will show Google's own pin: if it differs by
+more than a few metres, re-save from the UI and it will overwrite this.
+
+### NEW BUG: `geocodeAddress` always fails in production
+
+Found while trying to geocode the venue through the app's own function:
+
+```
+Geocoding error: REQUEST_DENIED – API keys with referer restrictions
+cannot be used with this API.
+```
+
+`GOOGLE_MAPS_API_KEY` in `functions/.env` is an HTTP-referer-restricted key. Those
+work from a browser and **never** work server-to-server, so this callable has been
+returning 500 for every call. It is a different key from the client's
+`VITE_GOOGLE_MAPS_API_KEY`, so fixing it means giving the function an unrestricted
+or IP-restricted key — a Google Cloud console action, not a code change.
+
+**Not a data-integrity risk, which is why it went unnoticed.** Two callers:
+
+- `components/shared/ProfileEditor.tsx:91` — the fallback when a rider types an
+  address instead of picking a suggestion. On failure it refuses to save and says
+  *"Please select an address from the suggestions"*. Loud and correct: nobody ends
+  up with an address that has no coordinates. Autocomplete is the normal path and
+  supplies its own coordinates, so most riders never touch this.
+- `hooks/useAdminDatabase.ts:113` — the manager creating a user by hand.
+
+So the effect is a degraded fallback, not corruption. Still worth fixing: the
+whole point of that fallback is the rider who does not use autocomplete.
+
+### The original problem, for the record: the venue was a developer placeholder
 
 `settings/main` has **no `sabhaLocation`**, so `getSabhaLocation()` logs
 *"Invalid sabhaLocation in settings — using default"* and falls back to
