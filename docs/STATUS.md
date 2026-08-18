@@ -65,14 +65,14 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `63dd465`, 2026-08-18. `main` = branch = production.
+Last deploy `a3fb098`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-BLsvjgN7.js` / css `index-CICByZfi.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-CAaQLf5o.js` / css `index-BrrVnZ4V.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **508** · client **697** · rules **89** —
 **1294 total**.
@@ -688,6 +688,77 @@ survived this long. Built by `preview/vite.config.ts`, not shipped.
 > produced two false readings during this investigation — first "the whole panel is
 > white in dark mode", then "light mode reports dark values". Neither was real.
 > Take the numbers from `theme.css`, which is the source of truth.
+
+---
+
+## 2026-08-18: the white border blink on every nav click
+
+Reported as: clicking a left-panel button makes that button **and the one
+above/below** blink a white border in sequence, dark mode only.
+
+Not the panel, not the pill — **Tailwind's preflight**:
+
+```css
+*,:before,:after{ border-width:0; border-style:solid; border-color:#e5e7eb }
+```
+
+Every element defaults to a **fixed light grey** border colour at zero width. The
+selected nav item added `border border-hairline/10`; the unselected one had no
+border utility at all. So with `transition-all`, one click animated:
+
+```
+border-width   0        ->  1px
+border-color   #e5e7eb  ->  rgba(255,255,255,.1)      (opaque grey to 10% white)
+```
+
+For 150 ms that drew a near-opaque light line on a `46 40 34` panel. The
+previously selected item ran the same transition in reverse and got **brighter as
+it shrank** — which is why two adjacent buttons appeared to blink in sequence.
+Invisible in light mode because `#e5e7eb` on cream is nothing, exactly as
+reported.
+
+Measured every frame of the transition on both buttons, before and after:
+
+| | before | after |
+|---|---|---|
+| `border-width` across the click | `0px → 1px`, animated | **constant `1px`** |
+| brightest border frame | opaque `#e5e7eb` | **`rgba(255,255,255,0.1)`** |
+| bright frames | — | **0** |
+
+Two changes. `borderColor.DEFAULT: 'transparent'` in `tailwind.config.js`, because
+a border nobody coloured should not appear rather than appear in a colour that
+cannot follow the theme — verified first that **no** element in `components/` sets
+a border width without also setting a colour, so nothing relied on the grey. And
+the inactive nav state now carries `border border-transparent`, holding the width
+constant: no animation, and no 1px content nudge on every tab change (box-sizing
+is border-box, so the icon and label used to shift inward each time).
+
+### The ratchet had two holes, and closing them found three more fixed colours
+
+**1. Directional variants.** `border-l-blue-500` never matched `border-` followed
+by a palette name, so `DriverHistory`'s stat stripes carried stock blue and green —
+beside a themed `border-l-saffron`, with the numbers next to them already on
+`--info-text` and `--success-text`.
+
+**2. The walker only inspected lines containing `className=`.** Class lists here
+are routinely built across several lines, and the continuation line holding the
+offending class mentions neither `className` nor stands alone in quotes, so it was
+**skipped outright**. It now tests inside quoted spans wherever they appear, which
+immediately surfaced `border-green-500/50` in `PhoneNumberInput` (beside a
+checkmark already using `--success-text`), `border-red-400` in `LoginScreen` and
+`border-red-300` in `VehicleForm` — all invalid-state borders that belonged on the
+danger ramp.
+
+That change also broke a meta-test I had written, which probed for `className=` —
+a string that cannot appear inside a quoted span, so it would have passed
+vacuously forever. It now probes for a class `App.tsx` really contains.
+
+> Worth internalising: this is the third distinct bug in this file's history caused
+> by a **pattern-matching guard that quietly matched nothing**. The audit-collection
+> guard, the recurrence drift guard, and now the colour walker. When adding one,
+> always break the thing on purpose and watch it fail.
+
+`#e5e7eb` no longer appears anywhere in the shipped CSS.
 
 ---
 
