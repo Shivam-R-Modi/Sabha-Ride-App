@@ -72,7 +72,7 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-CBEY3OUO.js` / css `index-FZb-2q1w.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-DXdbR3BD.js` / css `index-Vpg4cdQl.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **508** · client **791** · rules **89** —
 **1388 total**.
@@ -1199,6 +1199,12 @@ what a decorative rule is for. No guard was touched.
 8 more tests (client **783 → 791**), four more deliberate breakages each
 confirmed to fail: no click guard, no swipe threshold, the nav keeping its top
 edge, and gestures attached to a dock with nothing to overflow.
+
+Released the same day as bundle `index-DXdbR3BD.js` / css `index-Vpg4cdQl.css`.
+Verified against the LIVE stylesheet, which carries
+`.clay-bottom-nav.is-expanded{border-radius:0;box-shadow:none}` and the drawer's
+flat `background:rgb(var(--surface))`, and the LIVE bundle, which carries the
+touch handlers.
 
 ### Deployed
 
