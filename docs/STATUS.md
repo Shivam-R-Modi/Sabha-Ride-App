@@ -65,17 +65,17 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `a70b9eb`, 2026-08-18. `main` = branch = production.
+Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-LibDBCX6.js` / css `index-CtU1YqIi.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-DUZMBZsz.js` / css `index-DjHnHlyk.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **722** · rules **89** —
-**1319 total**.
+**Test suites, all green:** `functions` **508** · client **728** · rules **89** —
+**1325 total**.
 
 **Everything in this file is deployed.** `main` = `307c9dc` = production, local
 and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
@@ -887,6 +887,72 @@ reintroducing them found it:
 All four fire on reintroduction. That is now three separate occasions in this project
 where a pattern-matching guard quietly matched nothing; the rule stands — break the
 thing on purpose and watch it fail.
+
+---
+
+## "It looks right on localhost but wrong on the live site"
+
+Reported 2026-08-18. **The deployed bundle was correct.** This is worth writing down
+because the report is ambiguous by construction and the two causes need opposite
+fixes.
+
+### It was not the build
+
+Served the real production bundle locally (`.claude/launch.json` → **`prod-build`**,
+`vite preview --outDir dist` on 4175) and compared computed styles against the dev
+server and the live site on the same page:
+
+| | dev `:3000` | prod build `:4175` | live |
+|---|---|---|---|
+| h1 | Great Vibes 36px/700 `rgb(184,67,24)` | identical | identical |
+| card | Inter 16px, radius 24px | identical | identical |
+| button | Inter 14px/600, radius 9999px | identical | identical |
+| `--canvas` / `--surface` / `--accent` | `250 249 246` / `255 255 255` / `255 107 53` | identical | identical |
+
+Byte-for-byte across all three. Ruled the build out in one step — that is what the
+`prod-build` entry is for.
+
+### The asymmetry that makes localhost misleading
+
+**Dev never registers a service worker at all.** Its `/sw.js` returns the SPA
+fallback *HTML*, so registration fails outright:
+
+```
+localhost:3000/sw.js  ->  200  Content-Type: text/html   <!DOCTYPE html>…
+live /sw.js           ->  200  content-type: text/javascript
+```
+
+So localhost can never be stale and the deployed origin can. "Works locally" carries
+no information about the deployed bundle here.
+
+### And it was partly self-inflicted
+
+Moving the PWA to `prompt` mode (to stop a driver being reloaded mid-carload) meant
+new versions **wait for consent**. A client that never notices the banner therefore
+runs old code indefinitely — which is precisely what happened.
+
+Fixed with `applyUpdateWhenUnobserved` in `src/utils/swUpdate.ts`:
+
+- **tab hidden** → apply the waiting worker now; the reload happens off-screen and
+  the next look at the tab is already current
+- **tab visible again** → re-check for a newer worker, so returning after a day does
+  not wait out the 15-minute poll
+
+The banner stays for an actively-used tab, where being asked is right rather than a
+nuisance.
+
+> **It cannot rescue a client that does not have it yet.** Anyone already on a stale
+> bundle needs one manual clear to pick this up; after that it maintains itself.
+> The console one-liner:
+>
+> ```
+> navigator.serviceWorker.getRegistrations().then(r=>r.forEach(x=>x.unregister()))
+>   .then(()=>caches.keys()).then(k=>Promise.all(k.map(c=>caches.delete(c))))
+>   .then(()=>location.reload())
+> ```
+>
+> And to check which version a browser is on:
+> `document.querySelector('script[type=module]').src`
 
 ---
 
