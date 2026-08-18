@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-18**.
+at the end. Last updated **2026-08-18** (production-readiness pass).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -65,17 +65,17 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `307c9dc`, 2026-08-18. `main` = branch = production.
+Last deploy `0f831ec`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | 19 functions. `ensureSabhaEvents` **deleted** — see the rule model below |
-| Hosting | ✅ | bundle `index-BBzGHgyY.js` / css `index-ftUWeCmc.css`, verified by CONTENT (see below) |
+| Hosting | ✅ | bundle `index-q03eRQIj.js` / css `index-CDJzSYvQ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **499** · client **662** · rules **81** —
-**1242 total**.
+**Test suites, all green:** `functions` **508** · client **686** · rules **89** —
+**1283 total**.
 
 **Everything in this file is deployed.** `main` = `307c9dc` = production, local
 and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
@@ -308,6 +308,115 @@ every drop-off ride for coordinate-shaped keys (`lat`, `lng`, `coord`, `accuracy
 never tapped "Done for Today". That is the intended model — a driver keeps their
 car all evening — so the car stays held until they end the shift or
 `releaseIdleVehicles` reclaims it.
+
+---
+
+## 2026-08-18: production-readiness pass, and the ONE thing still blocking
+
+Four items were agreed. Three are code and deployed; the fourth was a data reset.
+
+### BLOCKING: the sabha venue is a developer placeholder
+
+`settings/main` has **no `sabhaLocation`**, so `getSabhaLocation()` logs
+*"Invalid sabhaLocation in settings — using default"* and falls back to
+`DEFAULT_SABHA_LOCATION` in `functions/src/utils/settings.ts`:
+
+```
+360 Huntington Ave, Boston, MA 02115   (Northeastern University)
+```
+
+This was masked until now: every test gathering was a one-off event carrying an
+explicit venue, and the venue chain is `ride → event → settings/main → DEFAULT`.
+With the test events cleared, the weekly rule's venue is `null`, so the chain now
+reaches the placeholder — **every ride would route to the wrong address.**
+
+**A manager must set the sabha location in Settings before anyone uses this.**
+
+Worth considering separately: the fallback is silent, which is this project's
+named failure mode. A missing venue currently produces confidently wrong routing
+rather than a refusal. Left as-is because making it throw would stop all
+dispatch, and that is a decision, not a cleanup.
+
+### Deployed: the PWA update prompt
+
+The app was on `registerType: 'autoUpdate'`, whose generated `registerSW.js` is a
+bare `register('/sw.js')` with **no update handling at all**. The new worker
+installed and claimed clients while an already-open page kept running old code,
+and nothing told the user. That is what made 2026-08-17 take an hour, and on an
+installed PWA it lets a driver run a stale client against current rules and
+functions indefinitely.
+
+Now `registerType: 'prompt'`, `skipWaiting` off so the worker parks in `waiting`,
+and `components/UpdateBanner.tsx` offers the reload. Not automatic — a driver
+mid-carload must not have the page pulled from under them. Not dismissible —
+hiding the notice and continuing on a stale build is the failure. `swUpdate.ts`
+also polls every 15 min, without which a PWA that never navigates never notices.
+
+### Deployed: crash reporting, with no third-party processor
+
+Deliberately **not** Sentry. It is a dependency for something twenty lines of
+Firestore does, and this app holds children's names, phone numbers and addresses
+— an error reporter that posts state and URLs to a vendor is a data-processing
+decision with legal weight, not a `package.json` diff.
+
+Reports go to `clientErrors`: create-only, `uid` pinned to the caller, readable by
+managers alone, immutable from any client. Redaction is one pure function — query
+string and hash dropped, message and stack truncated, recorded fields asserted as
+a whitelist so adding `state` later fails a test. Capped at 5 per session and
+deduped, so a render loop cannot bill by the write. It records **which bundle was
+running**, the field whose absence cost that hour.
+
+### Deployed: limits on the two riskiest callables
+
+`generateEventCSV` emits every rider's name, phone and address; `adminDeleteUser`
+is irreversible and takes a batch. Both were authorised but unthrottled while four
+less sensitive callables already had limits. Now 20/hour and 30/hour, placed
+AFTER the manager check so a stranger cannot spend a real manager's allowance.
+
+### Done: the data reset
+
+`scripts/clear-database.cjs` was **deleted rather than fixed** — it would have
+crashed on a filename this repo never used, deleted the FLEET, left the `cars`
+mirror populated against an empty `vehicles`, and deleted zero users (it matched
+them by a hardcoded list of names from a dataset that no longer exists).
+
+Replaced by `scripts/reset-to-clean-slate.cjs`, dry-run by default. Applied with
+the owner's confirmed scope:
+
+| cleared | kept |
+|---|---|
+| 12 users + their 12 Auth accounts | the manager (`tonnystark83@gmail.com`) |
+| 48 rides · 24 events · 6 attendance · 5 statistics | fleet Car1–3, reset to `available` in **both** mirrors |
+| 4 `managerInvites` | `settings/main`, `settings/sabhaRecurrence` |
+| dead `settings/rideContext` | 86 `auditLogs`, `system/*` |
+
+Reasoning behind the edges:
+
+- **The manager survives** — invites can only be issued by an existing manager, so
+  deleting the last one is a lockout with no route back in.
+- **Audit rows survive.** They reference accounts that no longer exist, which is
+  what an audit log is for. Two rows were added recording the reset itself.
+- **Invites do not.** An unredeemed `managerInvite` is a live credential to become
+  a manager. Four were outstanding from testing.
+- **`system/eventGenerator` survives.** It looks like residue of the deleted
+  seeder, but it now carries `pendingAttendanceDeletes` and is still read by
+  `updateRideTypeContext`. Checked before assuming.
+
+### Still outstanding, not blocking
+
+- **58 orphaned Auth logins** (71 → 59 after the reset) with no Firestore
+  document. Harmless — signing in creates a fresh signup awaiting approval — but
+  untidy. 52 are obviously test-shaped; `--orphans` deletes those. **Six are
+  real-looking addresses and the script never deletes them**:
+  `shivammodi6@`, `janimohak03@`, `shivam1@1123.com`, `kushalpanchal2497@`,
+  `m49914899@`, `r@gmail.com`.
+- **`npm run lint` still checks nothing** — no ESLint config exists.
+- **Typecheck baseline is 19**, mostly `err.message` on `unknown`. A near-miss this
+  session argues for driving it to 0: wiring the error reporter spliced a comment
+  into `const root = ReactDOM.createRoot(...)`, `npm run build` passed because Vite
+  does not typecheck, and the app would have shipped a **blank screen**. Only
+  `npm run typecheck` caught it.
+- **The `cars` / `vehicles` mirror** remains two collections for one fleet.
 
 ---
 
