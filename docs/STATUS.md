@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-17**.
+at the end. Last updated **2026-08-18**.
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -65,21 +65,21 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `bd59a08`, 2026-08-17 (late). `main` = branch = production.
+Last deploy `307c9dc`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | 19 functions. `ensureSabhaEvents` **deleted** — see the rule model below |
-| Hosting | ✅ | bundle `index-mgzSeAni.js` / css `index-eP-DnHL3.css`, verified by CONTENT (see below) |
+| Hosting | ✅ | bundle `index-BBzGHgyY.js` / css `index-ftUWeCmc.css`, verified by CONTENT (see below) |
 
-**Test suites, all green:** `functions` **499** · client **660** · rules **81** —
-**1240 total**.
+**Test suites, all green:** `functions` **499** · client **662** · rules **81** —
+**1242 total**.
 
-**Everything in this file is deployed.** The three fixes below went out on
-2026-08-17 in the usual order, and `main` = `bd59a08` = production, local and on
-GitHub.
+**Everything in this file is deployed.** `main` = `307c9dc` = production, local
+and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
+2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
 (`at_sabha` no longer gates a ride home — GPS at 100m, advisory, manual fallback
