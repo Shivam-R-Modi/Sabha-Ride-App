@@ -51,6 +51,18 @@
  *   node scripts/reset-to-clean-slate.cjs --key <path>
  *   node scripts/reset-to-clean-slate.cjs --key <path> --confirm
  *   node scripts/reset-to-clean-slate.cjs --key <path> --confirm --orphans
+ *   node scripts/reset-to-clean-slate.cjs --key <path> --confirm --orphans-only
+ *
+ * `--orphans-only` EXISTS BECAUSE THE REST OF THIS SCRIPT IS A ONE-SHOT.
+ *
+ * The collections it clears are only test debris on the day of the reset. Run it
+ * a second time later and `weeklyAttendance` holds the header the scheduler has
+ * published for the NEXT gathering, and `events` holds real exceptions — live
+ * data, wiped as collateral because somebody only wanted to tidy up stale Auth
+ * logins. That nearly happened on 2026-08-18, one day after the reset.
+ *
+ * So the Auth cleanup is separable, and a repeat run of the full script should be
+ * a deliberate act rather than the convenient way to reach one flag.
  */
 
 const path = require('path');
@@ -74,7 +86,8 @@ const admin = (() => {
 
 const args = process.argv.slice(2);
 const CONFIRM = args.includes('--confirm');
-const ORPHANS = args.includes('--orphans');
+const ORPHANS_ONLY = args.includes('--orphans-only');
+const ORPHANS = ORPHANS_ONLY || args.includes('--orphans');
 const keyIdx = args.indexOf('--key');
 const keyArg = keyIdx >= 0 ? args[keyIdx + 1] : process.env.SABHA_KEY;
 
@@ -130,11 +143,12 @@ async function deleteAll(name) {
         process.exit(1);
     }
     const keepUid = managers[0].id;
-    say(`${CONFIRM ? 'RUNNING' : 'DRY RUN'} — keeping manager ${managers[0].data().name} <${managers[0].data().email}>\n`);
+    say(`${CONFIRM ? 'RUNNING' : 'DRY RUN'}${ORPHANS_ONLY ? ' (orphaned Auth logins ONLY)' : ''}`
+        + ` — keeping manager ${managers[0].data().name} <${managers[0].data().email}>\n`);
 
     // ── users + their Auth accounts ──────────────────────────────
-    const doomed = users.docs.filter(d => d.id !== keepUid);
-    say(`users to delete: ${doomed.length}`);
+    const doomed = ORPHANS_ONLY ? [] : users.docs.filter(d => d.id !== keepUid);
+    say(`users to delete: ${doomed.length}${ORPHANS_ONLY ? '  (--orphans-only: user documents untouched)' : ''}`);
     doomed.forEach(d => say(`   ${d.id}  ${d.data().name}  ${d.data().email}`));
 
     // ── orphaned Auth ────────────────────────────────────────────
@@ -154,17 +168,23 @@ async function deleteAll(name) {
     }
 
     // ── collections ──────────────────────────────────────────────
-    say('\ncollections to clear:');
-    for (const name of CLEAR) {
-        const n = (await db.collection(name).count().get()).data().count;
-        say(`   ${name.padEnd(18)} ${n}`);
-    }
+    if (ORPHANS_ONLY) {
+        say('\nNo collection is touched in --orphans-only mode. This matters: by the day'
+          + '\nafter a reset, weeklyAttendance and events hold LIVE data for the next'
+          + '\ngathering, not test debris.');
+    } else {
+        say('\ncollections to clear:');
+        for (const name of CLEAR) {
+            const n = (await db.collection(name).count().get()).data().count;
+            say(`   ${name.padEnd(18)} ${n}`);
+        }
 
-    const kept = ['vehicles', 'cars', 'settings', 'auditLogs', 'system'];
-    say('\nkept as configuration or history:');
-    for (const name of kept) {
-        const n = (await db.collection(name).count().get()).data().count;
-        say(`   ${name.padEnd(18)} ${n}`);
+        const kept = ['vehicles', 'cars', 'settings', 'auditLogs', 'system'];
+        say('\nkept as configuration or history:');
+        for (const name of kept) {
+            const n = (await db.collection(name).count().get()).data().count;
+            say(`   ${name.padEnd(18)} ${n}`);
+        }
     }
 
     if (!CONFIRM) {
@@ -175,9 +195,11 @@ async function deleteAll(name) {
     // ── apply ────────────────────────────────────────────────────
     say('\napplying…');
 
-    for (const name of CLEAR) {
-        const n = await deleteAll(name);
-        say(`   cleared ${name}: ${n}`);
+    if (!ORPHANS_ONLY) {
+        for (const name of CLEAR) {
+            const n = await deleteAll(name);
+            say(`   cleared ${name}: ${n}`);
+        }
     }
 
     let userDocs = 0;
@@ -200,7 +222,7 @@ async function deleteAll(name) {
     // BOTH halves, always. Writing one and not the other is the bug this project
     // has spent the most time on.
     let fleetReset = 0;
-    for (const name of ['vehicles', 'cars']) {
+    for (const name of ORPHANS_ONLY ? [] : ['vehicles', 'cars']) {
         const snap = await db.collection(name).get();
         const batch = db.batch();
         snap.docs.forEach(d => {

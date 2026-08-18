@@ -489,12 +489,20 @@ Reasoning behind the edges:
 
 ### Still outstanding, not blocking
 
-- **58 orphaned Auth logins** (71 → 59 after the reset) with no Firestore
-  document. Harmless — signing in creates a fresh signup awaiting approval — but
-  untidy. 52 are obviously test-shaped; `--orphans` deletes those. **Six are
-  real-looking addresses and the script never deletes them**:
+- **Orphaned Auth logins: done.** 71 → 59 (the reset) → **7**. The 52
+  test-shaped ones are gone, with an audit row. **Six real-looking addresses were
+  deliberately kept** and the script will never delete them:
   `shivammodi6@`, `janimohak03@`, `shivam1@1123.com`, `kushalpanchal2497@`,
-  `m49914899@`, `r@gmail.com`.
+  `m49914899@`, `r@gmail.com`. Two of those (`r@gmail.com`,
+  `shivam1@1123.com`) are almost certainly debris too, and the other four look
+  like real people — deleting a real login is low harm (the next sign-in creates a
+  fresh signup awaiting approval) but it is not a call to make silently.
+
+  `--orphans-only` was added for this, and the reason is worth keeping: the rest of
+  that script is a ONE-SHOT. A day after the reset, `weeklyAttendance` holds the
+  header the scheduler published for the next gathering and `events` holds real
+  exceptions. Re-running the full script to reach one flag would have wiped live
+  data as collateral. It nearly did.
 - ~~`npm run lint` checks nothing~~ and ~~typecheck baseline is 19~~ — both fixed;
   see *Lint and typecheck* below.
 - **The `cars` / `vehicles` mirror** remains two collections for one fleet.
