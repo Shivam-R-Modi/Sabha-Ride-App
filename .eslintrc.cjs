@@ -112,6 +112,14 @@ module.exports = {
             rules: { 'react-refresh/only-export-components': 'off' },
         },
         {
+            // preview/ is the screen harness — entry points and Firestore stubs,
+            // built separately by preview/vite.config.ts and never shipped. The
+            // fast-refresh rule is about HMR quality in the app; a harness entry
+            // that mounts a root and exports nothing is exactly what it should be.
+            files: ['preview/**/*.tsx', 'preview/**/*.ts'],
+            rules: { 'react-refresh/only-export-components': 'off' },
+        },
+        {
             // Cloud Functions: Node, not a browser, and no React.
             files: ['functions/**/*.ts'],
             env: { browser: false, node: true },

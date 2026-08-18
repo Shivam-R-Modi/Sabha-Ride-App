@@ -115,6 +115,117 @@ describe('theme.css token contract', () => {
     });
 });
 
+/**
+ * Two DIFFERENT tokens resolving to the SAME colour inside one theme.
+ *
+ * The existing contract above checks that each token differs between light and
+ * dark. Every token passed that, and the sidebar was still broken: in dark mode
+ * `--canvas-deep` and `--surface` are both `39 34 29`, so the selected nav item
+ * (`bg-cream-300`) had no fill at all against the panel it sits on
+ * (`bg-surface`). The only cues left were a hairline border and orange text —
+ * and because `hover:bg-cream-200` DOES differ from the panel, hovering an
+ * unselected item looked more selected than the selected one.
+ *
+ * The mobile bottom nav had the identical bug, because `.clay-bottom-nav` is a
+ * `--surface` gradient and its active chip was also `bg-cream-300`.
+ *
+ * "Differs between themes" is the wrong question for anything stacked. The right
+ * one is "does this fill differ from the thing it sits ON, in every theme".
+ */
+describe('tokens that stack must not collide within a theme', () => {
+    /** The two ramps that get stacked on each other: page/panel vs fills. */
+    const STACKING = [
+        '--canvas', '--canvas-mid', '--canvas-deep', '--sunken',
+        '--surface', '--surface-mid', '--surface-deep',
+    ];
+
+    /**
+     * Collisions that exist today and are NOT currently exploited by any
+     * component. Recorded rather than silently tolerated, so a new one fails.
+     *
+     * The honest long-term fix is to separate dark `--canvas-deep` from
+     * `--surface` in the ramp — they collide by construction, since canvas climbs
+     * 28 -> 33 -> 39 and surface starts at 39. That is an app-wide visual change
+     * and was deliberately deferred; the components that were actually broken use
+     * `--sunken` now instead.
+     */
+    const KNOWN = new Set([
+        'light: --canvas == --surface-mid',
+        'light: --canvas-mid == --surface-deep',
+        'dark: --canvas-deep == --surface',
+    ]);
+
+    function collisions(theme: Map<string, string>, label: string): string[] {
+        const byValue = new Map<string, string[]>();
+        for (const name of STACKING) {
+            const value = theme.get(name);
+            if (!value) continue;
+            byValue.set(value, [...(byValue.get(value) ?? []), name]);
+        }
+        return [...byValue.values()]
+            .filter(names => names.length > 1)
+            .flatMap(names => names.slice(1).map(n => `${label}: ${names[0]} == ${n}`));
+    }
+
+    it('no NEW collision appears in either theme', () => {
+        const found = [...collisions(light, 'light'), ...collisions(dark, 'dark')];
+        const novel = found.filter(c => !KNOWN.has(c));
+
+        expect(
+            novel,
+            `Two stacking tokens now resolve to the same colour. Anything using one ` +
+            `as a fill on the other becomes invisible in that theme — which is how ` +
+            `the selected nav item disappeared in dark mode. Separate them, or add ` +
+            `to KNOWN with a note that nothing stacks them:\n  ${novel.join('\n  ')}`,
+        ).toEqual([]);
+    });
+
+    it('the allowlist has no stale entries', () => {
+        // A recorded collision that no longer exists means the ramp was fixed and
+        // the note should go, rather than sitting there excusing a future one.
+        const found = new Set([...collisions(light, 'light'), ...collisions(dark, 'dark')]);
+        const stale = [...KNOWN].filter(c => !found.has(c));
+
+        expect(stale, `Fixed — drop from KNOWN:\n  ${stale.join('\n  ')}`).toEqual([]);
+    });
+
+    /** Channel-sum distance, so "differs by 1" cannot pass as a fix. */
+    const distance = (a: string, b: string) => {
+        const pa = a.split(' ').map(Number), pb = b.split(' ').map(Number);
+        return pa.reduce((n, v, i) => n + Math.abs(v - pb[i]!), 0);
+    };
+
+    it('the selected nav fill is visible on the panel it sits on, in BOTH themes', () => {
+        // The specific property the sidebar and bottom nav depend on. Class ->
+        // token: `bg-cream-400` is `--sunken`, `bg-surface` is `--surface`, and
+        // `.clay-bottom-nav` runs `--surface` -> `--surface-mid`.
+        for (const [themeName, theme] of [['light', light], ['dark', dark]] as const) {
+            const fill = theme.get('--sunken')!;
+            for (const panel of ['--surface', '--surface-mid'] as const) {
+                expect(
+                    distance(fill, theme.get(panel)!),
+                    `${themeName}: --sunken is indistinguishable from ${panel}, so the ` +
+                    `selected nav item has no fill`,
+                ).toBeGreaterThan(12);
+            }
+        }
+    });
+
+    it('Layout.tsx really uses those classes, so this test cannot drift', () => {
+        // Without this the assertion above guards a pairing the component no
+        // longer has — a test that passes while the screen is broken, which is
+        // exactly what happened here the first time.
+        const layout = readFileSync(path.join(ROOT, 'components/Layout.tsx'), 'utf8');
+
+        expect(layout).toMatch(/<aside className=\{`fixed[^`]*bg-surface/);
+        // Three fills: the sidebar's active pill, its Sign Out button, and the
+        // bottom nav's active chip.
+        expect(layout.match(/bg-cream-400/g) ?? []).toHaveLength(3);
+        // And none of them back on the colliding token.
+        expect(layout).not.toMatch(/isActive\s*\?\s*'bg-cream-300/);
+    });
+});
+
 describe('theme.css guardrails that carry a decision', () => {
     it('keeps the 88% opacity floor on text-bearing glass', () => {
         // Glass everywhere was chosen over the chrome-only recommendation.

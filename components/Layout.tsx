@@ -127,8 +127,15 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
               key={item.id}
               onClick={() => setCurrentTab(item.id as TabView)}
               title={isSidebarCollapsed ? item.label : undefined}
+              // `cream-400`, not `cream-300`. In DARK mode `--canvas-deep`
+              // (cream-300) and `--surface` are the SAME colour, 39 34 29, so the
+              // selected pill had no fill at all against this panel — the only
+              // cues left were a hairline border and the orange text, and hovering
+              // an UNselected item (cream-200) looked more selected than the
+              // selected one. `cream-400` is `--sunken`, which differs from
+              // `--surface` in both themes. See tests/quality/theme-tokens.test.ts.
               className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all group relative btn-feedback ${isActive
-                ? 'bg-cream-300 text-saffron shadow-sm border border-hairline/10'
+                ? 'bg-cream-400 text-saffron shadow-sm border border-hairline/10'
                 : 'text-coffee-500 hover:bg-cream-200 hover:text-coffee'
                 }`}
             >
@@ -163,7 +170,9 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
             </div>
             <button
               onClick={logout}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-cream-300 hover:bg-[rgb(var(--danger-bg))] hover:text-[rgb(var(--danger-text))] text-coffee-700 rounded-xl text-xs font-bold transition-all group btn-feedback"
+              // cream-400 for the same reason as the nav pill above: cream-300 is
+              // indistinguishable from this panel in dark mode.
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-cream-400 hover:bg-[rgb(var(--danger-bg))] hover:text-[rgb(var(--danger-text))] text-coffee-700 rounded-xl text-xs font-bold transition-all group btn-feedback"
             >
               <LogOut size={16} className="group-hover:rotate-12 transition-transform" />
               Sign Out
@@ -208,7 +217,10 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
               className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${isActive ? 'text-saffron-800' : 'text-coffee-500'
                 }`}
             >
-              <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-cream-300' : ''}`}>
+              {/* cream-400: .clay-bottom-nav is a --surface -> --surface-mid
+                  gradient, so a cream-300 chip vanished here in dark mode exactly
+                  as it did in the sidebar. */}
+              <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-cream-400' : ''}`}>
                 <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
               </div>
               <span className="text-[10px] mt-1 font-bold uppercase tracking-tighter truncate max-w-full px-0.5">
