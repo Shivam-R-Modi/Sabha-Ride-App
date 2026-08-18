@@ -13,6 +13,8 @@ import { ManagerDashboard } from './components/manager/ManagerDashboard';
 import { ManagerReports } from './components/manager/ManagerReports';
 import { ManagerPeople } from './components/manager/ManagerPeople';
 import { ManagerSetup } from './components/manager/ManagerSetup';
+import { FleetManagement } from './components/manager/FleetManagement';
+import { ManagerRecords } from './components/manager/ManagerRecords';
 // import { CleanupUtility } from './components/admin/CleanupUtility'; // removed — component does not exist
 import { ResponsiveLayout } from './components/Layout';
 import { ProfileEditor } from './components/shared/ProfileEditor';
@@ -87,6 +89,12 @@ export default function App() {
           return <ManagerReports />;
         case 'setup':
           return <ManagerSetup />;
+        case 'fleet':
+          return <FleetManagement />;
+        case 'records':
+          // Wrapped, not the bare console: ManagerRecords carries the warning
+          // that used to live on Setup's accordion row. See that file.
+          return <ManagerRecords />;
         case 'profile':
           return <ProfileEditor />;
         default:

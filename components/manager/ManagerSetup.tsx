@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import { CalendarDays, Clock, MapPin, Car, Database, ChevronDown, AlertTriangle } from 'lucide-react';
+import { CalendarDays, Clock, MapPin, ChevronDown } from 'lucide-react';
 import { SabhaCalendar } from './SabhaCalendar';
 import { RideWindowControl } from './RideWindowControl';
 import { LocationSettings } from './LocationSettings';
-import { FleetManagement } from './FleetManagement';
-import { DatabaseConsole } from './DatabaseConsole';
 
 /**
  * Everything a manager configures, as named sections rather than a pile.
@@ -20,6 +18,16 @@ import { DatabaseConsole } from './DatabaseConsole';
  * Each section is collapsed by default and remembers nothing: these are things
  * you come here to change deliberately, so opening the page should show you the
  * menu, not the middle of a form.
+ *
+ * CHANGED 2026-08-18: Fleet and Raw records LEFT this page for the sidebar. What
+ * remains is the three things that describe a sabha — when it is, when rides run,
+ * and where it is. Fleet is an operational list touched most weeks, and the record
+ * editor is a destructive tool; neither was configuration, and burying the
+ * dangerous one in an accordion never made it safer, only harder to find. The
+ * warning it carried moved with it, into components/manager/ManagerRecords.tsx.
+ *
+ * The `danger` treatment this Section supported went with Raw records — it was the
+ * only caller. Restore it from git if a genuinely destructive setting lands here.
  */
 
 interface SectionProps {
@@ -30,12 +38,10 @@ interface SectionProps {
     open: boolean;
     onToggle: () => void;
     children: React.ReactNode;
-    /** Draws the warning treatment and an explanation before the content. */
-    danger?: string;
 }
 
 const Section: React.FC<SectionProps> = ({
-    icon, title, summary, open, onToggle, children, danger,
+    icon, title, summary, open, onToggle, children,
 }) => (
     <section className="clay-card p-0 overflow-hidden">
         <button
@@ -44,10 +50,8 @@ const Section: React.FC<SectionProps> = ({
             className="w-full flex items-center gap-4 p-4 text-left min-h-11 hover:bg-cream-300/40
                        transition-colors"
         >
-            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0
-                ${danger
-                    ? 'bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))]'
-                    : 'bg-cream-300 text-saffron'}`}>
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0
+                            bg-cream-300 text-saffron">
                 {icon}
             </div>
             <div className="min-w-0 flex-1">
@@ -63,13 +67,6 @@ const Section: React.FC<SectionProps> = ({
 
         {open && (
             <div className="border-t border-hairline/10 p-4 animate-in fade-in duration-150">
-                {danger && (
-                    <div className="flex items-start gap-3 mb-4 p-3 rounded-xl
-                                    bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))]">
-                        <AlertTriangle size={18} className="shrink-0 mt-0.5" aria-hidden="true" />
-                        <p className="text-sm leading-snug">{danger}</p>
-                    </div>
-                )}
                 {children}
             </div>
         )}
@@ -103,24 +100,6 @@ export const ManagerSetup: React.FC = () => {
             title: 'Venue',
             summary: 'Where drivers are routed to',
             children: <LocationSettings />,
-        },
-        {
-            id: 'fleet',
-            icon: <Car size={20} />,
-            title: 'Fleet',
-            summary: 'The cars drivers can take out',
-            children: <FleetManagement />,
-        },
-        {
-            id: 'database',
-            icon: <Database size={20} />,
-            title: 'Raw records',
-            summary: 'Advanced — edit documents directly',
-            danger:
-                'These are the live records, edited without any of the checks the rest of the ' +
-                'app applies. They include riders’ names, phone numbers and home addresses. ' +
-                'There is no undo.',
-            children: <DatabaseConsole />,
         },
     ];
 

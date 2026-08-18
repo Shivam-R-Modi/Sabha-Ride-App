@@ -129,7 +129,11 @@ export const FleetManagement: React.FC = () => {
         v => v.status === 'in_use' && !v.currentDriverId).length;
 
     return (
-        <div className="space-y-6 p-6">
+        // `max-w-3xl mx-auto` matches ManagerSetup / ManagerPeople / ManagerRecords.
+        // This was a section inside Setup's accordion until 2026-08-18, so it had no
+        // page frame of its own and would otherwise stretch the full width of a
+        // desktop window while every sibling page stayed in the same column.
+        <div className="space-y-6 p-6 max-w-3xl mx-auto animate-in fade-in duration-300">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -137,7 +141,7 @@ export const FleetManagement: React.FC = () => {
                         <Shield size={20} className="text-saffron" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-header font-bold text-coffee">Fleet Management</h2>
+                        <h1 className="text-xl font-header font-bold text-coffee">Fleet Management</h1>
                         <p className="text-sm text-coffee-500">Manage your vehicle fleet</p>
                     </div>
                 </div>

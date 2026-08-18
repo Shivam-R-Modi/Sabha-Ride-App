@@ -1,7 +1,8 @@
 import React from 'react';
 import { LotusIcon } from '../constants';
 import { TabView, UserRole } from '../types';
-import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings } from 'lucide-react';
+import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { RoleSwitcher } from './RoleSwitcher';
@@ -123,9 +124,14 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
           const isActive = currentTab === item.id;
           const Icon = item.icon;
           return (
+            <React.Fragment key={item.id}>
+              {/* Everyday destinations end here. What follows edits live records
+                  directly, so it gets visual distance rather than adjacency. */}
+              {item.separated && (
+                <hr className="border-0 border-t border-hairline/10 !mt-4 mb-2 mx-1" aria-hidden="true" />
+              )}
             <button
-              key={item.id}
-              onClick={() => setCurrentTab(item.id as TabView)}
+              onClick={() => setCurrentTab(item.id)}
               title={isSidebarCollapsed ? item.label : undefined}
               // `cream-400`, not `cream-300`. In DARK mode `--canvas-deep`
               // (cream-300) and `--surface` are the SAME colour, 39 34 29, so the
@@ -155,6 +161,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
                 <div className="absolute left-0 w-1 h-6 bg-saffron-800 rounded-r-full shadow-lg" />
               )}
             </button>
+            </React.Fragment>
           );
         })}
       </nav>
@@ -219,7 +226,7 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentTab(item.id as TabView)}
+              onClick={() => setCurrentTab(item.id)}
               className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${isActive ? 'text-saffron-800' : 'text-coffee-500'
                 }`}
             >
@@ -243,7 +250,18 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
   );
 };
 
-const getNavItems = (role: UserRole) => {
+interface NavItem {
+  id: TabView;
+  label: string;
+  icon: LucideIcon;
+  /**
+   * Draw a divider above this item in the sidebar. Marks the end of the
+   * everyday destinations, so the advanced one below does not read as a peer.
+   */
+  separated?: boolean;
+}
+
+const getNavItems = (role: UserRole): NavItem[] => {
   if (role === 'driver') {
     return [
       { id: 'home', label: 'Dashboard', icon: Home },
@@ -252,15 +270,27 @@ const getNavItems = (role: UserRole) => {
     ];
   }
   if (role === 'manager') {
-    // Five destinations, replacing three nav systems on one screen: this bar,
+    // Seven destinations, replacing three nav systems on one screen: this bar,
     // a segmented control, and four unlabelled toolbar icons — among them a
     // map-pin that meant "settings" and a car that meant "fleet".
+    //
+    // `Fleet` and `Records` were sections inside Setup's accordion. Fleet earns a
+    // place here because it is touched most weeks. Records is LAST and behind a
+    // divider on purpose: it edits live documents holding riders' names, phone
+    // numbers and home addresses, with no undo, so it must not sit next to the
+    // button a manager hits every Friday.
+    //
+    // Labelled `Records`, not `Raw records`: at 375px the bottom nav gives each
+    // item ~47px, and `RAW RECORDS` at text-[10px] uppercase overflows that and
+    // truncates. `Fleet` and `Records` both fit.
     return [
       { id: 'home', label: 'Dispatch', icon: LayoutDashboard },
       { id: 'people', label: 'People', icon: UserCheck },
       { id: 'history', label: 'Reports', icon: History },
+      { id: 'fleet', label: 'Fleet', icon: Car },
       { id: 'setup', label: 'Setup', icon: Settings },
       { id: 'profile', label: 'Profile', icon: UserIcon },
+      { id: 'records', label: 'Records', icon: Database, separated: true },
     ];
   }
   return [

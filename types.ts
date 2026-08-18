@@ -310,7 +310,16 @@ export interface AssignmentResult {
  * four unlabelled icon buttons in a toolbar, one of which used a map-pin to
  * mean "settings".
  */
-export type TabView = 'home' | 'rides' | 'profile' | 'history' | 'people' | 'setup';
+/**
+ * Every destination the shell can show.
+ *
+ * `fleet` and `records` were sections inside Setup's accordion until 2026-08-18.
+ * They are top-level now: fleet because it is used most weeks, records because
+ * burying a destructive tool in an accordion did not make it safer, only harder
+ * to find. Setup keeps the three that genuinely configure a sabha.
+ */
+export type TabView =
+    | 'home' | 'rides' | 'profile' | 'history' | 'people' | 'setup' | 'fleet' | 'records';
 
 export interface NotificationPayload {
   title: string;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle2, X, UserCheck, Loader2 } from 'lucide-react';
 import { usePendingDrivers, usePendingRiders, updateUserStatus } from '../../hooks/useFirestore';
+import { ManagerInvites } from './ManagerInvites';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../shared/useConfirm';
 import type { Driver, User } from '../../types';
@@ -124,6 +125,14 @@ export const ManagerPeople: React.FC = () => {
                     )}
                 </>
             )}
+
+            {/* OUTSIDE the ternary above, deliberately.
+                That branch returns an "All caught up" card INSTEAD of the sections
+                whenever nothing is pending — which is the normal state most of the
+                week. Rendering invites inside it would make the feature vanish
+                exactly when a manager has time to use it, and look deleted.
+                tests/components/ManagerInvites.test.tsx pins this. */}
+            <ManagerInvites />
 
             {confirmDialog}
         </div>
