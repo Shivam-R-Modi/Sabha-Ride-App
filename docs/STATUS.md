@@ -65,17 +65,17 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `54b85f0`, 2026-08-18. `main` = branch = production.
+Last deploy `a0569f9`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-ClYBm2JW.js` / css `index-CDJzSYvQ.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-BUaBgDs1.js` / css `index-CDJzSYvQ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **692** · rules **89** —
-**1289 total**.
+**Test suites, all green:** `functions` **508** · client **696** · rules **89** —
+**1293 total**.
 
 **Everything in this file is deployed.** `main` = `307c9dc` = production, local
 and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
@@ -584,6 +584,77 @@ The two `exhaustive-deps` warnings that were correct as written are resolved
 properly rather than silenced — one with `useCallback`, one with a ref.
 `--report-unused-disable-directives` stays on, and earned its keep by catching two
 misplaced directives written along the way.
+
+---
+
+## 2026-08-18: the selected tab had no fill in dark mode
+
+Reported as *"a UI issue on the left panel on any dashboard"*. It is a dark-mode
+**token collision**, not a layout fault.
+
+```
+--surface      39 34 29    the sidebar panel   (bg-surface)
+--canvas-deep  39 34 29    the selected pill   (bg-cream-300)
+```
+
+In light those are `255,255,255` and `237,232,224` — an obvious pill. In dark they
+are **byte-identical**, so the selected nav item had no fill; the only cues left
+were a hairline border and orange text. Backwards in a telling way, too:
+`hover:bg-cream-200` (`33 29 25`) *does* differ from the panel, so **hovering an
+unselected item looked more selected than the selected one.**
+
+Three places on the same screen, all fixed to `bg-cream-400` (`--sunken`), which
+clears `--surface` in both themes — channel-sum distance light **96**, dark **48**,
+where it was **0**:
+
+- the sidebar's active nav item
+- the sidebar's Sign Out button
+- the mobile bottom nav's active chip (`.clay-bottom-nav` is a `--surface`
+  gradient, so it had the identical bug)
+
+### Why the theme tests missed it
+
+They check that each token differs **between** light and dark. Both tokens pass
+that — they each change. **Nothing checked that two DIFFERENT tokens differ from
+each other WITHIN a theme**, which is the property "a fill is visible on the panel
+it sits on" actually depends on.
+
+Added to `tests/quality/theme-tokens.test.ts`: a general guard that fails on any
+NEW collision among the stacking ramps (the three existing ones recorded and
+annotated), a specific assertion that the nav fill clears the panel by a real
+margin in both themes, and a **drift guard pinning the classes `Layout.tsx`
+actually uses** — without that last one the assertion would keep passing while the
+screen was broken, which is precisely what happened the first time.
+
+### Fixed at the component, not in the ramp — and what that leaves
+
+Dark `--canvas-deep` and `--surface` collide **by construction**: canvas climbs
+`28 → 33 → 39` and surface *starts* at `39`. Separating them fixes all 64
+`bg-cream-300` uses at once but changes shading across every screen in dark mode,
+so it was deliberately deferred.
+
+**So the same collision still affects other `bg-cream-300` elements.** Ranked:
+
+| severity | place | effect in dark |
+|---|---|---|
+| affordance | `ThemeToggle` selected segment | the same collision inverted — track is `cream-300/60`, selected is `bg-surface`. Only the saffron text distinguishes the choice. |
+| cosmetic | `SabhaCalendar` "one-off" badge | badge loses its chip; the label still reads fine |
+| cosmetic | `Sheet`, `SabhaCalendar`, `ProfileEditor`, `RiderHome`, `useConfirm` hovers | hover feedback invisible on a surface parent |
+
+None of those hides a primary control the way the nav did. Clearing them properly
+means separating the ramp.
+
+### The sidebar had never been viewable
+
+`preview/shell.html` was added to the screen harness, with an auth stub, because
+the shell only exists behind a sign-in — which is why a zero-contrast selected tab
+survived this long. Built by `preview/vite.config.ts`, not shipped.
+
+> Method note for whoever debugs theming next: reading `getComputedStyle` in the
+> same tick as setting `data-theme` in a headless pane returns **stale values**. It
+> produced two false readings during this investigation — first "the whole panel is
+> white in dark mode", then "light mode reports dark values". Neither was real.
+> Take the numbers from `theme.css`, which is the source of truth.
 
 ---
 
