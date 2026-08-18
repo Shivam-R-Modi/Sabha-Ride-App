@@ -236,6 +236,81 @@ why. Bundle CSS 74.0 → 72.6 kB.
 
 ---
 
+## Verified 2026-08-18: a full cycle, and the presence fallback's first real run
+
+Event `2026-08-18` was a **same-day one-off** (11:05–11:25) created by the manager;
+the Friday rule was untouched. Both legs ran end to end:
+
+| leg | driver | riders | runs |
+|---|---|---|---|
+| Home → Sabha | Tala Das | 5 | 2 |
+| Sabha → Home | Dido Re | 6 | 2 |
+
+All 11 rides reached `completed`, **zero** left in `requested`, and every rider
+ended `home_safe`. No orphans, no residue.
+
+### The presence fallback finally ran for real
+
+Five of the six returning riders recorded `{"method":"pickup"}` — the `at_sabha`
+short-circuit, because this app had driven them there. No GPS needed.
+
+**Wej Ewe did not ride out**, and recorded:
+
+```json
+{"method":"manual","distanceMeters":2370}
+```
+
+That is the case the whole presence redesign exists for, exercised in production
+for the first time. GPS put them 2370 m away — 23× the 100 m radius — so it fell
+through to "Are you at the sabha?", they confirmed, and they got a ride home.
+Under the old `at_sabha` gate `studentReadyToLeave` would have thrown, and the
+client would have advised "Please try again", which could never have worked.
+
+The implausible distance is **recorded, not enforced**: a manager can see the
+claim is doubtful, and nobody was stranded to achieve that. Record-don't-enforce,
+working as designed.
+
+### Privacy held
+
+The presence claim stores `method` and `distanceMeters` and nothing else. Scanned
+every drop-off ride for coordinate-shaped keys (`lat`, `lng`, `coord`, `accuracy`,
+`position`): **none**. Pickup rides carry `presence: null`, as they should.
+
+### Carload grouping clustered correctly
+
+| run | riders |
+|---|---|
+| 1 | 717 E 5th St · 474 E 7th St · 442 E 5th St — all South Boston 02127 |
+| 2 | 1 Andrew St Cambridge · 111 Browne St · 33 Dwight St — both Brookline 02446 |
+
+### Attendance header still correct
+
+`startsAt` 11:05, `endsAt` 11:25 — matching the event document. The old defect
+(4:00 AM published for an 11:00 PM sabha) stays fixed.
+
+### Two things checked and cleared, so nobody re-investigates
+
+- **`attendanceLocksAt` looked wrong** — 6 PM on 08-17 for an 08-18 sabha, i.e.
+  ~21 hours in the past by the time this same-day event was created. It is not a
+  defect: `canWithdraw` gates **only** a yes → no withdrawal
+  (`hooks/useAttendance.ts:104`). An initial answer and no → yes are always
+  allowed, so a short-notice sabha cannot dead-end a rider.
+- **This run did NOT decisively exercise the end-shift count.** Dido Re's shift
+  ended with counters zeroed, so the write path completed without a spurious
+  warning — but Tala Das was still holding Car1 at that moment, so
+  `otherDriversOnShift > 0` would have suppressed any warning regardless. The
+  decisive proof stays the deployed-code check against the real stale row: old
+  filter warned "1 rider still waiting", deployed filter and dispatch both say 0.
+
+### Open, benign
+
+**Tala Das still holds Car1** (`in_use`, driver `available`, runs=2 ppl=5). They
+never tapped "Done for Today". That is the intended model — a driver keeps their
+car all evening — so the car stays held until they end the shift or
+`releaseIdleVehicles` reclaims it.
+
+---
+
 ## Reading production without guessing
 
 Admin-SDK scripts live in the session scratchpad (regenerate as needed; they are
