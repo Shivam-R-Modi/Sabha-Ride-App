@@ -43,11 +43,22 @@ const drawer = () => document.querySelector('.clay-bottom-drawer') as HTMLElemen
 const sidebar = () => document.querySelector('aside') as HTMLElement;
 const scrim = () => document.querySelector('.fixed.inset-0') as HTMLElement | null;
 
-/** Visible button labels in the dock, in order. */
+/**
+ * Labelled destinations in the dock, in order.
+ *
+ * The pull handle is a button too and carries no text, so it is filtered out —
+ * and `the dock holds exactly four destinations and the handle` below counts the
+ * raw buttons, so this filter cannot hide one that lost its label.
+ */
 const dockLabels = () =>
-    within(dock()).getAllByRole('button').map(b => (b.textContent ?? '').trim());
+    within(dock()).getAllByRole('button')
+        .map(b => (b.textContent ?? '').trim())
+        .filter(Boolean);
 
+/** The pull handle, which replaced the More tab as the visible control. */
 const moreButton = () => within(dock()).getByRole('button', { name: /more destinations/i });
+const drawerHandle = () => within(drawer()!).getByRole('button', { name: /hide more destinations/i });
+const handleBar = (button: HTMLElement) => button.querySelector('span')!;
 
 /** Lets a test put the app on a given tab from inside the provider. */
 const Goto: React.FC<{ tab: TabView }> = ({ tab }) => {
@@ -69,10 +80,27 @@ beforeEach(() => {
 });
 
 describe('the manager dock', () => {
-    it('shows four destinations and a More control, not seven', () => {
+    it('shows four destinations, not seven', () => {
         renderLayout('manager');
 
-        expect(dockLabels()).toEqual(['Dispatch', 'People', 'Fleet', 'Setup', 'More']);
+        expect(dockLabels()).toEqual(['Dispatch', 'People', 'Fleet', 'Setup']);
+    });
+
+    it('holds exactly four destinations and the handle — nothing unlabelled hiding', () => {
+        // Counts raw buttons, so a destination that lost its label would show up
+        // here rather than being quietly dropped by the filter above.
+        renderLayout('manager');
+
+        expect(within(dock()).getAllByRole('button')).toHaveLength(5);
+        expect(moreButton()).toBeInTheDocument();
+    });
+
+    it('has no More tab in the row', () => {
+        // Removed on request: four destinations and a fifth tab that was not a
+        // destination read as five peers.
+        renderLayout('manager');
+
+        expect(within(dock()).queryByText(/^More$/)).toBeNull();
     });
 
     it('leaves the overflow destinations OUT of the dock entirely', () => {
@@ -134,22 +162,23 @@ describe('the manager dock', () => {
 });
 
 describe('the dock never reads as "nothing selected"', () => {
-    it('marks More as active while a hidden destination is current', () => {
-        // Records lives in the drawer. Without this the manager looks down at a
-        // dock with no lit item and cannot tell where they are.
+    it('turns the handle saffron while a hidden destination is current', () => {
+        // Records lives in the drawer. With the More tab gone the handle is the
+        // ONLY thing that can say so — without it the manager looks down at a
+        // dock with nothing lit and cannot tell where they are.
         renderLayout('manager', 'records');
 
         act(() => { screen.getByText('goto-records').click(); });
 
-        expect(moreButton().className).toMatch(/text-saffron-800/);
+        expect(handleBar(moreButton()).className).toMatch(/bg-saffron/);
     });
 
-    it('does not mark More while a docked destination is current', () => {
+    it('leaves the handle plain while a docked destination is current', () => {
         renderLayout('manager', 'fleet');
 
         act(() => { screen.getByText('goto-fleet').click(); });
 
-        expect(moreButton().className).not.toMatch(/text-saffron-800/);
+        expect(handleBar(moreButton()).className).not.toMatch(/bg-saffron/);
     });
 });
 
@@ -160,6 +189,8 @@ describe('roles with nothing to overflow', () => {
 
         expect(dockLabels()).toEqual(['Dashboard', 'History', 'Profile']);
         expect(within(dock()).queryByRole('button', { name: /more destinations/i })).toBeNull();
+        // And no unlabelled handle either: three buttons, three destinations.
+        expect(within(dock()).getAllByRole('button')).toHaveLength(3);
     });
 
     it('a rider gets no More control either', () => {
@@ -270,8 +301,9 @@ describe('the drawer and the dock read as one panel', () => {
         renderLayout('manager');
         act(() => { moreButton().click(); });
 
-        act(() => { moreButton().click(); });
+        act(() => { drawerHandle().click(); });
 
         expect(dock().className).not.toMatch(/is-expanded/);
+        expect(drawer()).toBeNull();
     });
 });

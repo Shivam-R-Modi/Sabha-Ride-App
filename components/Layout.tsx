@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LotusIcon } from '../constants';
 import { TabView, UserRole } from '../types';
-import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, ChevronDown, MoreHorizontal, UserCheck, Settings, Database } from 'lucide-react';
+import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
@@ -256,11 +256,40 @@ const DockButton: React.FC<{
 /** Past this many pixels of vertical travel, a touch was a swipe and not a tap. */
 const SWIPE_THRESHOLD = 24;
 
-/** The pull affordance. Decorative — the More button is the real control. */
-const GrabHandle: React.FC = () => (
-  <div className="flex justify-center pb-2" aria-hidden="true">
-    <span className="h-1 w-9 rounded-full bg-hairline/25" />
-  </div>
+/**
+ * The pull handle, and the only visible control for the overflow.
+ *
+ * It replaced a `More` item in the row: four destinations and a fifth tab that
+ * was not a destination read as five peers, and the dock is cleaner without it.
+ *
+ * It is a BUTTON, not the decoration it looks like, and that is deliberate. On a
+ * phone this dock is the only navigation there is — the sidebar is desktop-only
+ * — so if expanding were swipe-only, Reports, Profile and Records would have no
+ * reachable control at all for anyone who cannot make a touch swipe: keyboard,
+ * switch access, VoiceOver. Three destinations would simply be stranded.
+ *
+ * In the nav it is positioned inside the existing 8px of top padding, so it adds
+ * NO height. `--bottom-nav-h` is what every other element clears by, and growing
+ * the nav for this would put the two out of step. It sits entirely ABOVE the
+ * 64px row, so it cannot swallow taps meant for a destination.
+ */
+const GrabHandle: React.FC<{
+  expanded: boolean;
+  overflowIsActive: boolean;
+  onToggle: () => void;
+  className?: string;
+}> = ({ expanded, overflowIsActive, onToggle, className = '' }) => (
+  <button
+    onClick={onToggle}
+    aria-expanded={expanded}
+    aria-label={expanded ? 'Hide more destinations' : 'More destinations'}
+    className={`flex items-center justify-center ${className}`}
+  >
+    {/* Saffron while a hidden destination is the current one. With the More tab
+        gone this bar is the ONLY thing left that can say so, and without it the
+        dock reads as "nothing selected" whenever a manager sits on Records. */}
+    <span className={`h-1 w-9 rounded-full transition-colors ${overflowIsActive ? 'bg-saffron' : 'bg-hairline/25'}`} />
+  </button>
 );
 
 /**
@@ -373,7 +402,12 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
             aria-hidden="true"
           />
           <div className="clay-bottom-drawer animate-in slide-in-from-bottom-4" {...gestures}>
-            <GrabHandle />
+            <GrabHandle
+              expanded
+              overflowIsActive={overflowIsActive}
+              onToggle={() => setExpanded(false)}
+              className="w-full pb-2"
+            />
             <div className="max-w-md mx-auto grid grid-cols-3 gap-1">
               {overflow.map(item => (
                 <DockButton
@@ -400,7 +434,12 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
             clears by, and growing the nav for a decoration would put the two
             out of step. Hidden while open, where the drawer carries it. */}
         {hasOverflow && !expanded && (
-          <span className="absolute left-1/2 -translate-x-1/2 top-0.5 h-1 w-9 rounded-full bg-hairline/25" aria-hidden="true" />
+          <GrabHandle
+            expanded={false}
+            overflowIsActive={overflowIsActive}
+            onToggle={() => setExpanded(true)}
+            className="absolute inset-x-0 top-0 h-2"
+          />
         )}
         <div className="max-w-md mx-auto flex justify-around items-center h-16 gap-0.5">
           {docked.map(item => (
@@ -412,30 +451,6 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
             />
           ))}
 
-          {hasOverflow && (
-            <button
-              onClick={() => setExpanded(open => !open)}
-              aria-expanded={expanded}
-              aria-label={expanded ? 'Hide more destinations' : 'More destinations'}
-              className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${overflowIsActive || expanded ? 'text-saffron-800' : 'text-coffee-500'
-                }`}
-            >
-              {/* The chip marks CURRENT, matching every other item. Tinting it
-                  merely because the drawer is open made More look selected while
-                  Dispatch also looked selected. */}
-              <div className={`p-1 rounded-xl transition-all ${overflowIsActive ? 'bg-cream-400' : ''}`}>
-                {expanded
-                  ? <ChevronDown className="w-6 h-6 stroke-2" />
-                  : <MoreHorizontal className={`w-6 h-6 ${overflowIsActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />}
-              </div>
-              <span className="text-[10px] mt-1 font-bold uppercase tracking-tighter">More</span>
-              {/* Marked active while a hidden destination is the current one, so
-                  the dock never reads as "nothing selected". */}
-              {overflowIsActive && !expanded && (
-                <div className="absolute top-0 w-1/2 max-w-[40px] h-1 bg-saffron-800 rounded-b-md shadow-[0_2px_10px_rgba(184,67,24,0.4)] animate-in slide-in-from-top-1" />
-              )}
-            </button>
-          )}
         </div>
       </nav>
     </>

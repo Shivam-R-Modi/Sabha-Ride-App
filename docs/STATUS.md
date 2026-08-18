@@ -74,8 +74,8 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-DXdbR3BD.js` / css `index-Vpg4cdQl.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **791** · rules **89** —
-**1388 total**.
+**Test suites, all green:** `functions` **508** · client **793** · rules **89** —
+**1390 total**.
 
 **Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
@@ -1199,6 +1199,31 @@ what a decorative rule is for. No guard was touched.
 8 more tests (client **783 → 791**), four more deliberate breakages each
 confirmed to fail: no click guard, no swipe threshold, the nav keeping its top
 edge, and gestures attached to a dock with nothing to overflow.
+
+### Then the More tab came out
+
+Asked for on sight of the working gesture: four destinations plus a fifth tab
+that was not a destination read as five peers.
+
+It was NOT replaced with nothing. The pull handle became the control — same
+pill, now a `<button>` with the same accessible name. Swipe-only would have
+stranded Reports, Profile and Records: **on a phone this dock is the only
+navigation there is**, the sidebar being desktop-only, so anyone who cannot make
+a touch swipe (keyboard, switch access, VoiceOver) would have had no route to
+three destinations at all.
+
+The handle also inherits the job the More tab was doing: it turns **saffron**
+while a hidden destination is current. Without that the dock reads as "nothing
+selected" whenever a manager sits on Records. It stays inside the nav's existing
+8px of top padding — no height added, and entirely above the 64px row, so it
+cannot swallow taps meant for a destination.
+
+`bg-cream-400` in `theme-tokens.test.ts` went 4 → 3 with the More chip gone; the
+handle marks the same state with a bar, so it needs no fill.
+
+2 more tests (client **791 → 793**). Three deliberate breakages confirmed to
+fail — the loudest being the handle reverting to decoration, which fails **10**
+of the 21 dock tests.
 
 Released the same day as bundle `index-DXdbR3BD.js` / css `index-Vpg4cdQl.css`.
 Verified against the LIVE stylesheet, which carries

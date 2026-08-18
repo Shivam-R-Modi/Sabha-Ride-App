@@ -243,11 +243,14 @@ describe('tokens that stack must not collide within a theme', () => {
         const layout = readFileSync(path.join(ROOT, 'components/Layout.tsx'), 'utf8');
 
         expect(layout).toMatch(/<aside className=\{`fixed[^`]*bg-surface/);
-        // Four fills: the sidebar's active pill, its Sign Out button, the dock's
-        // active chip (DockButton, shared by the visible row and the overflow
-        // drawer), and the dock's More control, which takes the same chip while
-        // one of the hidden destinations is current.
-        expect(layout.match(/bg-cream-400/g) ?? []).toHaveLength(4);
+        // Three fills: the sidebar's active pill, its Sign Out button, and the
+        // dock's active chip (DockButton, shared by the visible row and the
+        // overflow drawer).
+        //
+        // Was four while the dock carried a `More` tab. That tab is gone — the
+        // pull handle replaced it — and the handle marks the same state with a
+        // saffron BAR rather than a chip, so it needs no fill of its own.
+        expect(layout.match(/bg-cream-400/g) ?? []).toHaveLength(3);
         // And none of them back on the colliding token.
         expect(layout).not.toMatch(/isActive\s*\?\s*'bg-cream-300/);
     });
