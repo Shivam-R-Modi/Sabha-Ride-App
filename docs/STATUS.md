@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-18** (iOS install prompt).
+at the end. Last updated **2026-08-18** (banner theme, mobile dock).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -74,11 +74,11 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-BZOSUz-K.js` / css `index-CO8GBe2B.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **769** · rules **89** —
-**1366 total**.
+**Test suites, all green:** `functions` **508** · client **783** · rules **89** —
+**1380 total**.
 
-**Everything in this file is deployed.** `main` = `5b8bfa1` = production, local
-and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed EXCEPT the last section** — *The dark-mode
+banner and the crowded dock* — which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1071,6 +1071,98 @@ The **post-ride trigger** was planned and is not built. `CompletionScreen` alrea
 fires confetti and "Great job!", which is the highest-goodwill moment in the app
 and the natural place to ask. Today the banner appears on first visit and once
 only; the Profile entry is the permanent way back.
+
+---
+
+## 2026-08-18: the dark-mode banner, and a dock with seven items on a phone
+
+Two mobile reports, from screenshots of the real app.
+
+### 1. The update banner was a bright slab in dark mode
+
+Not a token that failed to switch — a token switching in the *wrong direction*.
+`UpdateBanner` and `PWAPrompt` both used a deliberate inverted pair: the coffee
+background utility with cream text. That background reads `--text-strong`, and
+the **text ramp flips between themes** — 61 41 20 in light, 232 227 220 in dark.
+So the panel itself became near-white on a dark app. Contrast was never the
+problem (13.8:1); the banner was simply painted from the text ramp instead of
+the panel ramp.
+
+Both now use `bg-surface`, which moves with every other card, plus a saffron
+accent bar carrying the "this is a notice" weight the inversion used to.
+Measured in a real browser, reading a frame after the theme switch:
+
+| | light | dark |
+|---|---|---|
+| banner background, new | `rgb(255,255,255)` | `rgb(46,40,34)` |
+| banner background, old | `rgb(61,41,20)` | `rgb(232,227,220)` |
+| heading text | `rgb(61,41,20)` — 13.76:1 | `rgb(232,227,220)` — 11.40:1 |
+| muted second line | 5.15:1 | 5.25:1 |
+
+The accent is a positioned span, not a border: the elevation rule is border OR
+shadow, never both, and `shadow-2xl` is what lifts these off the page.
+
+`bg-coffee` is **not** banned generally — it is a deliberate emphasis idiom in
+`RideWindowControl` and `DatabaseConsole`, where a dark chip on a page is the
+point. It is banned only for these two, which are panels. A new guard in
+`theme-tokens.test.ts` keeps the pair together, because the likely regression is
+restyling one and forgetting the other, leaving two differently-coloured notices
+in the same corner.
+
+### 2. Seven destinations across a 390px phone
+
+~47px each, which is why the labels are `text-[10px]` and only just fit. Now four
+stay docked — **Dispatch · People · Fleet · Setup** — and Reports, Profile and
+Records move behind a More control. Five slots at ~78px, the budget iOS uses.
+
+**The overflow opens UPWARD as a drawer, and the dock's own height never
+changes.** That is the constraint that shaped the design: `--bottom-nav-h` is a
+static token and `<main>` in Layout.tsx reserves exactly that much bottom
+padding, so a dock that genuinely grew would hide the last row of content behind
+itself and make the page jump on every open.
+
+Two details that are easy to miss:
+
+- **Drivers and riders get no More control at all.** They have three
+  destinations, and a button opening an empty drawer is the dead control this
+  repo keeps deleting. `primary` is simply unset for them, and the split
+  degrades to "show everything".
+- **More is marked active while a hidden destination is current.** Without it a
+  manager sitting on Records looks down at a dock with nothing lit and has lost
+  their place.
+
+A side effect worth keeping: Records edits live names, phone numbers and home
+addresses with no undo. On desktop it sits behind a divider for exactly that
+reason; on mobile it now sits behind a deliberate tap rather than beside the
+button a manager hits every Friday.
+
+The **sidebar is untouched** and still shows all seven — a desktop rail has the
+room a phone does not. `getNavItems` still returns all seven in order, so
+`managerNavigation.test.tsx` keeps parsing what it always did.
+
+### Two guards moved, neither weakened
+
+- `native-dialogs.test.ts` — the drawer's click-catcher is a `fixed inset-0`,
+  which trips the hand-rolled-overlay ratchet. `Layout.tsx` joins `RoleSwitcher`
+  in `NOT_DIALOGS` for the identical recorded reason: a dropdown is not modal,
+  and trapping focus inside three nav destinations would make the rest of the app
+  unreachable to a keyboard.
+- `theme-tokens.test.ts` — the `bg-cream-400` count went 3 → 4. The fourth is the
+  More control, which takes the same active chip. The assertion it protects
+  (none of these fills use the colliding `cream-300`) is unchanged.
+
+### Verification
+
+14 new tests, client **769 → 783**. Four deliberate breakages on the dock, each
+confirmed to fail: a More control with nothing to overflow (2), the active
+marking dropped (1), no split at all (2), and a drawer that stays open after a
+choice (1). Every new utility was confirmed present in the built stylesheet —
+`clay-bottom-drawer`, `z-dropdown`, `grid-cols-3`, `w-1.5`, `pl-5`,
+`text-coffee-400` — because silently-dead CSS is the standing failure here.
+
+**Not seen on a real phone.** The dock is mobile-only and behind auth, so the
+browser pane cannot reach it; the DOM structure and the theme colours are
+measured, the appearance is not.
 
 ---
 

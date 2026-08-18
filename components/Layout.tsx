@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { LotusIcon } from '../constants';
 import { TabView, UserRole } from '../types';
-import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database } from 'lucide-react';
+import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, ChevronDown, MoreHorizontal, UserCheck, Settings, Database } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
@@ -219,40 +219,158 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   );
 };
 
+/**
+ * One dock button. Shared by the visible row and the overflow drawer so the two
+ * cannot drift into looking like different controls.
+ */
+const DockButton: React.FC<{
+  item: NavItem;
+  isActive: boolean;
+  onClick: () => void;
+  heightClass?: string;
+  showActiveBar?: boolean;
+}> = ({ item, isActive, onClick, heightClass = 'h-full', showActiveBar = true }) => {
+  const Icon = item.icon;
+  return (
+    <button
+      onClick={onClick}
+      className={`relative flex flex-col items-center justify-center ${heightClass} w-full transition-all btn-feedback ${isActive ? 'text-saffron-800' : 'text-coffee-500'
+        }`}
+    >
+      {/* cream-400: .clay-bottom-nav is a --surface -> --surface-mid
+          gradient, so a cream-300 chip vanished here in dark mode exactly
+          as it did in the sidebar. */}
+      <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-cream-400' : ''}`}>
+        <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
+      </div>
+      <span className="text-[10px] mt-1 font-bold uppercase tracking-tighter truncate max-w-full px-0.5">
+        {item.label}
+      </span>
+      {isActive && showActiveBar && (
+        <div className="absolute top-0 w-1/2 max-w-[40px] h-1 bg-saffron-800 rounded-b-md shadow-[0_2px_10px_rgba(184,67,24,0.4)] animate-in slide-in-from-top-1" />
+      )}
+    </button>
+  );
+};
+
+/**
+ * The mobile dock.
+ *
+ * Seven destinations across a 390px phone gave each one ~47px — under a
+ * comfortable thumb target, and the reason the labels are `text-[10px]` and
+ * still only just fit. Four destinations plus a More control gives ~78px each,
+ * the same five-slot budget iOS uses for a tab bar.
+ *
+ * The overflow opens UPWARD as a drawer instead of making the dock taller.
+ * `--bottom-nav-h` is a static token and `<main>` above reserves exactly that
+ * much bottom padding, so a dock that genuinely grew would hide the last row of
+ * content behind itself and the page would jump on every open.
+ *
+ * Only the manager has more than five destinations. Drivers and riders have
+ * three, so `primary` is unset for them and they get NO More control — one that
+ * opened an empty drawer would be the dead button this repo keeps deleting.
+ *
+ * A side effect worth keeping: Records edits live names, phone numbers and home
+ * addresses with no undo. On desktop it sits behind a divider for that reason;
+ * here it now sits behind a deliberate tap instead of next to the button a
+ * manager hits every Friday.
+ */
 const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
   const { currentTab, setCurrentTab } = useNavigation();
   const navItems = getNavItems(role);
+  const [expanded, setExpanded] = useState(false);
+
+  const primary = navItems.filter(item => item.primary);
+  const overflow = navItems.filter(item => !item.primary);
+  // BOTH halves must be non-empty. A role that marks nothing shows its whole
+  // list exactly as before, and a role that marks everything gets no drawer.
+  const hasOverflow = primary.length > 0 && overflow.length > 0;
+  const docked = hasOverflow ? primary : navItems;
+
+  // Whether the current tab is one of the hidden ones. Without this the dock
+  // would show nothing selected while a manager sits on Records, and they would
+  // lose their place every time they glanced down.
+  const overflowIsActive = overflow.some(item => item.id === currentTab);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setExpanded(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expanded]);
+
+  const choose = (id: TabView) => {
+    setCurrentTab(id);
+    setExpanded(false);
+  };
 
   return (
-    <nav className="clay-bottom-nav lg:hidden">
-      <div className="max-w-md mx-auto flex justify-around items-center h-16 gap-0.5">
-        {navItems.map((item) => {
-          const isActive = currentTab === item.id;
-          const Icon = item.icon;
-          return (
-            <button
+    <>
+      {expanded && (
+        <>
+          {/* Invisible click-catcher, the same pattern RoleSwitcher uses and
+              deliberately NOT a Sheet: a dropdown is not modal, and trapping
+              focus inside a three-item nav menu would be wrong. `lg:hidden`
+              because the dock itself is hidden there — without it, resizing to
+              desktop with the drawer open would leave an invisible sheet over
+              the whole app. */}
+          <div
+            className="fixed inset-0 z-dropdown lg:hidden"
+            onClick={() => setExpanded(false)}
+            aria-hidden="true"
+          />
+          <div className="clay-bottom-drawer animate-in slide-in-from-bottom-4">
+            <div className="max-w-md mx-auto grid grid-cols-3 gap-1">
+              {overflow.map(item => (
+                <DockButton
+                  key={item.id}
+                  item={item}
+                  isActive={currentTab === item.id}
+                  onClick={() => choose(item.id)}
+                  heightClass="py-2"
+                  showActiveBar={false}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      <nav className="clay-bottom-nav">
+        <div className="max-w-md mx-auto flex justify-around items-center h-16 gap-0.5">
+          {docked.map(item => (
+            <DockButton
               key={item.id}
-              onClick={() => setCurrentTab(item.id)}
-              className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${isActive ? 'text-saffron-800' : 'text-coffee-500'
+              item={item}
+              isActive={currentTab === item.id}
+              onClick={() => choose(item.id)}
+            />
+          ))}
+
+          {hasOverflow && (
+            <button
+              onClick={() => setExpanded(open => !open)}
+              aria-expanded={expanded}
+              aria-label={expanded ? 'Hide more destinations' : 'More destinations'}
+              className={`relative flex flex-col items-center justify-center h-full w-full transition-all btn-feedback ${overflowIsActive || expanded ? 'text-saffron-800' : 'text-coffee-500'
                 }`}
             >
-              {/* cream-400: .clay-bottom-nav is a --surface -> --surface-mid
-                  gradient, so a cream-300 chip vanished here in dark mode exactly
-                  as it did in the sidebar. */}
-              <div className={`p-1 rounded-xl transition-all ${isActive ? 'bg-cream-400' : ''}`}>
-                <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
+              <div className={`p-1 rounded-xl transition-all ${overflowIsActive || expanded ? 'bg-cream-400' : ''}`}>
+                {expanded
+                  ? <ChevronDown className="w-6 h-6 stroke-2" />
+                  : <MoreHorizontal className={`w-6 h-6 ${overflowIsActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />}
               </div>
-              <span className="text-[10px] mt-1 font-bold uppercase tracking-tighter truncate max-w-full px-0.5">
-                {item.label}
-              </span>
-              {isActive && (
+              <span className="text-[10px] mt-1 font-bold uppercase tracking-tighter">More</span>
+              {/* Marked active while a hidden destination is the current one, so
+                  the dock never reads as "nothing selected". */}
+              {overflowIsActive && !expanded && (
                 <div className="absolute top-0 w-1/2 max-w-[40px] h-1 bg-saffron-800 rounded-b-md shadow-[0_2px_10px_rgba(184,67,24,0.4)] animate-in slide-in-from-top-1" />
               )}
             </button>
-          );
-        })}
-      </div>
-    </nav>
+          )}
+        </div>
+      </nav>
+    </>
   );
 };
 
@@ -265,6 +383,15 @@ interface NavItem {
    * everyday destinations, so the advanced one below does not read as a peer.
    */
   separated?: boolean;
+  /**
+   * Keep this one in the collapsed mobile dock. Everything unmarked moves into
+   * the More drawer.
+   *
+   * Only set for roles with more than five destinations — see BottomNav. The
+   * SIDEBAR ignores it entirely and still shows all seven, because a desktop
+   * rail has the room a phone does not.
+   */
+  primary?: boolean;
 }
 
 const getNavItems = (role: UserRole): NavItem[] => {
@@ -290,11 +417,11 @@ const getNavItems = (role: UserRole): NavItem[] => {
     // item ~47px, and `RAW RECORDS` at text-[10px] uppercase overflows that and
     // truncates. `Fleet` and `Records` both fit.
     return [
-      { id: 'home', label: 'Dispatch', icon: LayoutDashboard },
-      { id: 'people', label: 'People', icon: UserCheck },
+      { id: 'home', label: 'Dispatch', icon: LayoutDashboard, primary: true },
+      { id: 'people', label: 'People', icon: UserCheck, primary: true },
       { id: 'history', label: 'Reports', icon: History },
-      { id: 'fleet', label: 'Fleet', icon: Car },
-      { id: 'setup', label: 'Setup', icon: Settings },
+      { id: 'fleet', label: 'Fleet', icon: Car, primary: true },
+      { id: 'setup', label: 'Setup', icon: Settings, primary: true },
       { id: 'profile', label: 'Profile', icon: UserIcon },
       { id: 'records', label: 'Records', icon: Database, separated: true },
     ];

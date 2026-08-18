@@ -36,19 +36,22 @@ export const PWAPrompt: React.FC = () => {
     // stays. Focus mode hides the sidebar at every width, so it stays too.
     <div className={`fixed bottom-safe-nav right-4 z-sticky animate-in slide-in-from-bottom-10 left-4 ${isFocusMode ? '' : isSidebarCollapsed ? 'lg:left-24' : 'lg:left-64'
       }`}>
-      {/* Inverted pair — see the note in components/UpdateBanner.tsx. */}
-      <div className="bg-coffee text-cream p-4 rounded-xl shadow-2xl flex items-start justify-between gap-3">
+      {/* Panel ramp and saffron accent — see the note in components/UpdateBanner.tsx.
+          These two share a slot and must stay styled as one pair;
+          tests/quality/theme-tokens.test.ts fails if they drift apart. */}
+      <div className="relative overflow-hidden bg-surface text-coffee p-4 pl-5 rounded-xl shadow-2xl flex items-start justify-between gap-3">
+        <span className="absolute inset-y-0 left-0 w-1.5 bg-saffron" aria-hidden="true" />
         {availability === 'manual' ? (
           <div className="min-w-0">
             <h4 className="font-bold text-sm flex items-center gap-1.5">
               <Share size={14} className="shrink-0" /> Add to Home Screen
             </h4>
-            <p className="text-xs text-cream/70 mt-0.5">Opens like an app, without the address bar.</p>
+            <p className="text-xs text-coffee-500 mt-0.5">Opens like an app, without the address bar.</p>
             {/* Numbered rather than prose: this is a route through two menus,
                 and a driver reads it one-handed in a car park. */}
             <ol className="mt-2 space-y-1">
               {steps.map((step, index) => (
-                <li key={step} className="text-xs text-cream/90 flex items-start gap-2">
+                <li key={step} className="text-xs text-coffee-700 flex items-start gap-2">
                   <span className="shrink-0 w-4 h-4 rounded-full bg-saffron text-white text-[10px] font-bold flex items-center justify-center mt-px">
                     {index + 1}
                   </span>
@@ -60,7 +63,7 @@ export const PWAPrompt: React.FC = () => {
         ) : (
           <div className="min-w-0">
             <h4 className="font-bold text-sm">Install App</h4>
-            <p className="text-xs text-cream/70">Add to home screen for better experience</p>
+            <p className="text-xs text-coffee-500">Add to home screen for better experience</p>
           </div>
         )}
 
@@ -76,7 +79,7 @@ export const PWAPrompt: React.FC = () => {
               <Download size={14} /> Install
             </button>
           )}
-          <button onClick={dismiss} aria-label="Dismiss" className="text-cream/50 hover:text-cream">
+          <button onClick={dismiss} aria-label="Dismiss" className="text-coffee-400 hover:text-coffee">
             <X size={18} />
           </button>
         </div>

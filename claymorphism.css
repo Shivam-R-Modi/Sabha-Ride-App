@@ -709,11 +709,42 @@
   z-index: 100;
 }
 
+/* The overflow drawer, opened by the dock's More control.
+   
+   Sits ON TOP of the nav rather than inside it, and the nav's own height is
+   unchanged while it is open. That is deliberate: --bottom-nav-h above is a
+   STATIC token, and <main> in Layout.tsx reserves exactly that much bottom
+   padding, so a dock that really grew would hide the last row of content
+   behind itself. Floating above keeps that contract intact and stops the page
+   jumping every time the drawer opens.
+
+   Same gradient and radius as the nav so the two read as one piece. */
+.clay-bottom-drawer {
+  position: fixed;
+  bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+
+  background: linear-gradient(180deg,
+      rgb(var(--surface)) 0%,
+      rgb(var(--surface-mid)) 100%);
+
+  padding: 12px 16px;
+  border-radius: 24px 24px 0 0;
+
+  box-shadow: 0 -8px 24px 0 rgb(var(--shadow-cast) / 0.12);
+
+  /* `dropdown` rung — it must clear the two bottom banners, which sit on
+     `sticky` in this same strip. See the ladder in tailwind.config.js. */
+  z-index: 1000;
+}
+
 /* Hide on desktop */
 @media (min-width: 1024px) {
 
   .clay-tab-bar,
-  .clay-bottom-nav {
+  .clay-bottom-nav,
+  .clay-bottom-drawer {
     display: none !important;
   }
 }

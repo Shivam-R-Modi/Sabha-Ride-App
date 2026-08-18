@@ -91,15 +91,33 @@ export const UpdateBanner: React.FC = () => {
             className={`fixed bottom-safe-nav right-4 z-sticky animate-in slide-in-from-bottom-10 left-4 ${isFocusMode ? '' : isSidebarCollapsed ? 'lg:left-24' : 'lg:left-64'
                 }`}
         >
-            {/* `bg-coffee text-cream`, an INVERTED PAIR. `bg-coffee` is `--text-strong`, a
-                TEXT token, and the text ramp inverts between themes — 61 41 20 in light,
-                232 227 220 in dark. So `text-white` on it measured 13.76:1 in light and
-                **1.28:1** in dark: white on near-white. `text-cream` is `--canvas`, which
-                inverts in step, giving 13.07:1 and 13.82:1. */}
-            <div className="bg-coffee text-cream p-4 rounded-xl shadow-2xl flex items-center justify-between gap-3">
+            {/* Painted from the PANEL ramp, not the text ramp.
+                
+                It used to be a deliberate inverted pair: the coffee background
+                utility with cream text. That is contrast-correct — the coffee
+                background reads `--text-strong`, which flips between themes, and
+                the cream text flips with it — but it means the panel BECOMES
+                near-white in dark mode, so the banner read as a bright slab
+                pasted onto a dark app.
+
+                (The utility names are spelled around rather than written out:
+                Tailwind scans this file as plain TEXT, comments included, so
+                naming one here re-emits it into the bundle.)
+
+                `bg-surface` moves in the same direction as every other card:
+                white in light, 46 40 34 in dark. Measured against `text-coffee`
+                it is 13.76:1 light and 11.40:1 dark; the muted second line is
+                5.15:1 and 5.25:1. All above the AA floor.
+
+                The saffron bar carries the "this is a notice" weight the
+                inversion used to. It is a positioned span rather than a border
+                because the elevation rule is border OR shadow, never both, and
+                `shadow-2xl` is what lifts this off the page. */}
+            <div className="relative overflow-hidden bg-surface text-coffee p-4 pl-5 rounded-xl shadow-2xl flex items-center justify-between gap-3">
+                <span className="absolute inset-y-0 left-0 w-1.5 bg-saffron" aria-hidden="true" />
                 <div>
                     <h4 className="font-bold text-sm">Update available</h4>
-                    <p className="text-xs text-cream/70">
+                    <p className="text-xs text-coffee-500">
                         Reload to get the latest version. Safe to finish what you are doing first.
                     </p>
                 </div>

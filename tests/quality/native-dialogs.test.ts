@@ -153,8 +153,19 @@ describe('hand-rolled overlays', () => {
      *                   A dropdown is not modal — Escape and click-away are its
      *                   whole interaction, and making it a dialog would trap
      *                   focus in a three-item menu.
+     *   Layout          is the same catcher behind the mobile dock's More
+     *                   drawer, exempt for the identical reason. Trapping focus
+     *                   inside three nav destinations would make the rest of the
+     *                   app unreachable to a keyboard until the menu was closed,
+     *                   which is worse than the problem Sheet solves. It closes
+     *                   on Escape, on click-away and on choosing a destination.
      */
-    const NOT_DIALOGS = ['shared/Sheet.tsx', 'auth/SplashScreen.tsx', 'RoleSwitcher.tsx'];
+    const NOT_DIALOGS = [
+        'shared/Sheet.tsx',
+        'auth/SplashScreen.tsx',
+        'RoleSwitcher.tsx',
+        'components/Layout.tsx',
+    ];
 
     /** A `fixed inset-0` that ought to be a Sheet and is not one yet. */
     function overlays(): { file: string; line: number; text: string }[] {

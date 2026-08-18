@@ -243,9 +243,11 @@ describe('tokens that stack must not collide within a theme', () => {
         const layout = readFileSync(path.join(ROOT, 'components/Layout.tsx'), 'utf8');
 
         expect(layout).toMatch(/<aside className=\{`fixed[^`]*bg-surface/);
-        // Three fills: the sidebar's active pill, its Sign Out button, and the
-        // bottom nav's active chip.
-        expect(layout.match(/bg-cream-400/g) ?? []).toHaveLength(3);
+        // Four fills: the sidebar's active pill, its Sign Out button, the dock's
+        // active chip (DockButton, shared by the visible row and the overflow
+        // drawer), and the dock's More control, which takes the same chip while
+        // one of the hidden destinations is current.
+        expect(layout.match(/bg-cream-400/g) ?? []).toHaveLength(4);
         // And none of them back on the colliding token.
         expect(layout).not.toMatch(/isActive\s*\?\s*'bg-cream-300/);
     });
@@ -527,5 +529,52 @@ describe('the app uses themed colours, not Tailwind stock', () => {
         const stale = [...HEX_ALLOWED.keys()]
             .filter(file => offences(RAW_HEX, f => f !== file).length === 0);
         expect(stale, `Allowlisted but clean — drop the entry:\n  ${stale.join('\n  ')}`).toEqual([]);
+    });
+});
+
+/**
+ * The two banners that share the bottom slot.
+ *
+ * `UpdateBanner` and `PWAPrompt` are both `fixed bottom-safe-nav`, so on a phone
+ * they occupy the same strip and are frequently seen one after the other. They
+ * were styled as an inverted pair — `bg-coffee text-cream` — which is
+ * contrast-correct but paints the panel from the TEXT ramp, and that ramp flips
+ * between themes. The result in dark mode was a near-white slab on a dark app:
+ * technically legible, visibly foreign.
+ *
+ * Both now use `bg-surface`, which moves with the rest of the app's cards. The
+ * risk this guards is drift — restyling one and forgetting the other, leaving
+ * two differently-coloured notices in the same corner.
+ *
+ * `bg-coffee` is NOT banned generally. It is a deliberate emphasis idiom in
+ * RideWindowControl and DatabaseConsole, where a dark chip on a page is the
+ * point. It is banned only for these two, which are panels, not chips.
+ */
+describe('the bottom banners stay one pair', () => {
+    const BANNERS = ['components/UpdateBanner.tsx', 'components/PWAPrompt.tsx'];
+
+    const read = (file: string) => readFileSync(path.join(ROOT, file), 'utf8');
+
+    it('both paint from the panel ramp', () => {
+        for (const file of BANNERS) {
+            expect(read(file), `${file} should use bg-surface`).toMatch(/bg-surface\b/);
+        }
+    });
+
+    it('neither paints its panel from the inverting text ramp', () => {
+        // The specific regression: `bg-coffee` is `--text-strong`, 61 41 20 in
+        // light and 232 227 220 in dark. As a panel it inverts the whole banner.
+        for (const file of BANNERS) {
+            expect(read(file).includes('bg-coffee'), `${file} is back on the text ramp`).toBe(false);
+        }
+    });
+
+    it('both are still in the shared bottom slot, so this pairing still matters', () => {
+        // A guard on the guard: if either stops being a bottom banner, the
+        // reasoning above no longer applies and this block should be revisited
+        // rather than left passing for the wrong reason.
+        for (const file of BANNERS) {
+            expect(read(file), `${file} no longer sits in the bottom slot`).toMatch(/fixed bottom-safe-nav/);
+        }
     });
 });
