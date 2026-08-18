@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { reportClientError } from '../src/utils/errorReport';
 
 interface Props {
     children: ReactNode;
@@ -26,6 +27,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
         console.error('ErrorBoundary caught an error:', error, errorInfo);
+        // The console is nobody's monitoring system. This screen means a user is
+        // looking at a dead app, and before this the only record was in a devtools
+        // panel on their phone that no one would ever open.
+        void reportClientError('render', error);
     }
 
     handleReload = () => {

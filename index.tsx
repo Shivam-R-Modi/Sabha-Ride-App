@@ -15,11 +15,18 @@ import { NavigationProvider } from './contexts/NavigationContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { installGlobalErrorReporting } from './src/utils/errorReport';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
+
+// Installed BEFORE the first render, because an error thrown on the way up is
+// exactly the kind that leaves a blank screen with no explanation. An
+// ErrorBoundary cannot see these — they happen outside React's tree, or in
+// promises nobody awaited.
+installGlobalErrorReporting();
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(

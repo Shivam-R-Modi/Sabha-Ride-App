@@ -42,6 +42,7 @@ exports.adminDeleteUser = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const authz_1 = require("../utils/authz");
+const rateLimiter_1 = require("../utils/rateLimiter");
 const audit_1 = require("../utils/audit");
 const fleet_1 = require("../utils/fleet");
 exports.adminDeleteUser = functions.https.onCall(async (data, context) => {
@@ -59,6 +60,24 @@ exports.adminDeleteUser = functions.https.onCall(async (data, context) => {
         // records the role only in `roles[]` was refused here while passing
         // everywhere else.
         const callerData = await (0, authz_1.assertApprovedManager)(db, callerUid, 'delete users');
+        // Throttled because this one is irreversible.
+        //
+        // Deleting a user removes their Firestore document AND their Auth account.
+        // There is no undo in the app, and `targetUserIds` accepts a BATCH, so a
+        // single loop over this endpoint can empty the congregation faster than
+        // anyone could notice and far faster than a 7-day point-in-time restore
+        // could be decided on.
+        //
+        // 30/hour leaves ordinary housekeeping — pruning a handful of duplicate
+        // or departed accounts — completely unaffected, while capping the damage
+        // a runaway script or a stolen session can do before someone intervenes.
+        // Same placement as the export: after the authority check, so a stranger
+        // cannot spend a real manager's allowance.
+        await (0, rateLimiter_1.checkRateLimit)(callerUid, {
+            maxRequests: 30,
+            windowMs: 60 * 60 * 1000,
+            functionName: 'adminDeleteUser',
+        });
         // Collect array of target UIDs to delete
         const uidsToDelete = [];
         if (typeof targetUserId === 'string' && targetUserId.trim()) {

@@ -55,6 +55,13 @@ vi.mock('../utils/authz', () => ({
     assertApprovedManager: vi.fn(async () => ({ name: 'Manager Meera' })),
 }));
 
+// Deleting a user is irreversible and takes a batch, so the handler is rate
+// limited. Stubbed to a no-op here: these cases are about the fleet cleanup, and
+// the limit itself is covered in sensitiveEndpointLimits.test.ts.
+vi.mock('../utils/rateLimiter', () => ({
+    checkRateLimit: vi.fn(async () => undefined),
+}));
+
 const auditRows: any[] = [];
 vi.mock('../utils/audit', () => ({
     writeAuditLog: vi.fn(async (_db: any, entry: any) => { auditRows.push(entry); return null; }),

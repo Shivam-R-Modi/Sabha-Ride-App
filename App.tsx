@@ -17,6 +17,7 @@ import { ManagerSetup } from './components/manager/ManagerSetup';
 import { ResponsiveLayout } from './components/Layout';
 import { ProfileEditor } from './components/shared/ProfileEditor';
 import { PWAPrompt } from './components/PWAPrompt';
+import { UpdateBanner } from './components/UpdateBanner';
 import { OmWatermark } from './constants';
 import { useAuth } from './contexts/AuthContext';
 import { useNavigation } from './contexts/NavigationContext';
@@ -107,6 +108,7 @@ export default function App() {
 
   return (
     <div className="relative">
+      <UpdateBanner />
       <PWAPrompt />
       <OmWatermark />
       <ResponsiveLayout role={displayRole}>

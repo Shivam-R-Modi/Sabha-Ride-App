@@ -497,6 +497,37 @@ service cloud.firestore {
     }
 
     // =====================================
+    // CLIENT ERROR REPORTS
+    // =====================================
+    //
+    // Crash reports from the browser. Written by whoever crashed, read only by
+    // managers — see src/utils/errorReport.ts for why this is a Firestore
+    // collection rather than a third-party error service.
+    match /clientErrors/{reportId} {
+      // Any signed-in user may FILE one, because anyone can crash. Unauthenticated
+      // is refused: an open write endpoint is a free way to fill the database, and
+      // a report with no `uid` cannot help anybody anyway.
+      //
+      // `uid` is pinned to the caller. Without this, one signed-in user could file
+      // reports attributed to another — noise that would send a manager chasing
+      // the wrong person's phone.
+      allow create: if isAuthenticated()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.message is string
+                    && request.resource.data.message.size() <= 500;
+
+      // Reports are evidence. Nobody edits or deletes them from the client —
+      // including the person who filed one, who could otherwise erase the trace
+      // of a crash a manager is trying to understand. Pruning is an Admin SDK job.
+      allow update, delete: if false;
+
+      // Only managers, and only through the recorded-role path: this is the one
+      // place a stack trace and a uid sit together, which is more than an ordinary
+      // rider or driver has any reason to read.
+      allow read: if isManagerForRead();
+    }
+
+    // =====================================
     // SETTINGS COLLECTION (Sabha location, etc.)
     // =====================================
     match /settings/{settingId} {

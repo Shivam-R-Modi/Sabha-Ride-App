@@ -38,7 +38,22 @@ export default defineConfig(({ mode, command }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: 'autoUpdate',
+        // 'prompt', not 'autoUpdate'. THIS IS THE FIX FOR A REAL FAILURE.
+        //
+        // Under 'autoUpdate' the generated registerSW.js is a bare
+        // `navigator.serviceWorker.register('/sw.js')` — no update handling of any
+        // kind. The new worker installed and claimed clients, but an ALREADY-OPEN
+        // page kept running the JavaScript it had already downloaded, and nothing
+        // told the user. On 2026-08-17 that cost an hour of chasing a dark-mode
+        // bug that was already fixed in production; on a phone with the PWA left
+        // open it means a driver can run last week's client against this week's
+        // rules and functions indefinitely.
+        //
+        // 'prompt' makes the new worker WAIT, and components/UpdateBanner.tsx
+        // offers the reload. Deliberately not an automatic reload: a driver
+        // mid-ride must not have the page pulled out from under them — but they
+        // must be told, so the banner is persistent rather than dismissible.
+        registerType: 'prompt',
         includeAssets: ['fonts/**/*', 'assets/**/*', 'icons/**/*'],
         manifest: {
           name: 'Sabha Ride Seva',
@@ -74,8 +89,15 @@ export default defineConfig(({ mode, command }) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           // Clean up old caches
           cleanupOutdatedCaches: true,
-          // Skip waiting and claim clients immediately
-          skipWaiting: true,
+          // skipWaiting is deliberately ABSENT (i.e. false).
+          //
+          // It is what made the swap silent: the new worker took over without
+          // anybody being asked, while the open page carried on with stale code.
+          // With it off the worker parks in `waiting`, which is the signal
+          // UpdateBanner watches for, and the reload happens when the user says
+          // so. `clientsClaim` stays: once the user accepts, the fresh worker
+          // should control the page immediately rather than after another
+          // navigation.
           clientsClaim: true,
           runtimeCaching: [
             {

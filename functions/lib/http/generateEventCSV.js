@@ -41,6 +41,7 @@ exports.generateEventCSV = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const authz_1 = require("../utils/authz");
+const rateLimiter_1 = require("../utils/rateLimiter");
 /**
  * HTTP Callable: Generate CSV export for an event
  * Input: { eventDate: string } (YYYY-MM-DD format)
@@ -62,6 +63,27 @@ exports.generateEventCSV = functions.https.onCall(async (data, context) => {
         // had been rejected could still export the lot — revocation never reached
         // the one function where it mattered most.
         await (0, authz_1.assertApprovedManager)(db, context.auth.uid, 'export data');
+        // THROTTLED, not merely authorised.
+        //
+        // The rows below are every rider's name, phone number and home address —
+        // the most sensitive thing this app can emit, and for a congregation that
+        // includes minors. `assertApprovedManager` answers "may you export?"; it
+        // cannot answer "why are you exporting for the 400th time tonight?"
+        //
+        // A compromised or borrowed manager session is the realistic threat, and
+        // an unthrottled export turns it into a bulk dump of the whole community
+        // in seconds. 20/hour is far above any real use — a manager exports once
+        // per gathering, maybe a handful of times while fixing a spreadsheet —
+        // and far below what exfiltration needs.
+        //
+        // Deliberately AFTER the manager check, so a stranger probing this
+        // endpoint is refused for the right reason and never consumes a
+        // legitimate manager's budget.
+        await (0, rateLimiter_1.checkRateLimit)(context.auth.uid, {
+            maxRequests: 20,
+            windowMs: 60 * 60 * 1000,
+            functionName: 'generateEventCSV',
+        });
         const rows = [];
         // Header
         rows.push('Student Name,Phone,Pickup Address,Status,Request Date');

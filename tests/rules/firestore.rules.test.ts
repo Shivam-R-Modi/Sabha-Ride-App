@@ -17,7 +17,7 @@ import {
     assertSucceeds,
     type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, deleteDoc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { addDoc, doc, deleteDoc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 
 let testEnv: RulesTestEnvironment;
 
@@ -816,5 +816,83 @@ describe('attendance records are server-owned', () => {
     it('the event generator marker is not client-writable', async () => {
         await assertFails(setDoc(doc(asManager(), 'system', 'eventGenerator'), { seededAt: 'now' }));
         await assertFails(setDoc(doc(asStudent(), 'system', 'eventGenerator'), { seededAt: 'now' }));
+    });
+});
+
+/**
+ * Crash reports: anyone may file, only managers may read.
+ *
+ * This collection is written by a BROKEN client, which makes it unusual — the
+ * app is in a bad state at the exact moment it needs to write. So the rule has to
+ * be permissive enough that a report actually lands, and tight enough that an
+ * open write endpoint is not a way to fill the database or frame another user.
+ *
+ * A report pairs a stack trace with a uid, which is more than an ordinary rider
+ * or driver has any reason to read about someone else.
+ */
+describe('clientErrors — crash reports', () => {
+    const report = (uid: string) => ({
+        uid, kind: 'render', message: 'boom', stack: 'at f()',
+        path: '/dashboard', bundle: 'index-abc.js', userAgent: 'jsdom',
+    });
+
+    it('lets a signed-in user file their own crash', async () => {
+        await assertSucceeds(addDoc(collection(asStudent(), 'clientErrors'), report(STUDENT)));
+    });
+
+    it('refuses an anonymous report', async () => {
+        // An unauthenticated write endpoint is free storage for anyone who finds
+        // it, and a report with no uid could not help anybody anyway.
+        await assertFails(addDoc(collection(asAnon(), 'clientErrors'), report('whoever')));
+    });
+
+    it('refuses a report attributed to somebody else', async () => {
+        // Otherwise one signed-in user can file crashes as another, and a manager
+        // goes chasing the wrong person's phone.
+        await assertFails(addDoc(collection(asStudent(), 'clientErrors'), report(OTHER_STUDENT)));
+    });
+
+    it('refuses a message big enough to be a payload', async () => {
+        await assertFails(addDoc(collection(asStudent(), 'clientErrors'), {
+            ...report(STUDENT), message: 'x'.repeat(2000),
+        }));
+    });
+
+    it('refuses a report with no message', async () => {
+        const { message, ...noMessage } = report(STUDENT);
+        await assertFails(addDoc(collection(asStudent(), 'clientErrors'), noMessage));
+    });
+
+    it('lets a manager read them', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'clientErrors', 'e1'), report(STUDENT));
+        });
+
+        await assertSucceeds(getDoc(doc(asManager(), 'clientErrors', 'e1')));
+    });
+
+    it('does NOT let a rider or driver read them', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'clientErrors', 'e1'), report(STUDENT));
+        });
+
+        // Not even their own: the value is the aggregate, and read access here is
+        // read access to every user's uid and stack traces.
+        await assertFails(getDoc(doc(asStudent(), 'clientErrors', 'e1')));
+        await assertFails(getDoc(doc(asDriver(), 'clientErrors', 'e1')));
+    });
+
+    it('nobody edits or deletes a report from the client', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'clientErrors', 'e1'), report(STUDENT));
+        });
+
+        // Reports are evidence of a crash somebody may be investigating. The
+        // person who filed one must not be able to erase the trace, and neither
+        // should a manager from the console — pruning is an Admin SDK job.
+        await assertFails(updateDoc(doc(asStudent(), 'clientErrors', 'e1'), { message: 'nothing to see' }));
+        await assertFails(deleteDoc(doc(asStudent(), 'clientErrors', 'e1')));
+        await assertFails(updateDoc(doc(asManager(), 'clientErrors', 'e1'), { message: 'tidied' }));
+        await assertFails(deleteDoc(doc(asManager(), 'clientErrors', 'e1')));
     });
 });

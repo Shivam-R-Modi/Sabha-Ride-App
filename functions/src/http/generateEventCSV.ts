@@ -6,6 +6,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { assertApprovedManager } from '../utils/authz';
+import { checkRateLimit } from '../utils/rateLimiter';
 
 /**
  * HTTP Callable: Generate CSV export for an event
@@ -31,6 +32,28 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
         // had been rejected could still export the lot — revocation never reached
         // the one function where it mattered most.
         await assertApprovedManager(db, context.auth.uid, 'export data');
+
+        // THROTTLED, not merely authorised.
+        //
+        // The rows below are every rider's name, phone number and home address —
+        // the most sensitive thing this app can emit, and for a congregation that
+        // includes minors. `assertApprovedManager` answers "may you export?"; it
+        // cannot answer "why are you exporting for the 400th time tonight?"
+        //
+        // A compromised or borrowed manager session is the realistic threat, and
+        // an unthrottled export turns it into a bulk dump of the whole community
+        // in seconds. 20/hour is far above any real use — a manager exports once
+        // per gathering, maybe a handful of times while fixing a spreadsheet —
+        // and far below what exfiltration needs.
+        //
+        // Deliberately AFTER the manager check, so a stranger probing this
+        // endpoint is refused for the right reason and never consumes a
+        // legitimate manager's budget.
+        await checkRateLimit(context.auth.uid, {
+            maxRequests: 20,
+            windowMs: 60 * 60 * 1000,
+            functionName: 'generateEventCSV',
+        });
 
         const rows: string[] = [];
 
