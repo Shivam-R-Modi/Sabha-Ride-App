@@ -65,17 +65,17 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `0f831ec`, 2026-08-18. `main` = branch = production.
+Last deploy `810d19c`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | 19 functions. `ensureSabhaEvents` **deleted** — see the rule model below |
-| Hosting | ✅ | bundle `index-q03eRQIj.js` / css `index-CDJzSYvQ.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-B0wDa7Wb.js` / css `index-CDJzSYvQ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **686** · rules **89** —
-**1283 total**.
+**Test suites, all green:** `functions` **508** · client **688** · rules **89** —
+**1285 total**.
 
 **Everything in this file is deployed.** `main` = `307c9dc` = production, local
 and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
@@ -468,13 +468,87 @@ Reasoning behind the edges:
   real-looking addresses and the script never deletes them**:
   `shivammodi6@`, `janimohak03@`, `shivam1@1123.com`, `kushalpanchal2497@`,
   `m49914899@`, `r@gmail.com`.
-- **`npm run lint` still checks nothing** — no ESLint config exists.
-- **Typecheck baseline is 19**, mostly `err.message` on `unknown`. A near-miss this
-  session argues for driving it to 0: wiring the error reporter spliced a comment
-  into `const root = ReactDOM.createRoot(...)`, `npm run build` passed because Vite
-  does not typecheck, and the app would have shipped a **blank screen**. Only
-  `npm run typecheck` caught it.
+- ~~`npm run lint` checks nothing~~ and ~~typecheck baseline is 19~~ — both fixed;
+  see *Lint and typecheck* below.
 - **The `cars` / `vehicles` mirror** remains two collections for one fleet.
+
+---
+
+## 2026-08-18: lint and typecheck, and the three bugs they found
+
+`npm run lint` had a script and no config for the life of this repo, so it always
+exited with *"couldn't find a configuration file"* — **a gate that looked green and
+checked nothing.** Typecheck sat at a 19-error baseline. Both are clean now:
+
+```
+npm run lint        passes, zero suppressions
+npm run typecheck   0 errors   (was 19)
+```
+
+### The config, and what it deliberately does not enforce
+
+`.eslintrc.cjs`, eslintrc format — the installed ESLint is **8.57** and the script
+passes `--ext`, which flat config rejects. Don't "modernise" it without also
+changing the script.
+
+A lint that fails on 400 pre-existing style opinions gets switched off within a
+week, and the script runs `--max-warnings 0`, so a warning is as fatal as an
+error. So: rules that catch **bugs** are on, rules that catch only style are off
+**with a stated reason** in the file. `no-explicit-any` is off — the Firestore
+boundary is genuinely untyped until validated, banning it is a hundreds-of-sites
+refactor, and it would not have caught anything this project has actually hit.
+
+It also encodes the `window.confirm` / `alert` / `prompt` ban as a lint error,
+which is faster feedback than the existing quality test.
+
+### Three real defects, all from the first run
+
+**1. `useDriverDashboard` showed drivers the placeholder venue.** The one that was
+genuinely live. `venueAddress` was missing from a dep array; it resolves through
+`useSettings()`, which starts at `DEFAULT_SABHA_LOCATION` and only becomes the
+real venue once the snapshot lands. With `[driverId]` alone the effect captured
+the placeholder and never re-ran, so a drop-off ride with no venue of its own
+showed **360 Huntington Ave** for the life of the listener — the same placeholder
+that was live in production until today. Fixed by declaring the dependency.
+
+**2. `RoleSwitcher` called `useState` after an early `return null`.** Hook count
+depending on live data. **Measured rather than assumed: React 19 tolerates this**
+— it throws nothing and logs nothing, so this was latent fragility, not the crash
+first suspected. Fixed anyway; the note in the file records the measurement so
+nobody re-investigates.
+
+**3. `ManagerDashboard` held ~57 lines of dead duplicates.** Four approve/deny
+handlers with no button, an attendance CSV download with no button, and two
+pending-user hooks whose results were never read — **two live Firestore listeners
+on every manager's dashboard, feeding nothing.** Checked before deleting:
+`ManagerPeople` owns approvals, `ManagerReports` owns the CSV, both working. Not a
+missing feature — a second, unreachable copy of one. Confirmed gone from the
+deployed bundle by grepping for its toast strings.
+
+### How typecheck got to 0
+
+- **Eleven** were `err.message` on a value correctly typed `unknown`. Now routed
+  through `src/utils/errorText.ts` (`messageOf` / `codeOf`), so the narrowing
+  lives in one tested place. **Deliberately not `(e as Error).message`** — that is
+  the same bug with a cast on top: a thrown string or a `{ code }` literal yields
+  `undefined`, and the user reads "undefined" in a toast.
+- **Two** were fields the documents genuinely carry but the interfaces omitted:
+  `Ride.studentPhone`, `RideStudent.avatarUrl`.
+- **Three** were one line — spreading a `Record<string, any>` drops the index
+  signature, so TS inferred bare `{ updatedAt: string }`.
+- **Two** were `scripts/setRideContext.ts`, which is **deleted, not fixed**. It
+  pointed at a service-account filename this repo has never used, and it wrote a
+  hand-rolled `system/rideContext` with **no `eventId`** — and
+  `isValidPendingRide` treats a null event key as *accept any event*, so running
+  it would have made every stale request from every past sabha dispatchable.
+  Superseded by the `manuallyUpdateRideContext` callable.
+
+### No suppressions in the final state
+
+The two `exhaustive-deps` warnings that were correct as written are resolved
+properly rather than silenced — one with `useCallback`, one with a ref.
+`--report-unused-disable-directives` stays on, and earned its keep by catching two
+misplaced directives written along the way.
 
 ---
 
