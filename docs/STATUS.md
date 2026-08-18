@@ -72,13 +72,12 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-BZOSUz-K.js` / css `index-CO8GBe2B.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-CBEY3OUO.js` / css `index-FZb-2q1w.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **508** · client **783** · rules **89** —
 **1380 total**.
 
-**Everything in this file is deployed EXCEPT the last section** — *The dark-mode
-banner and the crowded dock* — which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1163,6 +1162,14 @@ choice (1). Every new utility was confirmed present in the built stylesheet —
 **Not seen on a real phone.** The dock is mobile-only and behind auth, so the
 browser pane cannot reach it; the DOM structure and the theme colours are
 measured, the appearance is not.
+
+### Deployed
+
+Released hosting-only on 2026-08-18 — bundle `index-CBEY3OUO.js`, css
+`index-FZb-2q1w.css`. Verified against the LIVE files, not just the filenames:
+the stylesheet carries `clay-bottom-drawer` and the `dropdown` rung, the bundle
+carries both More labels, and the old inverted panel markup appears **zero**
+times.
 
 ---
 
