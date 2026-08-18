@@ -257,39 +257,34 @@ const DockButton: React.FC<{
 const SWIPE_THRESHOLD = 24;
 
 /**
- * The pull handle, and the only visible control for the overflow.
+ * The pull handle. The hint for the gesture, and nothing more.
  *
- * It replaced a `More` item in the row: four destinations and a fifth tab that
- * was not a destination read as five peers, and the dock is cleaner without it.
+ * DELIBERATELY NOT A CONTROL, decided by the owner on 2026-08-18 after the
+ * trade-off was put to them. What it costs, recorded so nobody "fixes" it by
+ * accident and nobody rediscovers it as a bug:
  *
- * It is a BUTTON, not the decoration it looks like, and that is deliberate. On a
- * phone this dock is the only navigation there is — the sidebar is desktop-only
- * — so if expanding were swipe-only, Reports, Profile and Records would have no
- * reachable control at all for anyone who cannot make a touch swipe: keyboard,
- * switch access, VoiceOver. Three destinations would simply be stranded.
+ *   On a phone this dock is the only navigation there is — the sidebar is
+ *   desktop-only — so a swipe is now the ONLY way to reach Reports, Profile and
+ *   Records. Anyone who cannot make one (keyboard, switch access, VoiceOver)
+ *   cannot reach those three destinations on a phone at all.
  *
- * In the nav it is positioned inside the existing 8px of top padding, so it adds
- * NO height. `--bottom-nav-h` is what every other element clears by, and growing
- * the nav for this would put the two out of step. It sits entirely ABOVE the
- * 64px row, so it cannot swallow taps meant for a destination.
+ * Restoring a control is a small change: give this a wrapping `<button>` with
+ * `onClick`, `aria-expanded` and an `aria-label` of "More destinations", which
+ * is what it had before this commit.
+ *
+ * In the nav it sits inside the existing 8px of top padding, so it adds NO
+ * height — `--bottom-nav-h` is what every other element clears by.
  */
 const GrabHandle: React.FC<{
-  expanded: boolean;
   overflowIsActive: boolean;
-  onToggle: () => void;
   className?: string;
-}> = ({ expanded, overflowIsActive, onToggle, className = '' }) => (
-  <button
-    onClick={onToggle}
-    aria-expanded={expanded}
-    aria-label={expanded ? 'Hide more destinations' : 'More destinations'}
-    className={`flex items-center justify-center ${className}`}
-  >
-    {/* Saffron while a hidden destination is the current one. With the More tab
-        gone this bar is the ONLY thing left that can say so, and without it the
-        dock reads as "nothing selected" whenever a manager sits on Records. */}
+}> = ({ overflowIsActive, className = '' }) => (
+  <div className={`flex items-center justify-center ${className}`} aria-hidden="true">
+    {/* Saffron while a hidden destination is the current one. This bar is the
+        only thing left that can say so, and without it the dock reads as
+        "nothing selected" whenever a manager sits on Records. */}
     <span className={`h-1 w-9 rounded-full transition-colors ${overflowIsActive ? 'bg-saffron' : 'bg-hairline/25'}`} />
-  </button>
+  </div>
 );
 
 /**
@@ -349,10 +344,12 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
   // visible control is undiscoverable and unreachable by keyboard, so the
   // button stays and does the same job.
   const swipeStartY = useRef<number | null>(null);
+  const swipeOrigin = useRef<Node | null>(null);
   const swiped = useRef(false);
 
   const onTouchStart = (event: React.TouchEvent) => {
     swipeStartY.current = event.touches[0]?.clientY ?? null;
+    swipeOrigin.current = event.target instanceof Node ? event.target : null;
     swiped.current = false;
   };
 
@@ -377,8 +374,18 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
   // the finger lifts — so swiping up from Fleet would open the drawer and
   // navigate to Fleet at the same time. Capture phase runs before the button's
   // own handler, which is the only place this can be stopped.
+  //
+  // Matched against the element the finger STARTED on, not on a bare "did a
+  // swipe just happen" flag. That flag stayed armed after the swipe that opens
+  // the drawer, so the very next tap — a destination inside the drawer the
+  // swipe had just revealed — was swallowed and the drawer sat there doing
+  // nothing. The synthetic click a swipe produces always targets its origin;
+  // anything else is a real tap and must go through.
   const onClickCapture = (event: React.MouseEvent) => {
     if (!swiped.current) return;
+    const origin = swipeOrigin.current;
+    const target = event.target;
+    if (!origin || !(target instanceof Node) || !(origin === target || origin.contains(target))) return;
     swiped.current = false;
     event.preventDefault();
     event.stopPropagation();
@@ -402,12 +409,7 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
             aria-hidden="true"
           />
           <div className="clay-bottom-drawer animate-in slide-in-from-bottom-4" {...gestures}>
-            <GrabHandle
-              expanded
-              overflowIsActive={overflowIsActive}
-              onToggle={() => setExpanded(false)}
-              className="w-full pb-2"
-            />
+            <GrabHandle overflowIsActive={overflowIsActive} className="w-full pb-2" />
             <div className="max-w-md mx-auto grid grid-cols-3 gap-1">
               {overflow.map(item => (
                 <DockButton
@@ -434,12 +436,7 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
             clears by, and growing the nav for a decoration would put the two
             out of step. Hidden while open, where the drawer carries it. */}
         {hasOverflow && !expanded && (
-          <GrabHandle
-            expanded={false}
-            overflowIsActive={overflowIsActive}
-            onToggle={() => setExpanded(true)}
-            className="absolute inset-x-0 top-0 h-2"
-          />
+          <GrabHandle overflowIsActive={overflowIsActive} className="absolute inset-x-0 top-0 h-2" />
         )}
         <div className="max-w-md mx-auto flex justify-around items-center h-16 gap-0.5">
           {docked.map(item => (

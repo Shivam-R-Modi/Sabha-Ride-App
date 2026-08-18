@@ -74,8 +74,8 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-DXdbR3BD.js` / css `index-Vpg4cdQl.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **793** · rules **89** —
-**1390 total**.
+**Test suites, all green:** `functions` **508** · client **794** · rules **89** —
+**1391 total**.
 
 **Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
@@ -1224,6 +1224,29 @@ handle marks the same state with a bar, so it needs no fill.
 2 more tests (client **791 → 793**). Three deliberate breakages confirmed to
 fail — the loudest being the handle reverting to decoration, which fails **10**
 of the 21 dock tests.
+
+### And then gesture-only, by decision
+
+The handle was a `<button>` for one commit. The owner was shown the trade-off and
+chose **swipe-only** anyway, so the handle is a hint again.
+
+**What that costs, recorded so nobody rediscovers it as a bug:** on a phone this
+dock is the only navigation there is — the sidebar is desktop-only — so a swipe
+is now the ONLY route to Reports, Profile and Records. Anyone who cannot make one
+(keyboard, switch access, VoiceOver) cannot reach those three on a phone at all.
+`tests/components/bottomNavOverflow.test.tsx` asserts the absence of a control on
+purpose, so it reads as a decision rather than something that fell off. Restoring
+it is small: wrap `GrabHandle`'s bar in a `<button>` with `onClick`,
+`aria-expanded` and an `aria-label` of "More destinations".
+
+**A real bug fell out of making the gesture the only way in.** The click guard
+used a bare "a swipe just happened" flag, and that flag stayed armed after the
+swipe that opens the drawer — so the very next tap, on a destination inside the
+drawer the swipe had just revealed, was swallowed and the drawer sat there doing
+nothing. While a More button existed this was rare; with the gesture as the only
+entry it was on the path **every single time**. The guard now matches the element
+the finger STARTED on: the synthetic click a swipe produces always targets its
+origin, and anything else is a real tap.
 
 Released the same day as bundle `index-DXdbR3BD.js` / css `index-Vpg4cdQl.css`.
 Verified against the LIVE stylesheet, which carries

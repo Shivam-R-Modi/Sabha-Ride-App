@@ -55,10 +55,16 @@ const dockLabels = () =>
         .map(b => (b.textContent ?? '').trim())
         .filter(Boolean);
 
-/** The pull handle, which replaced the More tab as the visible control. */
-const moreButton = () => within(dock()).getByRole('button', { name: /more destinations/i });
-const drawerHandle = () => within(drawer()!).getByRole('button', { name: /hide more destinations/i });
-const handleBar = (button: HTMLElement) => button.querySelector('span')!;
+/** The pull handle's bar — a hint, not a control. See GrabHandle in Layout.tsx. */
+const handleBar = (panel: HTMLElement) => panel.querySelector('span.rounded-full') as HTMLElement | null;
+
+const swipe = (element: HTMLElement, from: number, to: number) => act(() => {
+    fireEvent.touchStart(element, { touches: [{ clientY: from }] });
+    fireEvent.touchEnd(element, { changedTouches: [{ clientY: to }] });
+});
+
+/** The only way to open it. */
+const openDrawer = () => swipe(dock(), 800, 730);
 
 /** Lets a test put the app on a given tab from inside the provider. */
 const Goto: React.FC<{ tab: TabView }> = ({ tab }) => {
@@ -86,20 +92,24 @@ describe('the manager dock', () => {
         expect(dockLabels()).toEqual(['Dispatch', 'People', 'Fleet', 'Setup']);
     });
 
-    it('holds exactly four destinations and the handle — nothing unlabelled hiding', () => {
+    it('holds four buttons and nothing else — no unlabelled control hiding', () => {
         // Counts raw buttons, so a destination that lost its label would show up
-        // here rather than being quietly dropped by the filter above.
+        // here rather than being quietly dropped by the filter above. Four, not
+        // five: the handle is a hint, not a button.
         renderLayout('manager');
 
-        expect(within(dock()).getAllByRole('button')).toHaveLength(5);
-        expect(moreButton()).toBeInTheDocument();
+        expect(within(dock()).getAllByRole('button')).toHaveLength(4);
+        expect(handleBar(dock())).not.toBeNull();
     });
 
-    it('has no More tab in the row', () => {
-        // Removed on request: four destinations and a fifth tab that was not a
-        // destination read as five peers.
+    it('offers NO button for the overflow — the gesture is the only way in', () => {
+        // Deliberate, decided by the owner on 2026-08-18 with the cost stated:
+        // on a phone this dock is the only navigation, so a swipe is now the
+        // only route to Reports, Profile and Records. Asserted rather than left
+        // implicit so it reads as a decision and not as something that fell off.
         renderLayout('manager');
 
+        expect(within(dock()).queryByRole('button', { name: /more destinations/i })).toBeNull();
         expect(within(dock()).queryByText(/^More$/)).toBeNull();
     });
 
@@ -125,7 +135,7 @@ describe('the manager dock', () => {
         renderLayout('manager');
         expect(drawer()).toBeNull();
 
-        act(() => { moreButton().click(); });
+        openDrawer();
 
         expect(drawer()).not.toBeNull();
         for (const label of ['Reports', 'Profile', 'Records']) {
@@ -135,7 +145,7 @@ describe('the manager dock', () => {
 
     it('closes once a destination is chosen', () => {
         renderLayout('manager');
-        act(() => { moreButton().click(); });
+        openDrawer();
 
         act(() => { within(drawer()!).getByText('Records').click(); });
 
@@ -144,7 +154,7 @@ describe('the manager dock', () => {
 
     it('closes on Escape', () => {
         renderLayout('manager');
-        act(() => { moreButton().click(); });
+        openDrawer();
 
         act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
 
@@ -153,7 +163,7 @@ describe('the manager dock', () => {
 
     it('closes when the click-catcher behind it is tapped', () => {
         renderLayout('manager');
-        act(() => { moreButton().click(); });
+        openDrawer();
 
         act(() => { scrim()!.click(); });
 
@@ -170,7 +180,7 @@ describe('the dock never reads as "nothing selected"', () => {
 
         act(() => { screen.getByText('goto-records').click(); });
 
-        expect(handleBar(moreButton()).className).toMatch(/bg-saffron/);
+        expect(handleBar(dock())!.className).toMatch(/bg-saffron/);
     });
 
     it('leaves the handle plain while a docked destination is current', () => {
@@ -178,7 +188,7 @@ describe('the dock never reads as "nothing selected"', () => {
 
         act(() => { screen.getByText('goto-fleet').click(); });
 
-        expect(handleBar(moreButton()).className).not.toMatch(/bg-saffron/);
+        expect(handleBar(dock())!.className).not.toMatch(/bg-saffron/);
     });
 });
 
@@ -188,9 +198,9 @@ describe('roles with nothing to overflow', () => {
         renderLayout('driver');
 
         expect(dockLabels()).toEqual(['Dashboard', 'History', 'Profile']);
-        expect(within(dock()).queryByRole('button', { name: /more destinations/i })).toBeNull();
-        // And no unlabelled handle either: three buttons, three destinations.
         expect(within(dock()).getAllByRole('button')).toHaveLength(3);
+        // Not even the hint: there is nothing a swipe could reveal.
+        expect(handleBar(dock())).toBeNull();
     });
 
     it('a rider gets no More control either', () => {
@@ -212,11 +222,6 @@ describe('swipe to open and close', () => {
      * navigate to Fleet.
      */
 
-    const swipe = (element: HTMLElement, from: number, to: number) => act(() => {
-        fireEvent.touchStart(element, { touches: [{ clientY: from }] });
-        fireEvent.touchEnd(element, { changedTouches: [{ clientY: to }] });
-    });
-
     it('opens when the dock is swiped up', () => {
         renderLayout('manager');
 
@@ -227,7 +232,7 @@ describe('swipe to open and close', () => {
 
     it('closes when the drawer is swiped down', () => {
         renderLayout('manager');
-        act(() => { moreButton().click(); });
+        openDrawer();
 
         swipe(drawer()!, 700, 780);
 
@@ -275,6 +280,21 @@ describe('swipe to open and close', () => {
         expect(fleet.className).toMatch(/text-saffron-800/);
     });
 
+    it('lets the very next tap through — the swipe that opened it must not eat it', () => {
+        // The defect this caught: the "a swipe just happened" flag stayed armed
+        // after the opening swipe, so the first tap on a destination inside the
+        // drawer was suppressed and the drawer sat there doing nothing. With
+        // the gesture as the ONLY way in, every use of the drawer starts with a
+        // swipe, so this was on the path every single time.
+        renderLayout('manager');
+        openDrawer();
+
+        act(() => { within(drawer()!).getByText('Reports').click(); });
+
+        expect(drawer()).toBeNull();
+        expect(within(dock()).getByText('Dispatch').closest('button')!.className).not.toMatch(/text-saffron-800/);
+    });
+
     it('does nothing on a dock with nothing to overflow', () => {
         // A driver has three destinations. Swiping must not conjure a drawer.
         renderLayout('driver');
@@ -292,16 +312,16 @@ describe('the drawer and the dock read as one panel', () => {
         renderLayout('manager');
         expect(dock().className).not.toMatch(/is-expanded/);
 
-        act(() => { moreButton().click(); });
+        openDrawer();
 
         expect(dock().className).toMatch(/is-expanded/);
     });
 
     it('takes its top edge back when the drawer closes', () => {
         renderLayout('manager');
-        act(() => { moreButton().click(); });
+        openDrawer();
 
-        act(() => { drawerHandle().click(); });
+        swipe(drawer()!, 700, 780);
 
         expect(dock().className).not.toMatch(/is-expanded/);
         expect(drawer()).toBeNull();
