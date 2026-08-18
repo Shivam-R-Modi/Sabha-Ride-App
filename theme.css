@@ -262,9 +262,20 @@
   --canvas-deep: 39 34 29;
   --canvas-soft: 31 27 23;
 
-  --surface: 39 34 29;
-  --surface-mid: 46 40 34;
-  --surface-deep: 53 46 39;
+  /* THE SURFACE RAMP STARTS ABOVE THE CANVAS RAMP, NOT LEVEL WITH IT.
+     `--surface` used to be 39 34 29 — the exact value of `--canvas-deep`. The
+     two ramps met, because canvas climbs 28 -> 33 -> 39 and surface began at
+     39, and that made every `bg-cream-300` fill INVISIBLE on a `bg-surface`
+     panel. It cost the selected item in the sidebar and in the mobile bottom
+     nav: no pill at all in dark mode, with hover (canvas-mid) more visible than
+     the actual selection.
+     Shifted up one existing step, so `--surface` is now the value `--surface-mid`
+     already carried — a shade this palette had vetted. Contrast against
+     `--canvas-deep` is 18 (channel-sum), the same order as the light ramp's own
+     steps. Guarded by tests/quality/theme-tokens.test.ts. */
+  --surface: 46 40 34;
+  --surface-mid: 54 47 40;
+  --surface-deep: 62 54 46;
   /* Below the canvas, not level with it. A pressed-in surface — an input
      well, a progress track — reads as recessed only if it is DARKER than
      what surrounds it. Matching the canvas here made every inset control
@@ -272,11 +283,14 @@
   --sunken: 21 18 15;
 
   --text-strong: 232 227 220;
-  /* 14.8:1 on surface */
+  /* 11.40:1 on surface — measured, not estimated. The three numbers here read
+     14.8 / 11.4 / 6.1 before 2026-08-18 and none was true: the real values on
+     the old surface were 12.34 / 9.12 / 5.68. Nothing caught it because the
+     "ratios in comments are true" test only covers the LIGHT block. */
   --text: 203 196 187;
-  /* 11.4:1 */
+  /*  8.42:1 on surface */
   --text-soft: 163 154 143;
-  /*  6.1:1 — still above the AA floor */
+  /*  5.25:1 on surface — still above the 4.5 AA floor */
   --text-faint: 128 118 108;
   /*  non-text only, same as light */
   --text-on-accent: 28 24 21;
@@ -288,7 +302,7 @@
   --accent-mid: 220 120 78;
   --accent-deep: 208 108 68;
   --accent-text: 233 156 116;
-  /* 7.2:1 on surface */
+  /* 6.57:1 on surface */
 
   /* The CTA ramp inverts direction: on dark, a filled button is a LIGHT
      saffron carrying dark text, not a dark saffron carrying white. */

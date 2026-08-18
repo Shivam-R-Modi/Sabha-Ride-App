@@ -140,19 +140,27 @@ describe('tokens that stack must not collide within a theme', () => {
     ];
 
     /**
-     * Collisions that exist today and are NOT currently exploited by any
-     * component. Recorded rather than silently tolerated, so a new one fails.
+     * Collisions that remain, and why each is harmless.
      *
-     * The honest long-term fix is to separate dark `--canvas-deep` from
-     * `--surface` in the ramp — they collide by construction, since canvas climbs
-     * 28 -> 33 -> 39 and surface starts at 39. That is an app-wide visual change
-     * and was deliberately deferred; the components that were actually broken use
-     * `--sunken` now instead.
+     * `dark: --canvas-deep == --surface` USED TO BE HERE, and it was the one that
+     * bit: it made every `bg-cream-300` fill invisible on a `bg-surface` panel.
+     * The dark surface ramp was lifted one step on 2026-08-18 to separate them, so
+     * that entry is gone and the whole class of bug with it.
+     *
+     * The two that stay are in LIGHT, where the surface ramp is squeezed against
+     * white and has almost no headroom. They are unexploitable rather than merely
+     * unexploited: **`bg-surface-mid` and `bg-surface-deep` have zero usages in the
+     * codebase**, so nothing can stack on them. `.clay-bottom-nav` reads
+     * `--surface-mid` in a gradient, and its light end matching `--canvas` is
+     * invisible only against the page — which that nav never sits on, being fixed
+     * over content.
+     *
+     * If either class ever gets used as a background, delete the matching entry
+     * here first and find the headroom.
      */
     const KNOWN = new Set([
         'light: --canvas == --surface-mid',
         'light: --canvas-mid == --surface-deep',
-        'dark: --canvas-deep == --surface',
     ]);
 
     function collisions(theme: Map<string, string>, label: string): string[] {
@@ -208,6 +216,23 @@ describe('tokens that stack must not collide within a theme', () => {
                     `selected nav item has no fill`,
                 ).toBeGreaterThan(12);
             }
+        }
+    });
+
+    it('cream-300 — the most common fill — is visible on a surface in BOTH themes', () => {
+        // What lifting the dark surface ramp actually bought. `bg-cream-300`
+        // (`--canvas-deep`) is used 64 times, mostly as a chip, badge or hover on a
+        // card. Before the lift the dark distance here was ZERO and every one of
+        // those was invisible; the three in the navigation were merely the ones
+        // somebody noticed.
+        //
+        // A margin, not mere inequality: "differs by 1" is not a visible fill.
+        for (const [themeName, theme] of [['light', light], ['dark', dark]] as const) {
+            expect(
+                distance(theme.get('--canvas-deep')!, theme.get('--surface')!),
+                `${themeName}: --canvas-deep is indistinguishable from --surface, so ` +
+                `every bg-cream-300 chip, badge and hover on a card vanishes`,
+            ).toBeGreaterThanOrEqual(18);
         }
     });
 
