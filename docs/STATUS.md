@@ -65,17 +65,17 @@ Resolved by merging `main` into the branch and redeploying.
 
 ## Live in production
 
-Last deploy `a0569f9`, 2026-08-18. `main` = branch = production.
+Last deploy `63dd465`, 2026-08-18. `main` = branch = production.
 
 | | Deployed | Notes |
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-BUaBgDs1.js` / css `index-CDJzSYvQ.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-BLsvjgN7.js` / css `index-CICByZfi.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **696** · rules **89** —
-**1293 total**.
+**Test suites, all green:** `functions` **508** · client **697** · rules **89** —
+**1294 total**.
 
 **Everything in this file is deployed.** `main` = `307c9dc` = production, local
 and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
@@ -626,23 +626,56 @@ margin in both themes, and a **drift guard pinning the classes `Layout.tsx`
 actually uses** — without that last one the assertion would keep passing while the
 screen was broken, which is precisely what happened the first time.
 
-### Fixed at the component, not in the ramp — and what that leaves
+### Then fixed at the ramp as well, which cleared the rest
 
-Dark `--canvas-deep` and `--surface` collide **by construction**: canvas climbs
-`28 → 33 → 39` and surface *starts* at `39`. Separating them fixes all 64
-`bg-cream-300` uses at once but changes shading across every screen in dark mode,
-so it was deliberately deferred.
+The component fix covered the three navigation surfaces. The **cause** was that
+the two ramps met:
 
-**So the same collision still affects other `bg-cream-300` elements.** Ranked:
+```
+--canvas: 28 24 21   --canvas-mid: 33 29 25   --canvas-deep: 39 34 29
+--surface: 39 34 29  <- the same value
+```
 
-| severity | place | effect in dark |
-|---|---|---|
-| affordance | `ThemeToggle` selected segment | the same collision inverted — track is `cream-300/60`, selected is `bg-surface`. Only the saffron text distinguishes the choice. |
-| cosmetic | `SabhaCalendar` "one-off" badge | badge loses its chip; the label still reads fine |
-| cosmetic | `Sheet`, `SabhaCalendar`, `ProfileEditor`, `RiderHome`, `useConfirm` hovers | hover feedback invisible on a surface parent |
+Canvas climbed `28 → 33 → 39` and surface *began* at 39, so any `bg-cream-300`
+chip, badge or hover on a `bg-surface` card had zero contrast in dark mode. The
+navigation was just where somebody noticed.
 
-None of those hides a primary control the way the nav did. Clearing them properly
-means separating the ramp.
+The dark surface ramp is now lifted one existing step — `--surface` becomes
+`46 40 34`, the value `--surface-mid` already carried, so it is a shade this
+palette had vetted rather than a new invention. `mid 54 47 40`, `deep 62 54 46`.
+
+Chose the smaller of two candidates on purpose. Lifting to `48 42 36` gave a
+channel-sum separation of 24 but cost more text contrast; `46 40 34` gives **18**,
+the same order as the light ramp's own steps (`250 → 245 → 237`), and keeps more
+headroom. Checked against the contrast suite, not by eye:
+
+| role on `--surface` (dark) | before | after | floor |
+|---|---|---|---|
+| `--text-strong` | 12.34:1 | **11.40:1** | 4.5 |
+| `--text` | 9.12:1 | **8.42:1** | 4.5 |
+| `--text-soft` | 5.68:1 | **5.25:1** | 4.5 |
+| `--accent-text` | 7.11:1 | **6.57:1** | 4.5 |
+| `--text-faint` | 3.55:1 | **3.28:1** | must stay *below* |
+
+Elevation ordering still holds — `sunken < canvas < surface < surface-mid <
+surface-deep` — which `theme-contrast.test.ts` already pinned.
+
+**The documented dark ratios were wrong before any of this.** theme.css claimed
+`14.8 / 11.4 / 6.1` for the dark text roles on surface; the real values on the old
+surface were `12.34 / 9.12 / 5.68`. Nothing caught it because the "ratios in
+comments are true" test only covers the **light** block — light was accurate to two
+decimals, dark had never been checked. Now measured, and labelled as measured.
+
+The dark entry is gone from the collision allowlist. The two remaining light
+entries are annotated as **unexploitable** rather than merely unexploited:
+`bg-surface-mid` and `bg-surface-deep` have **zero usages** anywhere, so nothing
+can stack on them. A new assertion pins `--canvas-deep` clearing `--surface` by a
+real margin in both themes, so a future squeeze fails instead of quietly hiding
+chips again.
+
+The navigation keeps `bg-cream-400` (`--sunken`) rather than reverting: on the
+lifted surface that is a distance of 66 versus 18, and a selected tab deserves the
+stronger of the two.
 
 ### The sidebar had never been viewable
 
