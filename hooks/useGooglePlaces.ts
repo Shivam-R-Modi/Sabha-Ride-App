@@ -33,7 +33,7 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
 let loadPromise: Promise<void> | null = null;
 
 /** Load the Google Maps JS SDK (with Places library) exactly once. */
-function loadGoogleMapsSDK(): Promise<void> {
+export function loadGoogleMapsSDK(): Promise<void> {
     if ((window as any).google?.maps?.places) {
         return Promise.resolve();
     }
@@ -51,6 +51,63 @@ function loadGoogleMapsSDK(): Promise<void> {
     });
 
     return loadPromise;
+}
+
+// ---- Standalone geocode ----------------------------------------------------
+
+/**
+ * Turn a typed address into coordinates, in the BROWSER.
+ *
+ * WHY THIS IS NOT THE CLOUD FUNCTION
+ * ----------------------------------
+ * There was a `geocodeAddress` callable, and it returned 500 for every call for
+ * as long as it existed:
+ *
+ *     REQUEST_DENIED – API keys with referer restrictions
+ *                      cannot be used with this API.
+ *
+ * `GOOGLE_MAPS_API_KEY` in `functions/.env` is an HTTP-referer-restricted key.
+ * Referer restrictions are a BROWSER mechanism — the server sends no referer, so
+ * such a key can never work server-to-server. Fixing it that way needed a second,
+ * unrestricted or IP-restricted key: another credential to store, rotate and leak.
+ *
+ * The browser key already does this, which is the whole reason the SDK loader
+ * above exists. Verified against production on 2026-08-18: the same key that
+ * powers autocomplete geocodes "346 Huntington Ave" to 42.339362, -71.0878001.
+ * So the fix is to stop needing a server key at all.
+ *
+ * The trust model is unchanged. Autocomplete has always produced coordinates in
+ * the browser and `ProfileEditor` has always written them, so client-supplied
+ * coordinates were already accepted; this only closes the one path that was
+ * broken. The referer restriction is what keeps the key usable only from the
+ * app's own origin.
+ *
+ * Returns null rather than throwing on a miss, because every caller's next move
+ * is the same: ask the person to pick a suggestion instead.
+ */
+export async function geocodeAddressInBrowser(address: string): Promise<PlaceDetails | null> {
+    const trimmed = address.trim();
+    if (trimmed.length < 3) return null;
+
+    await loadGoogleMapsSDK();
+
+    return new Promise<PlaceDetails | null>(resolve => {
+        new google.maps.Geocoder().geocode({ address: trimmed }, (results, status) => {
+            if (status !== google.maps.GeocoderStatus.OK || !results?.length) {
+                // Includes ZERO_RESULTS, which is an answer rather than a fault.
+                resolve(null);
+                return;
+            }
+            const best = results[0];
+            const { lat, lng } = best.geometry.location;
+            resolve({
+                latitude: lat(),
+                longitude: lng(),
+                formattedAddress: best.formatted_address || trimmed,
+                placeId: best.place_id || '',
+            });
+        });
+    });
 }
 
 // ---- Hook ------------------------------------------------------------------

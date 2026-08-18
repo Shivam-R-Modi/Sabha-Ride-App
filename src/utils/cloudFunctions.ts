@@ -366,25 +366,11 @@ export async function deleteSabhaEvent(
 // GEOCODING FUNCTIONS
 // ============================================
 
-export interface GeocodeResult {
-    latitude: number;
-    longitude: number;
-    formattedAddress: string;
-    placeId: string | null;
-}
-
-export async function geocodeAddress(address: string): Promise<{ lat?: number; lng?: number; formattedAddress?: string }> {
-    const res = await callFunction<GeocodeResult>('geocodeAddress', { address });
-    return {
-        lat: res.latitude,
-        lng: res.longitude,
-        formattedAddress: res.formattedAddress
-    };
-}
-
-export async function geocodeAddressViaCloud(address: string): Promise<GeocodeResult> {
-    return callFunction<GeocodeResult>('geocodeAddress', { address });
-}
+// `geocodeAddress` and `geocodeAddressViaCloud` were here — two wrappers around
+// one callable that returned 500 for every call it ever received, because the key
+// in functions/.env is referer-restricted and a server sends no referer. Geocoding
+// happens in the browser now, with the key that already works:
+// `geocodeAddressInBrowser` in hooks/useGooglePlaces.ts.
 
 export async function adminDeleteUserViaCloud(targetUserId: string | string[]): Promise<{ success: boolean; deletedCount: number }> {
     if (Array.isArray(targetUserId)) {

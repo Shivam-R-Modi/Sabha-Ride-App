@@ -11,7 +11,8 @@ import {
   orderBy,
   limit
 } from 'firebase/firestore';
-import { geocodeAddress, adminDeleteUserViaCloud } from '../src/utils/cloudFunctions';
+import { adminDeleteUserViaCloud } from '../src/utils/cloudFunctions';
+import { geocodeAddressInBrowser } from './useGooglePlaces';
 import { writeAuditLog } from '../src/utils/audit';
 import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../src/constants/tenancy';
 
@@ -111,17 +112,27 @@ export function useAdminDatabase(targetCollection: SupportedCollection) {
       // compile. Three of the standing typecheck errors were this one line.
       const updates: Record<string, any> = { ...data, updatedAt: new Date().toISOString() };
 
-      // Geocode address if user or setting address field was updated
+      // Geocode in the BROWSER, not through the old cloud callable — that one
+      // returned 500 for every call, because the key in functions/.env is
+      // referer-restricted and a server sends no referer. See
+      // geocodeAddressInBrowser for the full story.
+      //
+      // Note what happens on a miss: the address is still saved, WITHOUT
+      // coordinates. That was the previous behaviour too and it is a real gap —
+      // a rider with no pickupLat cannot be dispatched — but it is the manager's
+      // own hand-edit of somebody else's record, and refusing the whole save
+      // because a geocode failed would be worse. The Waiting queue is where an
+      // uncoordinated rider becomes visible.
       if (data.address && typeof data.address === 'string' && data.address.trim().length > 5) {
         try {
-          const geoRes = await geocodeAddress(data.address.trim());
-          if (geoRes?.lat && geoRes?.lng) {
-            updates.pickupLat = geoRes.lat;
-            updates.pickupLng = geoRes.lng;
+          const geo = await geocodeAddressInBrowser(data.address.trim());
+          if (geo) {
+            updates.pickupLat = geo.latitude;
+            updates.pickupLng = geo.longitude;
             updates.location = {
-              latitude: geoRes.lat,
-              longitude: geoRes.lng,
-              formattedAddress: geoRes.formattedAddress || data.address.trim(),
+              latitude: geo.latitude,
+              longitude: geo.longitude,
+              formattedAddress: geo.formattedAddress || data.address.trim(),
               geocodedAt: new Date().toISOString()
             };
           }

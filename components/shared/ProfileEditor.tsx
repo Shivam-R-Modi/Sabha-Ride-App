@@ -11,7 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { AddressAutocomplete } from '../auth/AddressAutocomplete';
 import { PhoneNumberInput } from '../auth/PhoneNumberInput';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
-import { geocodeAddressViaCloud } from '../../src/utils/cloudFunctions';
+import { geocodeAddressInBrowser } from '../../hooks/useGooglePlaces';
 import { Save, X, CheckCircle, AlertCircle, Pencil } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -88,11 +88,18 @@ export const ProfileEditor: React.FC = () => {
             // Fallback geocode if address was typed manually without picking from suggestions
             if (addressChanged && !activePlace && address.trim()) {
                 try {
-                    const geo = await geocodeAddressViaCloud(address.trim());
-                    if (geo && typeof geo.latitude === 'number' && typeof geo.longitude === 'number' && (geo.latitude !== 0 || geo.longitude !== 0)) {
+                    // Browser geocode. This used to call a cloud function that
+                    // ALWAYS failed — a referer-restricted key cannot be used
+                    // server-side — so this fallback has never once worked, and
+                    // anyone who typed their address instead of picking a
+                    // suggestion was simply told to pick a suggestion.
+                    const geo = await geocodeAddressInBrowser(address.trim());
+                    // 0,0 is the "never geocoded" placeholder, not the Atlantic —
+                    // same rejection as resolveHomeCoords.
+                    if (geo && (geo.latitude !== 0 || geo.longitude !== 0)) {
                         activePlace = {
-                            placeId: geo.placeId || '',
-                            formattedAddress: geo.formattedAddress || address.trim(),
+                            placeId: geo.placeId,
+                            formattedAddress: geo.formattedAddress,
                             latitude: geo.latitude,
                             longitude: geo.longitude
                         };

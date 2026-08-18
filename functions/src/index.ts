@@ -62,4 +62,16 @@ export { adminDeleteUser } from './http/adminDeleteUser';
 export { managerReleaseVehicle } from './http/managerReleaseVehicle';
 
 // Utility Functions
-export { geocodeAddress } from './http/geocodeAddress';
+// geocodeAddress was exported here. Deleted 2026-08-18: it returned 500 for every
+// call for its whole life, because GOOGLE_MAPS_API_KEY in functions/.env is an
+// HTTP-referer-restricted key and referer restrictions are a browser mechanism —
+// a server sends no referer, so such a key can never work server-to-server.
+//
+// Fixing it needed a SECOND, unrestricted key: another credential to store,
+// rotate and leak. The browser key already geocodes (verified against production
+// against this very address), so the client does it directly now — see
+// geocodeAddressInBrowser in hooks/useGooglePlaces.ts. Nothing calls this any
+// more, and a deployed endpoint that always fails is a control that cannot work.
+//
+// GOOGLE_MAPS_API_KEY is no longer read by any function and can be dropped from
+// functions/.env.
