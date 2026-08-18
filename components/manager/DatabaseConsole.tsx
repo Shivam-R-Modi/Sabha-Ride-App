@@ -1,11 +1,62 @@
 import React, { useState, useMemo } from 'react';
-import { Database, Search, Plus, Edit2, Trash2, ShieldAlert, Loader2, FileText, Users, Car, Navigation, Clock, Filter } from 'lucide-react';
+import { Database, Search, Plus, Edit2, Trash2, ShieldAlert, Loader2, FileText, Users, Car, Navigation, Clock, Filter, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAdminDatabase, SupportedCollection } from '../../hooks/useAdminDatabase';
 import { DocumentEditorModal } from './DocumentEditorModal';
 import { useConfirm } from '../shared/useConfirm';
 import { normaliseAuditRow } from '../../src/utils/audit';
 import { useToast } from '../../contexts/ToastContext';
+
+/**
+ * One filter pill.
+ *
+ * WHAT WAS WRONG WITH THE TWO HAND-ROLLED ONES
+ * --------------------------------------------
+ * They were a bare `<select>` with `bg-transparent` and no `appearance-none`, so
+ * the BROWSER drew its own dropdown arrow: a shape and colour this app does not
+ * control, sitting flush against the text because nothing reserved room for it.
+ * That is the cramped, uneven look — worse on the Status pill, whose longer label
+ * pushed the arrow to the pill's edge.
+ *
+ * They also each carried their own funnel icon, so a two-filter row showed the
+ * same glyph twice, and mixed `gap-1.5` with an `ml-1` on the icon, so the spacing
+ * was uneven between them.
+ *
+ * Still a native `<select>`: it keeps keyboard support, screen-reader semantics and
+ * the platform picker on mobile, which a hand-built dropdown would all have to
+ * re-earn. `appearance-none` plus a `ChevronDown` gives it our chevron, and
+ * `pr-9` reserves the space that was missing. The option list itself follows
+ * `color-scheme`, which theme.css sets per theme, so the native menu is already
+ * dark in dark mode.
+ */
+const FilterSelect: React.FC<{
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    children: React.ReactNode;
+}> = ({ label, value, onChange, children }) => (
+    <label className="relative flex items-center gap-2 bg-cream-200 pl-3 pr-9 py-2 rounded-xl
+                      border border-hairline/10 cursor-pointer shrink-0
+                      focus-within:ring-2 focus-within:ring-saffron">
+        <span className="text-[10px] font-bold text-coffee-500 uppercase tracking-wide shrink-0">
+            {label}
+        </span>
+        <select
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={label}
+            className="appearance-none bg-transparent text-xs font-bold text-coffee
+                       focus:outline-none cursor-pointer"
+        >
+            {children}
+        </select>
+        <ChevronDown
+            size={14}
+            aria-hidden="true"
+            className="absolute right-3 text-coffee-500 pointer-events-none"
+        />
+    </label>
+);
 
 export const DatabaseConsole: React.FC = () => {
   const toast = useToast();
@@ -138,11 +189,21 @@ export const DatabaseConsole: React.FC = () => {
           the page heading directly beneath it. What is left is what only this
           component can say: the mode badge and the action. */}
       <div className="clay-card bg-gradient-to-r from-[rgb(var(--cta))]/10 via-gold/10 to-[rgb(var(--cta-dark))]/10 border border-hairline/20 p-4 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-saffron text-[rgb(var(--text-on-accent))] rounded-2xl shadow-lg shadow-saffron/20">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 bg-saffron text-[rgb(var(--text-on-accent))] rounded-2xl shadow-lg shadow-saffron/20 shrink-0">
             <Database size={20} />
           </div>
-          <span className="bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-[rgb(var(--success))]/40">
+          {/* "Direct", not "Live", database access — the badge beside it already
+              says LIVE ADMIN MODE, and two "Live"s in four words reads as a stutter.
+              Same word the old subtitle used ("Direct administrative access to…").
+
+              An h2, because ManagerRecords owns the page's h1. This names the tool;
+              it does not repeat the page title, which is what the old two-line
+              banner was doing. */}
+          <h2 className="font-header font-bold text-coffee text-sm sm:text-base truncate">
+            Direct database access
+          </h2>
+          <span className="bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-[rgb(var(--success))]/40 shrink-0">
             Live Admin Mode
           </span>
         </div>
@@ -249,44 +310,31 @@ export const DatabaseConsole: React.FC = () => {
           />
         </div>
 
-        {/* `no-scrollbar`: the global thumb is a 10px saffron gradient, which on a
-              short strip like this draws a solid orange bar under the filters. The
-              tab row above already had it; this one was missed. The TABLE below
-              keeps its scrollbar on purpose — there, scrolling is real. */}
-          <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto no-scrollbar">
+        {/* ONE funnel for the group, not one per pill.
+            `no-scrollbar`: the global thumb is a 10px saffron gradient, which on a
+            short strip like this draws a solid orange bar under the filters. The tab
+            row above already had it; this one was missed. The TABLE below keeps its
+            scrollbar on purpose — there, scrolling is real. */}
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
+          <Filter size={14} aria-hidden="true" className="text-coffee-500 shrink-0" />
+
           {activeTab === 'users' && (
-            <div className="flex items-center gap-1.5 bg-cream-200 p-1.5 rounded-xl border border-hairline/10">
-              <Filter size={14} className="text-coffee-500 ml-1" />
-              <span className="text-[10px] font-bold text-coffee-500 uppercase">Role:</span>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="bg-transparent text-xs font-bold text-coffee focus:outline-none"
-              >
-                <option value="all">All Roles</option>
-                <option value="manager">Managers</option>
-                <option value="driver">Drivers</option>
-                <option value="student">Students</option>
-              </select>
-            </div>
+            <FilterSelect label="Role" value={roleFilter} onChange={setRoleFilter}>
+              <option value="all">All roles</option>
+              <option value="manager">Managers</option>
+              <option value="driver">Drivers</option>
+              <option value="student">Students</option>
+            </FilterSelect>
           )}
 
-          <div className="flex items-center gap-1.5 bg-cream-200 p-1.5 rounded-xl border border-hairline/10">
-            <Filter size={14} className="text-coffee-500 ml-1" />
-            <span className="text-[10px] font-bold text-coffee-500 uppercase">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent text-xs font-bold text-coffee focus:outline-none"
-            >
-              <option value="all">All Statuses</option>
-              <option value="approved">Approved</option>
-              <option value="pending">Pending</option>
-              <option value="available">Available</option>
-              <option value="in_use">In Use</option>
-              <option value="offline">Offline</option>
-            </select>
-          </div>
+          <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter}>
+            <option value="all">All statuses</option>
+            <option value="approved">Approved</option>
+            <option value="pending">Pending</option>
+            <option value="available">Available</option>
+            <option value="in_use">In use</option>
+            <option value="offline">Offline</option>
+          </FilterSelect>
         </div>
       </div>
 

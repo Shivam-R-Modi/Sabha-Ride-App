@@ -28,6 +28,7 @@ const FIREBASE_STUB = path.resolve(__dirname, 'firebase-stub.ts');
 const CF_STUB = path.resolve(__dirname, 'cloud-functions-stub.ts');
 const HOOKS_STUB = path.resolve(__dirname, 'hooks-stub.ts');
 const AUTH_STUB = path.resolve(__dirname, 'auth-stub.tsx');
+const ADMIN_DB_STUB = path.resolve(__dirname, 'admin-db-stub.ts');
 
 /** Any import ending in firebase/config becomes the stub, however it is spelled. */
 const stubFirebase = {
@@ -38,6 +39,7 @@ const stubFirebase = {
     if (/(^|\/)utils\/cloudFunctions(\.ts)?$/.test(source)) return CF_STUB;
     if (/(^|\/)hooks\/(useCurrentEvent|useFirestore)(\.ts)?$/.test(source)) return HOOKS_STUB;
     if (/(^|\/)contexts\/AuthContext(\.tsx)?$/.test(source)) return AUTH_STUB;
+    if (/(^|\/)hooks\/useAdminDatabase(\.ts)?$/.test(source)) return ADMIN_DB_STUB;
     return null;
   },
 };
@@ -49,6 +51,6 @@ export default defineConfig({
   build: {
     outDir: path.resolve(REPO, 'preview-dist'),
     emptyOutDir: true,
-    rollupOptions: { input: [path.resolve(__dirname, 'rider.html'), path.resolve(__dirname, 'driver.html'), path.resolve(__dirname, 'manager.html'), path.resolve(__dirname, 'shell.html')] },
+    rollupOptions: { input: [path.resolve(__dirname, 'rider.html'), path.resolve(__dirname, 'driver.html'), path.resolve(__dirname, 'manager.html'), path.resolve(__dirname, 'shell.html'), path.resolve(__dirname, 'records.html')] },
   },
 });
