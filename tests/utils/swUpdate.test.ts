@@ -14,7 +14,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import {
-    UPDATE_POLL_MS, applyUpdate, updateIsWaiting, watchForUpdate,
+    UPDATE_POLL_MS, applyUpdate, applyUpdateWhenUnobserved, updateIsWaiting, watchForUpdate,
     type RegistrationLike, type WorkerLike,
 } from '../../src/utils/swUpdate';
 
@@ -170,5 +170,92 @@ describe('watchForUpdate', () => {
     it('checks often enough to matter, and not so often it is chatty', () => {
         expect(UPDATE_POLL_MS).toBeLessThanOrEqual(30 * 60 * 1000);
         expect(UPDATE_POLL_MS).toBeGreaterThanOrEqual(5 * 60 * 1000);
+    });
+});
+
+describe('applyUpdateWhenUnobserved', () => {
+    /** A document whose visibility we can drive. */
+    function fakeDoc(initial: 'visible' | 'hidden') {
+        const listeners: Array<() => void> = [];
+        return {
+            visibilityState: initial as string,
+            addEventListener: (_t: 'visibilitychange', cb: () => void) => { listeners.push(cb); },
+            removeEventListener: (_t: 'visibilitychange', cb: () => void) => {
+                const i = listeners.indexOf(cb);
+                if (i >= 0) listeners.splice(i, 1);
+            },
+            go(state: 'visible' | 'hidden') { this.visibilityState = state; listeners.forEach(l => l()); },
+            get listenerCount() { return listeners.length; },
+        };
+    }
+
+    it('applies a waiting update while the tab is HIDDEN', async () => {
+        // The whole point: nobody is looking, so take the update rather than wait
+        // to be noticed. A client that never sees the banner is a client running
+        // old code for weeks — which is exactly what happened on 2026-08-18.
+        const w = worker();
+        const { reg } = registration({ waiting: w });
+        const doc = fakeDoc('hidden');
+
+        applyUpdateWhenUnobserved(doc as never, async () => reg);
+        await Promise.resolve(); await Promise.resolve();
+
+        expect(w.posted).toEqual([{ type: 'SKIP_WAITING' }]);
+    });
+
+    it('does NOT apply while the tab is VISIBLE', async () => {
+        // Someone is using it. A driver mid-carload must not have the page reload
+        // under them; that is what the banner is for.
+        const w = worker();
+        const { reg } = registration({ waiting: w });
+        const doc = fakeDoc('visible');
+
+        applyUpdateWhenUnobserved(doc as never, async () => reg);
+        await Promise.resolve(); await Promise.resolve();
+
+        expect(w.posted).toEqual([]);
+    });
+
+    it('re-checks for a newer worker when the tab comes BACK', async () => {
+        // Returning after a day should not have to wait out the 15-minute poll.
+        const { reg } = registration();
+        const doc = fakeDoc('visible');
+
+        applyUpdateWhenUnobserved(doc as never, async () => reg);
+        await Promise.resolve(); await Promise.resolve();
+
+        expect(reg.update).toHaveBeenCalled();
+    });
+
+    it('applies on the transition to hidden, not only at attach time', async () => {
+        const w = worker();
+        const { reg } = registration({ waiting: w });
+        const doc = fakeDoc('visible');
+
+        applyUpdateWhenUnobserved(doc as never, async () => reg);
+        await Promise.resolve(); await Promise.resolve();
+        expect(w.posted).toEqual([]);
+
+        doc.go('hidden');
+        await Promise.resolve(); await Promise.resolve();
+
+        expect(w.posted).toEqual([{ type: 'SKIP_WAITING' }]);
+    });
+
+    it('survives no registration at all', async () => {
+        // Dev has none: /sw.js there is the SPA fallback HTML, so registration
+        // fails outright. This must not throw into the app it is minding.
+        const doc = fakeDoc('hidden');
+        expect(() => applyUpdateWhenUnobserved(doc as never, async () => null)).not.toThrow();
+    });
+
+    it('detaches its listener on cleanup', () => {
+        const doc = fakeDoc('visible');
+        const stop = applyUpdateWhenUnobserved(doc as never, async () => null);
+        expect(doc.listenerCount).toBe(1);
+
+        stop();
+
+        expect(doc.listenerCount).toBe(0);
     });
 });

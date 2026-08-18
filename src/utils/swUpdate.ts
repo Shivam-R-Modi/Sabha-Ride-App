@@ -136,3 +136,53 @@ export function watchForUpdate(
     const handle = schedule(() => { void registration.update(); }, UPDATE_POLL_MS) as never;
     return () => cancel(handle);
 }
+
+/**
+ * Apply a waiting update the moment nobody is looking, and re-check on return.
+ *
+ * WHY THIS EXISTS
+ * ---------------
+ * Moving to `prompt` mode stopped new versions taking over on their own, which was
+ * the point: a driver mid-carload must not have the page reload under them. The
+ * side effect showed up immediately — a client that never notices the banner runs
+ * old code indefinitely, and on 2026-08-18 that produced a report of "the deployed
+ * UI is wrong" when the deployed bundle was in fact correct and the browser was
+ * serving its own precache.
+ *
+ * A tab that is HIDDEN has nobody to interrupt. So:
+ *
+ *   hidden   -> apply the waiting worker now. The reload happens off-screen and
+ *               the next look at the tab is already current.
+ *   visible  -> ask the server whether a newer worker exists, so returning after
+ *               a day does not wait out the 15-minute poll.
+ *
+ * The banner stays for an actively-used tab, because that is the case where being
+ * asked is the correct behaviour rather than a nuisance.
+ *
+ * Injected `doc` and `sw` rather than reaching for globals, so the branching is
+ * testable without a browser.
+ */
+export function applyUpdateWhenUnobserved(
+    doc: { visibilityState: string; addEventListener: (t: 'visibilitychange', cb: () => void) => void; removeEventListener: (t: 'visibilitychange', cb: () => void) => void },
+    getRegistration: () => Promise<RegistrationLike | null>,
+): () => void {
+    const onChange = () => {
+        void getRegistration().then(reg => {
+            if (!reg) return;
+            if (doc.visibilityState === 'hidden') {
+                // Nobody is watching: take the update now.
+                applyUpdate(reg);
+            } else {
+                // Back on screen: is there something newer than the last poll saw?
+                void reg.update();
+            }
+        }).catch(() => {
+            // Staying current is best-effort. It must never throw into the app.
+        });
+    };
+
+    // Run once on attach: the tab may already be hidden when an update lands.
+    onChange();
+    doc.addEventListener('visibilitychange', onChange);
+    return () => doc.removeEventListener('visibilitychange', onChange);
+}

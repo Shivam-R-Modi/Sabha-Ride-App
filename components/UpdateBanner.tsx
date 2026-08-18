@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useNavigation } from '../contexts/NavigationContext';
-import { applyUpdate, watchForUpdate, type RegistrationLike } from '../src/utils/swUpdate';
+import { applyUpdate, applyUpdateWhenUnobserved, watchForUpdate, type RegistrationLike } from '../src/utils/swUpdate';
 
 /**
  * "A new version is ready" — the one thing the app could not previously say.
@@ -48,9 +48,23 @@ export const UpdateBanner: React.FC = () => {
         const onControllerChange = () => window.location.reload();
         navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
+        // Update without waiting to be noticed.
+        //
+        // The banner is the right answer for a tab somebody is USING. It is the
+        // wrong answer for one sitting in the background, which is how a client
+        // ends up weeks behind: nobody sees the prompt, so nothing happens. This
+        // applies a waiting worker while the tab is hidden, and re-checks the
+        // moment it comes back. See applyUpdateWhenUnobserved.
+        const stopUnobserved = applyUpdateWhenUnobserved(
+            document,
+            () => navigator.serviceWorker.getRegistration()
+                .then(r => (r ?? null) as unknown as RegistrationLike | null),
+        );
+
         return () => {
             cancelled = true;
             cleanup?.();
+            stopUnobserved();
             navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
         };
     }, []);
