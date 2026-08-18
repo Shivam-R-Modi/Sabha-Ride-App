@@ -6,6 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { RoleSwitcher } from './RoleSwitcher';
+import { InstallAppButton } from './shared/InstallAppButton';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -181,6 +182,8 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
                 <p className="text-[10px] text-coffee-500 font-bold uppercase truncate">{role}</p>
               </div>
             </div>
+            {/* Renders nothing where the browser cannot install. */}
+            <InstallAppButton variant="sidebar" />
             <button
               onClick={logout}
               // cream-400 for the same reason as the nav pill above: cream-300 is
@@ -192,13 +195,16 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
             </button>
           </div>
         ) : (
-          <button
-            onClick={logout}
-            title="Logout"
-            className="w-full flex justify-center p-3 text-coffee-500 hover:text-[rgb(var(--danger-text))] transition-colors btn-feedback"
-          >
-            <LogOut size={22} />
-          </button>
+          <div className="space-y-2">
+            <InstallAppButton variant="sidebar" collapsed />
+            <button
+              onClick={logout}
+              title="Logout"
+              className="w-full flex justify-center p-3 text-coffee-500 hover:text-[rgb(var(--danger-text))] transition-colors btn-feedback"
+            >
+              <LogOut size={22} />
+            </button>
+          </div>
         )}
 
         {/* Collapse Toggle */}

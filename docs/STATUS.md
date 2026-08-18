@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-18** (production-readiness pass).
+at the end. Last updated **2026-08-18** (iOS install prompt).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -74,11 +74,12 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-DUZMBZsz.js` / css `index-DjHnHlyk.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **728** · rules **89** —
-**1325 total**.
+**Test suites, all green:** `functions` **508** · client **769** · rules **89** —
+**1366 total**.
 
-**Everything in this file is deployed.** `main` = `307c9dc` = production, local
-and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed EXCEPT the last section** — *Installing on
+iOS*, which is committed and swept but **not released**. `main` = production;
+`HEAD` is one commit ahead of it. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -953,6 +954,113 @@ nuisance.
 >
 > And to check which version a browser is on:
 > `document.querySelector('script[type=module]').src`
+
+---
+
+## 2026-08-18: the install prompt was invisible on every iPhone
+
+Asked whether the app could be installed on a phone the way it can on desktop. The
+answer surfaced a live defect rather than a missing feature.
+
+`components/PWAPrompt.tsx` offered installation **only** in response to
+`beforeinstallprompt`. **WebKit never fires that event**, and WebKit is the only
+engine allowed on iOS, so the banner returned `null` on every iPhone and iPad, for
+every user, permanently. Nothing failed and nothing appeared. "Use Chrome instead"
+is not a workaround either — Chrome for iOS is Safari's engine wearing Chrome's
+interface, so it behaves identically here.
+
+This matters more than it looks: **most of this congregation's drivers are on
+iPhones.** The one platform that got no prompt is the majority platform.
+
+### What replaced it
+
+`src/utils/pwaInstall.ts` holds one verdict function that both consumers read, so
+the banner and the Profile entry cannot disagree:
+
+| verdict | when | what is shown |
+|---|---|---|
+| `installed` | already running from the home screen | nothing — never nag |
+| `prompt` | the browser handed over an event | one-tap Install button |
+| `manual` | iOS, where only the user can do it | the two actual taps, worded per browser |
+| `none` | no route exists (desktop Firefox, a real Mac) | **nothing at all** |
+
+`none` is the important row. A permanently visible "Install" on a browser that
+cannot install is this repo's standing failure mode, so the absence is the feature.
+
+Three details that are easy to get wrong and are each pinned by a test:
+
+- **iPadOS 13+ sends a desktop Mac user-agent.** Touch points are the only thing
+  separating an iPad from a MacBook, and the distinction is load-bearing: a real
+  Mac must NOT be told to hunt for a Share icon it does not have.
+- **Safari puts Share in the bottom toolbar; Chrome and Edge for iOS put it in the
+  address bar.** Naming the wrong end of the screen is how a two-step instruction
+  gets abandoned, so step one names the right place per browser.
+- **The event is captured at module scope**, from `index.tsx`, not in a hook.
+  Chrome fires it once and early — often before React mounts — and it cannot be
+  requested again. A listener added on mount can miss it outright.
+
+### A defect written and caught inside this change
+
+The first draft held `dismissed` in component state. The banner and the Profile
+entry are separate `usePwaInstall` callers, so pressing the entry wrote the
+storage key and **notified nobody** — the banner's own copy had been read once at
+mount and would never look again. Wired up, silently inert: the same shape as the
+bug being fixed. Dismissal now lives in module state with a subscription, and
+`tests/components/InstallAppButton.test.tsx` fails if the notification is removed.
+
+### Where it lives
+
+Profile, for the same reason `ThemeToggle` is there — it is a property of the
+device, and Profile is the one destination all three roles share. The desktop
+sidebar footer gets it too. **Not** in onboarding, and not in the nav lists:
+
+- onboarding runs **once**, so skipping it or signing up on a laptop means never
+  seeing it again;
+- drivers land on `PendingApproval`, so an icon installed there opens to "waiting
+  for approval";
+- the manager's bottom nav is already seven items at 375px, with no room for an
+  eighth;
+- and asking for commitment before the first ride is asking before the app has
+  been any use.
+
+### The quality guard that had to be narrowed, carefully
+
+`tests/quality/native-dialogs.test.ts` bans `window.prompt`. Chrome's install
+event **also** has a method called `prompt`, and its type must be written down
+because `lib.dom` has no definition for it. The guard now skips method signatures
+in type declarations — a return-type annotation directly after the parameter list
+is not valid as a call expression — and the ban was re-verified against four real
+call forms (`prompt(...)`, `window.prompt(...)`, `alert(...)`, `confirm(...)`),
+each of which still fails it. **Narrowed, not weakened.**
+
+### Verification
+
+41 new tests (**769** client, up from 728). Four deliberate breakages, each
+confirmed to fail:
+
+| breakage | failures |
+|---|---|
+| iOS gets no verdict (the original bug) | 9 |
+| a real Mac told to hunt for a Share icon | 2 |
+| dismissal stops notifying the other caller | 2 |
+| an Install button rendered on iOS | 1 |
+
+Also checked in a real browser against the production build, because no test
+covers `index.tsx` itself: dispatching a cancelable `beforeinstallprompt` returns
+`false`, proving the module-level listener is present in the shipped bundle and
+called `preventDefault()`.
+
+**Not visually confirmed on a real iPhone**, and not verifiable from here — the
+banner lives in the authenticated tree, and the browser pane cannot present itself
+as iOS. The DOM assertions cover the wording and the absent Install button; the
+appearance on a physical device has not been seen.
+
+### Still open
+
+The **post-ride trigger** was planned and is not built. `CompletionScreen` already
+fires confetti and "Great job!", which is the highest-goodwill moment in the app
+and the natural place to ask. Today the banner appears on first visit and once
+only; the Profile entry is the permanent way back.
 
 ---
 

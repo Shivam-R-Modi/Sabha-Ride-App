@@ -14,6 +14,7 @@ import { PlaceDetails } from '../../hooks/useGooglePlaces';
 import { geocodeAddressInBrowser } from '../../hooks/useGooglePlaces';
 import { Save, X, CheckCircle, AlertCircle, Pencil } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { InstallAppButton } from './InstallAppButton';
 
 export const ProfileEditor: React.FC = () => {
     const { currentUser, userProfile, refreshProfile, logout } = useAuth();
@@ -210,6 +211,14 @@ export const ProfileEditor: React.FC = () => {
                     share — the manager's Settings sheet is manager-only. */}
                 <div className="mt-6 max-w-sm mx-auto text-left">
                     <ThemeToggle />
+                </div>
+
+                {/* Installing. Here for the same reason as the theme: it is a
+                    property of the device, and Profile is the only destination
+                    all three roles share. Renders nothing on a browser that
+                    cannot install, so it is never a dead row. */}
+                <div className="mt-3 max-w-sm mx-auto text-left">
+                    <InstallAppButton />
                 </div>
 
                 {/* Edit & Sign Out buttons */}

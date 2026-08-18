@@ -16,6 +16,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { installGlobalErrorReporting } from './src/utils/errorReport';
+import { watchInstallPrompt } from './src/utils/pwaInstall';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -27,6 +28,12 @@ if (!rootElement) {
 // ErrorBoundary cannot see these — they happen outside React's tree, or in
 // promises nobody awaited.
 installGlobalErrorReporting();
+
+// Also before the first render, and for the same class of reason: Chrome
+// fires `beforeinstallprompt` once, early, and often before React has
+// mounted. A listener added on mount can miss it outright, and there is no
+// way to ask for the event again.
+watchInstallPrompt(window);
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(

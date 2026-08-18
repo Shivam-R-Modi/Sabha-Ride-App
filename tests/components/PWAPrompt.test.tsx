@@ -23,6 +23,22 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { PWAPrompt } from '../../components/PWAPrompt';
 import { NavigationProvider, useNavigation } from '../../contexts/NavigationContext';
+import { resetInstallState } from '../../src/utils/pwaInstall';
+
+const IPHONE_SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1';
+const IPHONE_CHROME = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 CriOS/122.0 Mobile/15E148 Safari/604.1';
+
+const REAL_UA = window.navigator.userAgent;
+const REAL_MATCH_MEDIA = window.matchMedia;
+
+/** Pretend this tab is running on the given device. */
+const onDevice = (userAgent: string) =>
+    Object.defineProperty(window.navigator, 'userAgent', { value: userAgent, configurable: true });
+
+/** Pretend the app is already running from the home screen. */
+const alreadyInstalled = () => {
+    window.matchMedia = ((query: string) => ({ matches: query.includes('standalone') })) as any;
+};
 
 /** Fires the event the browser uses to offer installation. */
 const offerInstall = () => act(() => {
@@ -54,6 +70,12 @@ const renderPrompt = () => render(
 
 beforeEach(() => {
     window.localStorage.clear();
+    // The captured prompt and the dismissal flag are module state, deliberately
+    // — see src/utils/pwaInstall.ts. Without this reset these tests would pass
+    // only in their current order.
+    resetInstallState();
+    onDevice(REAL_UA);
+    window.matchMedia = REAL_MATCH_MEDIA;
 });
 
 describe('PWAPrompt — clearing the sidebar', () => {
@@ -114,5 +136,70 @@ describe('PWAPrompt — clearing the sidebar', () => {
         offerInstall();
 
         expect(banner()!.className).toMatch(/\bright-4\b/);
+    });
+});
+
+describe('PWAPrompt — iOS, where the install event never arrives', () => {
+    /**
+     * The defect being guarded: this banner used to render `null` on every
+     * iPhone, because it waited for `beforeinstallprompt` and WebKit does not
+     * send it. No error, no fallback, nothing on screen — and every iOS browser
+     * is WebKit, so "use Chrome instead" was not a workaround either.
+     */
+
+    it('shows the hand-written steps with no install event at all', () => {
+        onDevice(IPHONE_SAFARI);
+        renderPrompt();
+
+        expect(screen.getByText('Add to Home Screen')).toBeInTheDocument();
+        expect(screen.getByText(/Tap the Share icon in the bar at the bottom/i)).toBeInTheDocument();
+        expect(screen.getByText(/Choose .Add to Home Screen., then Add/i)).toBeInTheDocument();
+    });
+
+    it('sends Chrome-for-iOS to the address bar, not the bottom bar', () => {
+        onDevice(IPHONE_CHROME);
+        renderPrompt();
+
+        // Anchored on "Chrome's" — the banner's own subtitle also says
+        // "address bar", so the loose match found two nodes.
+        expect(screen.getByText(/Tap the Share icon in Chrome/i)).toBeInTheDocument();
+        expect(screen.queryByText(/bar at the bottom/i)).toBeNull();
+    });
+
+    it('offers no Install button, because nothing here can install', () => {
+        // A button wired to a handler that cannot work is the failure mode this
+        // whole change exists to remove. Absence is the correct behaviour.
+        onDevice(IPHONE_SAFARI);
+        renderPrompt();
+
+        expect(screen.queryByText('Install')).toBeNull();
+    });
+
+    it('stays away once dismissed, across a remount', () => {
+        onDevice(IPHONE_SAFARI);
+        const first = renderPrompt();
+        act(() => { screen.getByLabelText('Dismiss').click(); });
+        expect(banner()).toBeNull();
+
+        first.unmount();
+        renderPrompt();
+
+        expect(banner()).toBeNull();
+    });
+
+    it('shows nothing when already running from the home screen', () => {
+        // Nagging someone to install the app they are using it inside.
+        onDevice(IPHONE_SAFARI);
+        alreadyInstalled();
+        renderPrompt();
+
+        expect(banner()).toBeNull();
+    });
+
+    it('shows nothing on a desktop browser with no route to install', () => {
+        // jsdom's own user-agent: not iOS, and no prompt event fired.
+        renderPrompt();
+
+        expect(banner()).toBeNull();
     });
 });

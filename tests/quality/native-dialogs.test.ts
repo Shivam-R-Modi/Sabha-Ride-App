@@ -45,8 +45,21 @@ function sourceFiles(): string[] {
 }
 
 /**
- * Calls to a global dialog function, ignoring comments and anything that is
- * plainly a property access (`foo.alert(`), which is not the global.
+ * A method signature in a type declaration — `prompt(): Promise<void>;` — as
+ * opposed to a call.
+ *
+ * Needed because Chrome's install event has a method called `prompt`, and
+ * src/utils/pwaInstall.ts must write its type down (lib.dom has no definition
+ * for it). Banning the WORD would mean the API could not be described. The
+ * shape is unambiguous: a return-type annotation directly after the parameter
+ * list, terminated by a semicolon, is not valid as a call expression.
+ */
+const TYPE_DECLARATION = /^\s*(?:readonly\s+)?[\w$]+\s*(?:<[^>]*>)?\([^)]*\)\s*:\s*[^;{]+;\s*$/;
+
+/**
+ * Calls to a global dialog function, ignoring comments, type declarations, and
+ * anything that is plainly a property access (`foo.alert(`), which is not the
+ * global.
  */
 function callSites(name: string): { file: string; line: number; text: string }[] {
     const pattern = new RegExp(`(?<![.\\w])(?:window\\.)?${name}\\s*\\(`);
@@ -67,6 +80,7 @@ function callSites(name: string): { file: string; line: number; text: string }[]
                 return;
             }
             if (line.startsWith('//') || line.startsWith('*')) return;
+            if (TYPE_DECLARATION.test(raw)) return;
 
             if (pattern.test(raw)) {
                 hits.push({ file: path.relative(ROOT, file), line: i + 1, text: line });
@@ -101,9 +115,13 @@ describe('native dialogs', () => {
     });
 
     it('window.prompt is banned as well, for the same reason', () => {
-        // Not currently used anywhere. Asserted so it cannot arrive later as
-        // the "quick" way to collect a value — suppressed, it returns null and
-        // the caller silently takes the cancel path.
+        // Not called anywhere. Asserted so it cannot arrive later as the
+        // "quick" way to collect a value — suppressed, it returns null and the
+        // caller silently takes the cancel path.
+        //
+        // `InstallPromptEvent.prompt()` in src/utils/pwaInstall.ts is Chrome's
+        // install event, not this. Its declaration is skipped as a type, and
+        // its call site is a property access, which was never matched.
         const hits = callSites('prompt');
         expect(hits, format(hits)).toHaveLength(0);
     });
