@@ -61,12 +61,22 @@ describe('the root element paints itself', () => {
 });
 
 describe('the splash screen reaches the bottom of a phone', () => {
-    it('is at least the LARGE viewport height', () => {
-        // `inset-0` is the layout viewport, which can be shorter than the screen
-        // while browser chrome is out — that was the strip along the bottom. `lvh`
-        // is the screen with chrome retracted. Where there is no chrome, lvh and
-        // dvh are the same number.
+    it('overshoots the bottom rather than matching the viewport', () => {
+        // `min-height: 100lvh` alone was tried and did NOT fix it on the device.
+        // `position: fixed` is sized to the visual viewport while the canvas html
+        // paints can extend past it, so the height now adds the bottom inset on
+        // top. Behaviour is covered in tests/components/SplashScreen.test.tsx; this
+        // is the CSS shape.
         expect(splash).toMatch(/100lvh/);
+        expect(splash).toMatch(/env\(safe-area-inset-bottom/);
+    });
+
+    it('never dismisses itself', () => {
+        // The tap is the only way out, by the owner's decision. A timer here would
+        // undo it silently; the behavioural proof is in
+        // tests/components/SplashScreen.test.tsx.
+        expect(splash).not.toMatch(/setTimeout/);
+        expect(splash).not.toMatch(/SPLASH_MS/);
     });
 
     it('has a dark colour behind the photo', () => {

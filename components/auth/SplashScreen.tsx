@@ -14,23 +14,21 @@ const SPIRITUAL_QUOTES = [
 
 const QUOTE_INDEX_KEY = 'sabha_ride_quote_index';
 
-/** Long enough to read a short line of Gujarati, short enough not to be a wait. */
-const SPLASH_MS = 1800;
-
+/**
+ * THIS SCREEN WAITS FOR A TAP. It does not dismiss itself.
+ *
+ * The history matters, because it has now gone both ways. A tap was originally
+ * required; that was removed in the Phase 3 redesign as "one mandatory, meaningless
+ * tap before every launch", including for a rider opening the app just to see
+ * whether their driver had arrived. The owner reversed it on 2026-08-19: the tap is
+ * wanted, deliberately.
+ *
+ * So there is no timer here on purpose. If a timer reappears, it is not a tidy-up —
+ * it undoes an explicit decision, and `tests/quality/root-background.test.ts` says
+ * so.
+ */
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     const [currentQuote, setCurrentQuote] = useState<string>('');
-
-    // Dismisses itself.
-    //
-    // The auto-dismiss timer was removed once "to favour a user-initiated
-    // transition", which in practice meant one mandatory, meaningless tap
-    // before every single launch — including for a rider who opened the app to
-    // check whether their driver had arrived. Tapping still skips it, so the
-    // impatient lose nothing.
-    useEffect(() => {
-        const timer = setTimeout(onComplete, SPLASH_MS);
-        return () => clearTimeout(timer);
-    }, [onComplete]);
 
     useEffect(() => {
         // Get the last quote index from localStorage
@@ -52,13 +50,21 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             className="fixed inset-0 flex flex-col items-center justify-end cursor-pointer animate-in fade-in duration-500 pb-16"
             onClick={onComplete}
             style={{
-                /* `inset-0` is the layout viewport, which on a phone can be SHORTER
-                   than the screen while the browser chrome is out — that left a strip
-                   at the bottom on mobile. `100lvh` is the LARGE viewport height: the
-                   screen with chrome retracted, so this always reaches the bottom.
-                   Where there is no chrome (desktop, an installed PWA) lvh and dvh are
-                   the same number and nothing changes. */
-                minHeight: '100lvh',
+                /* COVER THE SCREEN BY OVERSHOOTING IT, rather than by trying to match
+                   it exactly.
+                   `position: fixed` is sized to the VISUAL viewport, while the page
+                   canvas — which `html` paints — can extend further, under retracted
+                   browser chrome and into the home-indicator safe area. The difference
+                   is the strip that kept showing along the bottom of a phone. It is
+                   not reproducible on a desktop emulator: measured there, the element
+                   covers 812 of 812 pixels with nothing missing, because there are no
+                   insets and no chrome to create the gap.
+                   `min-height: 100lvh` alone did not fix it on the device, so this
+                   stops chasing the exact number and adds the bottom inset on top.
+                   Overshooting is free: the excess is off-screen on a fixed element.
+                   If `lvh` is unsupported the whole calc is invalid, height falls back
+                   to auto, and `inset-0` sizes it as before — no worse than it was. */
+                height: 'calc(100lvh + env(safe-area-inset-bottom, 0px))',
                 /* Behind the photo, for the moment before it decodes and for any
                    sliver the crop cannot reach. A FIXED dark brown, not a theme
                    token: this screen is dark in both themes, so `--canvas` would put
