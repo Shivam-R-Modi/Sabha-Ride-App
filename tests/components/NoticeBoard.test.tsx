@@ -103,10 +103,12 @@ describe('the sabha agenda', () => {
         expect(screen.getByText('Kirtan, then dinner')).toBeInTheDocument();
     });
 
-    it('labels it, so it is not mistaken for a notice', () => {
+    it('carries no label — the flyer text already says what it is', () => {
+        // Removed at the owner's request, along with the card's own styling. The
+        // agenda is now indistinguishable from a notice, which is the intent.
         currentEvent = { agenda: 'Kirtan' };
         render(<NoticeBoard />);
-        expect(screen.getByText('Sabha agenda')).toBeInTheDocument();
+        expect(screen.queryByText(/Sabha agenda/i)).toBeNull();
     });
 
     it('keeps the line breaks a long agenda depends on', () => {

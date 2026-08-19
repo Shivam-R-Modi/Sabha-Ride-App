@@ -34,8 +34,16 @@ const theme = readFileSync(path.join(ROOT, 'theme.css'), 'utf8');
 
 describe('the notice board looks like every other card', () => {
     it('uses clay-card for its cards', () => {
-        // Both of them: a notice, and the sabha agenda.
-        expect(board.match(/className="clay-card p-4 text-left"/g) ?? []).toHaveLength(2);
+        // ONE occurrence, not two: with the agenda's label gone, its card and a
+        // notice's card were the same <article> twice, so they are one component.
+        expect(board.match(/className="clay-card p-4 text-left"/g) ?? []).toHaveLength(1);
+    });
+
+    it('has no agenda-specific label or styling left', () => {
+        // The owner asked for the label to go too, after the card styling. What is
+        // left must not quietly reintroduce a distinction.
+        expect(board).not.toMatch(/Sabha agenda</);
+        expect(board).not.toMatch(/AgendaCard/);
     });
 
     it('uses no bespoke notice card class', () => {

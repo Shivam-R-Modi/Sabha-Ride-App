@@ -3,7 +3,6 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useNotices } from '../../hooks/useNotices';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { isLongForCard } from '../../src/utils/agenda';
-import type { Notice } from '../../types';
 
 /**
  * Long text in a dashboard card, collapsed until asked for.
@@ -60,7 +59,15 @@ const LongText: React.FC<{ text: string }> = ({ text }) => {
  * Renders NOTHING when there is nothing to say — an empty panel headed "Notices"
  * is furniture.
  */
-const NoticeCard: React.FC<{ notice: Notice }> = ({ notice }) => {
+/**
+ * One card on the board — a notice, or the sabha agenda. There is no difference.
+ *
+ * The agenda used to carry a "SABHA AGENDA" label and its own component. Both are
+ * gone at the owner's request: the flyer text already says what it is, so the
+ * label was repeating the content, and once it went the two components were the
+ * same `<article>` twice over.
+ */
+const BoardCard: React.FC<{ text: string; imageUrl?: string }> = ({ text, imageUrl }) => {
     // No <img> in this app had an onError before this one. A notice image is
     // remote and sits on every dashboard, so a broken one would be a visible
     // failure with no explanation — the shape this repo keeps removing. On error
@@ -69,47 +76,33 @@ const NoticeCard: React.FC<{ notice: Notice }> = ({ notice }) => {
 
     return (
         <article className="clay-card p-4 text-left">
-            {notice.imageUrl && !imageFailed && (
+            {imageUrl && !imageFailed && (
                 <img
-                    src={notice.imageUrl}
+                    src={imageUrl}
                     alt=""
                     loading="lazy"
                     onError={() => setImageFailed(true)}
                     className="w-full rounded-2xl mb-3 object-cover max-h-72"
                 />
             )}
-            <LongText text={notice.body} />
+            <LongText text={text} />
         </article>
     );
 };
 
 /**
- * The upcoming sabha's agenda.
+ * Manager-authored notices and the upcoming sabha's agenda, on every dashboard.
  *
- * This is the last mile of a pipeline that was already complete and went
- * nowhere: a manager types an agenda in the Sabha Calendar, `editOccurrence`
- * writes it to `events/{date}`, the recurrence resolver carries it,
- * `updateRideTypeContext` publishes it onto `system/rideContext`, and
- * `useCurrentEvent` reads it — and then no component in the app rendered it. So
- * the field existed, was carried correctly through four layers, and was invisible
- * to every rider and Sarthi. Exactly the failure this repo keeps removing.
+ * THE AGENDA'S LAST MILE. A manager types it in the Sabha Calendar,
+ * `editOccurrence` writes it to `events/{date}`, the recurrence resolver carries
+ * it, `updateRideTypeContext` publishes it onto `system/rideContext`, and
+ * `useCurrentEvent` reads it — and before this nothing rendered it. Four layers of
+ * correct plumbing to a screen that did not exist, so a manager could write an
+ * agenda no rider or Sarthi could ever see.
  *
- * It sits in the notice board rather than in a panel of its own so there is ONE
- * place people look for "what is happening", which was the point of the board.
- * Labelled, because an agenda is not a notice: it belongs to a specific sabha and
- * changes every week.
+ * It is rendered here rather than in a panel of its own so there is ONE place
+ * people look for what is happening, which was the point of the board.
  */
-const AgendaCard: React.FC<{ agenda: string }> = ({ agenda }) => (
-    <article className="clay-card p-4 text-left">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-saffron-800 mb-1.5">
-            Sabha agenda
-        </p>
-        {/* Plain text, same as a notice body. Line breaks survive; markup does not
-            exist here. */}
-        <LongText text={agenda} />
-    </article>
-);
-
 export const NoticeBoard: React.FC<{
     /**
      * Rendered instead of nothing when the board is empty.
@@ -139,8 +132,11 @@ export const NoticeBoard: React.FC<{
 
     return (
         <section className="space-y-3" aria-label="Notices and sabha agenda">
-            {showAgenda && <AgendaCard agenda={agenda} />}
-            {showNotices && notices.map(notice => <NoticeCard key={notice.id} notice={notice} />)}
+            {/* Agenda first: it belongs to the evening people are about to attend. */}
+            {showAgenda && <BoardCard text={agenda} />}
+            {showNotices && notices.map(notice => (
+                <BoardCard key={notice.id} text={notice.body} imageUrl={notice.imageUrl} />
+            ))}
         </section>
     );
 };
