@@ -138,7 +138,7 @@ function isValidPendingRide(docData, expectedEventKey, expectedRideType) {
 }
 // ── main function ──────────────────────────────────────────
 exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
     // Auth check
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -554,18 +554,12 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         console.log('[globalAssign] Batch committed + lock released');
         // ── Step 10: Notifications (non-blocking) ───────────
         try {
-            const driverFcmToken = driverData.fcmToken;
-            if (driverFcmToken) {
-                await (0, notifications_1.notifyDriverStudentsAssigned)(driverFcmToken, rideStudents.length);
-            }
+            await (0, notifications_1.notifyDriverStudentsAssigned)((0, notifications_1.tokensOf)(driverId, driverData), rideStudents.length);
             // By rider, not by request: a rider holding two of this car's stops
             // should get one message, not two.
             for (const studentId of new Set(assignedStudents.map(s => s.studentId))) {
                 const sDoc = await db.collection('users').doc(studentId).get();
-                const sToken = (_r = sDoc.data()) === null || _r === void 0 ? void 0 : _r.fcmToken;
-                if (sToken) {
-                    await (0, notifications_1.notifyStudentDriverAssigned)(sToken, driverData.name || 'Driver', carData.name || 'Vehicle', carData.color || '');
-                }
+                await (0, notifications_1.notifyStudentDriverAssigned)((0, notifications_1.tokensOf)(studentId, sDoc.data()));
             }
         }
         catch (notifErr) {
@@ -617,7 +611,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         // This runs after catch block, providing extra guarantee
         try {
             const lockStillExists = await lockRef.get();
-            if (lockStillExists.exists && ((_s = lockStillExists.data()) === null || _s === void 0 ? void 0 : _s.driverId) === driverId) {
+            if (lockStillExists.exists && ((_r = lockStillExists.data()) === null || _r === void 0 ? void 0 : _r.driverId) === driverId) {
                 await lockRef.delete();
                 console.log('[globalAssign] Lock cleaned up in finally block');
             }

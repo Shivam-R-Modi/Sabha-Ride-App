@@ -72,7 +72,7 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-3LM1Ju9t.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-Bq42l6mm.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **521** · client **858** · rules **89** —
 **1468 total**.
@@ -1831,6 +1831,12 @@ they will look. An invisible control is the same family of defect as a dead one.
   a real device.
 
 **So push can now be turned on, but nobody has been asked to.**
+
+Released 2026-08-18 (functions then hosting). **The original blocker is gone:**
+`GET /firebase-messaging-sw.js` now returns `text/javascript` with
+`no-cache` — it returned `200 text/html` via the SPA rewrite before, which is
+why service worker registration failed and `getToken` could never have
+succeeded.
 
 ---
 

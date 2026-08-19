@@ -51,7 +51,7 @@ const seats_1 = require("../constants/seats");
  * Output: Updated ride details
  */
 exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
-    var _a, _b;
+    var _a;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -168,10 +168,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         await batch.commit();
         // Notify student
         try {
-            const fcmToken = (_b = studentDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmToken;
-            if (fcmToken) {
-                await (0, notifications_1.notifyStudentDriverAssigned)(fcmToken, driver.name, ride.carModel, ride.carColor);
-            }
+            await (0, notifications_1.notifyStudentDriverAssigned)((0, notifications_1.tokensOf)(studentDoc.id, studentDoc.data()));
         }
         catch (notifError) {
             console.error('Error sending notification:', notifError);

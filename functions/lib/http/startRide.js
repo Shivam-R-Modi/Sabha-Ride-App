@@ -47,7 +47,6 @@ const notifications_1 = require("../utils/notifications");
  * Output: Success confirmation
  */
 exports.startRide = functions.https.onCall(async (data, context) => {
-    var _a;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -98,10 +97,7 @@ exports.startRide = functions.https.onCall(async (data, context) => {
             // Send notification to student
             try {
                 const studentDoc = await db.collection('users').doc(student.id).get();
-                const fcmToken = (_a = studentDoc.data()) === null || _a === void 0 ? void 0 : _a.fcmToken;
-                if (fcmToken) {
-                    await (0, notifications_1.notifyStudentRideStarting)(fcmToken, destination);
-                }
+                await (0, notifications_1.notifyStudentRideStarting)((0, notifications_1.tokensOf)(student.id, studentDoc.data()));
             }
             catch (notifError) {
                 console.error('Error sending notification to student:', student.id, notifError);

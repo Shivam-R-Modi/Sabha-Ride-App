@@ -56,7 +56,7 @@ const OPEN_RIDE_STATUSES = ['requested', 'assigned', 'driver_en_route', 'arrivin
  * Output: Driver's today stats
  */
 exports.completeRide = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -177,7 +177,6 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         });
         // Determine student status after ride
         const newStudentStatus = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'at_sabha' : 'home_safe';
-        const destination = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'Sabha' : 'Home';
         // Update students status and notify
         for (const student of allStudents) {
             // A group too large for one car is split across cars, so a rider can
@@ -202,10 +201,7 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
             // Send notification to student
             try {
                 const studentDoc = await db.collection('users').doc(student.id).get();
-                const fcmToken = (_d = studentDoc.data()) === null || _d === void 0 ? void 0 : _d.fcmToken;
-                if (fcmToken) {
-                    await (0, notifications_1.notifyStudentRideCompleted)(fcmToken, destination);
-                }
+                await (0, notifications_1.notifyStudentRideCompleted)((0, notifications_1.tokensOf)(student.id, studentDoc.data()));
             }
             catch (notifError) {
                 console.error('Error sending notification to student:', student.id, notifError);

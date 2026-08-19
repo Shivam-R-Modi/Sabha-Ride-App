@@ -291,22 +291,19 @@ async function drainAttendanceDelete(db, date) {
 }
 /** Tell the people who said yes, or who had asked for a ride. */
 async function notifyAffected(db, uids, date) {
-    var _a;
     try {
-        const tokens = [];
+        const recipients = [];
         for (const uid of uids) {
             const snap = await db.collection('users').doc(uid).get();
-            const token = (_a = snap.data()) === null || _a === void 0 ? void 0 : _a.fcmToken;
-            if (typeof token === 'string' && token)
-                tokens.push(token);
+            recipients.push(...(0, notifications_1.tokensOf)(uid, snap.data()));
         }
-        if (tokens.length === 0)
+        if (recipients.length === 0)
             return;
         const [year, month, day] = date.split('-').map(Number);
         const label = new Intl.DateTimeFormat('en-US', {
             timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long',
         }).format(new Date(Date.UTC(year, month - 1, day, 12)));
-        await (0, notifications_1.sendMulticastNotification)(tokens, 'Sabha cancelled', `The sabha on ${label} is no longer scheduled. Your ride request has been cancelled.`, { reason: 'sabha-deleted', eventId: date });
+        await (0, notifications_1.sendNotification)(recipients, 'Sabha cancelled', `The sabha on ${label} is no longer scheduled. Your ride request has been cancelled.`, { reason: 'sabha-deleted', eventId: date });
     }
     catch (error) {
         console.error('[deleteSabhaEvent] Could not notify affected riders:', error);
