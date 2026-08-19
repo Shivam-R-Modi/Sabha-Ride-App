@@ -72,13 +72,12 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-CSXhoV4V.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-3LM1Ju9t.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **508** · client **830** · rules **89** —
 **1427 total**.
 
-**Everything in this file is deployed EXCEPT the last section** — *the rename* —
-which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1569,6 +1568,12 @@ its wording updated and its strength left exactly as it was.
 9 new tests (client **821 → 830**), four deliberate breakages each confirmed to
 fail: old copy returning, the role literal being "finished", the collections
 being renamed in rules, and the app name reverting in the manifest.
+
+Released 2026-08-18 as **functions then hosting** (15 function files changed, no
+rules). Verified against the LIVE site: title and `apple-mobile-web-app-title`
+both `Bhulka Gaadi`, manifest name and short_name both `Bhulka Gaadi`, and in
+the live bundle **zero** occurrences of the old copy alongside the role literals
+still present 18 / 19 / 5 times.
 
 ---
 

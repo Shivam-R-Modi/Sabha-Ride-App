@@ -168,7 +168,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
     // untested code sitting in the middle of the dispatch path. Manager-initiated
     // assignment is manualAssignStudent, which authorises separately.
     if (driverId !== context.auth.uid) {
-        throw new functions.https.HttpsError('permission-denied', 'A driver can only request an assignment for themselves.');
+        throw new functions.https.HttpsError('permission-denied', 'A Sarthi can only request an assignment for themselves.');
     }
     const db = admin.firestore();
     // ── Step 1: Acquire lock ────────────────────────────────
@@ -209,7 +209,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         // ── Step 3: Tapping driver + car ────────────────────
         const driverDoc = await db.collection('users').doc(driverId).get();
         if (!driverDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Driver profile not found.');
+            throw new functions.https.HttpsError('not-found', 'Sarthi profile not found.');
         }
         const driverData = driverDoc.data();
         // Approved, and actually a driver.
@@ -240,7 +240,7 @@ exports.globalAssignDriver = functions.https.onCall(async (data, context) => {
         // Two drivers could hold the same car.
         const currentHolder = (0, fleet_1.resolveVehicleHolder)(carData);
         if (carData.status === 'in_use' && currentHolder && currentHolder !== driverId) {
-            throw new functions.https.HttpsError('failed-precondition', 'Vehicle is assigned to another driver.');
+            throw new functions.https.HttpsError('failed-precondition', 'Vehicle is assigned to another Sarthi.');
         }
         const availableSeats = Math.max(1, (carData.capacity || 4) - 1);
         // The largest vehicle the fleet HAS, which decides whether a group too big

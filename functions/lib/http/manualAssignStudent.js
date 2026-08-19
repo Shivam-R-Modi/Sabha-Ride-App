@@ -76,12 +76,12 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         // Check student is waiting
         const waitingStatuses = ['waiting_for_pickup', 'waiting_for_dropoff', 'requested', 'assigned'];
         if (!waitingStatuses.includes(student.status)) {
-            throw new functions.https.HttpsError('failed-precondition', 'Student is not waiting for assignment');
+            throw new functions.https.HttpsError('failed-precondition', 'Bhulku is not waiting for assignment');
         }
         // Get driver details
         const driverDoc = await db.collection('users').doc(driverId).get();
         if (!driverDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Driver not found');
+            throw new functions.https.HttpsError('not-found', 'Sarthi not found');
         }
         const driver = Object.assign({ id: driverDoc.id }, driverDoc.data());
         // Get active ride for driver
@@ -90,7 +90,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
             .where('status', 'in', ['assigned', 'driver_en_route', 'arriving', 'in_progress'])
             .get();
         if (activeRideSnap.empty) {
-            throw new functions.https.HttpsError('failed-precondition', 'Driver does not have an active ride');
+            throw new functions.https.HttpsError('failed-precondition', 'Sarthi does not have an active ride');
         }
         const rideDoc = activeRideSnap.docs[0];
         const ride = Object.assign({ id: rideDoc.id }, rideDoc.data());
@@ -195,7 +195,7 @@ exports.manualAssignStudent = functions.https.onCall(async (data, context) => {
         if (error instanceof functions.https.HttpsError) {
             throw error;
         }
-        throw new functions.https.HttpsError('internal', 'Failed to assign student');
+        throw new functions.https.HttpsError('internal', 'Failed to assign Bhulku');
     }
 });
 //# sourceMappingURL=manualAssignStudent.js.map

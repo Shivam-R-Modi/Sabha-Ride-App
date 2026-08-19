@@ -144,13 +144,13 @@ async function notifyEveryone(title, body, data) {
  * Notify student when driver is assigned
  */
 async function notifyStudentDriverAssigned(fcmToken, driverName, carModel, carColor) {
-    await sendNotification(fcmToken, '🚗 Driver Assigned ✓', `${driverName} will pick you up in a ${carColor} ${carModel}`, { type: 'driver_assigned' });
+    await sendNotification(fcmToken, '🚗 Sarthi Assigned ✓', `${driverName} will pick you up in a ${carColor} ${carModel}`, { type: 'driver_assigned' });
 }
 /**
  * Notify driver when students are assigned
  */
 async function notifyDriverStudentsAssigned(fcmToken, studentCount) {
-    await sendNotification(fcmToken, '👥 Students Assigned', `You have been assigned ${studentCount} student${studentCount > 1 ? 's' : ''}`, { type: 'students_assigned' });
+    await sendNotification(fcmToken, '👥 Bhulka Assigned', `You have been assigned ${studentCount} student${studentCount > 1 ? 's' : ''}`, { type: 'students_assigned' });
 }
 /**
  * Notify student when ride is starting
@@ -169,6 +169,6 @@ async function notifyStudentRideCompleted(fcmToken, destination) {
  * Notify manager about unassigned students
  */
 async function notifyManagerUnassignedStudents(fcmToken, count) {
-    await sendNotification(fcmToken, '⚠️ Unassigned Students', `${count} student${count > 1 ? 's' : ''} need manual assignment`, { type: 'unassigned_students' });
+    await sendNotification(fcmToken, '⚠️ Unassigned Bhulka', `${count} student${count > 1 ? 's' : ''} need manual assignment`, { type: 'unassigned_students' });
 }
 //# sourceMappingURL=notifications.js.map

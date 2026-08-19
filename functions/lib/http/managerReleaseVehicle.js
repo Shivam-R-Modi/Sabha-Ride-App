@@ -107,7 +107,7 @@ exports.managerReleaseVehicle = functions.https.onCall(async (data, context) => 
             .where('status', 'in', ACTIVE_RIDE_STATUSES)
             .get();
         if (!live.empty) {
-            throw new functions.https.HttpsError('failed-precondition', `${vehicle.assignedDriverName || 'That driver'} is on a run with `
+            throw new functions.https.HttpsError('failed-precondition', `${vehicle.assignedDriverName || 'That Sarthi'} is on a run with `
                 + `${live.size} ride(s). Release their riders first, or wait until they finish.`);
         }
     }

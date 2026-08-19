@@ -142,7 +142,7 @@ exports.driverDoneForToday = functions.https.onCall(async (data, context) => {
         const driver = driverDoc.data();
         // Verify the caller is the driver
         if (driverId !== context.auth.uid) {
-            throw new functions.https.HttpsError('permission-denied', 'Only the driver can mark themselves done');
+            throw new functions.https.HttpsError('permission-denied', 'Only the Sarthi can mark themselves done');
         }
         // Check if driver has an active ride
         if (driver === null || driver === void 0 ? void 0 : driver.activeRideId) {
@@ -219,7 +219,7 @@ exports.driverDoneForToday = functions.https.onCall(async (data, context) => {
         if (error instanceof functions.https.HttpsError) {
             throw error;
         }
-        throw new functions.https.HttpsError('internal', 'Failed to mark driver done');
+        throw new functions.https.HttpsError('internal', 'Failed to mark Sarthi done');
     }
 });
 //# sourceMappingURL=driverDoneForToday.js.map
