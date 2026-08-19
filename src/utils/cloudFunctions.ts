@@ -121,6 +121,14 @@ export interface CompleteRideResult {
  * Idempotent server-side on `arrivedAt`, so a second tap is free and reports
  * `alreadyArrived` rather than announcing again.
  */
+/**
+ * One message to every phone. Server-side this is rate limited per manager AND
+ * by a congregation-wide floor, and every send writes an audit row.
+ */
+export async function managerBroadcast(body: string): Promise<{ success: boolean }> {
+    return callFunction<{ success: boolean }>('managerBroadcast', { body });
+}
+
 export async function sarthiArrived(rideId: string): Promise<{ success: boolean; alreadyArrived: boolean }> {
     return callFunction<{ success: boolean; alreadyArrived: boolean }>('sarthiArrived', { rideId });
 }

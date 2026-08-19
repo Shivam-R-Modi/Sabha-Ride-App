@@ -74,8 +74,8 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **19** functions (`sarthiArrived` added). `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-DBh5txYI.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **532** · client **874** · rules **89** —
-**1495 total**.
+**Test suites, all green:** `functions` **546** · client **874** · rules **89** —
+**1509 total**.
 
 **Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
@@ -1875,11 +1875,49 @@ Needed no edits anywhere else: `completeRide`, `driverDoneForToday`,
 among their active statuses. `driver_en_route` stays unwritten — deleting it
 would fail `vocabulary.test.ts`, which pins it as stored vocabulary.
 
-### Still to do
+### Step 5 landed: manager broadcasts, and foreground messages
 
-- **Manager broadcasts** — the last step.
-- Foreground messages still raise nothing in-app; a Sarthi with the app open
-  does not see a toast for a new assignment.
+**Foreground.** `components/PushMessages.tsx` subscribes to `onMessage` and
+routes to a toast. FCM suppresses the system notification while the tab is
+focused, so a Sarthi looking at the route screen was previously never told a new
+assignment had landed — the message was delivered and dropped. It returns the
+unsubscriber, because StrictMode double-invokes effects and every toast would
+otherwise appear twice.
+
+**Broadcasts.** `managerBroadcast` plus a composer in Setup. The manager supplies
+the BODY only; the title is fixed. A free-text title would let a broadcast
+impersonate a system push — "Sarthi has arrived", to everyone.
+
+Two limits, because one is not enough:
+
+- per-manager via `checkRateLimit`, the house pattern;
+- a **congregation-wide floor** in `system/broadcastState` — 10 minutes apart,
+  5 a day — reserved in a transaction BEFORE anything is sent. `checkRateLimit`
+  is keyed per user and fails open by design, so two managers each comfortably
+  inside their own budget still double the noise. A per-user limiter
+  structurally cannot see that.
+
+Every send writes an audit row **pending first, closed after**, so a broadcast
+that dies mid-fan-out still leaves evidence it was attempted.
+
+### Two tests that looked right and were not
+
+Worth recording, because the breakage check is the only reason they were caught:
+
+- `sends the manager's words to everyone` asserted the title was fixed — but
+  never SUPPLIED a title, so it proved nothing about impersonation.
+- `leaves a failed row when the send throws` did not prove pending-first
+  ordering, because the catch block writes a row either way.
+
+Both are now real: one passes a title and asserts it is ignored, the other
+records call order and asserts `['audit', 'send']`.
+
+### Push is complete
+
+All five steps are in. What remains is optional: FCM topics instead of the
+whole-collection scan (only needed at multi-city), and an in-app notification
+history — the `notifications` collection has rules but nothing reads or writes
+it.
 
 **So push can now be turned on, but nobody has been asked to.**
 

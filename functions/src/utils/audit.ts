@@ -35,7 +35,8 @@ export type AuditAction =
     | 'doc.delete'
     | 'user.delete'
     | 'event.delete'
-    | 'manager.promote';
+    | 'manager.promote'
+    | 'broadcast.send';
 
 export type AuditOutcome = 'pending' | 'ok' | 'failed';
 

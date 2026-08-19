@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { CalendarDays, Clock, MapPin, ChevronDown } from 'lucide-react';
+import { Megaphone, CalendarDays, Clock, MapPin, ChevronDown } from 'lucide-react';
 import { SabhaCalendar } from './SabhaCalendar';
 import { RideWindowControl } from './RideWindowControl';
 import { LocationSettings } from './LocationSettings';
+import { BroadcastComposer } from './BroadcastComposer';
 
 /**
  * Everything a manager configures, as named sections rather than a pile.
@@ -93,6 +94,13 @@ export const ManagerSetup: React.FC = () => {
             title: 'Ride window',
             summary: 'When riders can request, and when drop-off opens',
             children: <RideWindowControl />,
+        },
+        {
+            id: 'broadcast',
+            icon: <Megaphone size={20} />,
+            title: 'Send a message',
+            summary: 'Reaches everyone who turned notifications on',
+            children: <BroadcastComposer />,
         },
         {
             id: 'venue',

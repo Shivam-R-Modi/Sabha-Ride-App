@@ -20,6 +20,7 @@ import { ResponsiveLayout } from './components/Layout';
 import { ProfileEditor } from './components/shared/ProfileEditor';
 import { PWAPrompt } from './components/PWAPrompt';
 import { UpdateBanner } from './components/UpdateBanner';
+import { PushMessages } from './components/PushMessages';
 import { OmWatermark } from './constants';
 import { useAuth } from './contexts/AuthContext';
 import { useNavigation } from './contexts/NavigationContext';
@@ -117,6 +118,9 @@ export default function App() {
   return (
     <div className="relative">
       <UpdateBanner />
+      {/* No UI. Subscribes to push that arrives while the app is open,
+          which FCM otherwise delivers and drops. */}
+      <PushMessages />
       <PWAPrompt />
       <OmWatermark />
       <ResponsiveLayout role={displayRole}>
