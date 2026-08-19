@@ -77,8 +77,7 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 **Test suites, all green:** `functions` **508** · client **821** · rules **89** —
 **1418 total**.
 
-**Everything in this file is deployed EXCEPT the last section** — *the home
-screen icon* — which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1501,6 +1500,13 @@ against a 205px safe radius. One file cannot be both full-bleed and maskable.
 `index.html` now points at **180x180**, which is the size iOS actually asks for.
 A side effect worth noting: the flat field compresses far better —
 `icon-512x512.png` went from **372KB to 53KB**.
+
+Released 2026-08-18. Verified against the LIVE files: all four are RGB with no
+alpha, `icon-512x512.png` really is 512x512, and each one has exactly **one**
+colour on its border.
+
+**iOS caches the home screen icon at install time**, so this does NOT update an
+icon already on a home screen. It has to be removed and re-added once.
 
 11 new tests (client **810 → 821**), four deliberate breakages each confirmed to
 fail. They read the PNG **header** rather than decoding the image, so no new
