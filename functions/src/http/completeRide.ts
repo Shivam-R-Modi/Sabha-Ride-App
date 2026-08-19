@@ -5,7 +5,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { notifyStudentRideCompleted } from '../utils/notifications';
+import { notifyStudentRideCompleted, tokensOf } from '../utils/notifications';
 // The fleet helpers were imported here to release the car on every completed
 // run. Nothing in this file touches the fleet any more — see the comment on the
 // driver update below.
@@ -161,7 +161,6 @@ export const completeRide = functions.https.onCall(async (data, context) => {
 
         // Determine student status after ride
         const newStudentStatus = ride?.rideType === 'home-to-sabha' ? 'at_sabha' : 'home_safe';
-        const destination = ride?.rideType === 'home-to-sabha' ? 'Sabha' : 'Home';
 
         // Update students status and notify
         for (const student of allStudents) {
@@ -191,10 +190,7 @@ export const completeRide = functions.https.onCall(async (data, context) => {
             // Send notification to student
             try {
                 const studentDoc = await db.collection('users').doc(student.id).get();
-                const fcmToken = studentDoc.data()?.fcmToken;
-                if (fcmToken) {
-                    await notifyStudentRideCompleted(fcmToken, destination);
-                }
+                await notifyStudentRideCompleted(tokensOf(student.id, studentDoc.data()));
             } catch (notifError) {
                 console.error('Error sending notification to student:', student.id, notifError);
             }

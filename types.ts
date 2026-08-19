@@ -27,6 +27,17 @@ export interface User {
   avatarUrl?: string;
   createdAt: string;
   lastActive?: string;
+  /**
+   * One entry per device that has push turned on, keyed by the FCM token.
+   *
+   * A MAP, not the single string this used to be. A single string meant last
+   * device wins: turn notifications on with a phone, later open the app on a
+   * laptop, and the phone silently stopped receiving with nothing said. A map
+   * rather than an array because pruning one dead token is a single field
+   * delete instead of a read-modify-write race between two concurrent sends.
+   */
+  fcmTokens?: Record<string, { label?: string; updatedAt?: string }>;
+  /** @deprecated The pre-map shape. Still READ so older documents keep working; nothing writes it. */
   fcmToken?: string;
   accountStatus: AccountStatus;
   // Optional properties for when User is merged with Driver data
@@ -115,6 +126,17 @@ export interface Driver {
   address?: string;
   createdAt?: string;
   lastActive?: string;
+  /**
+   * One entry per device that has push turned on, keyed by the FCM token.
+   *
+   * A MAP, not the single string this used to be. A single string meant last
+   * device wins: turn notifications on with a phone, later open the app on a
+   * laptop, and the phone silently stopped receiving with nothing said. A map
+   * rather than an array because pruning one dead token is a single field
+   * delete instead of a read-modify-write race between two concurrent sends.
+   */
+  fcmTokens?: Record<string, { label?: string; updatedAt?: string }>;
+  /** @deprecated The pre-map shape. Still READ so older documents keep working; nothing writes it. */
   fcmToken?: string;
 }
 

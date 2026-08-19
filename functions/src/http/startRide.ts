@@ -5,7 +5,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { notifyStudentRideStarting } from '../utils/notifications';
+import { notifyStudentRideStarting, tokensOf } from '../utils/notifications';
 
 /**
  * HTTP Callable: Start a ride
@@ -76,10 +76,7 @@ export const startRide = functions.https.onCall(async (data, context) => {
             // Send notification to student
             try {
                 const studentDoc = await db.collection('users').doc(student.id).get();
-                const fcmToken = studentDoc.data()?.fcmToken;
-                if (fcmToken) {
-                    await notifyStudentRideStarting(fcmToken, destination);
-                }
+                await notifyStudentRideStarting(tokensOf(student.id, studentDoc.data()));
             } catch (notifError) {
                 console.error('Error sending notification to student:', student.id, notifError);
             }

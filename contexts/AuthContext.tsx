@@ -1,10 +1,11 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, onSnapshot, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { User, Driver, UserRole } from '../types';
 import { grantedRoles } from '../src/roles';
+import { readDeviceToken, writeDeviceToken, tokenKey } from '../src/utils/push';
 
 interface AuthContextType {
   currentUser: FirebaseUser | null;
@@ -114,11 +115,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     if (currentUser) {
       try {
+        // Only THIS device's token, and only if there is one. On a shared phone
+        // the next person's ride would otherwise be pushed to the person who
+        // just signed out.
+        //
+        // Before signOut, not after: once signed out `isOwner(userId)` is false
+        // and the rules deny the write. The legacy single field is cleared too,
+        // for a document written before the map existed.
+        const token = readDeviceToken();
         await updateDoc(doc(db, 'users', currentUser.uid), {
-          fcmToken: null
+          ...(token ? { [`fcmTokens.${tokenKey(token)}`]: deleteField() } : {}),
+          fcmToken: deleteField(),
         });
+        writeDeviceToken(null);
       } catch (err) {
-        console.warn('[AuthContext] Could not clear FCM token on logout:', err);
+        console.warn('[AuthContext] Could not clear the push token on logout:', err);
       }
     }
     await signOut(auth);

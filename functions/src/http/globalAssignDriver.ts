@@ -16,7 +16,7 @@ import { resolveHomeCoords } from '../utils/coords';
 import { writeVehicleState, resolveVehicleHolder } from '../utils/fleet';
 import { eventKeyFromRide } from '../utils/events';
 import { assertApprovedDriver } from '../utils/authz';
-import { notifyStudentDriverAssigned, notifyDriverStudentsAssigned } from '../utils/notifications';
+import { notifyStudentDriverAssigned, notifyDriverStudentsAssigned, tokensOf } from '../utils/notifications';
 import { getSabhaLocation, resolveVenue } from '../utils/settings';
 import { checkRateLimit } from '../utils/rateLimiter';
 
@@ -618,23 +618,12 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
 
         // ── Step 10: Notifications (non-blocking) ───────────
         try {
-            const driverFcmToken = driverData.fcmToken;
-            if (driverFcmToken) {
-                await notifyDriverStudentsAssigned(driverFcmToken, rideStudents.length);
-            }
+            await notifyDriverStudentsAssigned(tokensOf(driverId, driverData), rideStudents.length);
             // By rider, not by request: a rider holding two of this car's stops
             // should get one message, not two.
             for (const studentId of new Set(assignedStudents.map(s => s.studentId))) {
                 const sDoc = await db.collection('users').doc(studentId).get();
-                const sToken = sDoc.data()?.fcmToken;
-                if (sToken) {
-                    await notifyStudentDriverAssigned(
-                        sToken,
-                        driverData.name || 'Driver',
-                        carData.name || 'Vehicle',
-                        carData.color || ''
-                    );
-                }
+                await notifyStudentDriverAssigned(tokensOf(studentId, sDoc.data()));
             }
         } catch (notifErr) {
             console.error('[globalAssign] Notification error (non-fatal):', notifErr);

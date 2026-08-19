@@ -90,6 +90,10 @@ export default defineConfig(({ mode, command }) => {
         workbox: {
           // Precache all static assets including index.html
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          // A service worker precached and re-served by another service worker
+          // is meaningless, and keeps a stale copy alive across deploys.
+          // globIgnores REPLACES the workbox default, so node_modules is restated.
+          globIgnores: ['**/node_modules/**/*', '**/firebase-messaging-sw.js'],
           // Clean up old caches
           cleanupOutdatedCaches: true,
           // skipWaiting is deliberately ABSENT (i.e. false).

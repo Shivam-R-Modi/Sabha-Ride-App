@@ -74,8 +74,8 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-3LM1Ju9t.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **830** · rules **89** —
-**1427 total**.
+**Test suites, all green:** `functions` **521** · client **847** · rules **89** —
+**1457 total**.
 
 **Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
@@ -1763,7 +1763,59 @@ same deletion fails two cases on both sides.
 
 ---
 
-## Notifications are OUT OF SCOPE
+## Notifications are BACK IN SCOPE (2026-08-18)
+
+**This reverses the 2026-08-17 decision below.** The owner explicitly reopened
+push, including the manager-broadcast half that had been dropped. The old section
+is kept underneath because its measurements are still the record of why push
+never worked — but "do not re-raise it" no longer applies.
+
+One correction to it: **the VAPID key was never the blocker.** The FCM SDK has a
+`DEFAULT_VAPID_KEY` fallback, so an absent key degrades rather than throwing. The
+real blocker was that `/firebase-messaging-sw.js` did not exist, and the SPA
+rewrite served `index.html` for it — service worker registration fails on MIME
+type, so `getToken` could never have succeeded.
+
+### Landed so far — delivery is POSSIBLE, not yet HAPPENING
+
+- Both rival client modules deleted. `src/utils/push.ts` is the pure decision
+  layer (17 tests, no imports), `src/utils/pushClient.ts` the Firebase edge.
+- `public/firebase-messaging-sw.js`, registered at
+  `/firebase-cloud-messaging-push-scope` — a **different scope from the Workbox
+  worker**, which is what stops it becoming the page controller and tripping
+  `UpdateBanner`'s reload-on-`controllerchange`.
+- `globIgnores` keeps it out of the Workbox precache; a `firebase.json` header
+  entry stops it inheriting `max-age=3600`.
+- **`fcmToken` (one string) → `fcmTokens` (a map).** The old shape was
+  last-device-wins: enable on a phone, later open a laptop, phone goes quiet
+  silently. Done now because zero tokens exist, so the migration is free.
+- **Dead-token pruning.** `sendEachForMulticast` does not throw on partial
+  failure — it returns a `responses[]` array that the old code discarded. That
+  was the only signal a token had died. Now pruned, and deliberately NOT on
+  transient errors: pruning during an FCM outage would silently unsubscribe the
+  congregation.
+- **Notification copy rewritten for lock screens.** It named the Sarthi and
+  described their car, announced the child's destination, and announced arrival
+  home. A push is read off a lock screen by whoever holds the phone, and the
+  phone may belong to a child.
+- **A rename gap closed:** `vocabulary.test.ts` never scanned `functions/`, so
+  "assigned N students" was still in the copy that reaches a lock screen.
+
+### Still required before anything is delivered
+
+1. **A VAPID key.** Firebase Console → Cloud Messaging → Web configuration →
+   Generate key pair, into `.env.local` as `VITE_FIREBASE_VAPID_KEY`.
+   Deliberately NOT in `REQUIRED_ENV` — that gate is for values whose absence
+   renders a blank page; a missing VAPID key just makes push unavailable.
+2. **Nothing calls `enablePush` yet.** No permission prompt, no Profile toggle.
+   Until that lands, `Notification.permission` stays `"default"` for everyone and
+   no token is ever written.
+
+**So push still delivers nothing today, and that is expected at this point.**
+
+---
+
+## Notifications were OUT OF SCOPE (superseded, kept for its measurements)
 
 A "notify everyone on change" feature was planned on 2026-08-17 — manager-side
 checkboxes on Sabha Calendar, Ride Window and Venue, plus a drivers-only one on

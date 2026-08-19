@@ -41,7 +41,15 @@ vi.mock('../utils/rateLimiter', () => ({
 
 const sendMulticast = vi.fn(async () => undefined);
 vi.mock('../utils/notifications', () => ({
-    sendMulticastNotification: (...args: any[]) => sendMulticast(...(args as [])),
+    sendNotification: (...args: any[]) => sendMulticast(...(args as [])),
+    // The real one reads both the fcmTokens map and the legacy single field.
+    // Kept faithful here so the test still exercises which PEOPLE are reached.
+    tokensOf: (uid: string, data: any) => {
+        const out: { uid: string; token: string }[] = [];
+        for (const token of Object.keys(data?.fcmTokens ?? {})) out.push({ uid, token });
+        if (typeof data?.fcmToken === 'string' && data.fcmToken) out.push({ uid, token: data.fcmToken });
+        return out;
+    },
 }));
 
 import { deleteSabhaEvent } from './deleteSabhaEvent';
@@ -391,8 +399,11 @@ describe('deleteSabhaEvent — what actually gets written', () => {
         await call({ date: '2026-08-14', acknowledge: true });
 
         expect(sendMulticast).toHaveBeenCalledTimes(1);
-        const [tokens, title] = sendMulticast.mock.calls[0] as any[];
-        expect(tokens.sort()).toEqual(['token-a', 'token-b']);
+        const [recipients, title] = sendMulticast.mock.calls[0] as any[];
+        // Recipients now carry the uid alongside the token — that is what makes
+        // pruning a dead token possible at all.
+        expect(recipients.map((r: any) => r.token).sort()).toEqual(['token-a', 'token-b']);
+        expect(recipients.map((r: any) => r.uid).sort()).toEqual(['stu-a', 'stu-b']);
         expect(title).toMatch(/cancelled/i);
     });
 

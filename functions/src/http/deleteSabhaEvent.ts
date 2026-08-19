@@ -25,7 +25,7 @@ import * as admin from 'firebase-admin';
 import { DEFAULT_TIME_ZONE, zonedDateKey } from '../utils/time';
 import { findCurrentEvent, EVENTS_COLLECTION, SEED_MARKER_DOC } from '../utils/events';
 import { buildCurrentEvent, resolveScheduleWindow } from '../utils/schedule';
-import { sendMulticastNotification } from '../utils/notifications';
+import { sendNotification, tokensOf } from '../utils/notifications';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { assertApprovedManager } from '../utils/authz';
 import { writeAuditLog } from '../utils/audit';
@@ -329,22 +329,21 @@ async function notifyAffected(
     date: string,
 ): Promise<void> {
     try {
-        const tokens: string[] = [];
+        const recipients = [];
         for (const uid of uids) {
             const snap = await db.collection('users').doc(uid).get();
-            const token = snap.data()?.fcmToken;
-            if (typeof token === 'string' && token) tokens.push(token);
+            recipients.push(...tokensOf(uid, snap.data()));
         }
 
-        if (tokens.length === 0) return;
+        if (recipients.length === 0) return;
 
         const [year, month, day] = date.split('-').map(Number);
         const label = new Intl.DateTimeFormat('en-US', {
             timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long',
         }).format(new Date(Date.UTC(year, month - 1, day, 12)));
 
-        await sendMulticastNotification(
-            tokens,
+        await sendNotification(
+            recipients,
             'Sabha cancelled',
             `The sabha on ${label} is no longer scheduled. Your ride request has been cancelled.`,
             { reason: 'sabha-deleted', eventId: date },

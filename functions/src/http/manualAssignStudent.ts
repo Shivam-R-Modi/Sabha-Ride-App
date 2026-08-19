@@ -7,7 +7,7 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { Student, Driver, Ride, RideStudent } from '../types';
 import { optimizeRoute, calculateRouteStats } from '../utils/routing';
-import { notifyStudentDriverAssigned } from '../utils/notifications';
+import { notifyStudentDriverAssigned, tokensOf } from '../utils/notifications';
 import { getSabhaLocation, resolveVenue } from '../utils/settings';
 import { assertApprovedManager } from '../utils/authz';
 import { seatsOf } from '../constants/seats';
@@ -165,10 +165,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
 
         // Notify student
         try {
-            const fcmToken = studentDoc.data()?.fcmToken;
-            if (fcmToken) {
-                await notifyStudentDriverAssigned(fcmToken, driver.name, ride.carModel, ride.carColor);
-            }
+            await notifyStudentDriverAssigned(tokensOf(studentDoc.id, studentDoc.data()));
         } catch (notifError) {
             console.error('Error sending notification:', notifError);
         }

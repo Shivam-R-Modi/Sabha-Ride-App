@@ -49,6 +49,9 @@ export interface User {
     avatarUrl?: string;
     createdAt: string;
     lastActive?: string;
+    /** One entry per device with push on, keyed by token. See tokensOf(). */
+    fcmTokens?: Record<string, { label?: string; updatedAt?: string }>;
+    /** @deprecated Pre-map shape. Still read so older documents keep working. */
     fcmToken?: string;
     accountStatus: AccountStatus;
     registeredRole?: UserRole;

@@ -34,7 +34,7 @@
     "headers": [
       {
         "comment": "Entry points must revalidate. Firebase defaults everything to max-age=3600, which meant a returning visitor kept a stale index.html — pointing at asset hashes that no longer exist — and a stale service worker, for up to an hour after every deploy.",
-        "source": "/**/@(index.html|sw.js|registerSW.js|manifest.webmanifest)",
+        "source": "/**/@(index.html|sw.js|registerSW.js|manifest.webmanifest|firebase-messaging-sw.js)",
         "headers": [
           {
             "key": "Cache-Control",
