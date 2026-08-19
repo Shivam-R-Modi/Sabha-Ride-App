@@ -77,7 +77,10 @@ export default defineConfig(({ mode, command }) => {
               type: 'image/png',
             },
             {
-              src: '/icons/icon-512x512.png',
+              // Its own file, with the mark at 60% of the tile. Android may crop
+              // a maskable icon to a CIRCLE, and the plain icon above clears the
+              // safe zone by only 3px — fine as a square, a gamble as a circle.
+              src: '/icons/icon-maskable-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',

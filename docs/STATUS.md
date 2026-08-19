@@ -74,10 +74,11 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-CSXhoV4V.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **810** · rules **89** —
-**1407 total**.
+**Test suites, all green:** `functions` **508** · client **821** · rules **89** —
+**1418 total**.
 
-**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed EXCEPT the last section** — *the home
+screen icon* — which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1448,6 +1449,63 @@ the LIVE stylesheet — the `appearance:none` rule, the normalised
 `::-webkit-date-and-time-value`, and **zero** occurrences of a hidden calendar
 picker indicator — and in the LIVE bundle, which carries all four stacking rows
 (2 x `gap-2` from SabhaCalendar, 2 x `gap-3` from Setup).
+
+---
+
+## 2026-08-18: the white border on the home screen icon
+
+Installed on a phone, the app icon sat inside a white frame while every other
+icon bled to its edge. Three separate faults in the source art, and the first
+guess about the cause was wrong.
+
+**It was NOT transparency.** The usual reason for a white ring is a PNG with a
+transparent margin, which iOS composites onto white. These files had **no alpha
+channel at all** (`mode=RGB`) — the light surround was painted into the pixels:
+**77px on every side of a 640px canvas, 12% of the image.**
+
+The other two, found while fixing the first:
+
+- The artwork had **its own rounded corners** inside that surround. iOS applies
+  its own corner mask, so the two radii disagree and leak light pixels at the
+  corners even after cropping to the plate.
+- **`icon-512x512.png` was actually 640x640.** The manifest had been declaring a
+  size the file did not have.
+
+### What it took
+
+Four attempts, because each intermediate fix left a different border:
+
+| attempt | result |
+|---|---|
+| crop to the plate | plate's antialiased rim survives — light edge |
+| + flood fill corners | fill colour sampled off the rim — lighter *frame* |
+| + edge replication | rounded corners replicate their own arc — frame again |
+| **composite onto a flat field** | **border is one colour** |
+
+The last one works because the plate is genuinely flat — measured at
+`(53,31,8)` from 4px inside the edge, over 6,354 samples. The mark is separated
+by **saturation**, not brightness: the plate is a *warm* brown with saturation
+45, so an early threshold of 22 would have half-erased it. Above 70 and below
+the car's 140–190 separates them cleanly and keeps the artwork's antialiasing.
+
+Result: the border of every icon is a single colour at every size, and the car
+is pixel-identical.
+
+### A second surface fixed while there
+
+The plain icon clears Android's **centre-80% maskable safe zone by only 3px** —
+fine as a square, a gamble as a circle. `icon-maskable-512x512.png` is now its
+own file with the mark at 60% of the tile: furthest point 167px from centre
+against a 205px safe radius. One file cannot be both full-bleed and maskable.
+
+`index.html` now points at **180x180**, which is the size iOS actually asks for.
+A side effect worth noting: the flat field compresses far better —
+`icon-512x512.png` went from **372KB to 53KB**.
+
+11 new tests (client **810 → 821**), four deliberate breakages each confirmed to
+fail. They read the PNG **header** rather than decoding the image, so no new
+dependency: that pins the declared-size bug exactly, and pins "no alpha channel",
+which is the property that lets iOS paint white in the first place.
 
 ---
 

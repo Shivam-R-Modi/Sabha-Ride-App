@@ -50,7 +50,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Sabha Ride" />
-  <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+  <!-- 180x180 is the size iOS actually asks for, and it must be FULL BLEED and
+       opaque: iOS applies its own corner mask, so any margin baked into the
+       file shows up as a border on the home screen. The old file had a 77px
+       light surround of its own (12% of a 640px canvas) and rounded corners
+       inside that, which is exactly what was showing. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180x180.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
