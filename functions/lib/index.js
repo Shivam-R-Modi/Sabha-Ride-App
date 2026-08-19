@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.startRide = exports.globalAssignDriver = exports.updateSabhaRecurrence = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.sarthiArrived = exports.startRide = exports.globalAssignDriver = exports.updateSabhaRecurrence = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -76,6 +76,8 @@ var globalAssignDriver_1 = require("./http/globalAssignDriver");
 Object.defineProperty(exports, "globalAssignDriver", { enumerable: true, get: function () { return globalAssignDriver_1.globalAssignDriver; } });
 var startRide_1 = require("./http/startRide");
 Object.defineProperty(exports, "startRide", { enumerable: true, get: function () { return startRide_1.startRide; } });
+var sarthiArrived_1 = require("./http/sarthiArrived");
+Object.defineProperty(exports, "sarthiArrived", { enumerable: true, get: function () { return sarthiArrived_1.sarthiArrived; } });
 var completeRide_1 = require("./http/completeRide");
 Object.defineProperty(exports, "completeRide", { enumerable: true, get: function () { return completeRide_1.completeRide; } });
 var releaseAssignment_1 = require("./http/releaseAssignment");
