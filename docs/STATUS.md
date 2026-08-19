@@ -2021,6 +2021,58 @@ border width or a transform.
 
 ---
 
+## 2026-08-19: the black gaps — `html` was never painted
+
+Deployed, client only. Two reports, one root cause, and the way it was found is the
+part to remember.
+
+**Only `body` had a background.** `grep -rn "^html" *.css` returned exactly one
+rule — four properties, none of them a background. So anything the body did not
+cover fell through to the browser's default canvas, which in dark mode is pure
+black:
+
+- pull the page past the top and a black band appears above the app — **mobile and
+  desktop**, anywhere the scroll rubber-bands;
+- a black strip below the splash screen on a phone.
+
+### The colour was the diagnosis
+
+This app's dark canvas is `rgb(28 24 21)`, a warm near-black. What appeared was
+**pure black — a colour `theme.css` does not contain anywhere.** So the app was not
+painting it. That ruled out every component in one step and pointed at the only
+element with no background rule. Worth reaching for again: when something renders a
+colour the theme does not define, stop looking at components.
+
+### Fixes
+
+- **`html` gets `background-color: rgb(var(--canvas))`** — the TOKEN. A hardcoded
+  colour here would be the `bg-coffee` trap in another costume: right in one theme,
+  wrong in the other, and only visible in overscroll where nobody looks. Flat rather
+  than the body's gradient, because it shows only in overscroll and the safe areas,
+  where a second gradient would band against the body's.
+- **`overscroll-behavior: none`** on html, so the document does not rubber-band at
+  all. It also stops an inner scroller — the records table, a dashboard — chaining
+  its overscroll to the page.
+- **The splash gets `min-height: 100lvh`** plus a dark fallback. `inset-0` is the
+  LAYOUT viewport, which on a phone can be shorter than the screen while chrome is
+  out. `lvh` is the screen with chrome retracted; where there is no chrome, lvh and
+  dvh are the same number. The fallback is a fixed `#1C1815` and deliberately NOT a
+  theme token — that screen is dark in both themes, so `--canvas` would put a
+  near-white band under a dark photograph in light mode.
+
+### Verified in a browser, not inferred
+
+html computes `rgb(28, 24, 21)` in dark and `rgb(250, 249, 246)` in light,
+`overscroll-behavior` is `none` on both axes, and `100lvh` is supported and resolves
+to the viewport height. The live stylesheet was then fetched and confirmed to carry
+the rule.
+
+`tests/quality/root-background.test.ts` pins all of it. Four breakages caught: the
+background removed, the background hardcoded, overscroll dropped, and the splash's
+lvh removed with its fallback themed.
+
+---
+
 ## Reading production without guessing
 
 Admin-SDK scripts live in the session scratchpad (regenerate as needed; they are
