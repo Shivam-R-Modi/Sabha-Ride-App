@@ -72,13 +72,12 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-BCKCNHiN.js` / css `index-Ms4Cnfwp.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-QJhcNF9l.js` / css `index-Ms4Cnfwp.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **508** · client **802** · rules **89** —
 **1399 total**.
 
-**Everything in this file is deployed EXCEPT the last section** — *the Fleet
-header* — which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1380,6 +1379,11 @@ It degrades rather than breaking — nothing overflows at any width from 320 to
 
 2 new tests (client **800 → 802**), both confirmed to fail when the `+` and the
 icon import are put back.
+
+Released as bundle `index-QJhcNF9l.js`. Verified in the LIVE bundle: the header
+button'''s `children` is the plain string "Add Vehicle" with no element beside it,
+and the header goes straight from the `min-w-0` wrapper to the `h1` with no icon
+tile between them.
 
 ---
 
