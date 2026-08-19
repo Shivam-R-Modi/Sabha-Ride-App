@@ -1,7 +1,10 @@
 "use strict";
 // ============================================
 // SCHEDULED: expireNotices
-// Takes down notices that are past, and their images.
+// Takes down notices that are past, and their images. Also clears the agenda off
+// sabhas that have already happened — the same "manager-authored text that
+// expires" job, sharing one nightly slot rather than paying for a second
+// scheduler entry to run one bounded query.
 // ============================================
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -43,6 +46,7 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const time_1 = require("../utils/time");
 const noticeStorage_1 = require("../utils/noticeStorage");
+const pastAgendas_1 = require("../utils/pastAgendas");
 /** Same ceiling as expireStaleRequests: a runaway sweep is worse than a slow one. */
 const MAX_PER_RUN = 200;
 /**
@@ -69,8 +73,18 @@ exports.expireNotices = functions.pubsub
     .onRun(async () => {
     var _a;
     const db = admin.firestore();
+    const todayKey = (0, time_1.zonedDateKey)(new Date(), time_1.DEFAULT_TIME_ZONE);
+    // Its OWN try/catch, ahead of the notice sweep and outside it. Two
+    // independent jobs share this slot, and neither may take the other down —
+    // the same reasoning that keeps this whole handler from throwing at the
+    // ride-request sweep beside it. `clearPastAgendas` already swallows its
+    // own errors; this ordering is what stops a notice failure from skipping
+    // it silently.
+    const agendasCleared = await (0, pastAgendas_1.clearPastAgendas)(db, todayKey);
+    if (agendasCleared > 0) {
+        console.log(`[expireNotices] cleared the agenda on ${agendasCleared} past sabha(s)`);
+    }
     try {
-        const todayKey = (0, time_1.zonedDateKey)(new Date(), time_1.DEFAULT_TIME_ZONE);
         const snapshot = await db.collection('notices').get();
         const past = snapshot.docs
             .filter(doc => { var _a; return noticeIsPast((_a = doc.data()) !== null && _a !== void 0 ? _a : {}, todayKey); })

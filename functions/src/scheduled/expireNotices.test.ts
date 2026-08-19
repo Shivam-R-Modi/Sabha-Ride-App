@@ -20,7 +20,22 @@ vi.mock('firebase-functions', () => ({
 
 let db: any;
 let deleted: string[];
-vi.mock('firebase-admin', () => ({ firestore: () => db }));
+let agendaUpdates: Array<{ id: string; data: any }>;
+/** Whatever the mocked FieldValue.delete() returns. Read only inside test bodies. */
+const AGENDA_DELETED = '__FIELD_DELETE__';
+// `firestore` is callable AND carries FieldPath/FieldValue, because this handler
+// now also runs `clearPastAgendas`, which uses both. With the bare `() => db`
+// mock that step threw on every run and was swallowed by its own catch — ten
+// tests passed while half the handler silently did nothing.
+//
+// Everything is built INSIDE the factory: vi.mock is hoisted above the consts
+// below, so referencing one from here is a use-before-initialisation error.
+vi.mock('firebase-admin', () => {
+    const firestore: any = () => db;
+    firestore.FieldPath = { documentId: () => '__name__' };
+    firestore.FieldValue = { delete: () => '__FIELD_DELETE__' };
+    return { firestore };
+});
 
 const deleteImage = vi.fn(async (..._a: any[]) => true);
 vi.mock('../utils/noticeStorage', () => ({
@@ -29,18 +44,44 @@ vi.mock('../utils/noticeStorage', () => ({
 
 import { expireNotices, noticeIsPast } from './expireNotices';
 
-function makeDb(notices: Array<{ id: string; data: any }>) {
+/**
+ * Tagged by collection name. An untagged mock that answers every collection with
+ * the same shape is how the notice board's subscription once captured the rides
+ * listener in DriverDashboard.test.tsx and made nine tests drive the wrong thing.
+ */
+function makeDb(
+    notices: Array<{ id: string; data: any }>,
+    events: Array<{ id: string; data: any }> = [],
+) {
     deleted = [];
+    agendaUpdates = [];
     db = {
-        collection: () => ({
-            get: async () => ({
-                docs: notices.map(n => ({
-                    id: n.id,
-                    data: () => n.data,
-                    ref: { delete: async () => { deleted.push(n.id); } },
-                })),
-            }),
-        }),
+        collection: (name: string) => {
+            if (name === 'events') {
+                return {
+                    where: () => ({
+                        get: async () => ({
+                            docs: events.map(e => ({
+                                id: e.id,
+                                data: () => e.data,
+                                ref: {
+                                    update: async (data: any) => { agendaUpdates.push({ id: e.id, data }); },
+                                },
+                            })),
+                        }),
+                    }),
+                };
+            }
+            return {
+                get: async () => ({
+                    docs: notices.map(n => ({
+                        id: n.id,
+                        data: () => n.data,
+                        ref: { delete: async () => { deleted.push(n.id); } },
+                    })),
+                }),
+            };
+        },
     };
 }
 
@@ -116,7 +157,12 @@ describe('expireNotices', () => {
 
     it('does not throw when Firestore fails', async () => {
         // It shares the 03:00 slot with the sweep that expires ride requests.
-        db = { collection: () => ({ get: async () => { throw new Error('firestore down'); } }) };
+        db = {
+            collection: () => ({
+                get: async () => { throw new Error('firestore down'); },
+                where: () => ({ get: async () => { throw new Error('firestore down'); } }),
+            }),
+        };
         await expect((expireNotices as any)()).resolves.toBeNull();
     });
 
@@ -124,5 +170,60 @@ describe('expireNotices', () => {
         makeDb(Array.from({ length: 250 }, (_, i) => ({ id: `n${i}`, data: { showUntil: '2020-01-01' } })));
         await (expireNotices as any)();
         expect(deleted).toHaveLength(200);
+    });
+});
+
+describe('the agenda sweep shares this slot without being coupled to it', () => {
+    /**
+     * Two independent jobs run at 03:00 in this one handler. The whole point of
+     * the arrangement is that neither can take the other down, and that is only
+     * true because the agenda step sits OUTSIDE the notice sweep's try/catch.
+     */
+    it('clears a past sabha agenda, deleting the field and not the document', async () => {
+        makeDb([], [{ id: '2026-08-14', data: { agenda: 'Old kirtan' } }]);
+
+        await (expireNotices as any)();
+
+        expect(agendaUpdates).toEqual([{ id: '2026-08-14', data: { agenda: AGENDA_DELETED } }]);
+    });
+
+    it('still clears agendas when the notice sweep blows up', async () => {
+        // The regression this guards: moving the agenda call inside the notice
+        // try block, where a notices failure would skip it for ever.
+        makeDb([], [{ id: '2026-08-14', data: { agenda: 'Old kirtan' } }]);
+        const noticesGet = db.collection;
+        db.collection = (name: string) => {
+            if (name === 'notices') {
+                return { get: async () => { throw new Error('notices down'); } };
+            }
+            return noticesGet(name);
+        };
+
+        await expect((expireNotices as any)()).resolves.toBeNull();
+        expect(agendaUpdates.map(u => u.id)).toEqual(['2026-08-14']);
+    });
+
+    it('still takes notices down when the agenda sweep blows up', async () => {
+        makeDb([{ id: 'n1', data: { showUntil: '2020-01-01' } }]);
+        const inner = db.collection;
+        db.collection = (name: string) => {
+            if (name === 'events') {
+                return { where: () => ({ get: async () => { throw new Error('events down'); } }) };
+            }
+            return inner(name);
+        };
+
+        await expect((expireNotices as any)()).resolves.toBeNull();
+        expect(deleted).toEqual(['n1']);
+    });
+
+    it('leaves an agenda alone on the day of its own sabha', async () => {
+        // Uses the real clock, so build the key the same way the handler does.
+        const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        makeDb([], [{ id: todayKey, data: { agenda: 'Tonight' } }]);
+
+        await (expireNotices as any)();
+
+        expect(agendaUpdates).toEqual([]);
     });
 });

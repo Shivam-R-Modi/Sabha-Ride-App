@@ -750,6 +750,58 @@ describe('the sabha calendar', () => {
         }));
     });
 
+    it('a manager CAN write a long-form agenda', async () => {
+        // The agenda became a paragraph, and this document is written STRAIGHT
+        // FROM THE BROWSER by editOccurrence — there is no callable in between,
+        // so these rules are the only real boundary on it.
+        await assertSucceeds(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
+            agenda: '6:30 Kirtan\n7:15 Katha\n\n8:00 Prasad\n\nAll welcome 🙏',
+        }));
+    });
+
+    it('a manager CAN write an agenda exactly at the ceiling', async () => {
+        await assertSucceeds(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
+            agenda: 'x'.repeat(2000),
+        }));
+    });
+
+    it('refuses an agenda over the ceiling', async () => {
+        // Unbounded free text on a document every signed-in client reads.
+        await assertFails(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
+            agenda: 'x'.repeat(2001),
+        }));
+    });
+
+    it('refuses an oversize agenda on create too, not just update', async () => {
+        await assertFails(setDoc(doc(asManager(), 'events', '2026-08-28'), {
+            date: '2026-08-28', startTime: '18:00', endTime: '20:00',
+            status: 'scheduled', venue: null, agenda: 'x'.repeat(2001),
+        }));
+    });
+
+    it('refuses an agenda that is not a string', async () => {
+        await assertFails(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
+            agenda: { nested: 'object' },
+        }));
+        await assertFails(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
+            agenda: 12345,
+        }));
+    });
+
+    it('still allows an edit that does not mention agenda at all', async () => {
+        // A merge write for times only never sends the field. Requiring it would
+        // break every ordinary edit — the reason the rule tests for absence.
+        await assertSucceeds(updateDoc(doc(asManager(), 'events', '2026-08-14'), {
+            startTime: '17:00', endTime: '19:30',
+        }));
+    });
+
+    it('a student still cannot write an agenda, long or short', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'events', '2026-08-14'), {
+            agenda: 'Cancelled, go home',
+        }));
+    });
+
     it('a manager CANNOT delete a sabha directly — only the callable may', async () => {
         // The new invariant, and the test that would have caught the old
         // `allow write: if isManager()`, since `write` silently includes delete.

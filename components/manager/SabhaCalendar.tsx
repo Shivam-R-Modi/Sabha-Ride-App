@@ -3,6 +3,7 @@ import { CalendarDays, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-
 import { useAuth } from '../../contexts/AuthContext';
 import { useUpcomingEvents, editOccurrence, createOneOff, SabhaEvent } from '../../hooks/useEvents';
 import { describeRule, labelForSource } from '../../src/utils/recurrence';
+import { AGENDA_MAX_CHARS, agendaSummary, describeAgendaProblem } from '../../src/utils/agenda';
 import { RecurringSabha } from './RecurringSabha';
 import { previewDeleteSabhaEvent, deleteSabhaEvent } from '../../src/utils/cloudFunctions';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
@@ -99,6 +100,10 @@ const EventRow: React.FC<{
     const save = async () => {
         if (!currentUser) return;
         if (!valid) { setError(`Sabha must run for more than ${DROPOFF_LEAD_MINUTES} minutes.`); return; }
+        // Checked here for a readable message. firestore.rules holds the real
+        // ceiling, because this document is written straight from the browser.
+        const agendaProblem = describeAgendaProblem(agenda);
+        if (agendaProblem) { setError(agendaProblem); return; }
 
         setBusy(true);
         setError(null);
@@ -203,7 +208,7 @@ const EventRow: React.FC<{
                         <>
                             <p className="text-xs text-coffee-500 mt-0.5">
                                 {formatTime(event.startTime)} – {formatTime(event.endTime)}
-                                {event.agenda ? ` · ${event.agenda}` : ''}
+                                {agendaSummary(event.agenda) ? ` · ${agendaSummary(event.agenda)}` : ''}
                             </p>
                             {event.venue?.address && (
                                 <p className="text-[10px] text-saffron-800 mt-0.5 truncate">
@@ -252,10 +257,18 @@ const EventRow: React.FC<{
                             className="w-full min-w-0 px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                         />
                     </div>
-                    <input
-                        type="text" value={agenda} onChange={(e) => setAgenda(e.target.value)}
-                        placeholder="Agenda (optional)" disabled={busy}
-                        className="w-full px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
+                    {/* A paragraph, not a line. The agenda is what the congregation
+                        reads on their own dashboard, so it holds the evening's
+                        detail — `whitespace-pre-line` there keeps the line breaks
+                        typed here. */}
+                    <textarea
+                        value={agenda}
+                        onChange={(e) => { setAgenda(e.target.value); setError(null); }}
+                        placeholder="Agenda (optional) — shown to everyone on their dashboard"
+                        disabled={busy}
+                        rows={5}
+                        maxLength={AGENDA_MAX_CHARS}
+                        className="w-full px-2 py-1.5 rounded-lg border border-hairline/20 text-sm leading-relaxed resize-y focus:outline-none focus:border-saffron"
                     />
                     <div>
                         <AddressAutocomplete
@@ -348,6 +361,8 @@ export const SabhaCalendar: React.FC = () => {
         if (!currentUser) return;
         if (!date) { setAddError('Pick a date.'); return; }
         if (!isUsableDuration(start, end)) { setAddError(`Sabha must run for more than ${DROPOFF_LEAD_MINUTES} minutes.`); return; }
+        const agendaProblem = describeAgendaProblem(agenda);
+        if (agendaProblem) { setAddError(agendaProblem); return; }
 
         setBusy(true);
         setAddError(null);
@@ -461,10 +476,14 @@ export const SabhaCalendar: React.FC = () => {
                                 className="w-full min-w-0 px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                             />
                         </div>
-                        <input
-                            type="text" value={agenda} onChange={(e) => setAgenda(e.target.value)}
-                            placeholder="Agenda (optional)" disabled={busy}
-                            className="w-full px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
+                        <textarea
+                            value={agenda}
+                            onChange={(e) => { setAgenda(e.target.value); setAddError(null); }}
+                            placeholder="Agenda (optional) — shown to everyone on their dashboard"
+                            disabled={busy}
+                            rows={5}
+                            maxLength={AGENDA_MAX_CHARS}
+                            className="w-full px-2 py-1.5 rounded-lg border border-hairline/20 text-sm leading-relaxed resize-y focus:outline-none focus:border-saffron"
                         />
                         <div>
                             <AddressAutocomplete

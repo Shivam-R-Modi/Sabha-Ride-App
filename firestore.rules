@@ -471,11 +471,28 @@ service cloud.firestore {
       // the next sabha is, and the driver dashboard gates "Assign Me" on it.
       allow read: if isAuthenticated();
 
+      // The agenda is long-form text written by a manager and shown on every
+      // dashboard, and `editOccurrence`/`createOneOff` write this document
+      // STRAIGHT FROM THE CLIENT — no callable in between. So this is the only
+      // place the ceiling is actually enforced; the composer's own check exists
+      // to give a readable message first.
+      //
+      // 2000 mirrors AGENDA_MAX_CHARS in src/utils/agenda.ts. Rules cannot import
+      // it, so tests/quality/agenda-cap.test.ts fails if the two ever drift.
+      //
+      // Absence has to pass: a merge write that only touches times or status
+      // never sends `agenda`, and requiring it would break editing a sabha.
+      function agendaWithinLimit() {
+        return !('agenda' in request.resource.data)
+               || (request.resource.data.agenda is string
+                   && request.resource.data.agenda.size() <= 2000);
+      }
+
       // Managers schedule and move a gathering. Writing here changes when rides
       // open for the whole congregation, so it is the same authority as changing
       // the venue.
-      allow create: if isManager();
-      allow update: if isManager();
+      allow create: if isManager() && agendaWithinLimit();
+      allow update: if isManager() && agendaWithinLimit();
 
       // Deletion goes through the deleteSabhaEvent callable, NEVER directly —
       // including for managers.

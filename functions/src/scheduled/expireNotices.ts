@@ -1,12 +1,16 @@
 // ============================================
 // SCHEDULED: expireNotices
-// Takes down notices that are past, and their images.
+// Takes down notices that are past, and their images. Also clears the agenda off
+// sabhas that have already happened — the same "manager-authored text that
+// expires" job, sharing one nightly slot rather than paying for a second
+// scheduler entry to run one bounded query.
 // ============================================
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { DEFAULT_TIME_ZONE, zonedDateKey } from '../utils/time';
 import { deleteNoticeImage } from '../utils/noticeStorage';
+import { clearPastAgendas } from '../utils/pastAgendas';
 
 /** Same ceiling as expireStaleRequests: a runaway sweep is worse than a slow one. */
 const MAX_PER_RUN = 200;
@@ -37,8 +41,20 @@ export const expireNotices = functions.pubsub
     .onRun(async () => {
         const db = admin.firestore();
 
+        const todayKey = zonedDateKey(new Date(), DEFAULT_TIME_ZONE);
+
+        // Its OWN try/catch, ahead of the notice sweep and outside it. Two
+        // independent jobs share this slot, and neither may take the other down —
+        // the same reasoning that keeps this whole handler from throwing at the
+        // ride-request sweep beside it. `clearPastAgendas` already swallows its
+        // own errors; this ordering is what stops a notice failure from skipping
+        // it silently.
+        const agendasCleared = await clearPastAgendas(db, todayKey);
+        if (agendasCleared > 0) {
+            console.log(`[expireNotices] cleared the agenda on ${agendasCleared} past sabha(s)`);
+        }
+
         try {
-            const todayKey = zonedDateKey(new Date(), DEFAULT_TIME_ZONE);
             const snapshot = await db.collection('notices').get();
 
             const past = snapshot.docs
