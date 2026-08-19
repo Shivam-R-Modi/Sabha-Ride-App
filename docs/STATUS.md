@@ -74,8 +74,8 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-3LM1Ju9t.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **521** · client **847** · rules **89** —
-**1457 total**.
+**Test suites, all green:** `functions` **521** · client **858** · rules **89** —
+**1468 total**.
 
 **Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
@@ -1801,17 +1801,36 @@ type, so `getToken` could never have succeeded.
 - **A rename gap closed:** `vocabulary.test.ts` never scanned `functions/`, so
   "assigned N students" was still in the copy that reaches a lock screen.
 
-### Still required before anything is delivered
+### Step 2 landed: there is now a way to turn it on
 
-1. **A VAPID key.** Firebase Console → Cloud Messaging → Web configuration →
-   Generate key pair, into `.env.local` as `VITE_FIREBASE_VAPID_KEY`.
-   Deliberately NOT in `REQUIRED_ENV` — that gate is for values whose absence
-   renders a blank page; a missing VAPID key just makes push unavailable.
-2. **Nothing calls `enablePush` yet.** No permission prompt, no Profile toggle.
-   Until that lands, `Notification.permission` stays `"default"` for everyone and
-   no token is ever written.
+The VAPID key is configured (`.env.local`, gitignored — it is a PUBLIC key, so
+shipping it in the bundle is correct). `hooks/usePush.ts` and
+`components/shared/PushToggle.tsx` sit in Profile beside the theme and install
+controls.
 
-**So push still delivers nothing today, and that is expected at this point.**
+**The reachability check that matters:** before the UI existed, the VAPID key
+appeared **0 times** in the built bundle — the client half was tree-shaken out,
+exactly as it had been for the whole life of the app. It now appears, along with
+the FCM scope and the toggle's copy. That is the difference between wired and
+merely written.
+
+"On" means THIS device holds a token the user's document still lists — not that
+permission was granted. A granted permission with no token is a failed
+registration, and calling that "on" would be a dead control.
+
+The toggle renders null ONLY for `unsupported`. For `blocked` it explains how to
+undo it, because the user can fix that — just not here — and Profile is where
+they will look. An invisible control is the same family of defect as a dead one.
+
+### Still to do
+
+- **No prompt after first assignment yet** — the toggle is opt-in from Profile
+  only, so most people will never find it. That is step 3.
+- **"I've arrived"** and **manager broadcasts** are steps 3 and 4.
+- **Delivery has still never been observed.** There is no FCM emulator; it needs
+  a real device.
+
+**So push can now be turned on, but nobody has been asked to.**
 
 ---
 

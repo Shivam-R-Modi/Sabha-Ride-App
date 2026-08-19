@@ -15,6 +15,7 @@ import { geocodeAddressInBrowser } from '../../hooks/useGooglePlaces';
 import { Save, X, CheckCircle, AlertCircle, Pencil } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { InstallAppButton } from './InstallAppButton';
+import { PushToggle } from './PushToggle';
 
 export const ProfileEditor: React.FC = () => {
     const { currentUser, userProfile, refreshProfile, logout } = useAuth();
@@ -219,6 +220,12 @@ export const ProfileEditor: React.FC = () => {
                     cannot install, so it is never a dead row. */}
                 <div className="mt-3 max-w-sm mx-auto text-left">
                     <InstallAppButton />
+                </div>
+
+                {/* Notifications. Same reasoning as the two above: a property of
+                    the device, and Profile is the destination all roles share. */}
+                <div className="mt-3 max-w-sm mx-auto text-left">
+                    <PushToggle />
                 </div>
 
                 {/* Edit & Sign Out buttons */}
