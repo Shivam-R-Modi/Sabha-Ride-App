@@ -1969,6 +1969,58 @@ above the header.
 
 ---
 
+## 2026-08-19: Raw records shifted on every collection switch
+
+Deployed, client only. Reported as "every element below feels like they are shaking
+or readjusting upon switching". **Measured in `preview/records.html` at 1280x900,
+before and after** — this is what that harness is for.
+
+Four causes, none of them individually obvious:
+
+1. **The count badge rendered only on the ACTIVE tab.** Switching moved a ~35px
+   element between pills: the old tab lost 35px of width, the new gained 33, so
+   every pill after them slid. It was also briefly WRONG — `documents` is not
+   cleared while the next collection loads, so it showed the previous collection's
+   count as the new tab's. Moved beside the search, always present, "2 records" or
+   "1 of 2" when filtered, nothing while loading.
+2. **`scale-105` on the active pill, animated by `transition-all`.** A transform
+   moves no siblings, but one pill growing while another shrinks is movement
+   whatever the layout says.
+3. **The active pill had no border** while inactive ones had 1px, so it was 2px
+   narrower and everything after it shifted 2px per switch.
+4. **Switching sets `loading` true again** (`useAdminDatabase`, on every collection
+   change), swapping a table of any height for a fixed `py-16` spinner and back.
+   The four states now share a reserved `min-h-[26rem]`.
+
+### Two layout rules worth keeping
+
+**In a right-anchored flex group, only a TRAILING member can be removed for free.**
+The Role filter is conditional and must therefore come FIRST, with the
+always-present Status last. I "fixed" it the other way round and measured 136px of
+slide on every switch away from Users. There is now a test asserting the order,
+because the reason is invisible in the markup.
+
+**`overflow-x-auto` SCROLLS rather than resizes when squeezed**, and a scrolled
+group looks exactly like its contents jumping. Adding the record count left the
+filter group 16px short of its content (`scrollWidth 320` vs `clientWidth 304`) and
+that alone reproduced the symptom. Search narrowed to `md:w-64`, group
+`md:shrink-0`.
+
+### A measurement error of mine, recorded because it nearly sent the fix the wrong way
+
+I first read the Status filter as jumping 166px. It never moved. Role is
+`selects[0]` on Users and Status is `selects[0]` on every other tab, so I had
+compared two different controls and "confirmed" a bug that did not exist. Keying
+the measurement by label is what corrected it.
+
+After, across all five tabs and back: **0px tab drift, 0px pill width change**, one
+distinct Status position (x=880), one distinct results-region position (y=448,
+h=416), no overflow. `tests/quality/records-tab-stability.test.ts` pins all four
+causes; jsdom computes no Tailwind, so a rendering test cannot see a min-height, a
+border width or a transform.
+
+---
+
 ## Reading production without guessing
 
 Admin-SDK scripts live in the session scratchpad (regenerate as needed; they are
