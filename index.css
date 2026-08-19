@@ -29,6 +29,25 @@ html {
     -moz-osx-font-smoothing: grayscale;
     font-size: 16px;
     height: 100%;
+
+    /* THE ROOT ELEMENT NEEDS ITS OWN BACKGROUND, and it had none.
+       Only `body` was painted. Anything the body does not cover falls through to
+       the browser's default canvas — pure black in dark mode — and two people
+       reported exactly that:
+         · pull the page past the top and a black band appears above the app
+           (mobile AND desktop, wherever the scroll rubber-bands);
+         · a black strip under the splash screen on a phone.
+       The give-away was the COLOUR. This app's dark canvas is rgb(28 24 21), a
+       warm near-black; what showed was pure black, which is a colour the theme
+       does not contain. So it was never the app painting it.
+       A flat colour, not the body's gradient: this shows only in overscroll and in
+       the safe areas, where a second gradient would band against the body's. */
+    background-color: rgb(var(--canvas));
+
+    /* Stops the document rubber-banding at all, so there is nothing to see behind
+       it. Also stops an inner scroller — the records table, a dashboard — from
+       chaining its overscroll to the page once it hits its end. */
+    overscroll-behavior: none;
 }
 
 body {

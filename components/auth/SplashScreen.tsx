@@ -52,6 +52,19 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             className="fixed inset-0 flex flex-col items-center justify-end cursor-pointer animate-in fade-in duration-500 pb-16"
             onClick={onComplete}
             style={{
+                /* `inset-0` is the layout viewport, which on a phone can be SHORTER
+                   than the screen while the browser chrome is out — that left a strip
+                   at the bottom on mobile. `100lvh` is the LARGE viewport height: the
+                   screen with chrome retracted, so this always reaches the bottom.
+                   Where there is no chrome (desktop, an installed PWA) lvh and dvh are
+                   the same number and nothing changes. */
+                minHeight: '100lvh',
+                /* Behind the photo, for the moment before it decodes and for any
+                   sliver the crop cannot reach. A FIXED dark brown, not a theme
+                   token: this screen is dark in both themes, so `--canvas` would put
+                   a near-white band under a dark photo in light mode. Matches the
+                   dark canvas, rgb(28 24 21). */
+                backgroundColor: '#1C1815',
                 backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), url(${backgroundImage})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
