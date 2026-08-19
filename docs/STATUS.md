@@ -1666,18 +1666,48 @@ fast-forwarded to `0f0cfaf`.
 The emulator proves the rules; it does not prove that a photo picked on an iPhone
 uploads, renders the right way up, and is readable by another signed-in account.
 
-### One omission left
+### Both omissions are now closed
 
-- **The manager dashboard does not show the board** — only the rider and Sarthi
-  dashboards do. `.app-panel` is a fixed-height flex column, so an insert at the
-  outer level permanently steals height from the request table, which is the one
-  thing a manager needs during a sabha. It would have to go inside the `flex-1`
-  scroll region. Note the consequence now that the agenda renders in the board: a
-  manager writes the agenda and cannot see how it looks to everyone else, only the
-  one-line summary on the calendar row.
+Both were recorded here as not-done, and both were finished the same day: the
+sabha `agenda` field, and the board on the manager dashboard. See the two sections
+below.
 
-(The sabha `agenda` field was the other omission here. Done 2026-08-19 — see
-below.)
+### The manager dashboard: why the placement took thought — DONE 2026-08-19
+
+The board is on all three dashboards now. Where it goes on the manager's was the
+whole problem, and **both obvious answers are wrong**:
+
+- **Not the outer level.** `.app-panel` is a fixed-height flex column, so a sibling
+  above `flex-1 overflow-hidden` steals height from whichever tab is showing,
+  permanently. During a sabha that is the waiting queue.
+- **Not the Waiting tab.** `RequestTable` returns `<EmptyState />` at line 119,
+  **before** it renders its own `flex-1 overflow-auto`. So a board placed inside
+  that scroller disappears whenever the queue is empty — exactly when a manager has
+  time to read it. Placed above the table, it shrinks the queue again.
+
+It sits in the **other tab's `h-full overflow-y-auto` region**, scrolling with the
+ride cards at no cost to the queue. Pinned by
+`tests/quality/manager-notice-placement.test.ts`, which checks position by SOURCE
+ORDER: no DOM test can see a flex-height relationship, and standing up a
+ManagerDashboard harness would mean mocking useAuth, six useFirestore hooks, the
+toast context, the confirm dialog and two callables to assert a position.
+
+**That still left a gap, so there are two placements, not one.** Managers LAND on
+the Waiting tab, so the dashboard alone cannot answer "what does everyone see right
+now?". The **Notices tab now ends with that answer** — the real `NoticeBoard`, not a
+mock-up, because a preview that can drift from the thing it previews is worse than
+none.
+
+For that panel only, `NoticeBoard` takes a `whenEmpty` node. Dashboards pass nothing
+and still render `null`, because an empty panel headed "Notices" is furniture. But
+on the tab where a manager has just asked the question, silence is not an answer:
+it now says what is missing, and that the agenda is set on a **different screen**
+(Setup → Sabha Calendar). Leaving that vague is exactly how someone concludes the
+feature is broken.
+
+Client only — no rules or functions in that change. Three deliberate breakages
+caught: the board hoisted to the outer level, the board removed, `whenEmpty`
+ignored.
 
 ---
 
@@ -1769,7 +1799,7 @@ Both found by making the change and reading the output, not by the suite going r
 
 ### Verification
 
-**1639 tests** — 917 client, 602 functions, 120 rules. Typecheck 0, build clean.
+**1655 tests** — 933 client, 602 functions, 120 rules. Typecheck 0, build clean.
 
 Eight deliberate breakages, each confirmed to fail: `<` → `<=` on the date
 boundary (clears an agenda during its own sabha), the document deleted instead of
