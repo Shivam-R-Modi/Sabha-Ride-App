@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Database, Search, Plus, Edit2, Trash2, ShieldAlert, Loader2, FileText, Users, Car, Navigation, Clock, Filter, ChevronDown } from 'lucide-react';
+import { Database, Search, Plus, Edit2, Trash2, ShieldAlert, Loader2, FileText, Users, Car, Navigation, Clock, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAdminDatabase, SupportedCollection } from '../../hooks/useAdminDatabase';
 import { DocumentEditorModal } from './DocumentEditorModal';
@@ -227,15 +227,25 @@ export const DatabaseConsole: React.FC = () => {
 
       {/* Collection Selector Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-hairline/10 no-scrollbar">
+        {/* NO COUNT BADGE HERE, and that is the point.
+            The badge used to render only on the ACTIVE tab, so switching moved a
+            ~35px element from one pill to another: measured, the old tab lost 35px
+            of width and the new one gained 33, which slid every pill to the right
+            of them. That was the "shaking" on every switch. The count now lives
+            beside the search, where it is always present and can say how many of
+            how many.
+            It was also briefly WRONG: `documents` is not cleared while the new
+            collection loads, so the badge showed the previous collection's count
+            until the snapshot arrived. */}
         {[
-          { id: 'users', label: 'Users', icon: Users, count: activeTab === 'users' ? documents.length : null },
-          { id: 'vehicles', label: 'Vehicles', icon: Car, count: activeTab === 'vehicles' ? documents.length : null },
-          { id: 'rides', label: 'Rides', icon: Navigation, count: activeTab === 'rides' ? documents.length : null },
+          { id: 'users', label: 'Users', icon: Users },
+          { id: 'vehicles', label: 'Vehicles', icon: Car },
+          { id: 'rides', label: 'Rides', icon: Navigation },
           // The Attendance tab was here. Removed with 'weeklyAttendance' from
           // SupportedCollection: responses live in a subcollection this console
           // cannot see, so its delete button would have orphaned them.
-          { id: 'settings', label: 'Settings', icon: FileText, count: activeTab === 'settings' ? documents.length : null },
-          { id: 'auditLogs', label: 'Audit Logs', icon: Clock, count: activeTab === 'auditLogs' ? documents.length : null }
+          { id: 'settings', label: 'Settings', icon: FileText },
+          { id: 'auditLogs', label: 'Audit Logs', icon: Clock }
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -249,19 +259,22 @@ export const DatabaseConsole: React.FC = () => {
                 setStatusFilter('all');
                 setSelectedDocIds([]);
               }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap ${
+              // No `scale-105` on the active pill. A transform does not move its
+              // siblings, but `transition-all` animated it on every switch — one
+              // pill growing while another shrank, which is movement whatever the
+              // layout says. Colour and shadow already mark the active tab.
+              // `border border-transparent` on the active pill is not decoration:
+              // the inactive ones carry a 1px border, so without it the active pill
+              // is 2px narrower than the others and every pill after it shifts 2px
+              // on each switch. Measured before and after.
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-colors whitespace-nowrap border ${
                 isActive
-                  ? 'bg-coffee text-cream shadow-md scale-105'
-                  : 'bg-surface text-coffee-500 hover:bg-cream-300 border border-hairline/10'
+                  ? 'bg-coffee text-cream shadow-md border-transparent'
+                  : 'bg-surface text-coffee-500 hover:bg-cream-300 border-hairline/10'
               }`}
             >
               <Icon size={16} className={isActive ? 'text-saffron' : 'text-coffee-500'} />
               <span>{tab.label}</span>
-              {tab.count !== null && (
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${isActive ? 'bg-surface/20 text-white' : 'bg-cream-300 text-coffee-700'}`}>
-                  {tab.count}
-                </span>
-              )}
             </button>
           );
         })}
@@ -299,25 +312,53 @@ export const DatabaseConsole: React.FC = () => {
 
       {/* Search & Filtering Bar */}
       <div className="clay-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="relative w-full md:w-80">
-          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-coffee-500" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={`Search ${activeTab}...`}
-            className="w-full pl-10 pr-4 py-2 rounded-xl border border-hairline/20 text-xs focus:outline-none focus:ring-2 focus:ring-saffron"
-          />
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          {/* md:w-64, not w-80. Adding the record count to this cluster left the
+              filter group 16px short of its content on Users, and since that group
+              is `overflow-x-auto` it SCROLLED rather than resized — which read as
+              the Status filter jumping 16px on every switch to and from Users.
+              Measured: scrollWidth 320 against clientWidth 304. Narrowing the
+              search gives the row headroom so nothing scrolls or moves. */}
+          <div className="relative w-full md:w-64">
+            <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-coffee-500" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={`Search ${activeTab}...`}
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-hairline/20 text-xs focus:outline-none focus:ring-2 focus:ring-saffron"
+            />
+          </div>
+          {/* The count, moved off the tab pills so they stop resizing. Anchored to
+              the LEFT cluster on purpose: its own width changes with the number, and
+              here that moves nothing else.
+              Nothing while loading, because `documents` still holds the PREVIOUS
+              collection until the new snapshot lands — the old badge showed that
+              stale number as if it were the new tab's. */}
+          {!loading && !error && (
+            <p className="text-xs text-coffee-500 whitespace-nowrap shrink-0">
+              {filteredDocuments.length === documents.length
+                ? `${documents.length} ${documents.length === 1 ? 'record' : 'records'}`
+                : `${filteredDocuments.length} of ${documents.length}`}
+            </p>
+          )}
         </div>
 
-        {/* ONE funnel for the group, not one per pill.
+        {/* The funnel icon that sat here is gone. It was decorative
+            (`aria-hidden`) and sat BEFORE the conditional Role filter in a
+            right-anchored group, so leaving the Users tab slid it 152px across the
+            bar — measured. The selects carry visible ROLE/STATUS labels already, so
+            nothing was lost.
+            Role stays FIRST and Status LAST, and the order is load-bearing: this
+            group is right-anchored, so only a member that is removed from the LEFT
+            leaves the rest where they were. Putting Status first was tried and
+            measured — it slid 136px on every switch away from Users, because the
+            group then shrank from its right edge. Status last: x=885 on every tab.
             `no-scrollbar`: the global thumb is a 10px saffron gradient, which on a
             short strip like this draws a solid orange bar under the filters. The tab
             row above already had it; this one was missed. The TABLE below keeps its
             scrollbar on purpose — there, scrolling is real. */}
-        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
-          <Filter size={14} aria-hidden="true" className="text-coffee-500 shrink-0" />
-
+        <div className="flex items-center gap-2 w-full md:w-auto md:shrink-0 overflow-x-auto no-scrollbar">
           {activeTab === 'users' && (
             <FilterSelect label="Role" value={roleFilter} onChange={setRoleFilter}>
               <option value="all">All roles</option>
@@ -338,7 +379,18 @@ export const DatabaseConsole: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Data Table View */}
+      {/* Main Data Table View.
+          `min-h`: switching tabs sets loading TRUE again (useAdminDatabase does it
+          on every collection change), which swaps a table of any height for a
+          fixed `py-16` spinner and then swaps back. On a full Users table that is a
+          collapse and a re-expand on every single switch — the vertical half of the
+          "everything readjusts" complaint. Reserving the height means the spinner,
+          the error, the empty state and a small table all occupy the same room, so
+          nothing below moves while a collection loads.
+          Deliberately NOT "keep showing the old rows while loading": `documents`
+          still holds the previous collection, and the column headers are per-tab, so
+          that would render users' fields under vehicles' headings. */}
+      <div className="min-h-[26rem]">
       {loading ? (
         <div className="clay-card py-16 flex flex-col items-center justify-center space-y-3">
           <Loader2 className="animate-spin text-saffron" size={32} />
@@ -583,6 +635,7 @@ export const DatabaseConsole: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
 
       {/* Document Editor Modal */}
       {(selectedDocForEdit || isCreatingNew) && (
