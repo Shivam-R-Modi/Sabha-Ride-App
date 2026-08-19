@@ -1,7 +1,52 @@
 import React, { useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useNotices } from '../../hooks/useNotices';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
+import { isLongForCard } from '../../src/utils/agenda';
 import type { Notice } from '../../types';
+
+/**
+ * Long text in a dashboard card, collapsed until asked for.
+ *
+ * A full agenda runs to 2000 characters. Rendered whole it filled a phone and
+ * pushed the thing each dashboard exists FOR below the fold — the rider's request
+ * button, the Sarthi's "go on shift". Shipped that way once; the screenshots made
+ * it obvious.
+ *
+ * The clamp and the button come from ONE call to `isLongForCard`, so text can
+ * never be clipped without a control to open it. That is the failure mode worth
+ * designing against here: silently truncated text reads as the notice itself being
+ * short, and nobody goes looking for the rest.
+ */
+const LongText: React.FC<{ text: string }> = ({ text }) => {
+    const [open, setOpen] = useState(false);
+    const collapsible = isLongForCard(text);
+
+    return (
+        <>
+            {/* `whitespace-pre-line` is what keeps the flyer's line breaks; the
+                clamp counts rendered lines, so the two work together. */}
+            <p
+                className={`text-sm text-coffee-700 whitespace-pre-line leading-relaxed${
+                    collapsible && !open ? ' line-clamp-6' : ''
+                }`}
+            >
+                {text}
+            </p>
+            {collapsible && (
+                <button
+                    type="button"
+                    onClick={() => setOpen(v => !v)}
+                    aria-expanded={open}
+                    className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-saffron-800 min-h-11"
+                >
+                    {open ? 'Show less' : 'Read more'}
+                    {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+            )}
+        </>
+    );
+};
 
 /**
  * Manager-authored notices, on every dashboard.
@@ -33,9 +78,7 @@ const NoticeCard: React.FC<{ notice: Notice }> = ({ notice }) => {
                     className="w-full rounded-2xl mb-3 object-cover max-h-72"
                 />
             )}
-            <p className="text-sm text-coffee-700 whitespace-pre-line leading-relaxed">
-                {notice.body}
-            </p>
+            <LongText text={notice.body} />
         </article>
     );
 };
@@ -63,9 +106,7 @@ const AgendaCard: React.FC<{ agenda: string }> = ({ agenda }) => (
         </p>
         {/* Plain text, same as a notice body. Line breaks survive; markup does not
             exist here. */}
-        <p className="text-sm text-coffee-700 whitespace-pre-line leading-relaxed">
-            {agenda}
-        </p>
+        <LongText text={agenda} />
     </article>
 );
 

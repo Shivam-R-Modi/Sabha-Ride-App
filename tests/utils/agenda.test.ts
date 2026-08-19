@@ -7,7 +7,9 @@
  * paragraph.
  */
 import { describe, it, expect } from 'vitest';
-import { AGENDA_MAX_CHARS, agendaSummary, describeAgendaProblem } from '../../src/utils/agenda';
+import {
+    AGENDA_MAX_CHARS, CARD_LINES, agendaSummary, describeAgendaProblem, isLongForCard,
+} from '../../src/utils/agenda';
 
 describe('describeAgendaProblem', () => {
     it('accepts an empty agenda — it is optional', () => {
@@ -62,5 +64,47 @@ describe('agendaSummary', () => {
 
     it('does not truncate a first line that exactly fits', () => {
         expect(agendaSummary('x'.repeat(20), 20)).toBe('x'.repeat(20));
+    });
+});
+
+describe('isLongForCard', () => {
+    /**
+     * The point of this is that a dashboard stays usable. A full-length agenda
+     * rendered whole pushes the rider's request button and the Sarthi's "go on
+     * shift" off the screen — which is what the first version shipped doing.
+     */
+    it('leaves a short notice alone', () => {
+        expect(isLongForCard('Sabha at 8:30 tonight, Ell Hall.')).toBe(false);
+    });
+
+    it('collapses a long flyer', () => {
+        expect(isLongForCard('x'.repeat(281))).toBe(true);
+    });
+
+    it('collapses text with many short lines, not just many characters', () => {
+        // A running order is short per line and long overall — the shape of the
+        // real agendas.
+        const runningOrder = Array.from({ length: CARD_LINES + 1 }, (_, i) => `${i}:00 item`).join('\n');
+        expect(runningOrder.length).toBeLessThan(280);
+        expect(isLongForCard(runningOrder)).toBe(true);
+    });
+
+    it('leaves exactly CARD_LINES lines alone', () => {
+        const fits = Array.from({ length: CARD_LINES }, (_, i) => `${i}:00 item`).join('\n');
+        expect(isLongForCard(fits)).toBe(false);
+    });
+
+    it('counts blank lines, because they take a line each on screen', () => {
+        // Paragraph breaks are what make a flyer tall.
+        expect(isLongForCard('a\n\nb\n\nc\n\nd')).toBe(true);
+    });
+
+    it('handles an empty string', () => {
+        expect(isLongForCard('')).toBe(false);
+    });
+
+    it('never collapses something the full-length cap would reject', () => {
+        // Sanity on the two limits: everything at the ceiling is collapsible.
+        expect(isLongForCard('x'.repeat(AGENDA_MAX_CHARS))).toBe(true);
     });
 });

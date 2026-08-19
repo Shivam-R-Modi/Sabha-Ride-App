@@ -1,5 +1,7 @@
 /**
- * The sabha agenda, as long-form text.
+ * The sabha agenda, as long-form text. `isLongForCard` at the bottom is shared
+ * with notice bodies, which are the same thing wearing a different name:
+ * manager-authored long-form text rendered in a dashboard card.
  *
  * It used to be a one-line `<input type="text">` shown only inside the manager's
  * own calendar — `useCurrentEvent` read it off `system/rideContext` and no
@@ -44,4 +46,35 @@ export function agendaSummary(text: string | undefined | null, max = 60): string
     const [first, ...rest] = lines as [string, ...string[]];
     if (first.length <= max) return rest.length > 0 ? `${first} …` : first;
     return `${first.slice(0, max).trimEnd()}…`;
+}
+
+/**
+ * Lines a dashboard card shows before collapsing. Mirrors `line-clamp-6`.
+ */
+export const CARD_LINES = 6;
+
+/** Roughly `CARD_LINES` worth of characters at a phone's ~46 per line. */
+const CARD_CHARS = 280;
+
+/**
+ * Should this text be collapsed in a dashboard card?
+ *
+ * A full agenda is up to 2000 characters. Rendered whole it fills a phone screen
+ * and pushes the thing the dashboard is FOR — the rider's request button, the
+ * Sarthi's "go on shift" — below the fold. So a long one is clamped with a
+ * "Read more".
+ *
+ * Deliberately a heuristic on the text rather than a measurement of the rendered
+ * box. Measuring meant `getClientRects()`, which on a block element returns one
+ * rect for the whole element and not one per line — it reported "nothing wraps"
+ * against a screenshot that plainly wrapped. A character count cannot be wrong in
+ * that direction: at worst a "Read more" appears on something that would just
+ * about have fitted.
+ *
+ * The caller must use this for BOTH the clamp and the button, so text is never
+ * clipped without a way to open it.
+ */
+export function isLongForCard(text: string): boolean {
+    if (text.length > CARD_CHARS) return true;
+    return text.split('\n').length > CARD_LINES;
 }

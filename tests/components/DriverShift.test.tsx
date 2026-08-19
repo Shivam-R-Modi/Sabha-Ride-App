@@ -211,3 +211,50 @@ describe('DriverShift — choosing a car', () => {
         expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
     });
 });
+
+describe('the afterHeader slot', () => {
+    /**
+     * This component owns the PAGE — its own `px-4 pt-6` wrapper and the header
+     * with the Sarthi's name. So anything DriverDashboard places around it lands
+     * either above that header, flush against the app chrome with no title above
+     * the fold, or below the whole card. The notice board sat in the first of
+     * those and looked dumped there, next to a rider dashboard that puts it after
+     * its header and looked composed.
+     *
+     * The slot is what makes the two screens match, so its POSITION is the thing
+     * worth pinning, not merely that it renders.
+     */
+    it('renders the slot content', () => {
+        show({ afterHeader: <p>A notice</p> });
+        expect(screen.getByText('A notice')).toBeInTheDocument();
+    });
+
+    it('renders it AFTER the name, not above it', () => {
+        show({ afterHeader: <p>A notice</p> });
+
+        const name = screen.getByRole('heading', { name: 'Ramesh Patel' });
+        const slot = screen.getByText('A notice');
+
+        // DOCUMENT_POSITION_FOLLOWING === 4
+        expect(
+            name.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING,
+            'the slot must come after the page header, or the screen opens with no title',
+        ).toBeTruthy();
+    });
+
+    it('renders it BEFORE the shift controls', () => {
+        show({ afterHeader: <p>A notice</p> });
+
+        const slot = screen.getByText('A notice');
+        const action = screen.getByRole('button', { name: /find my next riders/i });
+
+        expect(slot.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('changes nothing when omitted', () => {
+        // Every other caller passes no slot; the screen must be untouched.
+        const { container } = show();
+        expect(container.textContent).toContain('Ramesh Patel');
+        expect(screen.getByRole('button', { name: /find my next riders/i })).toBeInTheDocument();
+    });
+});

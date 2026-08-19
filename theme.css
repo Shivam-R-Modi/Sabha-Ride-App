@@ -133,6 +133,10 @@
   /* #FEF3C7 */
   --notice-3: 253 230 138;
   /* #FDE68A */
+  /* The notice card's CAST shadow. Gold here, because on cream a warm cast
+     shadow lifts the card. In dark it becomes black — see the dark block, and
+     the note there about why a tinted cast shadow reads as a glow. */
+  --notice-shadow: 212 175 55;
   --success-bg-deep: 195 230 203;
   --warning-bg-deep: 255 230 156;
   --danger-bg-deep: 245 198 203;
@@ -316,9 +320,19 @@
   --accent-tint-3: 65 50 40;
   --accent-tint-badge-1: 66 44 33;
   --accent-tint-badge-2: 82 54 40;
-  --notice-1: 46 39 22;
-  --notice-2: 58 48 25;
-  --notice-3: 71 58 28;
+  /* Was 46 39 22 → 71 58 28: a 25-step climb, far steeper and much more
+     saturated than the surface ramp beside it (46 40 34 → 62 54 46). Paired with
+     a GOLD cast shadow it read as a lamp on the dashboard rather than a card.
+     theme-contrast.test.ts states the principle: on dark, a cast shadow is
+     invisible, so elevation comes from LIGHTNESS — which means a tinted cast
+     shadow is not depth, it is a glow.
+     Now a 16-step climb, matching surface, still warm enough to read as a notice
+     rather than an ordinary card. */
+  --notice-1: 50 43 28;
+  --notice-2: 58 50 32;
+  --notice-3: 66 57 36;
+  /* Black, so the cast shadow is matte like every other card's in dark. */
+  --notice-shadow: 0 0 0;
   --success-bg-deep: 27 76 47;
   --warning-bg-deep: 84 63 16;
   --danger-bg-deep: 92 34 34;

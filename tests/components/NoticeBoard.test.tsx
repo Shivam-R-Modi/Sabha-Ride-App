@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let notices: any[] = [];
@@ -206,5 +206,98 @@ describe('whenEmpty', () => {
         loading = true;
         render(<NoticeBoard whenEmpty={<p>Nothing on the board</p>} />);
         expect(screen.getByText('Nothing on the board')).toBeInTheDocument();
+    });
+});
+
+describe('long text is collapsed so the dashboard stays usable', () => {
+    /**
+     * The first version rendered a full 2000-character agenda whole. On a phone it
+     * filled the screen and pushed the rider's request button and the Sarthi's
+     * "go on shift" below the fold — the dashboard's entire purpose, hidden behind
+     * an announcement.
+     *
+     * The invariant that matters: the clamp and the button come from one decision,
+     * so text is never clipped without a way to open it. Silently truncated text
+     * reads as a short notice, and nobody scrolls for the rest.
+     */
+    const LONG = 'x'.repeat(400);
+
+    it('clamps a long notice and offers to open it', () => {
+        notices = [{ id: 'n1', body: LONG }];
+        render(<NoticeBoard />);
+
+        expect(screen.getByText(LONG).className).toMatch(/line-clamp-6/);
+        expect(screen.getByRole('button', { name: /Read more/ })).toBeInTheDocument();
+    });
+
+    it('drops the clamp when opened, and offers to close again', () => {
+        notices = [{ id: 'n1', body: LONG }];
+        render(<NoticeBoard />);
+
+        fireEvent.click(screen.getByRole('button', { name: /Read more/ }));
+
+        expect(screen.getByText(LONG).className).not.toMatch(/line-clamp/);
+        expect(screen.getByRole('button', { name: /Show less/ })).toBeInTheDocument();
+    });
+
+    it('reports its state to assistive tech', () => {
+        notices = [{ id: 'n1', body: LONG }];
+        render(<NoticeBoard />);
+
+        const button = screen.getByRole('button', { name: /Read more/ });
+        expect(button).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(button);
+        expect(screen.getByRole('button', { name: /Show less/ })).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('leaves a short notice unclamped, with no button', () => {
+        // A one-line notice with a "Read more" that reveals nothing is worse than
+        // no control at all.
+        notices = [{ id: 'n1', body: 'Sabha at 8:30 tonight.' }];
+        render(<NoticeBoard />);
+
+        expect(screen.getByText('Sabha at 8:30 tonight.').className).not.toMatch(/line-clamp/);
+        expect(screen.queryByRole('button', { name: /Read more/ })).toBeNull();
+    });
+
+    it('never clamps without giving a way to expand', () => {
+        // The two must agree. If they ever diverge, text is silently cut off.
+        notices = [{ id: 'short', body: 'Tiny' }, { id: 'long', body: LONG }];
+        currentEvent = { agenda: LONG };
+        const { container } = render(<NoticeBoard />);
+
+        const clamped = container.querySelectorAll('.line-clamp-6').length;
+        const buttons = screen.getAllByRole('button', { name: /Read more/ }).length;
+        expect(clamped).toBe(buttons);
+        expect(clamped).toBe(2);
+    });
+
+    it('collapses a long agenda too, not only notices', () => {
+        currentEvent = { agenda: LONG };
+        render(<NoticeBoard />);
+        expect(screen.getByText(LONG).className).toMatch(/line-clamp-6/);
+    });
+
+    it('keeps the line breaks while clamped', () => {
+        // The clamp uses -webkit-box; pre-line has to survive it or the flyer
+        // collapses into one paragraph.
+        const flyer = Array.from({ length: 12 }, (_, i) => `Line ${i}`).join('\n');
+        currentEvent = { agenda: flyer };
+        render(<NoticeBoard />);
+
+        const body = screen.getByText(/Line 0/);
+        expect(body.className).toMatch(/whitespace-pre-line/);
+        expect(body.className).toMatch(/line-clamp-6/);
+        expect(body.textContent).toBe(flyer);
+    });
+
+    it('expands each card independently', () => {
+        notices = [{ id: 'a', body: LONG }, { id: 'b', body: `${LONG}b` }];
+        render(<NoticeBoard />);
+
+        fireEvent.click(screen.getAllByRole('button', { name: /Read more/ })[0]!);
+
+        expect(screen.getAllByRole('button', { name: /Read more/ })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: /Show less/ })).toHaveLength(1);
     });
 });

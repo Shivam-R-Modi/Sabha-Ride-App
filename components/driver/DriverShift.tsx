@@ -56,6 +56,19 @@ export interface DriverShiftProps {
     onOpenVehiclePicker: () => void;
     onCloseVehiclePicker: () => void;
     onSelectVehicle: (vehicle: Vehicle) => void;
+    /**
+     * Rendered directly under the name, before the shift card.
+     *
+     * A slot rather than an import, because this component has no business
+     * knowing about notices. It exists because DriverShift owns the PAGE — its
+     * own `px-4 pt-6` wrapper and the `<header>` with the Sarthi's name — so
+     * anything placed around it in DriverDashboard lands either above the page
+     * header, flush against the app chrome, or after the whole card. The notice
+     * board sat in the first of those and looked dumped there, while the page had
+     * no title above the fold. RiderHome puts it after its header; this makes the
+     * two screens match.
+     */
+    afterHeader?: React.ReactNode;
 }
 
 export const DriverShift: React.FC<DriverShiftProps> = ({
@@ -65,6 +78,7 @@ export const DriverShift: React.FC<DriverShiftProps> = ({
     vehicles, vehiclesLoading, vehiclePickerOpen, selectingVehicle,
     onGoOnShift, onEndShift, onFindRiders,
     onOpenVehiclePicker, onCloseVehiclePicker, onSelectVehicle,
+    afterHeader,
 }) => {
     const hasCar = Boolean(vehicleName);
 
@@ -87,6 +101,8 @@ export const DriverShift: React.FC<DriverShiftProps> = ({
                     {driverName}
                 </h1>
             </header>
+
+            {afterHeader}
 
             {onShift ? (
                 <div className="clay-card-accent">
