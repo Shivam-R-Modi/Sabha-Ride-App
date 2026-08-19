@@ -528,6 +528,34 @@ service cloud.firestore {
     }
 
     // =====================================
+    // NOTICES — the notice board
+    // =====================================
+    match /notices/{noticeId} {
+      // Everyone signed in reads it: the board renders on the dashboard of all
+      // three roles. Deliberately does NOT touch `resource.data`, which keeps it
+      // list-safe — a condition that inspects the document makes a collection
+      // query fail wholesale, and the board is read as a query.
+      allow read: if isAuthenticated();
+
+      // Managers author it, through the recorded-role path. `isManagerForRead()`
+      // would accept a custom claim that survives a demotion for up to an hour,
+      // which is fine for reading and not for writing.
+      //
+      // The size cap is here and not only in the composer, the same reasoning as
+      // clientErrors above: a client is a trust boundary even when it belongs to
+      // a manager. 4000 characters is a long flyer and nowhere near a payload.
+      allow create, update: if isManager()
+                            && request.resource.data.body is string
+                            && request.resource.data.body.size() <= 4000;
+
+      // Deleting a notice must also delete its image from Storage, and a client
+      // cannot be trusted to do both. `deleteNotice` does it in order, and the
+      // nightly sweep does it for expired ones. Same reasoning that makes
+      // `events` undeletable from the client — a raw delete orphans something.
+      allow delete: if false;
+    }
+
+    // =====================================
     // SETTINGS COLLECTION (Sabha location, etc.)
     // =====================================
     match /settings/{settingId} {

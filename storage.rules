@@ -1,0 +1,91 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bhulka Gaadi — Cloud Storage
+//
+// This is the FIRST Storage rules file in this project. Nothing uploaded
+// anything before notice-board images, so there is no prior behaviour to
+// preserve — and no prior template, which is why the manager check below is
+// written to mirror `firestore.rules` deliberately rather than approximately.
+//
+// Two things this file is guarding:
+//
+//   1. Only an approved manager may put a file here. Storage has no notion of
+//      this app's roles, so the check crosses into Firestore for the caller's
+//      user document. It reads `role`, `registeredRole` AND `roles[]`, because a
+//      recorded role may live in any of the three — see `recordsRole()` in
+//      firestore.rules. A single `role == 'manager'` test would silently miss a
+//      manager recorded only in the array.
+//
+//   2. Size and content type, ENFORCED HERE and not only in the client. The
+//      composer checks both for a decent error message, but a client is a trust
+//      boundary even when it belongs to a manager.
+//
+// Reads require a signed-in account. A notice is an announcement to the
+// congregation, not public content, and an unguarded download URL would outlive
+// the notice that was deleted.
+// ─────────────────────────────────────────────────────────────────────────────
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Identical reads are cached within one rules evaluation, so calling this
+    // more than once below costs a single Firestore read.
+    function callerData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Mirrors recordsRole() + isApprovedAs('manager') in firestore.rules.
+    //
+    // firestore.rules routes isManager() through grantsRole(), not recordsRole().
+    // For 'manager' the two are EQUIVALENT — grantsRole's extra clauses only
+    // fire when the role asked for is 'student' or 'driver' (the hierarchy
+    // expands downward, so a manager grants those). Checked, not assumed.
+    // NOT a custom claim: a claim survives on an ID token for up to an hour
+    // after a demotion, and the same reasoning is recorded in
+    // functions/src/utils/authz.ts.
+    function isApprovedManager() {
+      return signedIn()
+             && callerData().accountStatus == 'approved'
+             && (
+               callerData().role == 'manager'
+               || callerData().registeredRole == 'manager'
+               || ('roles' in callerData()
+                   && callerData().roles != null
+                   && 'manager' in callerData().roles)
+             );
+    }
+
+    function isReasonableImage() {
+      // 3 MB is comfortably more than a phone photo compressed for a flyer, and
+      // small enough that a mistake cannot fill the bucket.
+      return request.resource.size < 3 * 1024 * 1024
+             && request.resource.contentType.matches('image/.*');
+    }
+
+    // Notice-board images. One folder per notice so deleting the notice can
+    // delete its file — the document stores the PATH as well as the download
+    // URL, because a URL alone cannot be deleted.
+    match /notices/{noticeId}/{fileName} {
+      allow read: if signedIn();
+      allow write: if isApprovedManager() && isReasonableImage();
+
+      // Deletion goes through the deleteNotice callable, which removes the file
+      // and the document together. A client delete could strand one without the
+      // other — the same reasoning that makes `events` undeletable from the
+      // client in firestore.rules.
+      allow delete: if false;
+    }
+
+    // Everything else is closed. There is no other upload surface in this app,
+    // and a default-open bucket on a project holding children's data is not a
+    // mistake worth leaving room for.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

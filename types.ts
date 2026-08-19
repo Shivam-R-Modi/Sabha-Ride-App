@@ -341,7 +341,7 @@ export interface AssignmentResult {
  * to find. Setup keeps the three that genuinely configure a sabha.
  */
 export type TabView =
-    | 'home' | 'rides' | 'profile' | 'history' | 'people' | 'setup' | 'fleet' | 'records';
+    | 'home' | 'rides' | 'profile' | 'history' | 'people' | 'setup' | 'fleet' | 'notices' | 'records';
 
 export interface NotificationPayload {
   title: string;
@@ -473,3 +473,31 @@ export interface AuditLog {
   details: string;
 }
 
+
+/**
+ * A notice-board post.
+ *
+ * `body` is PLAIN TEXT and is rendered as plain text with line breaks preserved.
+ * It is never parsed as markdown or HTML — nothing in this app renders authored
+ * content as markup, and a manager-typed flyer on every family's dashboard is
+ * not the place to start.
+ *
+ * Both `imagePath` and `imageUrl` are stored. The URL renders it; the PATH is
+ * the only thing that can delete it, and a notice that expires has to take its
+ * image with it or Storage fills up.
+ */
+export interface Notice {
+  id: string;
+  body: string;
+  /** Storage path, e.g. `notices/{id}/flyer.jpg`. Absent when there is no image. */
+  imagePath?: string;
+  /** Download URL for rendering. Absent when there is no image. */
+  imageUrl?: string;
+  /** ISO date (YYYY-MM-DD). After this day the nightly sweep deletes the notice. */
+  showUntil?: string | null;
+  /** Optional sabha this notice is about; it is deleted once that sabha passes. */
+  eventId?: string | null;
+  createdAt: string;
+  createdByUid: string;
+  createdByName: string;
+}

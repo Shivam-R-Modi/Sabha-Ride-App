@@ -74,10 +74,12 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **20** functions (`sarthiArrived`, `managerBroadcast` added). `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-4uVxg9FQ.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **546** · client **874** · rules **89** —
-**1509 total**.
+**Test suites, all green:** `functions` **574** · client **887** · rules **97** —
+**1558 total**.
 
-**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed EXCEPT the last section** — *the notice
+board* — which is committed and swept but **NOT released, and blocked**: Cloud
+Storage is not provisioned on this project. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1574,6 +1576,100 @@ rules). Verified against the LIVE site: title and `apple-mobile-web-app-title`
 both `Bhulka Gaadi`, manifest name and short_name both `Bhulka Gaadi`, and in
 the live bundle **zero** occurrences of the old copy alongside the role literals
 still present 18 / 19 / 5 times.
+
+---
+
+## 2026-08-19: the notice board, and a new Notices tab
+
+Managers had no way to say anything that was not a ride event. Push broadcasts
+interrupt and leave no trace; there was nowhere to *look*.
+
+A new manager tab holds both tools side by side, deliberately: a **notice** stays
+where people can find it, a **broadcast** interrupts once and is gone. On separate
+screens that choice would be invisible and broadcast would get used for
+everything. The broadcast composer moved out of Setup.
+
+The board renders on all three dashboards, newest first, and posts **delete
+themselves** — document *and* image — once their day has passed.
+
+### BLOCKED: Cloud Storage does not exist on this project
+
+Verified with the Admin SDK, not inferred:
+
+```
+sabha-ride-app.firebasestorage.app  exists=false
+sabha-ride-app.appspot.com          exists=false
+```
+
+No `storage` key in `firebase.json` before this change, no `storage.rules`, no
+emulator, no `getStorage` call, not in any deploy script, and zero upload code
+anywhere in the app. `VITE_FIREBASE_STORAGE_BUCKET` was being passed to
+`initializeApp` and consumed by nothing.
+
+**Someone must click Storage → Get started in the Firebase console.** It is a
+one-time, irreversible location choice, which is why it is not something to do on
+another person's behalf. Until then `firebase deploy --only storage` fails and the
+"Add an image" button cannot work — so this is committed and NOT deployed.
+Everything except the upload is finished and tested.
+
+### Decisions, and the reasoning that is easy to lose
+
+- **`delete: if false` on `notices`,** even for a manager. Taking a notice down
+  must also delete its Storage object, and a client that deletes the document
+  first has thrown away the only reference to the file. Deletion goes through
+  `deleteNotice`, image first. Same reasoning that already makes `events`
+  undeletable from the client.
+- **Both `imagePath` and `imageUrl` are stored, and half a pair is refused.** A
+  URL renders but cannot be deleted; a path deletes but cannot render. Accepting
+  one without the other is precisely how a bucket fills with orphans nobody can
+  account for.
+- **The body is plain text, rendered with `whitespace-pre-line`.** No markdown, no
+  sanitiser, no `dangerouslySetInnerHTML` — which appears nowhere in this app.
+  Emoji and line breaks carry the formatting, which is what the real flyers use.
+  A test pins that a body containing `<img src=x onerror=…>` renders as *text*.
+- **The notice image has an `onError`.** No other `<img>` in this app has one. On
+  failure the picture goes and the words stay.
+- **Expiry compares dates in the sabha's timezone** via `zonedDateKey`, not
+  `toISOString().slice(0,10)`. A UTC comparison would take an evening notice down
+  five hours early on the east coast — during the sabha it was advertising.
+  A notice shows for the whole of its own day.
+- **`storage.rules` mirrors the Firestore manager check deliberately**, reading
+  `role`, `registeredRole` AND `roles[]`. A single `role == 'manager'` test would
+  silently miss a manager recorded only in the array. Checked, not assumed:
+  `grantsRole(data, 'manager')` reduces to exactly `recordsRole(data, 'manager')`,
+  because grantsRole's extra clauses only fire for `'student'` and `'driver'`.
+- **Size and type are enforced in `storage.rules`,** not only the composer. The
+  composer checks them for a readable message — "that image is 4.2 MB" beats a
+  raw permission error after a slow upload.
+- **A path containing `..` is refused** at both ends. Storage object names are
+  literal so it cannot traverse, but the path is sent to the server and used to
+  delete an object later, and it does not belong in that position. A test caught
+  this; the first sanitiser let it through.
+
+### Nav
+
+The mobile overflow drawer went from three items to four, and it was a
+`grid-cols-3` — three across and one orphan on a second row. Now `grid-cols-2`,
+a clean 2×2. `Notices` is 7 characters, inside the 8-character ceiling
+`managerNavigation.test.tsx` enforces, and sits before `Records`, which that test
+pins as last.
+
+One consequence: `DriverDashboard.test.tsx`'s Firestore mock returned the same
+untagged shape for every collection, so the board's `notices` subscription
+captured the rides listener and nine tests drove the wrong one. The mock now tags
+by collection name.
+
+### Verification
+
+49 new tests (functions 546 → 574, client 874 → 887, rules 89 → 97). Deliberate
+breakages, each caught: half an image pair accepted, an image path outside
+`notices/`, a path reading like traversal, document deleted before image, a notice
+expiring during its own event, a manager able to delete a notice, and the body
+size cap dropped.
+
+**Not verified, and cannot be until Storage exists:** a real upload. The emulator
+would prove the rules; it would not prove that a photo picked on an iPhone
+uploads, renders the right way up, and is readable by another account.
 
 ---
 

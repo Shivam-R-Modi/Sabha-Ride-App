@@ -121,6 +121,23 @@ export interface CompleteRideResult {
  * Idempotent server-side on `arrivedAt`, so a second tap is free and reports
  * `alreadyArrived` rather than announcing again.
  */
+/** Publish a notice-board post. Optionally pushes, via the same broadcast floor. */
+export async function publishNotice(input: {
+    body: string;
+    imagePath?: string | null;
+    imageUrl?: string | null;
+    showUntil?: string | null;
+    eventId?: string | null;
+    push?: boolean;
+}): Promise<{ success: boolean; noticeId: string }> {
+    return callFunction('"publishNotice"', input);
+}
+
+/** Take a notice down. Deletes its image too — a client cannot do both. */
+export async function deleteNotice(noticeId: string): Promise<{ success: boolean }> {
+    return callFunction('"deleteNotice"', { noticeId });
+}
+
 /**
  * One message to every phone. Server-side this is rate limited per manager AND
  * by a congregation-wide floor, and every send writes an audit row.

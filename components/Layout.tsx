@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LotusIcon } from '../constants';
 import { TabView, UserRole } from '../types';
-import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database } from 'lucide-react';
+import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database, Megaphone } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
@@ -410,7 +410,7 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
           />
           <div className="clay-bottom-drawer animate-in slide-in-from-bottom-4" {...gestures}>
             <GrabHandle overflowIsActive={overflowIsActive} className="w-full pb-2" />
-            <div className="max-w-md mx-auto grid grid-cols-3 gap-1">
+            <div className="max-w-md mx-auto grid grid-cols-2 gap-1">
               {overflow.map(item => (
                 <DockButton
                   key={item.id}
@@ -503,6 +503,7 @@ const getNavItems = (role: UserRole): NavItem[] => {
       { id: 'fleet', label: 'Fleet', icon: Car, primary: true },
       { id: 'setup', label: 'Setup', icon: Settings, primary: true },
       { id: 'profile', label: 'Profile', icon: UserIcon },
+      { id: 'notices', label: 'Notices', icon: Megaphone },
       { id: 'records', label: 'Records', icon: Database, separated: true },
     ];
   }

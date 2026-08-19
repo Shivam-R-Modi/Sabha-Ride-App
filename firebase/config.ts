@@ -29,6 +29,18 @@ export const db = initializeFirestore(app, {
 // Export app instance
 export { app };
 
+/**
+ * Cloud Storage, for notice-board images.
+ *
+ * Behind a function rather than a module-scope `getStorage(app)` so the Storage
+ * SDK only loads for the one manager screen that uploads. Everything else in the
+ * app — and every rider and Sarthi — never pays for it.
+ */
+export const storage = async () => {
+  const { getStorage } = await import('firebase/storage');
+  return getStorage(app);
+};
+
 // Initialize Messaging (with support check)
 export const initializeMessaging = async () => {
   try {

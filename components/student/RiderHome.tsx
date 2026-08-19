@@ -19,6 +19,7 @@ import {
 } from '../../src/utils/presence';
 import type { RiderState, SplitInfo, DismissedInfo } from '../../src/utils/riderState';
 import { PushPrompt } from '../shared/PushPrompt';
+import { NoticeBoard } from '../shared/NoticeBoard';
 
 /**
  * The rider's home screen: ONE card, ONE action.
@@ -371,6 +372,8 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
                 <h1 className="text-2xl font-header font-bold text-coffee">Jai Swaminarayan!</h1>
                 <p className="text-coffee-700 text-sm">{user.name}</p>
             </header>
+
+            <NoticeBoard />
 
             {card()}
 

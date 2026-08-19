@@ -896,3 +896,84 @@ describe('clientErrors — crash reports', () => {
         await assertFails(deleteDoc(doc(asManager(), 'clientErrors', 'e1')));
     });
 });
+
+/**
+ * The notice board.
+ *
+ * Manager-authored, read by everyone, and DELETABLE BY NOBODY from the client.
+ * That last one is the point: taking a notice down must also delete its image
+ * from Storage, and a client that deletes the document first has thrown away the
+ * only reference to the file. Same reasoning that already makes `events`
+ * undeletable here — a raw delete orphans something.
+ *
+ * The read rule deliberately does not touch `resource.data`, which keeps it
+ * list-safe. The board is read as a collection query, and a condition that
+ * inspects the document makes the whole query fail rather than filtering it.
+ */
+describe('the notice board', () => {
+    beforeEach(async () => {
+        await testEnv.withSecurityRulesDisabled(async ctx => {
+            await setDoc(doc(ctx.firestore(), 'notices', 'n1'), {
+                body: 'Sabha this Friday',
+                imagePath: 'notices/n1/flyer.jpg',
+                imageUrl: 'https://example.test/flyer.jpg',
+                showUntil: '2026-08-21',
+                createdAt: '2026-08-19T00:00:00.000Z',
+                createdByUid: MANAGER,
+                createdByName: 'Mira',
+            });
+        });
+    });
+
+    it('everyone signed in can read the board', async () => {
+        // It renders on the dashboard of all three roles.
+        await assertSucceeds(getDoc(doc(asStudent(), 'notices', 'n1')));
+        await assertSucceeds(getDoc(doc(asDriver(), 'notices', 'n1')));
+        await assertSucceeds(getDoc(doc(asManager(), 'notices', 'n1')));
+    });
+
+    it('a signed-in user can LIST it, which is how the board is read', async () => {
+        // The rule avoids `resource.data` precisely so this works.
+        await assertSucceeds(getDocs(collection(asStudent(), 'notices')));
+    });
+
+    it('an anonymous visitor cannot read it', async () => {
+        await assertFails(getDoc(doc(asAnon(), 'notices', 'n1')));
+    });
+
+    it('a manager can post and edit', async () => {
+        await assertSucceeds(setDoc(doc(asManager(), 'notices', 'n2'), {
+            body: 'Bhulka sabha moved to 7pm',
+            createdAt: '2026-08-19T00:00:00.000Z',
+            createdByUid: MANAGER,
+            createdByName: 'Mira',
+        }));
+        await assertSucceeds(updateDoc(doc(asManager(), 'notices', 'n1'), { body: 'Corrected time' }));
+    });
+
+    it('a rider or Sarthi cannot post', async () => {
+        await assertFails(setDoc(doc(asStudent(), 'notices', 'x'), { body: 'hello' }));
+        await assertFails(setDoc(doc(asDriver(), 'notices', 'x'), { body: 'hello' }));
+        await assertFails(updateDoc(doc(asStudent(), 'notices', 'n1'), { body: 'edited' }));
+    });
+
+    it('refuses a body big enough to be a payload', async () => {
+        // The composer caps it too; this is the boundary that actually holds.
+        await assertFails(setDoc(doc(asManager(), 'notices', 'big'), {
+            body: 'x'.repeat(4001),
+            createdAt: '2026-08-19T00:00:00.000Z',
+        }));
+    });
+
+    it('refuses a body that is not a string', async () => {
+        await assertFails(setDoc(doc(asManager(), 'notices', 'weird'), { body: { nested: true } }));
+    });
+
+    it('NOBODY deletes from the client — not even a manager', async () => {
+        // Deletion goes through deleteNotice, which removes the Storage object
+        // first. A client delete would orphan the image for ever.
+        await assertFails(deleteDoc(doc(asManager(), 'notices', 'n1')));
+        await assertFails(deleteDoc(doc(asStudent(), 'notices', 'n1')));
+        await assertFails(deleteDoc(doc(asDriver(), 'notices', 'n1')));
+    });
+});

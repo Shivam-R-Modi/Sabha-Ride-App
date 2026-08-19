@@ -37,12 +37,18 @@ let contextListener: ((snap: any) => void) | null = null;
 
 vi.mock('../../firebase/config', () => ({ db: {} }));
 vi.mock('firebase/firestore', () => ({
-    collection: () => ({ __rides: true }),
+    // Tagged BY NAME. The dashboard now also renders the notice board, which
+    // subscribes to `notices` — with a single untagged shape that subscription
+    // would capture the rides listener and every test below would drive the
+    // wrong one.
+    collection: (_db: unknown, name: string) => (name === 'notices' ? { __notices: true } : { __rides: true }),
     doc: () => ({ __context: true }),
-    query: () => ({ __rides: true }),
+    query: (base: any) => base,
     where: () => ({}),
+    orderBy: () => ({}),
     onSnapshot: (ref: any, next: any) => {
-        if (ref?.__rides) ridesListener = next;
+        if (ref?.__notices) next({ docs: [] });      // empty board; not what these tests are about
+        else if (ref?.__rides) ridesListener = next;
         else contextListener = next;
         return () => undefined;
     },

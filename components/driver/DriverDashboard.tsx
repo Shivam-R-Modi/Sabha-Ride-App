@@ -3,6 +3,7 @@ import { RideStudent, Waypoint } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { AssignmentPreview } from './AssignmentPreview';
 import { PushPrompt } from '../shared/PushPrompt';
+import { NoticeBoard } from '../shared/NoticeBoard';
 import { ActiveRide } from './ActiveRide';
 import { DriverShift } from './DriverShift';
 import { CompletionScreen } from './CompletionScreen';
@@ -519,6 +520,9 @@ export const DriverDashboard: React.FC = () => {
                 // renders nothing unless it is fair to ask.
                 return (
                     <div className="space-y-4">
+                        <div className="px-4 max-w-md mx-auto">
+                            <NoticeBoard />
+                        </div>
                         {shiftCard}
                         <div className="px-4 max-w-md mx-auto">
                             <PushPrompt />
