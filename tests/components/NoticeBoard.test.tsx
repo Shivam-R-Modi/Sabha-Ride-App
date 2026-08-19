@@ -169,3 +169,42 @@ describe('the sabha agenda', () => {
         expect(screen.getByText('Still shown')).toBeInTheDocument();
     });
 });
+
+describe('whenEmpty', () => {
+    /**
+     * The dashboards must keep rendering nothing when there is nothing to say —
+     * an empty panel headed "Notices" is furniture. The manager's Notices tab is
+     * the one caller that wants a word instead, because there the emptiness
+     * answers a question they just asked.
+     */
+    it('renders nothing when empty and no fallback is given', () => {
+        const { container } = render(<NoticeBoard />);
+        expect(container).toBeEmptyDOMElement();
+    });
+
+    it('renders the fallback when empty and one is given', () => {
+        render(<NoticeBoard whenEmpty={<p>Nothing on the board</p>} />);
+        expect(screen.getByText('Nothing on the board')).toBeInTheDocument();
+    });
+
+    it('does NOT render the fallback once there is a notice', () => {
+        notices = [{ id: 'n1', body: 'Something' }];
+        render(<NoticeBoard whenEmpty={<p>Nothing on the board</p>} />);
+        expect(screen.queryByText('Nothing on the board')).toBeNull();
+        expect(screen.getByText('Something')).toBeInTheDocument();
+    });
+
+    it('does NOT render the fallback once there is an agenda', () => {
+        // An agenda-only week is the common case, and it must not read as empty.
+        currentEvent = { agenda: 'Kirtan' };
+        render(<NoticeBoard whenEmpty={<p>Nothing on the board</p>} />);
+        expect(screen.queryByText('Nothing on the board')).toBeNull();
+        expect(screen.getByText('Kirtan')).toBeInTheDocument();
+    });
+
+    it('renders the fallback while still loading, rather than flashing empty', () => {
+        loading = true;
+        render(<NoticeBoard whenEmpty={<p>Nothing on the board</p>} />);
+        expect(screen.getByText('Nothing on the board')).toBeInTheDocument();
+    });
+});

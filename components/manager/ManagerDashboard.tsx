@@ -9,6 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { seatsOnRide } from '../../src/constants/seats';
 import { managerReleaseVehicle } from '../../src/utils/cloudFunctions';
 import { DriverPicker } from './DriverPicker';
+import { NoticeBoard } from '../shared/NoticeBoard';
 
 // Grouped Ride Card Component
 const RideAssignmentCard: React.FC<{
@@ -487,6 +488,20 @@ export const ManagerDashboard: React.FC = () => {
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-widest">Sarthis Self-Assign</span>
                 </div>
+              </div>
+
+              {/* The notice board, INSIDE this scroll region.
+                  It cannot go at the outer level: `.app-panel` is a fixed-height
+                  flex column, so a sibling above `flex-1 overflow-hidden` steals
+                  height from the tab content permanently — and the request queue
+                  is the one thing a manager needs during a sabha.
+                  Nor can it go inside RequestTable's own scroller on the Waiting
+                  tab: that component returns <EmptyState /> before rendering it
+                  whenever there are no requests, so the board would vanish
+                  exactly when a manager has time to read it. Here it scrolls with
+                  the rides and costs the queue nothing. */}
+              <div className="mb-6">
+                <NoticeBoard />
               </div>
 
               {/* A "Live Interactive Map" sat here. It was a schematic box that

@@ -69,7 +69,17 @@ const AgendaCard: React.FC<{ agenda: string }> = ({ agenda }) => (
     </article>
 );
 
-export const NoticeBoard: React.FC = () => {
+export const NoticeBoard: React.FC<{
+    /**
+     * Rendered instead of nothing when the board is empty.
+     *
+     * Dashboards pass nothing, so they keep rendering `null` — an empty panel
+     * headed "Notices" is furniture. The manager's own Notices tab passes a line,
+     * because there the emptiness is the answer to a question they just asked
+     * ("what does everyone see right now?") rather than a gap on their homepage.
+     */
+    whenEmpty?: React.ReactNode;
+}> = ({ whenEmpty }) => {
     const { notices, loading } = useNotices();
     const { event, loading: eventLoading } = useCurrentEvent();
 
@@ -84,7 +94,7 @@ export const NoticeBoard: React.FC = () => {
     // Nothing to say renders nothing. An empty panel headed "Notices" is
     // furniture, and that judgement has to survive the agenda being added — an
     // agenda-only week and a notices-only week both have to work.
-    if (!showNotices && !showAgenda) return null;
+    if (!showNotices && !showAgenda) return <>{whenEmpty ?? null}</>;
 
     return (
         <section className="space-y-3" aria-label="Notices and sabha agenda">

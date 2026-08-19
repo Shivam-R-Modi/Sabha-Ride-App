@@ -1,7 +1,8 @@
 import React from 'react';
-import { Megaphone, StickyNote } from 'lucide-react';
+import { Megaphone, StickyNote, Eye } from 'lucide-react';
 import { NoticeComposer } from './NoticeComposer';
 import { BroadcastComposer } from './BroadcastComposer';
+import { NoticeBoard } from '../shared/NoticeBoard';
 
 /**
  * The two ways a manager says something to the congregation.
@@ -54,6 +55,29 @@ export const ManagerNotices: React.FC = () => (
             summary="Interrupts everyone once. Nothing is kept"
         >
             <BroadcastComposer />
+        </Panel>
+
+        {/* The same component every rider and Sarthi renders, not a mock-up of it.
+            A preview that drifts from the real thing is worse than none.
+
+            It is here as well as on the manager dashboard because the dashboard
+            cannot be relied on for this: managers land on the Waiting tab, and the
+            board lives in the OTHER tab's scroll region — the Waiting tab is a
+            fixed-height queue that anything above would shrink. This is the one
+            place the answer is always available, next to the box that writes it. */}
+        <Panel
+            icon={<Eye size={20} />}
+            title="What everyone sees"
+            summary="The board as it looks on a rider's or Sarthi's dashboard"
+        >
+            <NoticeBoard
+                whenEmpty={
+                    <p className="text-sm text-coffee-500 italic">
+                        Nothing on the board right now. Post a notice above, or set this
+                        week's agenda in Setup → Sabha Calendar.
+                    </p>
+                }
+            />
         </Panel>
     </div>
 );
