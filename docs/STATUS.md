@@ -2073,6 +2073,58 @@ lvh removed with its fallback themed.
 
 ---
 
+## 2026-08-19: the splash waits for a tap, and covers the screen by overshooting
+
+Deployed, client only. Two owner requests after seeing the previous attempt on a
+phone.
+
+### The tap is back, and that raises the stakes on one handler
+
+The 1800ms auto-dismiss is gone. This **reverses** the Phase 3 change above, which
+removed the tap as "one mandatory, meaningless tap before every launch" — so the
+reversal is recorded here rather than looking like a regression later.
+
+The consequence is what matters: the tap is now the **only** way out of this screen.
+A broken `onClick` would brick the app at launch for everyone — no rider able to
+request a ride, no Sarthi able to go on shift — and the screen would look completely
+normal while it happened. `tests/components/SplashScreen.test.tsx` therefore proves
+the behaviour, not the markup: a click calls `onComplete`, thirty seconds of fake
+timers do NOT, and it is still tappable after being left. Confirmed by deleting the
+`onClick` on purpose.
+
+### Covering the screen: `100lvh` alone was not enough
+
+`position: fixed` is sized to the **visual viewport**. The canvas `html` paints
+extends further — under retracted browser chrome and into the home-indicator safe
+area — and that difference is the strip that kept appearing along the bottom. After
+the earlier fix it was still there, just canvas-coloured instead of black.
+
+**The desktop emulator cannot reproduce it**, and that is worth knowing before
+trusting a green preview: measured at 375x812, the element covers 812 of 812 pixels
+with zero shortfall, because there are no insets to create a gap. So the fix stops
+trying to match the viewport exactly and overshoots instead:
+
+```
+height: calc(100lvh + env(safe-area-inset-bottom, 0px))
+```
+
+Overshooting costs nothing — the excess is off-screen on a fixed element, and the
+page does not become scrollable (checked). If `lvh` is ever unsupported the calc is
+invalid, height falls back to auto and `inset-0` sizes it exactly as before.
+
+### Two things ruled out before changing anything
+
+- **The image.** A baked-in dark band would have looked identical — and this repo has
+  had exactly that bug once, on the app icon. It is 1280x988 **landscape**, so
+  `cover` scales it to 1093x844 on a phone and fills. Not the image.
+- **`viewport-fit=cover`** is present in `index.html`, so the page is allowed to paint
+  into the safe areas. The gap was never a permission problem.
+
+`preview/splash.html` was added to the screen harness for this. It is what turned
+the question from argument into measurement.
+
+---
+
 ## Reading production without guessing
 
 Admin-SDK scripts live in the session scratchpad (regenerate as needed; they are
@@ -2567,7 +2619,8 @@ only: no Cloud Function, no Firestore rule, and no hook data contract changes.**
   Which card appears is now a pure, tested function rather than early returns
   scattered through the render. The weekly attendance question no longer takes
   over the whole app — it is a card, and saying "not this time" collapses it
-  instead of replacing the dashboard. The splash screen stops demanding a tap.
+  instead of replacing the dashboard. The splash screen stopped demanding a tap —
+  **reversed on 2026-08-19 at the owner's request; it waits for one again.**
 
   Two faults were found by *looking* at it, which no test would have caught: the
   driver's name truncated to "Ra…" at phone width, and the ride card's status
