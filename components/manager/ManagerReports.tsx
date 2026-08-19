@@ -139,14 +139,18 @@ export const ManagerReports: React.FC = () => {
     return (
         <div className="p-6 space-y-6 animate-in fade-in duration-500">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
+            {/* `min-w-0` on the text and `shrink-0` on the action: in a
+                justify-between row a flex child will not shrink below its
+                content, so at 390px the button was squeezed until its LABEL
+                wrapped. The title is what should wrap, not the control. */}
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                     <h1 className="text-2xl font-header font-bold text-coffee">Reports & Analytics</h1>
                     <p className="text-coffee-500 text-sm mt-1">Overview of seva operations</p>
                 </div>
                 <button
                     onClick={fetchStats}
-                    className="px-4 py-2 text-sm font-bold text-saffron-800 bg-cream-300 rounded-xl hover:bg-cream-300 transition-colors"
+                    className="shrink-0 whitespace-nowrap px-4 py-2 text-sm font-bold text-saffron-800 bg-cream-300 rounded-xl hover:bg-cream-300 transition-colors"
                 >
                     Refresh
                 </button>
@@ -205,15 +209,21 @@ export const ManagerReports: React.FC = () => {
 
             {/* Weekly Attendance Section */}
             <div className="clay-card p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <div>
+                <div className="flex items-start justify-between gap-3 mb-6">
+                    <div className="min-w-0">
                         <h2 className="text-lg font-header font-bold text-coffee">Weekly Attendance</h2>
-                        <p className="text-sm text-coffee-500">Week ending {currentWeekStats?.weekId || 'N/A'}</p>
+                        {/* The date is one token. Left to wrap it broke at its own
+                            hyphens — "Week ending 2026-08-" / "21" — which reads as
+                            two different dates for a moment. Only the date is held
+                            together; the words before it may still wrap. */}
+                        <p className="text-sm text-coffee-500">
+                            Week ending <span className="whitespace-nowrap">{currentWeekStats?.weekId || 'N/A'}</span>
+                        </p>
                     </div>
                     <button
                         onClick={handleDownloadAttendance}
                         disabled={isDownloading}
-                        className="flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl text-sm font-bold hover:bg-saffron/90 transition-colors disabled:opacity-50"
+                        className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl text-sm font-bold hover:bg-saffron/90 transition-colors disabled:opacity-50"
                     >
                         {isDownloading ? (
                             <Loader2 size={16} className="animate-spin" />

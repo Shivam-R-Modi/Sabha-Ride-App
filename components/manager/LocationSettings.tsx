@@ -165,7 +165,12 @@ export const LocationSettings: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                    <div>
+                    {/* `min-w-0`: a grid child will not shrink below its own
+                        content, and a native time control reports a wide
+                        intrinsic size on iOS — enough to push this two-up row
+                        past the card edge. Measured as a no-op where it already
+                        fits, so it costs nothing where it is not needed. */}
+                    <div className="min-w-0">
                         <label className="block text-xs font-medium text-coffee-700 mb-1">
                             Default Start
                         </label>
@@ -181,7 +186,7 @@ export const LocationSettings: React.FC = () => {
                             className="w-full px-3 py-2 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron disabled:opacity-50"
                         />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                         <label className="block text-xs font-medium text-coffee-700 mb-1">
                             Default End
                         </label>

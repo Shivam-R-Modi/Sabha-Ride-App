@@ -167,7 +167,12 @@ export const RecurringSabha: React.FC = () => {
                     <legend className="text-xs font-semibold text-coffee-700 mb-2">
                         Which day{days.length > 1 ? 's' : ''}?
                     </legend>
-                    <div className="flex flex-wrap gap-2 mb-4">
+                    {/* A 4-wide grid, not flex-wrap. Seven chips sized to their
+                        own labels wrapped 5 + 2 and left a ragged second row; a
+                        grid gives 4 + 3 with every chip the same width. Not
+                        7-across: that would put each chip under the 44px
+                        minimum touch target at 390px. */}
+                    <div className="grid grid-cols-4 gap-2 mb-4">
                         {DAYS.map(day => {
                             const on = days.includes(day.value);
                             return (
@@ -189,7 +194,12 @@ export const RecurringSabha: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 mb-4">
-                        <label className="block">
+                        {/* `min-w-0`: a grid child will not shrink below its own
+                            content, and a native time control reports a wide
+                            intrinsic size on iOS — enough to push this two-up row
+                            past the card edge. Measured as a no-op where it
+                            already fits. */}
+                        <label className="block min-w-0">
                             <span className="text-xs font-semibold text-coffee-700">Starts</span>
                             <input
                                 type="time"
@@ -199,7 +209,7 @@ export const RecurringSabha: React.FC = () => {
                                            bg-surface text-sm text-coffee"
                             />
                         </label>
-                        <label className="block">
+                        <label className="block min-w-0">
                             <span className="text-xs font-semibold text-coffee-700">Ends</span>
                             <input
                                 type="time"

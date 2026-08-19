@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-18** (banner theme, mobile dock).
+at the end. Last updated **2026-08-18** (mobile layout polish).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -74,10 +74,11 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-DuHkD1EE.js` / css `index-DXyTT9ex.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **794** · rules **89** —
-**1391 total**.
+**Test suites, all green:** `functions` **508** · client **800** · rules **89** —
+**1397 total**.
 
-**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed EXCEPT the last section** — *mobile layout
+polish* — which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1265,6 +1266,75 @@ Released hosting-only on 2026-08-18 — bundle `index-CBEY3OUO.js`, css
 the stylesheet carries `clay-bottom-drawer` and the `dropdown` rung, the bundle
 carries both More labels, and the old inverted panel markup appears **zero**
 times.
+
+---
+
+## 2026-08-18: mobile layout polish, and a measurement that was wrong twice
+
+Five phone screenshots. The complaints were "misalignment" and sizes; the causes
+were shared, not per-screen.
+
+### The one real defect: header actions wrapped their own labels
+
+"Add Vehicle" and "Download CSV" were each broken across two lines beside titles
+also broken across two lines. **This is a flex default, not a size choice.** In
+`justify-between` a flex child will not shrink below its own content — but its
+content is TEXT, whose minimum is one WORD, not one line. So the button narrowed
+to the width of "Download" and put "CSV" underneath.
+
+`shrink-0 whitespace-nowrap` on the action and `min-w-0` on the title block: the
+title gives way, the control keeps its shape. Measured in a browser against the
+real stylesheet:
+
+| header | width | before | after |
+|---|---|---|---|
+| Fleet | 345px | "Add Vehicle" on 2 lines | 1 line |
+| Weekly Attendance | 297px | "Download CSV" on 2 lines | 1 line |
+
+### Two measurements that were wrong, and how
+
+Both worth recording, because both would have produced a confident wrong answer.
+
+1. **`getClientRects()` on a block element returns ONE rect** — the border box,
+   not one per line. The first run reported "nothing wraps anywhere", which
+   contradicted the screenshot. A `Range` over the text node gives one rect per
+   line box, and that immediately showed 2 lines.
+2. **The card width is not the page width.** The page has `p-6` and the card
+   inside it has `p-6` again: 393 − 48 − 48 = **297px**, not 345px. Measured at
+   345px the Weekly header does not wrap at all. Measuring the wrong box said
+   "no bug" for a bug that is in the screenshot.
+
+### Smaller fixes
+
+- **The week-ending date broke at its own hyphens** — "Week ending 2026-08-" /
+  "21", which reads as two dates until you look twice. The date is wrapped in a
+  `whitespace-nowrap` span; the words before it may still wrap.
+- **Day chips** wrapped 5 + 2 at widths from 44px to 54px. A 4-wide grid gives
+  4 + 3 with every chip 68px. **Not 7-across:** `min-w-11` fights a 7-column
+  track at 297px, and the measured result was SEVEN rows of one chip each.
+
+### Not verified: the time inputs
+
+The Setup screenshots suggest the two-up `Default Start` / `Default End` row is
+overflowing its card on iOS. `min-w-0` is on the grid cells now, which is the
+standard fix — a grid child will not shrink below its content, and a native time
+control reports a wide intrinsic size on iOS.
+
+**But it could not be reproduced here.** Chromium's time control shrinks happily
+even at a 200px container, so the fix measured as an exact no-op at every width
+tried (326, 240, 200). It is applied on the strength of the screenshot and a
+known mechanism, not on a reproduction. **Worth a look on the phone.**
+
+### Left alone deliberately
+
+The stat cards on Reports look uneven because "STUDENTS SERVED" wraps and "THIS
+WEEK" does not — but the 40px icon pins the row height, so the numbers below DO
+align and the cards are the same height. Nothing to fix; changing it would be
+churn.
+
+6 new tests (client **794 → 800**), three deliberate breakages each confirmed to
+fail. The guard reads button classNames out of the source and **throws** on a
+label it cannot find, so it cannot pass vacuously.
 
 ---
 

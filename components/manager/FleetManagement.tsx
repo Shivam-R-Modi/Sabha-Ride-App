@@ -135,19 +135,22 @@ export const FleetManagement: React.FC = () => {
         // desktop window while every sibling page stayed in the same column.
         <div className="space-y-6 p-6 max-w-3xl mx-auto animate-in fade-in duration-300">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-saffron/10 flex items-center justify-center">
+            {/* See the note in ManagerReports: the action keeps its width and
+                the title wraps, not the other way round. `shrink-0` on the icon
+                too, or it squashes from a square into a slot. */}
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 shrink-0 rounded-xl bg-saffron/10 flex items-center justify-center">
                         <Shield size={20} className="text-saffron" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                         <h1 className="text-xl font-header font-bold text-coffee">Fleet Management</h1>
                         <p className="text-sm text-coffee-500">Manage your vehicle fleet</p>
                     </div>
                 </div>
                 <button
                     onClick={handleAddVehicle}
-                    className="flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl font-semibold hover:bg-saffron/90 transition-colors"
+                    className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl font-semibold hover:bg-saffron/90 transition-colors"
                 >
                     <Plus size={18} />
                     Add Vehicle
