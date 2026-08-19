@@ -293,29 +293,6 @@
    Use for: Weekly Notice, Tips, Info boxes
    ═══════════════════════════════════════════════════════════════ */
 
-.clay-card-notice {
-  background: linear-gradient(145deg,
-      rgb(var(--notice-1)) 0%,
-      rgb(var(--notice-2)) 50%,
-      rgb(var(--notice-3)) 100%);
-  border-radius: var(--clay-radius-md);
-  padding: var(--card-padding-sm);
-
-  /* --notice-shadow, NOT --gold. Gold on cream is a warm lift; the same gold on
-     a near-black dashboard is a glow around the card, which is what this looked
-     like in dark mode. The token is gold in light and black in dark, so the cast
-     shadow is matte there — matching every other card, and matching the rule
-     theme-contrast.test.ts pins: on dark, depth comes from lightness, not from a
-     shadow that cannot be seen. */
-  box-shadow:
-    6px 6px 20px 0 rgb(var(--notice-shadow) / 0.2),
-    inset 6px 6px 12px 0 rgb(var(--shadow-glow) / 0.8),
-    inset -3px -3px 10px 0 rgb(var(--notice-shadow) / 0.1);
-
-  border: 1px solid rgb(var(--shadow-glow) / 0.9);
-  transition: var(--clay-transition);
-}
-
 /* ═══════════════════════════════════════════════════════════════
    2. CLAY BUTTONS
    ═══════════════════════════════════════════════════════════════ */

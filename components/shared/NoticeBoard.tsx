@@ -68,7 +68,7 @@ const NoticeCard: React.FC<{ notice: Notice }> = ({ notice }) => {
     const [imageFailed, setImageFailed] = useState(false);
 
     return (
-        <article className="clay-card-notice p-4 text-left">
+        <article className="clay-card p-4 text-left">
             {notice.imageUrl && !imageFailed && (
                 <img
                     src={notice.imageUrl}
@@ -100,7 +100,7 @@ const NoticeCard: React.FC<{ notice: Notice }> = ({ notice }) => {
  * changes every week.
  */
 const AgendaCard: React.FC<{ agenda: string }> = ({ agenda }) => (
-    <article className="clay-card-notice p-4 text-left">
+    <article className="clay-card p-4 text-left">
         <p className="text-[10px] font-bold uppercase tracking-wider text-saffron-800 mb-1.5">
             Sabha agenda
         </p>
