@@ -72,13 +72,12 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-DuHkD1EE.js` / css `index-DXyTT9ex.css`, verified by CONTENT |
+| Hosting | ✅ | bundle `index-BCKCNHiN.js` / css `index-Ms4Cnfwp.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **508** · client **800** · rules **89** —
 **1397 total**.
 
-**Everything in this file is deployed EXCEPT the last section** — *mobile layout
-polish* — which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1331,6 +1330,11 @@ The stat cards on Reports look uneven because "STUDENTS SERVED" wraps and "THIS
 WEEK" does not — but the 40px icon pins the row height, so the numbers below DO
 align and the cards are the same height. Nothing to fix; changing it would be
 churn.
+
+Released as bundle `index-BCKCNHiN.js` / css `index-Ms4Cnfwp.css`. All three
+header buttons verified present in the LIVE bundle by counting OCCURRENCES —
+`grep -c` counts lines, and a minified bundle is a few very long ones, so it
+reported 2 of 3 and looked like a missing button.
 
 6 new tests (client **794 → 800**), three deliberate breakages each confirmed to
 fail. The guard reads button classNames out of the source and **throws** on a
