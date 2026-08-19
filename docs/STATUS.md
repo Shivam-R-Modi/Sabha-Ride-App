@@ -1882,6 +1882,24 @@ pre-existing errors. It is now **0**. Do not treat 0 as suspicious.
 
 Deployed, client only. Four screenshots, three separate problems.
 
+**FINAL STATE FIRST, because the glow fix below was superseded within the hour.**
+The notice board now uses **`clay-card`** — the ordinary card — and
+`.clay-card-notice`, `--notice-1/2/3` and `--notice-shadow` are **deleted**. The
+owner's call on seeing the toned-down version: *"No need to make it stand out. keep
+it like other plain cards."*
+
+Deleted rather than adjusted, because dead CSS nothing renders is how a "slightly
+tinted" version quietly returns. `tests/quality/notice-card-plain.test.ts` pins that
+no `--notice-` token or `.clay-card-notice` rule survives, and carries the reasoning
+as the objection to answer if a notice ever genuinely needs its own treatment.
+
+Order mattered: `silent-css.test.ts` asserts every `clay-*` class a component uses is
+actually written, so deleting the rule before switching the components fails the
+sweep. Verified by doing exactly that on purpose.
+
+The rest of this section is kept because **the diagnosis is still the lesson**, even
+though the tuning it describes no longer ships.
+
 ### The glow had TWO causes, and the second hides behind the first
 
 **The cast shadow was painted in `--gold`.** On cream that is a warm lift. On a
