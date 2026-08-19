@@ -18,6 +18,7 @@ import {
     type PresenceClaim, type Verdict,
 } from '../../src/utils/presence';
 import type { RiderState, SplitInfo, DismissedInfo } from '../../src/utils/riderState';
+import { PushPrompt } from '../shared/PushPrompt';
 
 /**
  * The rider's home screen: ONE card, ONE action.
@@ -326,6 +327,10 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
                     <div className="space-y-3">
                         {state.split && <SplitNotice split={state.split} />}
                         {ride && <RideStatusCard ride={ride} />}
+                        {/* Asked here, not at signup: a ride has just been
+                            arranged, so what the notification is FOR is obvious.
+                            Renders nothing unless it is fair to ask. */}
+                        <PushPrompt />
                     </div>
                 );
 

@@ -168,3 +168,65 @@ export function writeDeviceToken(
         // Push still works this session; it just forgets which token was ours.
     }
 }
+
+// ── When to ask ─────────────────────────────────────────────────────────────
+//
+// The OS dialog is one-shot. On iOS a refusal cannot be undone without going
+// into Settings, so we never spend it until the person has said yes to a
+// reversible question of our own — and we stop asking that question quickly.
+
+export const PUSH_DISMISS_KEY = 'sabha-push-dismissed';
+
+/** Deliberately not exported as a bare number; the unit is easy to misread. */
+const ASK_AGAIN_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_DISMISSALS = 2;
+
+export interface PushDismissals {
+    count: number;
+    lastAt: number;
+}
+
+export function readPushDismissals(storage?: Pick<Storage, 'getItem'>): PushDismissals {
+    try {
+        const raw = (storage ?? globalThis.localStorage)?.getItem(PUSH_DISMISS_KEY);
+        if (!raw) return { count: 0, lastAt: 0 };
+        const parsed = JSON.parse(raw) as Partial<PushDismissals>;
+        return {
+            count: typeof parsed.count === 'number' ? parsed.count : 0,
+            lastAt: typeof parsed.lastAt === 'number' ? parsed.lastAt : 0,
+        };
+    } catch {
+        // Unreadable or malformed is the same as never dismissed.
+        return { count: 0, lastAt: 0 };
+    }
+}
+
+export function writePushDismissals(
+    value: PushDismissals,
+    storage?: Pick<Storage, 'setItem'>,
+): void {
+    try {
+        (storage ?? globalThis.localStorage)?.setItem(PUSH_DISMISS_KEY, JSON.stringify(value));
+    } catch {
+        // Worst case we ask once more than intended. Not worth failing over.
+    }
+}
+
+/**
+ * Whether to show the pre-prompt.
+ *
+ * Only ever for `off`. Never for `blocked` (asking again cannot help — the OS
+ * will not show the dialog), never for `needs-install` (an iOS tab cannot
+ * receive push, and tapping would burn the one prompt), never for `on`, never
+ * for `unsupported`.
+ */
+export function shouldOfferPush(input: {
+    availability: PushAvailability;
+    dismissals: PushDismissals;
+    now: number;
+}): boolean {
+    if (input.availability !== 'off') return false;
+    if (input.dismissals.count >= MAX_DISMISSALS) return false;
+    if (input.dismissals.count > 0 && input.now - input.dismissals.lastAt < ASK_AGAIN_AFTER_MS) return false;
+    return true;
+}

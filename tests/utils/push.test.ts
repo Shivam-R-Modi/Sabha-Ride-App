@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 import {
     pushAvailability, pushIsPossible, isDeadTokenError, tokenKey,
     deviceLabel, readDeviceToken, writeDeviceToken,
+    shouldOfferPush, readPushDismissals, writePushDismissals,
 } from '../../src/utils/push';
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1';
@@ -165,5 +166,60 @@ describe('remembering this device token', () => {
         };
         expect(() => writeDeviceToken('t', hostile)).not.toThrow();
         expect(readDeviceToken(hostile)).toBeNull();
+    });
+});
+
+describe('shouldOfferPush — when it is fair to ask', () => {
+    const never = { count: 0, lastAt: 0 };
+    const NOW = 1_000_000_000_000;
+    const DAY = 24 * 60 * 60 * 1000;
+
+    it('asks someone who has push available and has not been asked', () => {
+        expect(shouldOfferPush({ availability: 'off', dismissals: never, now: NOW })).toBe(true);
+    });
+
+    it('never asks when the browser already refused', () => {
+        // The OS will not show the dialog again, so a prompt here is a button
+        // that cannot do anything.
+        expect(shouldOfferPush({ availability: 'blocked', dismissals: never, now: NOW })).toBe(false);
+    });
+
+    it('never asks in an iOS tab', () => {
+        // Tapping would spend the one permission prompt iOS allows on a context
+        // that can never receive push.
+        expect(shouldOfferPush({ availability: 'needs-install', dismissals: never, now: NOW })).toBe(false);
+    });
+
+    it('does not pester someone who already turned it on', () => {
+        expect(shouldOfferPush({ availability: 'on', dismissals: never, now: NOW })).toBe(false);
+    });
+
+    it('waits a week after a dismissal', () => {
+        const once = { count: 1, lastAt: NOW };
+        expect(shouldOfferPush({ availability: 'off', dismissals: once, now: NOW + 6 * DAY })).toBe(false);
+        expect(shouldOfferPush({ availability: 'off', dismissals: once, now: NOW + 8 * DAY })).toBe(true);
+    });
+
+    it('stops asking after two refusals, however long it has been', () => {
+        const twice = { count: 2, lastAt: NOW };
+        expect(shouldOfferPush({ availability: 'off', dismissals: twice, now: NOW + 365 * DAY })).toBe(false);
+    });
+});
+
+describe('dismissal storage', () => {
+    it('round-trips', () => {
+        const store = new Map<string, string>();
+        const storage = {
+            getItem: (k: string) => store.get(k) ?? null,
+            setItem: (k: string, v: string) => { store.set(k, v); },
+        };
+        writePushDismissals({ count: 1, lastAt: 42 }, storage);
+        expect(readPushDismissals(storage)).toEqual({ count: 1, lastAt: 42 });
+    });
+
+    it('treats corrupt or absent data as never dismissed', () => {
+        expect(readPushDismissals({ getItem: () => 'not json' })).toEqual({ count: 0, lastAt: 0 });
+        expect(readPushDismissals({ getItem: () => null })).toEqual({ count: 0, lastAt: 0 });
+        expect(readPushDismissals({ getItem: () => { throw new Error('x'); } })).toEqual({ count: 0, lastAt: 0 });
     });
 });

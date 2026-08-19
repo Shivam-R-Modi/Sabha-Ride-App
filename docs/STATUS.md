@@ -74,8 +74,8 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-Bq42l6mm.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **521** · client **858** · rules **89** —
-**1468 total**.
+**Test suites, all green:** `functions` **521** · client **874** · rules **89** —
+**1484 total**.
 
 **Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
@@ -1822,13 +1822,42 @@ The toggle renders null ONLY for `unsupported`. For `blocked` it explains how to
 undo it, because the user can fix that — just not here — and Profile is where
 they will look. An invisible control is the same family of defect as a dead one.
 
+### DELIVERY CONFIRMED on a real iPhone, 2026-08-19
+
+Three notifications landed on a locked iPhone: *Sarthi assigned*, *Sarthi on the
+way*, *Ride complete*. **This is the first time push has ever delivered in this
+app.** The privacy rewrite is visible in the result — no child's name, no
+address, no destination on the lock screen, and "Ride complete" rather than the
+old "Home Safe!".
+
+### Step 3 landed: people are now asked
+
+`components/shared/PushPrompt.tsx`, shown under the rider's assignment card and
+on the Sarthi's dashboard — at the moment the value is obvious, not at signup.
+Asking before the app has been any use is how a permission gets refused
+permanently.
+
+It is a PRE-prompt, and that is the design. The OS dialog is one-shot: on iOS a
+refusal is only undoable in Settings. So the real dialog is raised only for
+someone who already said yes to a reversible question. `shouldOfferPush` returns
+false for `blocked`, `needs-install`, `on` and `unsupported`, caps at **two**
+refusals, and waits a **week** between them.
+
+Not inside `AssignmentPreview`: that screen is an accept-or-decline decision and
+interrupting it with a permission ask is the worst possible timing.
+
+One consequence worth knowing: `RiderHome` now renders a component that reads
+`useAuth`, so its tests mock `AuthContext` the way `Layout.test.tsx` does.
+
 ### Still to do
 
-- **No prompt after first assignment yet** — the toggle is opt-in from Profile
-  only, so most people will never find it. That is step 3.
-- **"I've arrived"** and **manager broadcasts** are steps 3 and 4.
-- **Delivery has still never been observed.** There is no FCM emulator; it needs
-  a real device.
+- **"I've arrived"** — step 4. The `arriving` status is still never written.
+  Note it must go AFTER `in_progress`: `startRide` refuses anything not
+  `assigned` and fans out over that query, so an earlier placement would break a
+  grouped car.
+- **Manager broadcasts** — step 5.
+- Foreground messages still raise nothing in-app; a Sarthi with the app open
+  does not see a toast for a new assignment.
 
 **So push can now be turned on, but nobody has been asked to.**
 

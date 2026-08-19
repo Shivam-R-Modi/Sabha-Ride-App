@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RideStudent, Waypoint } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { AssignmentPreview } from './AssignmentPreview';
+import { PushPrompt } from '../shared/PushPrompt';
 import { ActiveRide } from './ActiveRide';
 import { DriverShift } from './DriverShift';
 import { CompletionScreen } from './CompletionScreen';
@@ -512,7 +513,18 @@ export const DriverDashboard: React.FC = () => {
 
             case 'dashboard':
             default:
-                return shiftCard;
+                // The prompt lives here rather than inside AssignmentPreview:
+                // that screen is an accept-or-decline decision, and interrupting
+                // it with a permission ask is the worst possible timing. It
+                // renders nothing unless it is fair to ask.
+                return (
+                    <div className="space-y-4">
+                        {shiftCard}
+                        <div className="px-4 max-w-md mx-auto">
+                            <PushPrompt />
+                        </div>
+                    </div>
+                );
         }
     };
 

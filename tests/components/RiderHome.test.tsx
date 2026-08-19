@@ -18,6 +18,18 @@ const studentReadyToLeave = vi.fn().mockResolvedValue(undefined);
 const useCurrentEvent = vi.fn();
 const useSettings = vi.fn();
 
+// RiderHome now renders PushPrompt, which needs a uid and so reads useAuth.
+// Same pattern as Layout.test.tsx: mock the context rather than wrapping every
+// test in a provider. The prompt itself renders null here — jsdom has no
+// Notification API, so push reports as unsupported.
+vi.mock('../../contexts/AuthContext', () => ({
+    useAuth: () => ({
+        currentUser: { uid: 'rider_1' },
+        userProfile: { id: 'rider_1', name: 'Asha' },
+        refreshProfile: vi.fn(),
+    }),
+}));
+
 vi.mock('../../hooks/useFirestore', () => ({
     submitWeeklyAttendance: (...a: unknown[]) => submitWeeklyAttendance(...a),
     updateAttendanceResponse: (...a: unknown[]) => updateAttendanceResponse(...a),
