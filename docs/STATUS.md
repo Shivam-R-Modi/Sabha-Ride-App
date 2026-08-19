@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-19** (notice board deployed; Storage enabled).
+at the end. Last updated **2026-08-19** (notice board + sabha agenda deployed).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -1666,18 +1666,122 @@ fast-forwarded to `0f0cfaf`.
 The emulator proves the rules; it does not prove that a photo picked on an iPhone
 uploads, renders the right way up, and is readable by another signed-in account.
 
-### Two omissions, stated plainly
+### One omission left
 
-- **The sabha `agenda` field was NOT widened.** The plan said the existing
-  `agenda` would become the long-form paragraph written through the notice
-  composer. Only the notice's optional `eventId` link to a sabha date was built.
-  So a notice can be *tied* to a sabha and expire with it, but `agenda` is
-  untouched and the two are still separate fields. Not done, not attempted.
 - **The manager dashboard does not show the board** — only the rider and Sarthi
   dashboards do. `.app-panel` is a fixed-height flex column, so an insert at the
   outer level permanently steals height from the request table, which is the one
   thing a manager needs during a sabha. It would have to go inside the `flex-1`
-  scroll region.
+  scroll region. Note the consequence now that the agenda renders in the board: a
+  manager writes the agenda and cannot see how it looks to everyone else, only the
+  one-line summary on the calendar row.
+
+(The sabha `agenda` field was the other omission here. Done 2026-08-19 — see
+below.)
+
+---
+
+## 2026-08-19: the sabha agenda was dead code, and is now long-form and visible
+
+Deployed. The plan item left out of `766c51c`. Widening the field turned out to be
+the smaller half of the job.
+
+### The field was carried perfectly through four layers to nowhere
+
+A manager typed an agenda in the Sabha Calendar → `editOccurrence` wrote it to
+`events/{date}` → the recurrence resolver carried it → `updateRideTypeContext`
+published it onto `system/rideContext` → `useCurrentEvent` read it into
+`CurrentEvent.agenda` → **and no component in the app rendered it.**
+
+Grepped every `.tsx`: outside the manager's own calendar, `agenda` appeared only
+in that hook. So a manager could write an agenda and no rider or Sarthi could ever
+see it — the repo's signature failure, four layers deep and invisible because
+every individual layer was correct. Widening a field nobody reads would only have
+produced a bigger invisible field, which is why this is three changes and not one.
+
+### What shipped
+
+- **Long-form.** Both edit surfaces — editing an occurrence and adding a one-off —
+  are textareas with a 2000-char `maxLength`. The calendar row shows
+  `agendaSummary()`: the first non-empty line, with an ellipsis whenever anything
+  was left out **including when the first line fits but more lines follow**. A
+  summary that silently drops four paragraphs reads like a one-line agenda. The row
+  previously interpolated the whole string into a single-row card.
+- **Visible.** It renders on the rider and Sarthi dashboards, **inside the notice
+  board** rather than in a panel of its own, so there is ONE place people look for
+  "what is happening" — which was the point of the board. Labelled *Sabha agenda*,
+  because an agenda belongs to a specific sabha and changes weekly, where a notice
+  does not. Plain text with `whitespace-pre-line`, exactly like a notice body; a
+  test pins that markup renders as text.
+- **Self-clearing.** `clearPastAgendas` deletes **the FIELD, never the document.**
+  The event document anchors `weeklyAttendance/{date}`, and removing it would
+  strand names, phone numbers and home addresses with no screen that could ever
+  show them again — the documented reason `events` is undeletable from the client.
+  This sweep must not become a way around that.
+
+Riders also stop *seeing* a past agenda without waiting for the sweep, because
+`system/rideContext` republishes the next sabha's agenda every minute. The nightly
+job is the durable half: it stops a year of past agendas accumulating on documents
+nobody reads again.
+
+### Checked before touching anything
+
+- Event queries are bounded `documentId() >= today` (`functions/src/utils/events.ts`),
+  so nothing regenerates or re-reads a past event — a cleared field stays cleared.
+- The attendance CSV does not include the agenda, so clearing does not rewrite
+  history.
+
+### A new trust boundary, which did not exist before
+
+`editOccurrence` and `createOneOff` write `events/{date}` **straight from the
+browser** — no callable in between — and the `events` rules validated **no fields
+at all**. Unbounded manager-authored free text on a document every signed-in client
+reads is not something to widen and leave.
+
+A 2000-character cap now lives in `firestore.rules`, and **tolerating absence is
+part of the rule**: an ordinary times-only merge never sends `agenda`, and
+requiring it would break every edit. The cap is mirrored in `src/utils/agenda.ts`
+because rules cannot import a constant, and `tests/quality/agenda-cap.test.ts`
+fails if the two drift. The dangerous direction is raising the TS constant alone —
+the composer would then accept typing that Firestore rejects, losing the manager's
+text behind a raw permission error.
+
+### The 03:00 slot now runs two jobs, deliberately uncoupled
+
+`clearPastAgendas` sits **outside** the notice sweep's `try`/`catch`, inside
+`expireNotices`. Two tests pin that either half can fail while the other still
+runs. Sharing one scheduler entry beats a second function for one bounded query,
+but only if a notice failure cannot silently skip the agendas.
+
+### Two tests that were passing for the wrong reason
+
+Both found by making the change and reading the output, not by the suite going red:
+
+- `NoticeBoard.test.tsx` never mocked `useCurrentEvent`, so the component reached
+  **real Firestore**, the agenda was always `undefined`, and the whole agenda half
+  would have looked covered while being untested. The Firestore warning in stderr
+  was the only clue.
+- `expireNotices.test.ts` mocked `firebase-admin` as a bare `() => db` with no
+  `FieldPath`/`FieldValue`. The new agenda step therefore **threw on every run** and
+  was swallowed by its own catch — ten tests stayed green while half the handler did
+  nothing. The mock now tags by collection name, the same fix
+  `DriverDashboard.test.tsx` needed.
+
+### Verification
+
+**1639 tests** — 917 client, 602 functions, 120 rules. Typecheck 0, build clean.
+
+Eight deliberate breakages, each confirmed to fail: `<` → `<=` on the date
+boundary (clears an agenda during its own sabha), the document deleted instead of
+the field, the TS cap drifting from the rules literal, the rules cap raised, the
+rules type check dropped, the board no longer rendering the agenda, the row
+inlining the raw agenda again, and the textarea reverted to an input.
+
+Deployed `firestore:rules → functions:expireNotices → hosting`, `main`
+fast-forwarded. The **live** ruleset was then read back through the Firebase Rules
+API and confirmed to contain the cap, the type check, the absence clause and both
+guarded write paths — a compile success only proves some ruleset shipped.
+Live bundle `index-P1By7aoe.js` matched the local build.
 
 ### Decisions, and the reasoning that is easy to lose
 
