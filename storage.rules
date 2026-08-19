@@ -72,7 +72,15 @@ service firebase.storage {
     // URL, because a URL alone cannot be deleted.
     match /notices/{noticeId}/{fileName} {
       allow read: if signedIn();
-      allow write: if isApprovedManager() && isReasonableImage();
+
+      // create + update, NOT `write`. `write` expands to create, update AND
+      // delete, and allow statements are OR'd — so a `write` grant here would
+      // hand managers a direct delete that the `allow delete: if false` below
+      // could not take back. It would still have failed in practice, because
+      // isReasonableImage() reads request.resource, which is null on a delete,
+      // and an errored condition denies. Security by accident is not security:
+      // naming the two methods makes the denial below the actual reason.
+      allow create, update: if isApprovedManager() && isReasonableImage();
 
       // Deletion goes through the deleteNotice callable, which removes the file
       // and the document together. A client delete could strand one without the
