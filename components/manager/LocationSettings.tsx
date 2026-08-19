@@ -164,7 +164,7 @@ export const LocationSettings: React.FC = () => {
                     )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* `min-w-0`: a grid child will not shrink below its own
                         content, and a native time control reports a wide
                         intrinsic size on iOS — enough to push this two-up row

@@ -240,16 +240,16 @@ const EventRow: React.FC<{
 
             {editing && (
                 <div className="mt-2 space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input
                             type="time" value={start} onChange={(e) => { setStart(e.target.value); setError(null); }}
                             disabled={busy}
-                            className="px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
+                            className="w-full min-w-0 px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                         />
                         <input
                             type="time" value={end} onChange={(e) => { setEnd(e.target.value); setError(null); }}
                             disabled={busy}
-                            className="px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
+                            className="w-full min-w-0 px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                         />
                     </div>
                     <input
@@ -449,16 +449,16 @@ export const SabhaCalendar: React.FC = () => {
                             disabled={busy}
                             className="w-full px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                         />
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <input
                                 type="time" value={start} onChange={(e) => { setStart(e.target.value); setAddError(null); }}
                                 disabled={busy}
-                                className="px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
+                                className="w-full min-w-0 px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                             />
                             <input
                                 type="time" value={end} onChange={(e) => { setEnd(e.target.value); setAddError(null); }}
                                 disabled={busy}
-                                className="px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
+                                className="w-full min-w-0 px-2 py-1.5 rounded-lg border border-hairline/20 text-sm focus:outline-none focus:border-saffron"
                             />
                         </div>
                         <input

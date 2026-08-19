@@ -74,10 +74,11 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-QJhcNF9l.js` / css `index-Ms4Cnfwp.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **802** · rules **89** —
-**1399 total**.
+**Test suites, all green:** `functions` **508** · client **810** · rules **89** —
+**1407 total**.
 
-**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed EXCEPT the last section** — *the iOS time
+inputs* — which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1384,6 +1385,64 @@ Released as bundle `index-QJhcNF9l.js`. Verified in the LIVE bundle: the header
 button'''s `children` is the plain string "Add Vehicle" with no element beside it,
 and the header goes straight from the `min-w-0` wrapper to the `h1` with no icon
 tile between them.
+
+---
+
+## 2026-08-18: the iOS time inputs, reported twice
+
+The Setup screen's `Default Start` / `Default End` pair looked cut off on a
+phone. The first attempt added `min-w-0` to the grid cells — the textbook fix
+for a grid child refusing to shrink — **and it changed nothing.**
+
+### Why it could not be found from here
+
+**Chromium does not have the bug.** Its time control shrinks happily, down to a
+200px container and past it. Measured before and after at 326 / 240 / 200px,
+`min-w-0` was an exact no-op at every width. The engine on this machine simply
+behaves differently from the one on the phone, so no amount of local measuring
+would ever have shown it. That is worth remembering as a category: *a fix that
+measures as a no-op locally has not been tested, it has been skipped.*
+
+### So it stopped being a diagnosis
+
+Two changes instead, and the second does not depend on being right about the
+first:
+
+1. **Fix the mechanism.** WebKit's widget claims its own width and centres its
+   value with its own margins. `index.css` now sets `appearance:none` on
+   `time` / `date` / `datetime-local` and normalises
+   `::-webkit-date-and-time-value` to `text-align:left; margin:0`, plus drops
+   the inner spin and clear buttons this app never uses.
+2. **Remove the constraint.** Every two-up time row now stacks below `sm`, so
+   each control gets the full card width and there is nothing left to overflow —
+   true whatever the widget decides it wants. Four rows across
+   `LocationSettings`, `RecurringSabha` and `SabhaCalendar` (×2).
+
+`SabhaCalendar`'s inputs also had no `w-full` at all — they were bare grid
+children, which is the worst version of this — so they got `w-full min-w-0` too.
+
+### What was verified, and where
+
+Measured in a real browser against the built stylesheet:
+
+| | result |
+|---|---|
+| narrow viewport | stacked, full width, **0px overflow** at 297 and 272 |
+| 900px viewport | side by side, 294px each, **12px gap**, no overflow |
+| control still works | focusable, accepts values, `showPicker()` present |
+| value alignment | `text-align: start`, `margin: 0px` |
+| desktop picker indicator | still `inline-block` — **not** hidden |
+
+That last row is a deliberate guard: hiding the calendar picker indicator would
+have removed the only affordance on desktop, so a test fails if it is ever added
+to the hidden list.
+
+**Still not confirmed on the device itself.** The stacking is deterministic and
+does not rely on the diagnosis, but the phone is the only place that can say so.
+
+8 new tests (client **802 → 810**), three deliberate breakages each confirmed to
+fail: normalisation removed, a row back on a bare two-column grid, and
+over-reaching to hide the desktop picker.
 
 ---
 

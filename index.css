@@ -231,6 +231,52 @@ p {
 }
 
 /* Focus Visible - Global */
+/* ── Native date and time controls ──────────────────────────────────────────
+   
+   iOS Safari renders these as a native widget that reports a wide intrinsic
+   size and will NOT shrink to its container, so a two-up row of them overflows
+   its card and the value reads as cut off. Reported twice from a phone.
+
+   This could not be reproduced on the desktop engine — Chromium shrinks its
+   time control happily even in a 200px box, so an earlier `min-w-0` on the grid
+   cells measured as an exact no-op and shipped without fixing anything. These
+   rules target the WebKit widget itself, which is the part that differs:
+
+     appearance:none            drop the native widget for a plain field, which
+                                is what stops it claiming its own width
+     ::-webkit-date-and-time-value
+                                the value is centred with its own margins by
+                                default; left-align it and take the margins off
+                                so it cannot sit outside the box it is given
+     inner-spin / clear button  space reserved for controls this app never uses
+
+   The calendar picker indicator is deliberately NOT hidden — that is the only
+   affordance on desktop. */
+input[type="time"],
+input[type="date"],
+input[type="datetime-local"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+}
+
+input[type="time"]::-webkit-date-and-time-value,
+input[type="date"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+    min-width: 0;
+}
+
+input[type="time"]::-webkit-inner-spin-button,
+input[type="date"]::-webkit-inner-spin-button,
+input[type="datetime-local"]::-webkit-inner-spin-button,
+input[type="time"]::-webkit-clear-button,
+input[type="date"]::-webkit-clear-button {
+    -webkit-appearance: none;
+    display: none;
+}
+
 *:focus-visible {
     outline: 3px solid var(--saffron-orange, rgb(var(--accent)));
     outline-offset: 2px;
