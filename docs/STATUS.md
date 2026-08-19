@@ -71,8 +71,8 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 |---|---|---|
 | Firestore rules | ✅ | Unchanged since the redesign |
 | Firestore indexes | ✅ | Redeployed |
-| Cloud Functions | ✅ | **19** functions (`sarthiArrived` added). `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
-| Hosting | ✅ | bundle `index-DBh5txYI.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
+| Cloud Functions | ✅ | **20** functions (`sarthiArrived`, `managerBroadcast` added). `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
+| Hosting | ✅ | bundle `index-4uVxg9FQ.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
 **Test suites, all green:** `functions` **546** · client **874** · rules **89** —
 **1509 total**.
