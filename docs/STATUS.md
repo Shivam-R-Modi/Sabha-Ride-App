@@ -1878,6 +1878,79 @@ pre-existing errors. It is now **0**. Do not treat 0 as suspicious.
 
 ---
 
+## 2026-08-19: the notice card glowed in dark mode, and two other things
+
+Deployed, client only. Four screenshots, three separate problems.
+
+### The glow had TWO causes, and the second hides behind the first
+
+**The cast shadow was painted in `--gold`.** On cream that is a warm lift. On a
+near-black dashboard the same gold at 20% around a card IS a glow — there is
+nothing behind it for a light-coloured shadow to be a shadow ON.
+`theme-contrast.test.ts` already states the principle: on dark, elevation comes
+from **lightness**, because a cast shadow cannot be seen. So a TINTED cast shadow
+is never depth. It can only be glow. Worth remembering the next time a card needs
+"a bit of warmth" in dark mode.
+
+**The dark background ramp also climbed too fast.** 46 39 22 → 71 58 28 is a
+25-step rise, beside a surface ramp that climbs 16 — steeper *and* far more
+saturated, so the card brightened towards one corner like a light source. Fixing
+only the shadow would have left half the effect and looked like the fix had not
+worked.
+
+Now `--notice-shadow` (gold in light, black in dark) and a 16-step ramp matching
+surface, still warm enough to read as a notice rather than an ordinary card.
+A **token**, not a `[data-theme]` override: claymorphism.css contains no theme
+selectors at all, because theme.css re-pointing tokens IS the architecture.
+
+### Why the Sarthi dashboard looked worse than the rider's
+
+The owner spotted it as "Bhulku dashboard is more clean". The cause:
+
+**`DriverShift` owns the page.** Its own `px-4 pt-6 pb-6` wrapper and the
+`<header>` carrying the Sarthi's name. So placing the board around it in
+`DriverDashboard` put it ABOVE that header — flush against the app chrome, with the
+page's only title pushed below a wall of text. `RiderHome` renders
+header → board → card, which is exactly why that screen looked composed.
+
+`DriverShift` now takes an `afterHeader` slot, so the order matches: name, board,
+action. A slot rather than an import, because it has no business knowing about
+notices — and its POSITION is what the tests pin, not merely that it renders.
+
+### A long agenda buried the primary action
+
+2000 characters rendered whole fills a phone and pushes what each dashboard is FOR
+below the fold: the rider's request button, the Sarthi's "go on shift". Both
+screenshots show it happening.
+
+Long text now collapses to six lines with a "Read more". **The clamp and the button
+come from one call to `isLongForCard`**, so text can never be clipped without a
+control to open it — silently truncated text reads as a short notice, and nobody
+scrolls for the rest.
+
+Deliberately a heuristic on the text rather than a measurement of the rendered box.
+Measuring meant `getClientRects()`, which returns one rect for a block element
+instead of one per line, and had already reported "nothing wraps" against a
+screenshot that plainly wrapped. A character count cannot be wrong in that
+direction: at worst a "Read more" appears on something that would just have fitted.
+
+### Verified in the BUILT and LIVE css, not the JSX
+
+A clamp class Tailwind never generated would be exactly the silent-CSS failure this
+repo guards against, and the JSX looks identical either way. So the live stylesheet
+was fetched and checked:
+
+- `line-clamp-6{overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6}`
+- `--notice-shadow: 212 175 55` and `--notice-shadow: 0 0 0` both present
+- zero occurrences of `gold` inside the `.clay-card-notice` rule
+
+1681 tests (959 client, 602 functions, 120 rules), typecheck 0. Five deliberate
+breakages caught: shadow back to `--gold`, the dark shadow token made warm, the
+steep ramp restored, the clamp applied with no expand button, and the slot moved
+above the header.
+
+---
+
 ## Reading production without guessing
 
 Admin-SDK scripts live in the session scratchpad (regenerate as needed; they are
