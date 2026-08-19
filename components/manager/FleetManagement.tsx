@@ -3,7 +3,7 @@ import { useVehicles, deleteVehicle } from '../../hooks/useFirestore';
 import { Vehicle } from '../../types';
 import { VehicleForm } from './VehicleForm';
 import { VehicleList } from './VehicleList';
-import { Plus, Shield, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { managerReleaseVehicle } from '../../src/utils/cloudFunctions';
 import { useConfirm } from '../shared/useConfirm';
 
@@ -135,24 +135,35 @@ export const FleetManagement: React.FC = () => {
         // desktop window while every sibling page stayed in the same column.
         <div className="space-y-6 p-6 max-w-3xl mx-auto animate-in fade-in duration-300">
             {/* Header */}
-            {/* See the note in ManagerReports: the action keeps its width and
-                the title wraps, not the other way round. `shrink-0` on the icon
-                too, or it squashes from a square into a slot. */}
+            {/* Title, subtitle, action — the same shape as ManagerReports, which
+                never had a header icon.
+
+                The decorative shield that used to sit here cost 52px (a 40px tile
+                plus the 12px gap) out of 345px, and that was the whole reason
+                BOTH lines wrapped: measured at 390px it was title 2 lines /
+                subtitle 2 lines / header 96px tall, and without it 1 / 1 / 48px.
+                Shrinking the type instead does nothing — text-lg still wraps to
+                two lines, because the constraint was never the font size.
+
+                See the note in ManagerReports for why the action is `shrink-0`
+                and the text `min-w-0`. */}
             <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 shrink-0 rounded-xl bg-saffron/10 flex items-center justify-center">
-                        <Shield size={20} className="text-saffron" />
-                    </div>
-                    <div className="min-w-0">
-                        <h1 className="text-xl font-header font-bold text-coffee">Fleet Management</h1>
-                        <p className="text-sm text-coffee-500">Manage your vehicle fleet</p>
-                    </div>
+                <div className="min-w-0">
+                    <h1 className="text-xl font-header font-bold text-coffee">Fleet Management</h1>
+                    <p className="text-sm text-coffee-500">Manage your vehicle fleet</p>
                 </div>
+                {/* Text only. Dropping the `+` returns 26px to the row — the
+                    button measured 151px with it and 125px without — and a
+                    button centres its own text, so no flex is needed once the
+                    glyph is gone.
+
+                    That 26px alone did NOT unwrap the title; removing the header
+                    icon above is what did. Recorded because the opposite is the
+                    obvious guess. */}
                 <button
                     onClick={handleAddVehicle}
-                    className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl font-semibold hover:bg-saffron/90 transition-colors"
+                    className="shrink-0 whitespace-nowrap px-4 py-2 bg-saffron text-white rounded-xl font-semibold hover:bg-saffron/90 transition-colors"
                 >
-                    <Plus size={18} />
                     Add Vehicle
                 </button>
             </div>

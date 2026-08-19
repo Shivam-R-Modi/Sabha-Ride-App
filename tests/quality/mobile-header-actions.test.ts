@@ -71,6 +71,43 @@ describe('header actions keep their shape', () => {
     });
 });
 
+/** The children of the `<button>` containing `label`, with the opening tag cut off. */
+function buttonChildren(source: string, label: string): string {
+    const chunk = source
+        .split('<button')
+        .slice(1)
+        .map(part => part.split('</button>')[0]!)
+        .find(part => part.includes(label));
+
+    if (chunk === undefined) throw new Error(`no <button> containing "${label}"`);
+    // Everything after the opening tag closes. No attribute here contains '>'.
+    return chunk.slice(chunk.indexOf('>') + 1);
+}
+
+describe('the Fleet header carries no decoration', () => {
+    it('the Add Vehicle button is text, with no + glyph', () => {
+        // Asked for directly. A JSX element among the children is the icon
+        // coming back, whichever icon it happens to be.
+        const children = buttonChildren(read('components/manager/FleetManagement.tsx'), 'Add Vehicle');
+
+        expect(children.includes('<'), `an element is back inside the button:${children}`).toBe(false);
+    });
+
+    it('the header itself has no icon tile either', () => {
+        // Measured at 393pt: the 40px tile plus its 12px gap took 52px of 345px
+        // and was the whole reason the title AND subtitle both wrapped —
+        // 2 lines / 2 lines / 96px tall with it, 1 / 1 / 48px without.
+        //
+        // Shrinking the type instead does nothing: text-lg still wraps to two
+        // lines, because the constraint was never the font size. ManagerReports
+        // never had a header icon, so this also makes the two headers match.
+        const source = read('components/manager/FleetManagement.tsx');
+
+        expect(source, 'the header icon import is back').not.toMatch(/import \{[^}]*\bShield\b/);
+        expect(source, 'the header icon is back').not.toMatch(/<Shield\b/);
+    });
+});
+
 describe('text that must not be broken up', () => {
     it('the week ending date stays on one line', () => {
         // It was breaking at its own hyphens — "Week ending 2026-08-" / "21",

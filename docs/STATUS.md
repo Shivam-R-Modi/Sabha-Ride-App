@@ -74,10 +74,11 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-BCKCNHiN.js` / css `index-Ms4Cnfwp.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **800** · rules **89** —
-**1397 total**.
+**Test suites, all green:** `functions` **508** · client **802** · rules **89** —
+**1399 total**.
 
-**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed EXCEPT the last section** — *the Fleet
+header* — which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1339,6 +1340,46 @@ reported 2 of 3 and looked like a missing button.
 6 new tests (client **794 → 800**), three deliberate breakages each confirmed to
 fail. The guard reads button classNames out of the source and **throws** on a
 label it cannot find, so it cannot pass vacuously.
+
+---
+
+## 2026-08-18: the Fleet header, and the thing that was actually wrapping it
+
+Asked to drop the `+` from "Add Vehicle" and align the header properly. The
+first half was the ask; the second half needed measuring, and the obvious guess
+was wrong.
+
+**Removing the `+` did not unwrap the title.** It returned 26px — the button
+measured 151px with the glyph and 125px without — but at 393pt the title and
+subtitle both still broke across two lines.
+
+**Shrinking the type did not help either.** `text-lg` in place of `text-xl` gave
+exactly the same 2 lines / 2 lines / 96px. The constraint was never the font.
+
+**The decorative shield tile in the header was the whole cause.** 40px plus a
+12px gap is 52px out of 345px:
+
+| header at 393pt | title | subtitle | height |
+|---|---|---|---|
+| shield + `text-xl` | 2 lines | 2 lines | 96px |
+| shield + `text-lg` | 2 lines | 2 lines | 96px |
+| **no shield** | **1 line** | **1 line** | **48px** |
+
+So the tile is gone. `ManagerReports` never had one, so the two manager headers
+now match. Measured across widths, with the action's top aligned to the title's
+top to the pixel:
+
+| device | title | subtitle | header |
+|---|---|---|---|
+| 393pt (iPhone 15) | 1 | 1 | 48px |
+| 375pt | 2 | 1 | 76px |
+| 320pt (SE) | 2 | 2 | 96px |
+
+It degrades rather than breaking — nothing overflows at any width from 320 to
+430.
+
+2 new tests (client **800 → 802**), both confirmed to fail when the `+` and the
+icon import are put back.
 
 ---
 
