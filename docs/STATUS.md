@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-18** (renamed to Bhulka Gaadi).
+at the end. Last updated **2026-08-19** (notice board deployed; Storage enabled).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -1592,25 +1592,92 @@ everything. The broadcast composer moved out of Setup.
 The board renders on all three dashboards, newest first, and posts **delete
 themselves** — document *and* image — once their day has passed.
 
-### BLOCKED: Cloud Storage does not exist on this project
+### DEPLOYED 2026-08-19. Storage was enabled by the owner, and enabling it found two bugs
 
-Verified with the Admin SDK, not inferred:
+Storage did not exist on this project in any form until the owner clicked
+**Storage → Get started**. That unblocked the deploy — and made two things
+checkable that had been unverifiable, both of the house failure kind: code that
+looks wired up and silently does nothing.
+
+**1. The bucket is `sabha-ride-app.firebasestorage.app`. `appspot.com` does NOT
+exist here.** Confirmed with the Admin SDK:
 
 ```
-sabha-ride-app.firebasestorage.app  exists=false
+sabha-ride-app.firebasestorage.app  exists=true
 sabha-ride-app.appspot.com          exists=false
 ```
 
-No `storage` key in `firebase.json` before this change, no `storage.rules`, no
-emulator, no `getStorage` call, not in any deploy script, and zero upload code
-anywhere in the app. `VITE_FIREBASE_STORAGE_BUCKET` was being passed to
-`initializeApp` and consumed by nothing.
+`deleteNoticeImage` called `admin.storage().bucket()` with **no name**, which
+resolves from the runtime's `FIREBASE_CONFIG` — a field that on a project of this
+vintage can still be templated with the legacy `appspot.com` name. Deleting from a
+bucket that is not there answers **404**, `ignoreNotFound: true` swallows 404, and
+the caller is told the image is gone. Every notice image would have orphaned while
+both callers logged success — defeating the entire reason the feature was asked
+for ("so that image storage doesn't fill up if it accumulates").
 
-**Someone must click Storage → Get started in the Firebase console.** It is a
-one-time, irreversible location choice, which is why it is not something to do on
-another person's behalf. Until then `firebase deploy --only storage` fails and the
-"Add an image" button cannot work — so this is committed and NOT deployed.
-Everything except the upload is finished and tested.
+Now resolved explicitly by `noticeBucketName()`, with the bucket's existence
+checked **once per instance** so a wrong or missing bucket returns `false` and logs
+loudly. A rejected check is deliberately not cached: one network blip must not
+refuse every deletion for the life of the instance. The module had been mocked in
+every other suite and had **no test of its own** — the one decision governing
+whether Storage ever gets cleaned up. It has 12 now.
+
+**2. `storage.rules` granted `allow write` beside `allow delete: if false`.** In
+Storage rules `write` expands to create + update + **delete**, and allow statements
+are **OR'd** — so the delete denial was decoration. It did deny in practice, but
+only because the condition calls `isReasonableImage()`, which reads
+`request.resource.size`, and `request.resource` is **null on a delete**, so the
+condition errored and the engine denied. Security by accident. Now
+`allow create, update`.
+
+**No behavioural test can tell those two apart, and this is worth remembering.**
+With `allow write` restored, all 16 new storage rules tests still passed —
+verified by making the change and running them. `request.resource` is always null
+on a delete, so the emulator can never see the difference. The methods named in
+the grant are pinned textually in `tests/quality/storage-rules-shape.test.ts`
+instead, in the same spirit as the other `tests/quality/` ratchets. Add one
+image-independent clause to that condition and the hole opens silently.
+
+**`storage.rules` also had no tests at all**, on a project holding children's
+data. It has 16 now, against the Storage emulator, which `test:rules` starts
+(`--only firestore,storage`). Cross-service `firestore.get()` **does** work in
+that emulator — checked, not assumed — so the manager check is genuinely covered,
+including a manager recorded only in `roles[]` and a caller with no user document
+at all.
+
+### Deployed, and how it was verified
+
+Order was `firestore:rules → storage → functions → hosting`, then `main`
+fast-forwarded to `0f0cfaf`.
+
+- `storage.rules` **compiled** — which is the real check on the cross-service
+  `firestore.get()` syntax, since a malformed rule fails the deploy.
+- `publishNotice`, `deleteNotice` and `expireNotices` all reported
+  `Successful create operation`.
+- Live bundle matched the local build: `index-DLWae5QF.js` in both, HTTP 200.
+- **Storage rules are enforced live, not default-open.** An unauthenticated read
+  of a notice path returns **403 Permission denied** — a default-open bucket would
+  have returned 404 for a missing object. Same 403 outside `notices/`.
+- **The exact production code path was exercised server-side**: resolve the bucket
+  name the way the deployed function does → `exists()` → write a probe object →
+  delete it → confirm it is gone. All four passed; the probe was cleaned up.
+
+**Still not verified, and only the owner can:** a real image upload from a phone.
+The emulator proves the rules; it does not prove that a photo picked on an iPhone
+uploads, renders the right way up, and is readable by another signed-in account.
+
+### Two omissions, stated plainly
+
+- **The sabha `agenda` field was NOT widened.** The plan said the existing
+  `agenda` would become the long-form paragraph written through the notice
+  composer. Only the notice's optional `eventId` link to a sabha date was built.
+  So a notice can be *tied* to a sabha and expire with it, but `agenda` is
+  untouched and the two are still separate fields. Not done, not attempted.
+- **The manager dashboard does not show the board** — only the rider and Sarthi
+  dashboards do. `.app-panel` is a fixed-height flex column, so an insert at the
+  outer level permanently steals height from the request table, which is the one
+  thing a manager needs during a sabha. It would have to go inside the `flex-1`
+  scroll region.
 
 ### Decisions, and the reasoning that is easy to lose
 
@@ -1661,15 +1728,19 @@ by collection name.
 
 ### Verification
 
-49 new tests (functions 546 → 574, client 874 → 887, rules 89 → 97). Deliberate
-breakages, each caught: half an image pair accepted, an image path outside
-`notices/`, a path reading like traversal, document deleted before image, a notice
-expiring during its own event, a manager able to delete a notice, and the body
-size cap dropped.
+**1589 tests** — 890 client, 586 functions, 113 rules (97 Firestore + 16 Storage).
+Typecheck 0, build clean. That is 80 new tests across the two commits
+(functions 546 → 586, client 874 → 890, rules 89 → 113).
 
-**Not verified, and cannot be until Storage exists:** a real upload. The emulator
-would prove the rules; it would not prove that a photo picked on an iPhone
-uploads, renders the right way up, and is readable by another account.
+Deliberate breakages, each confirmed to fail: half an image pair accepted, an
+image path outside `notices/`, a path reading like traversal, document deleted
+before image, a notice expiring during its own event, a manager able to delete a
+notice, the body size cap dropped, the bucket suffix set back to `appspot.com`,
+the missing-bucket guard removed, a failed bucket check cached, `allow write`
+reintroduced, and the catch-all deny removed.
+
+**A note on the typecheck baseline:** `CLAUDE.md` says a clean run is 22
+pre-existing errors. It is now **0**. Do not treat 0 as suspicious.
 
 ---
 
@@ -2490,8 +2561,9 @@ order, and what a phone session cannot do.
 The short version of that last part: **from the Claude mobile app you can read,
 edit, test, build, commit and push — you cannot deploy, and you cannot see
 production data.** Deploys happen from the owner's Mac, in the order
-`firestore:rules → functions → hosting`, then fast-forward `main`. That order is
-now encoded in `npm run deploy:prod`, so it no longer depends on remembering it.
+`firestore:rules → storage → functions → hosting`, then fast-forward `main`.
+That order is encoded in `npm run deploy:prod`, so it no longer depends on
+remembering it — `deploy:rules` now includes the `storage` target.
 
 **Testing without waiting for Friday.** [`plans/testing-plan.md`](plans/testing-plan.md)
 §4 has the method: edit the sabha's times in **Setup → Sabha Calendar** (not
