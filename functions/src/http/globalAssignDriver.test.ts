@@ -431,13 +431,13 @@ describe('globalAssignDriver — one car, one driver', () => {
         // every time — two drivers, one car.
         await expect(run(baseFixture('home-to-sabha', undefined,
             takenCar({ assignedDriverId: 'someone-else' }),
-        ))).rejects.toThrow(/assigned to another driver/i);
+        ))).rejects.toThrow(/assigned to another sarthi/i);
     });
 
     it('still refuses when the holder is recorded under the legacy name', async () => {
         await expect(run(baseFixture('home-to-sabha', undefined,
             takenCar({ currentDriverId: 'someone-else' }),
-        ))).rejects.toThrow(/assigned to another driver/i);
+        ))).rejects.toThrow(/assigned to another sarthi/i);
     });
 
     it('lets the same driver re-assign the car they already hold', async () => {

@@ -1,5 +1,5 @@
 {
-  "name": "Sabha Ride Seva",
+  "name": "Bhulka Gaadi",
   "description": "A community ride coordination app for Hindu temple gatherings, facilitating transport for students.",
   "requestFramePermissions": [
     "geolocation"

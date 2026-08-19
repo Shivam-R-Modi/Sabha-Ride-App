@@ -75,7 +75,7 @@ const MobileHeader: React.FC<{ userName: string; role: UserRole }> = () => {
           <div className="bg-saffron/10 p-2 rounded-full">
             <LotusIcon className="w-5 h-5 text-saffron" />
           </div>
-          <h1 className="font-header font-bold text-base text-coffee truncate">Sabha Ride Seva</h1>
+          <h1 className="font-header font-bold text-base text-coffee truncate">Bhulka Gaadi</h1>
         </div>
         <div className="flex items-center gap-2">
           <RoleSwitcher />
@@ -106,7 +106,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
         </div>
         {!isSidebarCollapsed && (
           <div className="animate-in fade-in slide-in-from-left-2">
-            <h1 className="font-header font-bold text-coffee leading-none">Sabha Ride</h1>
+            <h1 className="font-header font-bold text-coffee leading-none">Bhulka Gaadi</h1>
             <p className="text-[10px] text-gold-700 font-bold uppercase tracking-widest mt-1">Seva Portal</p>
           </div>
         )}

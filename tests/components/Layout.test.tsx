@@ -154,7 +154,7 @@ describe('ResponsiveLayout — focus mode still hides the chrome', () => {
         // The point of focus mode: a run screen read at arm's length in a car
         // should not be sharing the viewport with two nav bars.
         expect(screen.queryByRole('banner')).toBeNull();
-        expect(screen.queryByText('Sabha Ride Seva')).toBeNull();
+        expect(screen.queryByText('Bhulka Gaadi')).toBeNull();
         expect(screen.queryByText('History')).toBeNull();
     });
 
@@ -167,7 +167,7 @@ describe('ResponsiveLayout — focus mode still hides the chrome', () => {
 
         expect(screen.getByTestId('page')).toBeInTheDocument();
         // Sidebar/header carry the product name; its presence is the chrome.
-        expect(screen.getAllByText(/Sabha Ride/i).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/Bhulka Gaadi/i).length).toBeGreaterThan(0);
     });
 
     it('does not re-render the child once per chrome element', async () => {

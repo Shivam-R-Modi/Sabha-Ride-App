@@ -176,7 +176,7 @@ export const ManagerReports: React.FC = () => {
                         <div className="w-10 h-10 bg-[rgb(var(--success-bg))] rounded-xl flex items-center justify-center">
                             <Users className="w-5 h-5 text-[rgb(var(--success-text))]" />
                         </div>
-                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Students Served</span>
+                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Bhulka Served</span>
                     </div>
                     <p className="text-3xl font-header font-bold text-coffee">{rideStats.totalStudentsServed}</p>
                     <p className="text-xs text-coffee-500 mt-1">across all rides</p>
@@ -188,7 +188,7 @@ export const ManagerReports: React.FC = () => {
                         <div className="w-10 h-10 bg-cream-300 rounded-xl flex items-center justify-center">
                             <TrendingUp className="w-5 h-5 text-saffron" />
                         </div>
-                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Active Drivers</span>
+                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Active Sarthis</span>
                     </div>
                     <p className="text-3xl font-header font-bold text-coffee">{rideStats.activeDrivers}</p>
                     <p className="text-xs text-coffee-500 mt-1">approved volunteers</p>

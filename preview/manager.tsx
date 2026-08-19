@@ -29,7 +29,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <ToastProvider><ManagerPeople /></ToastProvider>
     </div>
     <div style={{ position: 'relative', minHeight: 700 }}>
-      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Driver picker — replaces the silent pick</p>
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Sarthi picker — replaces the silent pick</p>
       <DriverPicker open onClose={() => {}} riderName="Anita Shah" seats={4}
         drivers={drivers} loading={false} assigningId={null} onPick={() => {}} />
     </div>

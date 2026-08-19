@@ -85,14 +85,14 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
         // Get student details
         const studentDoc = await db.collection('users').doc(studentId).get();
         if (!studentDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Student not found');
+            throw new functions.https.HttpsError('not-found', 'Bhulku not found');
         }
 
         const student = studentDoc.data();
 
         // Verify the caller is the student
         if (studentId !== context.auth.uid) {
-            throw new functions.https.HttpsError('permission-denied', 'Only the student can mark themselves ready');
+            throw new functions.https.HttpsError('permission-denied', 'Only the Bhulku can mark themselves ready');
         }
 
         // HOW THEY GOT HERE IS RECORDED, NOT ENFORCED.
@@ -275,6 +275,6 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
         if (error instanceof functions.https.HttpsError) {
             throw error;
         }
-        throw new functions.https.HttpsError('internal', 'Failed to mark student ready');
+        throw new functions.https.HttpsError('internal', 'Failed to mark Bhulku ready');
     }
 });

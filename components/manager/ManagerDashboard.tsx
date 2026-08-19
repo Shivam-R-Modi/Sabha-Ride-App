@@ -25,16 +25,16 @@ const RideAssignmentCard: React.FC<{
       <div className="p-4 bg-gradient-to-br from-cream to-surface border-b border-hairline/10 flex items-center gap-4">
         <div className="relative">
           <img
-            src={driver?.avatarUrl || `https://ui-avatars.com/api/?name=${driver?.name || 'Driver'}&background=FF6B35&color=fff`}
+            src={driver?.avatarUrl || `https://ui-avatars.com/api/?name=${driver?.name || 'Sarthi'}&background=FF6B35&color=fff`}
             className="w-12 h-12 rounded-xl shadow-md border-2 border-surface"
-            alt={driver?.name || 'Driver'}
+            alt={driver?.name || 'Sarthi'}
           />
           <div className="absolute -bottom-1 -right-1 bg-[rgb(var(--success-fill))] p-1 rounded-full border-2 border-surface">
             <Car size={10} className="text-white" />
           </div>
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-header font-bold text-coffee text-lg truncate">{driver?.name || 'Unassigned Driver'}</h3>
+          <h3 className="font-header font-bold text-coffee text-lg truncate">{driver?.name || 'Unassigned Sarthi'}</h3>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-xs bg-saffron/10 text-saffron-800 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
               {driver?.carModel || driver?.currentVehicleName || 'Vehicle'}
@@ -48,7 +48,7 @@ const RideAssignmentCard: React.FC<{
         {/* Action Buttons */}
         <div className="flex items-center gap-2 shrink-0 ml-auto">
           {/* Call Driver */}
-          <a href={`tel:${driver?.phone || ''}`} className="p-2 bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] rounded-lg hover:opacity-90 transition-colors shadow-sm" title="Call Driver">
+          <a href={`tel:${driver?.phone || ''}`} className="p-2 bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] rounded-lg hover:opacity-90 transition-colors shadow-sm" title="Call Sarthi">
             <Phone size={18} />
           </a>
           {/* Release Driver */}
@@ -56,7 +56,7 @@ const RideAssignmentCard: React.FC<{
             <button
               onClick={() => onRelease(driver.id, rides.map(r => r.id))}
               className="p-2 bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))] rounded-lg hover:opacity-90 transition-colors shadow-sm"
-              title="Release Driver & Unassign Students"
+              title="Release Sarthi & Unassign Bhulka"
             >
               <LogOut size={18} />
             </button>
@@ -74,13 +74,13 @@ const RideAssignmentCard: React.FC<{
                 <div className="w-6 h-6 rounded-full bg-saffron/20 text-saffron-800 flex items-center justify-center text-xs font-bold shrink-0">
                   {index + 1}
                 </div>
-                <span className="font-bold text-coffee truncate">{ride.studentName || 'Student'}</span>
+                <span className="font-bold text-coffee truncate">{ride.studentName || 'Bhulku'}</span>
               </div>
 
               <div className="flex items-center gap-1 shrink-0">
                 {/* Call Button */}
                 {(ride.studentPhone || (ride as any).phone || (ride as any).studentContact) ? (
-                  <a href={`tel:${ride.studentPhone || (ride as any).phone || (ride as any).studentContact}`} className="p-1.5 text-[rgb(var(--success-text))] hover:bg-[rgb(var(--success-bg))] rounded-md transition-colors" title="Call Student">
+                  <a href={`tel:${ride.studentPhone || (ride as any).phone || (ride as any).studentContact}`} className="p-1.5 text-[rgb(var(--success-text))] hover:bg-[rgb(var(--success-bg))] rounded-md transition-colors" title="Call Bhulku">
                     <Phone size={14} />
                   </a>
                 ) : (
@@ -94,7 +94,7 @@ const RideAssignmentCard: React.FC<{
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 text-[rgb(var(--info-text))] hover:bg-[rgb(var(--info-bg))] rounded-md transition-colors"
-                  title="Navigate to Student"
+                  title="Navigate to Bhulku"
                 >
                   <Navigation size={14} />
                 </a>
@@ -103,7 +103,7 @@ const RideAssignmentCard: React.FC<{
                   <button
                     onClick={() => onUnassign(ride.id)}
                     className="p-1.5 text-[rgb(var(--danger-text))] hover:bg-[rgb(var(--danger-bg))] rounded-md transition-colors"
-                    title="Unassign Student"
+                    title="Unassign Bhulku"
                   >
                     <UserMinus size={14} />
                   </button>
@@ -202,7 +202,7 @@ export const ManagerDashboard: React.FC = () => {
         // Use existing driver structure from ride, or construct basic info
         const driver = ride.driver || {
           id: driverIdFromRide,
-          name: ride.driverName || 'Driver',
+          name: ride.driverName || 'Sarthi',
           userId: driverIdFromRide,
           status: 'assigned',
           currentLocation: null,
@@ -485,7 +485,7 @@ export const ManagerDashboard: React.FC = () => {
                   <span className="relative flex h-2.5 w-2.5">
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[rgb(var(--info))]"></span>
                   </span>
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Drivers Self-Assign</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Sarthis Self-Assign</span>
                 </div>
               </div>
 
@@ -536,7 +536,7 @@ export const ManagerDashboard: React.FC = () => {
           <div className="bg-surface rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in duration-200">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-header font-bold text-xl text-coffee">Release Driver</h2>
+                <h2 className="font-header font-bold text-xl text-coffee">Release Sarthi</h2>
                 <button
                   onClick={() => {
                     setShowReleaseModal(false);
@@ -565,8 +565,8 @@ export const ManagerDashboard: React.FC = () => {
                       <Users size={20} className="text-[rgb(var(--info-text))]" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-[rgb(var(--info-text))]">Clear Students (Keep Online)</h3>
-                      <p className="text-sm text-[rgb(var(--info-text))]/70">Returns students to pool. Driver stays available for new assignments.</p>
+                      <h3 className="font-bold text-[rgb(var(--info-text))]">Clear Bhulka (Keep Online)</h3>
+                      <p className="text-sm text-[rgb(var(--info-text))]/70">Returns students to pool. Sarthi stays available for new assignments.</p>
                     </div>
                   </div>
                 </button>

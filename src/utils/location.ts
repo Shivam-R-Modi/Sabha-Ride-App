@@ -1,5 +1,5 @@
 /**
- * Location Utilities for Sabha Ride Seva
+ * Location Utilities for Bhulka Gaadi
  * Includes Haversine formula for distance calculation and coordinate utilities
  */
 

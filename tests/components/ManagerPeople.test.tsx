@@ -37,7 +37,7 @@ beforeEach(() => {
 describe('ManagerPeople — the queue', () => {
     it('separates drivers from riders', () => {
         show();
-        expect(screen.getByText(/Drivers · 1/)).toBeInTheDocument();
+        expect(screen.getByText(/Sarthis · 1/)).toBeInTheDocument();
         expect(screen.getByText(/Riders · 1/)).toBeInTheDocument();
     });
 

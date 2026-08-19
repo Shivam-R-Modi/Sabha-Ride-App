@@ -91,8 +91,8 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ role, email, onCompl
             <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-8 text-center">
                 <h1 className="text-3xl md:text-4xl font-header font-bold">Complete Your Profile</h1>
                 <p className="text-sm md:text-base mt-2 opacity-90">
-                    {role === 'student' && 'Student Information'}
-                    {role === 'driver' && 'Driver Information'}
+                    {role === 'student' && 'Bhulku Information'}
+                    {role === 'driver' && 'Sarthi Information'}
                     {role === 'manager' && 'Manager Information'}
                 </p>
             </div>

@@ -22,7 +22,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
     const roles = [
         {
             id: 'student' as UserRole,
-            title: 'Student',
+            title: 'Bhulku',
             description: 'Request rides to and from Sabha',
             icon: (
                 <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -32,7 +32,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
         },
         {
             id: 'driver' as UserRole,
-            title: 'Driver',
+            title: 'Sarthi',
             description: 'Volunteer to drive students',
             icon: (
                 <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">

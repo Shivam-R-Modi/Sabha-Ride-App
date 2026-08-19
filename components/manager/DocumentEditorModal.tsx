@@ -143,8 +143,8 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                     onChange={(e) => handleFieldChange(key, e.target.value)}
                     className="w-full px-4 py-2.5 rounded-xl border border-hairline/20 text-sm focus:outline-none focus:ring-2 focus:ring-saffron bg-surface"
                   >
-                    <option value="student">Student</option>
-                    <option value="driver">Driver</option>
+                    <option value="student">Bhulku</option>
+                    <option value="driver">Sarthi</option>
                     <option value="manager">Manager</option>
                   </select>
                 </div>

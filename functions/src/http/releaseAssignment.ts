@@ -38,7 +38,7 @@ export const releaseAssignment = functions.https.onCall(async (data, context) =>
 
         // Verify the caller is the driver assigned to this ride
         if (ride?.driverId !== context.auth.uid) {
-            throw new functions.https.HttpsError('permission-denied', 'Only the assigned driver can release this assignment');
+            throw new functions.https.HttpsError('permission-denied', 'Only the assigned Sarthi can release this assignment');
         }
 
         // Check ride status - can only release if status is 'assigned'
@@ -98,7 +98,7 @@ export const releaseAssignment = functions.https.onCall(async (data, context) =>
         return {
             success: true,
             rideId,
-            message: 'Assignment released successfully. Students returned to unassigned pool.',
+            message: 'Assignment released successfully. Bhulka returned to unassigned pool.',
             studentsReturned: ride?.students?.length || 0,
             newStudentStatus
         };

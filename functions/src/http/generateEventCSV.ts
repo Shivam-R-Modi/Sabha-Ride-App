@@ -58,7 +58,7 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
         const rows: string[] = [];
 
         // Header
-        rows.push('Student Name,Phone,Pickup Address,Status,Request Date');
+        rows.push('Bhulku Name,Phone,Pickup Address,Status,Request Date');
 
         // Maximum rows to prevent timeout (can be increased if needed)
         const MAX_ROWS = 500;

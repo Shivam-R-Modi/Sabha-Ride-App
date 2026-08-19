@@ -17,9 +17,9 @@ interface RideStatusCardProps {
  * thing.
  */
 const STATUS_CONFIG: Record<RideStatus, { label: string; tone: string }> = {
-  requested: { label: 'Looking for Driver', tone: 'bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]' },
-  assigned: { label: 'Driver Assigned', tone: 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]' },
-  driver_en_route: { label: 'Driver En Route', tone: 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]' },
+  requested: { label: 'Looking for Sarthi', tone: 'bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]' },
+  assigned: { label: 'Sarthi Assigned', tone: 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]' },
+  driver_en_route: { label: 'Sarthi En Route', tone: 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]' },
   arriving: { label: 'Arriving Soon', tone: 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]' },
   in_progress: { label: 'In Progress', tone: 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]' },
   completed: { label: 'Completed', tone: 'bg-cream-300 text-coffee-700' },

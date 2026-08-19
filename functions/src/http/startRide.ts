@@ -37,7 +37,7 @@ export const startRide = functions.https.onCall(async (data, context) => {
 
         // Verify the caller is the driver assigned to this ride
         if (ride?.driverId !== context.auth.uid) {
-            throw new functions.https.HttpsError('permission-denied', 'Only the assigned driver can start this ride');
+            throw new functions.https.HttpsError('permission-denied', 'Only the assigned Sarthi can start this ride');
         }
 
         // Check ride status

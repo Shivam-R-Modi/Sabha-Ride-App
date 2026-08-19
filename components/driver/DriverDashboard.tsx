@@ -90,7 +90,7 @@ export const DriverDashboard: React.FC = () => {
                     if (!students.some(s => s.id === r.studentId)) {
                         students.push({
                             id: r.studentId,
-                            name: r.studentName || 'Student',
+                            name: r.studentName || 'Bhulku',
                             phone: r.studentPhone || '',
                             location: {
                                 lat: r.pickupLat || (r.location?.lat ?? r.location?.latitude ?? 0),
@@ -238,7 +238,7 @@ export const DriverDashboard: React.FC = () => {
                 await handBackVehicle(userProfile.currentVehicleId);
             }
             // Assign new vehicle
-            await assignVehicleToDriver(vehicle, currentUser.uid, userProfile?.name || 'Driver');
+            await assignVehicleToDriver(vehicle, currentUser.uid, userProfile?.name || 'Sarthi');
             await refreshProfile();
             setShowVehicleSelector(false);
         } catch (error) {
@@ -432,7 +432,7 @@ export const DriverDashboard: React.FC = () => {
      */
     const shiftCard = (
         <DriverShift
-            driverName={userProfile?.name || 'Driver'}
+            driverName={userProfile?.name || 'Sarthi'}
             avatarUrl={userProfile?.avatarUrl}
             onShift={isAvailable}
             vehicleName={isAvailable ? userProfile?.currentVehicleName : undefined}

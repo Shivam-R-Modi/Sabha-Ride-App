@@ -49,7 +49,7 @@ export const completeRide = functions.https.onCall(async (data, context) => {
         // Verify the caller is the driver assigned to this ride
         const targetDriverId = ride?.driverId || ride?.driver?.id;
         if (targetDriverId !== driverUid) {
-            throw new functions.https.HttpsError('permission-denied', 'Only the assigned driver can complete this ride');
+            throw new functions.https.HttpsError('permission-denied', 'Only the assigned Sarthi can complete this ride');
         }
 
         // Check ride status - allow assigned, in_progress, driver_en_route, arriving

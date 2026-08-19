@@ -103,8 +103,8 @@ describe('RideStatusCard — every status says something', () => {
 
     it('gives each status its own words', () => {
         const labels = new Map<RideStatus, RegExp>([
-            ['assigned', /Driver Assigned/i],
-            ['driver_en_route', /Driver En Route/i],
+            ['assigned', /Sarthi Assigned/i],
+            ['driver_en_route', /Sarthi En Route/i],
             ['arriving', /Arriving Soon/i],
             ['in_progress', /In Progress/i],
             ['completed', /Completed/i],

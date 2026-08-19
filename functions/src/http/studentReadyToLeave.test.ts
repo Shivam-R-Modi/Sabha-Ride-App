@@ -167,7 +167,7 @@ describe('studentReadyToLeave — who may ask', () => {
         await expect((studentReadyToLeave as any)(
             { studentId: 'stu_1', presence: { method: 'manual' } },
             { auth: { uid: 'someone_else' } },
-        )).rejects.toThrow(/only the student/i);
+        )).rejects.toThrow(/only the bhulku/i);
     });
 
     it('still refuses when no home address is set, and says so', async () => {

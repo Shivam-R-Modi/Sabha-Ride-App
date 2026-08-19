@@ -260,6 +260,6 @@ describe('driverDoneForToday — the only thing that releases, and only when cle
         makeDb({ driver: CLEAR_DRIVER, stillAssigned: [] });
 
         await expect((driverDoneForToday as any)({ driverId: 'driver_1' }, { auth: { uid: 'someone_else' } }))
-            .rejects.toThrow(/only the driver/i);
+            .rejects.toThrow(/only the sarthi/i);
     });
 });

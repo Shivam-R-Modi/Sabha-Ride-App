@@ -1,7 +1,7 @@
 {
   "name": "sabha-ride-functions",
   "version": "1.0.0",
-  "description": "Firebase Cloud Functions for Sabha Ride Seva App",
+  "description": "Firebase Cloud Functions for Bhulka Gaadi",
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",

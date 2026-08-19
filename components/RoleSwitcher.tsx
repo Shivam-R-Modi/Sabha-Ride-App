@@ -10,12 +10,12 @@ const roleConfig: Record<UserRole, { label: string; icon: React.ReactNode; color
         color: 'text-coffee'
     },
     driver: {
-        label: 'Driver',
+        label: 'Sarthi',
         icon: <Car size={16} />,
         color: 'text-[rgb(var(--info-text))]'
     },
     student: {
-        label: 'Student',
+        label: 'Bhulku',
         icon: <GraduationCap size={16} />,
         color: 'text-[rgb(var(--success-text))]'
     }

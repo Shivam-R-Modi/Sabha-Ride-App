@@ -37,8 +37,8 @@ export const ProfileEditor: React.FC = () => {
     const roleLabel = (() => {
         const role = userProfile?.role || userProfile?.activeRole;
         if (role === 'manager') return 'Seva Manager';
-        if (role === 'driver') return 'Volunteer Driver';
-        return 'Student';
+        if (role === 'driver') return 'Volunteer Sarthi';
+        return 'Bhulku';
     })();
 
     const handlePlaceSelect = (details: PlaceDetails) => {

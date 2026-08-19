@@ -1,5 +1,5 @@
 /**
- * Formatting Utilities for Sabha Ride Seva
+ * Formatting Utilities for Bhulka Gaadi
  */
 
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
@@ -168,7 +168,7 @@ export function formatRideStatus(status: string): string {
         home_safe: 'Home Safe',
         missed_pickup: 'Missed Pickup',
         // Not "Cancelled" — nobody cancelled. The window closed with no driver.
-        missed_ride: 'No Driver Available',
+        missed_ride: 'No Sarthi Available',
     };
 
     return statusMap[status] || status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
@@ -181,8 +181,8 @@ export function formatRideStatus(status: string): string {
  */
 export function formatRole(role: string): string {
     const roleMap: Record<string, string> = {
-        student: 'Student',
-        driver: 'Driver',
+        student: 'Bhulku',
+        driver: 'Sarthi',
         manager: 'Manager',
     };
 

@@ -152,7 +152,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                                     <Users size={18} className="text-[rgb(var(--info-text))]" />
                                 </div>
                                 <p className="text-xl font-bold text-coffee">{driverStats.totalStudentsToday}</p>
-                                <p className="text-xs text-coffee-500">Students</p>
+                                <p className="text-xs text-coffee-500">Bhulka</p>
                             </div>
                             <div className="text-center">
                                 <div className="w-10 h-10 rounded-full bg-cream-300 flex items-center justify-center mx-auto mb-1">

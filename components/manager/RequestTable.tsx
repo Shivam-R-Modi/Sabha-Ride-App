@@ -190,7 +190,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                   />
                 </th>
                 <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest cursor-pointer hover:text-coffee" onClick={() => sortBy('name')}>
-                  <div className="flex items-center gap-1">Student <SortArrow field="name" /></div>
+                  <div className="flex items-center gap-1">Bhulku <SortArrow field="name" /></div>
                 </th>
                 <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest">Seats</th>
                 <th className="p-4 text-xs font-bold text-coffee-500 uppercase tracking-widest hidden lg:table-cell">Pickup Address</th>
@@ -255,7 +255,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                         <button 
                             onClick={() => onAssign(req.id)}
                             className="p-2 bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] hover:bg-[rgb(var(--success-bg))] rounded-lg transition-colors"
-                            title="Assign to Driver"
+                            title="Assign to Sarthi"
                         >
                           <Check size={18} />
                         </button>

@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-18** (mobile layout polish).
+at the end. Last updated **2026-08-18** (renamed to Bhulka Gaadi).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -74,10 +74,11 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-CSXhoV4V.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **508** · client **821** · rules **89** —
-**1418 total**.
+**Test suites, all green:** `functions` **508** · client **830** · rules **89** —
+**1427 total**.
 
-**Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
+**Everything in this file is deployed EXCEPT the last section** — *the rename* —
+which is committed and swept but **not released**. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
 
 Also shipped 2026-08-17, after the rule model: the drop-off presence check
@@ -1512,6 +1513,62 @@ icon already on a home screen. It has to be removed and re-added once.
 fail. They read the PNG **header** rather than decoding the image, so no new
 dependency: that pins the declared-size bug exactly, and pins "no alpha channel",
 which is the property that lets iOS paint white in the first place.
+
+---
+
+## 2026-08-18: renamed to Bhulka Gaadi
+
+| now | was |
+|---|---|
+| **Bhulka Gaadi** | Sabha Ride / Sabha Ride Seva |
+| **Bhulku / Bhulka** | Student / Students |
+| **Sarthi / Sarthis** | Driver / Drivers |
+
+### The line this rename does NOT cross
+
+`Student` and `Driver` live in three layers here, and only one of them is copy:
+
+| layer | examples | changed? |
+|---|---|---|
+| copy | "Bhulka Served", "Looking for Sarthi" | **yes** — 46 lines, 19 files |
+| **stored** | role literals `'student'`/`'driver'`; collections `/students`, `/drivers`; ride fields `studentId`, `driverId`, `students`, `assignedStudentIds`; status `driver_en_route` | **NO** |
+| identifiers | `DriverDashboard`, `useDriverLocation`, `RideStudent`, `driverDoneForToday` | **NO** |
+
+**Renaming the middle layer would be a live data migration, not a rename.**
+Every user document in production holds `role: 'student'`, the security rules
+match on it, and custom claims are minted from it. Change the literal and the
+rules stop matching the data — a silent permission denial, or a guard that
+quietly allows, on an app holding children's names, phones and addresses.
+
+`tests/quality/vocabulary.test.ts` asserts in **both** directions: the copy has
+moved, and the wire format has not. Verified in the built bundle — zero
+occurrences of "Students Served", "Looking for Driver" or "Sabha Ride", and the
+role literals still present 18 / 19 / 5 times.
+
+### Judgement calls worth knowing
+
+- **`formatRole` is the boundary in miniature.** Its keys are the stored role
+  literals and did not move; its values are the labels people read and did.
+- **Developer logs keep the old words.** `console.error('Error marking student
+  ready:')` matches the code identifiers (`studentId`), and that is what makes a
+  log greppable. The guard skips `console.*` for this reason.
+- **The audit action label `'manually assign students'` was left alone.** Audit
+  rows are a record; changing the action mid-stream splits the trail into
+  before-and-after for no user-visible gain.
+- **Comments were left alone.** They discuss the TYPES `Driver` and `Student`.
+  An early pass rewrote one of them and it had to be undone.
+- **The Firebase project and URL are unchanged** — `sabha-ride-app.web.app`
+  stays. Renaming those is a separate job with auth-domain consequences.
+
+### Tests updated rather than weakened
+
+Nine assertions pinned the old wording — four in `functions` (which assert a
+call is REFUSED, via a regex on the message) and five in the client. Each had
+its wording updated and its strength left exactly as it was.
+
+9 new tests (client **821 → 830**), four deliberate breakages each confirmed to
+fail: old copy returning, the role literal being "finished", the collections
+being renamed in rules, and the app name reverting in the manifest.
 
 ---
 

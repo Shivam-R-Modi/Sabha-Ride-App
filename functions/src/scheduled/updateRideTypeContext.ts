@@ -143,7 +143,7 @@ async function announceIfWindowJustOpened(
         isPickup
             // Not "this Friday" any more — the date can move.
             ? 'Tap to request your ride to the next sabha.'
-            : 'Drivers are heading out. Tap when you are ready to leave.',
+            : 'Sarthis are heading out. Tap when you are ready to leave.',
         { rideType: next.rideType, reason: 'window-opened' },
     );
 }

@@ -91,7 +91,7 @@ export const ManagerPeople: React.FC = () => {
             ) : (
                 <>
                     {pendingDrivers.length > 0 && (
-                        <Section title="Drivers" count={pendingDrivers.length}>
+                        <Section title="Sarthis" count={pendingDrivers.length}>
                             {pendingDrivers.map(driver => (
                                 <PersonRow
                                     key={driver.id}

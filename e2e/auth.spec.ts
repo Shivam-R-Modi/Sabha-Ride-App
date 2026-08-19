@@ -10,7 +10,7 @@ test.describe('Authentication', () => {
     await page.goto('/');
 
     // Should show login screen
-    await expect(page.locator('text=Sabha Ride Seva')).toBeVisible();
+    await expect(page.locator('text=Bhulka Gaadi')).toBeVisible();
   });
 
   test('should handle login flow', async ({ page }) => {
@@ -28,7 +28,7 @@ test.describe('Authentication', () => {
   });
 
   // TODO: Add more auth tests after Firebase emulator setup
-  // - Student registration
+  // - Bhulku registration
   // - Role selection
   // - Profile setup
   // - Logout

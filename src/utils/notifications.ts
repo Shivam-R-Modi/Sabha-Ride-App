@@ -1,5 +1,5 @@
 /**
- * Notification Utilities for Sabha Ride Seva
+ * Notification Utilities for Bhulka Gaadi
  * Handles Firebase Cloud Messaging and browser notifications
  */
 
@@ -125,13 +125,13 @@ export function getNotificationContent(
     switch (type) {
         case 'DRIVER_ASSIGNED':
             return {
-                title: '🚗 Driver Assigned',
+                title: '🚗 Sarthi Assigned',
                 body: `${data?.driverName} will pick you up in a ${data?.carModel}`,
             };
 
         case 'STUDENTS_ASSIGNED':
             return {
-                title: '👥 Students Assigned',
+                title: '👥 Bhulka Assigned',
                 body: `You have been assigned ${data?.studentCount} students`,
             };
 
@@ -161,7 +161,7 @@ export function getNotificationContent(
 
         default:
             return {
-                title: 'Sabha Ride Seva',
+                title: 'Bhulka Gaadi',
                 body: 'You have a new notification',
             };
     }

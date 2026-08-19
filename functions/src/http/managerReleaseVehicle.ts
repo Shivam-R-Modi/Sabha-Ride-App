@@ -85,7 +85,7 @@ export const managerReleaseVehicle = functions.https.onCall(async (data, context
         if (!live.empty) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
-                `${vehicle.assignedDriverName || 'That driver'} is on a run with `
+                `${vehicle.assignedDriverName || 'That Sarthi'} is on a run with `
                 + `${live.size} ride(s). Release their riders first, or wait until they finish.`,
             );
         }

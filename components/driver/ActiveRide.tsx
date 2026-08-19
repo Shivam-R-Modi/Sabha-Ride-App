@@ -289,7 +289,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
 
             {/* Student List */}
             <div className="px-4 mt-6">
-                <h3 className="text-sm font-bold text-coffee-500 uppercase tracking-wider mb-3">Students</h3>
+                <h3 className="text-sm font-bold text-coffee-500 uppercase tracking-wider mb-3">Bhulka</h3>
                 <div className="space-y-3">
                     {ride.students.map((student) => {
                         const routePoint = ride.route.find(r => r.studentId === student.id);

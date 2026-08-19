@@ -23,7 +23,7 @@ const states: [string, RiderState][] = [
   ['Not answered yet', { kind: 'attendance-unanswered' }],
   ['Can request', { kind: 'can-request' }],
   ['Waiting', { kind: 'waiting-for-driver' }],
-  ['Driver assigned', { kind: 'driver-assigned', split: null }],
+  ['Sarthi assigned', { kind: 'driver-assigned', split: null }],
   ['Split across two cars', { kind: 'driver-assigned', split: { totalSeats: 5, assignedSeats: 3, waitingSeats: 2, driverName: 'Ramesh' } }],
   ['Ready to leave', { kind: 'ready-to-leave' }],
   ['In queue home', { kind: 'in-dropoff-queue' }],

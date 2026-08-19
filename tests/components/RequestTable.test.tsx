@@ -206,7 +206,7 @@ describe('RequestTable — sorting', () => {
             ],
         });
 
-        const nameHeader = within(table()).getByText('Student');
+        const nameHeader = within(table()).getByText('Bhulku');
         const namesNow = () =>
             within(table()).getAllByText(/Anita Shah|Zara Mehta/).map(n => n.textContent);
 
@@ -227,7 +227,7 @@ describe('RequestTable — acting on a request', () => {
         const onAssign = vi.fn();
         renderTable({ requests: [request({ id: 'req-42' })], onAssign });
 
-        await user.click(within(table()).getByTitle(/assign to driver/i));
+        await user.click(within(table()).getByTitle(/assign to sarthi/i));
 
         expect(onAssign).toHaveBeenCalledWith('req-42');
     });

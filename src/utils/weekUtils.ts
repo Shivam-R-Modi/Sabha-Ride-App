@@ -1,5 +1,5 @@
 /**
- * Week Utilities for Sabha Ride Seva
+ * Week Utilities for Bhulka Gaadi
  *
  * The gathering's identity now comes from the server, via `useCurrentEvent` —
  * see hooks/useCurrentEvent.ts. Read it from there, not from here.

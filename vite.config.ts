@@ -56,9 +56,9 @@ export default defineConfig(({ mode, command }) => {
         registerType: 'prompt',
         includeAssets: ['fonts/**/*', 'assets/**/*', 'icons/**/*'],
         manifest: {
-          name: 'Sabha Ride Seva',
-          short_name: 'Sabha Ride',
-          description: 'Ride coordination app for Sabha community',
+          name: 'Bhulka Gaadi',
+          short_name: 'Bhulka Gaadi',
+          description: 'Ride coordination for the Sabha community',
           theme_color: '#3D2914',
           background_color: '#FAF9F6',
           display: 'standalone',

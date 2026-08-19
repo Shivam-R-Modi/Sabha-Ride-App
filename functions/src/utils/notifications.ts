@@ -134,7 +134,7 @@ export async function notifyStudentDriverAssigned(
 ): Promise<void> {
     await sendNotification(
         fcmToken,
-        '🚗 Driver Assigned ✓',
+        '🚗 Sarthi Assigned ✓',
         `${driverName} will pick you up in a ${carColor} ${carModel}`,
         { type: 'driver_assigned' }
     );
@@ -149,7 +149,7 @@ export async function notifyDriverStudentsAssigned(
 ): Promise<void> {
     await sendNotification(
         fcmToken,
-        '👥 Students Assigned',
+        '👥 Bhulka Assigned',
         `You have been assigned ${studentCount} student${studentCount > 1 ? 's' : ''}`,
         { type: 'students_assigned' }
     );
@@ -195,7 +195,7 @@ export async function notifyManagerUnassignedStudents(
 ): Promise<void> {
     await sendNotification(
         fcmToken,
-        '⚠️ Unassigned Students',
+        '⚠️ Unassigned Bhulka',
         `${count} student${count > 1 ? 's' : ''} need manual assignment`,
         { type: 'unassigned_students' }
     );

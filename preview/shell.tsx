@@ -34,7 +34,7 @@ const Panel: React.FC<{ role: UserRole; label: string }> = ({ role, label }) => 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <div style={{ padding: 12 }}>
         <Panel role={'manager' as UserRole} label="Manager — sidebar expanded" />
-        <Panel role={'driver' as UserRole} label="Driver" />
+        <Panel role={'driver' as UserRole} label="Sarthi" />
         <Panel role={'student' as UserRole} label="Rider" />
     </div>
 );

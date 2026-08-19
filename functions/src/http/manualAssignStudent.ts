@@ -50,14 +50,14 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         if (!waitingStatuses.includes(student.status)) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
-                'Student is not waiting for assignment'
+                'Bhulku is not waiting for assignment'
             );
         }
 
         // Get driver details
         const driverDoc = await db.collection('users').doc(driverId).get();
         if (!driverDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Driver not found');
+            throw new functions.https.HttpsError('not-found', 'Sarthi not found');
         }
         const driver = { id: driverDoc.id, ...driverDoc.data() } as Driver;
 
@@ -70,7 +70,7 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         if (activeRideSnap.empty) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
-                'Driver does not have an active ride'
+                'Sarthi does not have an active ride'
             );
         }
         const rideDoc = activeRideSnap.docs[0];
@@ -192,6 +192,6 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         if (error instanceof functions.https.HttpsError) {
             throw error;
         }
-        throw new functions.https.HttpsError('internal', 'Failed to assign student');
+        throw new functions.https.HttpsError('internal', 'Failed to assign Bhulku');
     }
 });

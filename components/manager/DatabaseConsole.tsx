@@ -322,8 +322,8 @@ export const DatabaseConsole: React.FC = () => {
             <FilterSelect label="Role" value={roleFilter} onChange={setRoleFilter}>
               <option value="all">All roles</option>
               <option value="manager">Managers</option>
-              <option value="driver">Drivers</option>
-              <option value="student">Students</option>
+              <option value="driver">Sarthis</option>
+              <option value="student">Bhulka</option>
             </FilterSelect>
           )}
 
@@ -393,8 +393,8 @@ export const DatabaseConsole: React.FC = () => {
                     <>
                       <th className="py-3.5 px-4">Type / Time</th>
                       <th className="py-3.5 px-4">Status</th>
-                      <th className="py-3.5 px-4">Driver</th>
-                      <th className="py-3.5 px-4">Student(s)</th>
+                      <th className="py-3.5 px-4">Sarthi</th>
+                      <th className="py-3.5 px-4">Bhulka</th>
                     </>
                   )}
                   {activeTab === 'settings' && (

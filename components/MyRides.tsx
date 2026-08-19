@@ -45,7 +45,7 @@ const RideCard: React.FC<{ ride: Ride; isHistory?: boolean }> = ({ ride }) => {
       <div className="flex items-center gap-2">
         {ride.driver && (
           <>
-            <img src={ride.driver.avatarUrl} className="w-6 h-6 rounded-full" alt="Driver" />
+            <img src={ride.driver.avatarUrl} className="w-6 h-6 rounded-full" alt="Sarthi" />
             <span className="text-xs text-coffee-700">{ride.driver.name}</span>
           </>
         )}
