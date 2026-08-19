@@ -115,6 +115,16 @@ export interface CompleteRideResult {
     };
 }
 
+/**
+ * Tell this stop's rider the Sarthi is outside.
+ *
+ * Idempotent server-side on `arrivedAt`, so a second tap is free and reports
+ * `alreadyArrived` rather than announcing again.
+ */
+export async function sarthiArrived(rideId: string): Promise<{ success: boolean; alreadyArrived: boolean }> {
+    return callFunction<{ success: boolean; alreadyArrived: boolean }>('sarthiArrived', { rideId });
+}
+
 export async function completeRide(rideId: string): Promise<CompleteRideResult> {
     return callFunction<CompleteRideResult>('completeRide', { rideId });
 }

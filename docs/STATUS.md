@@ -74,8 +74,8 @@ Last deploy `acdf9b9`, 2026-08-18. `main` = branch = production.
 | Cloud Functions | ✅ | **18** functions. `ensureSabhaEvents` and `geocodeAddress` **deleted** — see below |
 | Hosting | ✅ | bundle `index-Bq42l6mm.js` / css `index-T7da3jeJ.css`, verified by CONTENT |
 
-**Test suites, all green:** `functions` **521** · client **874** · rules **89** —
-**1484 total**.
+**Test suites, all green:** `functions` **532** · client **874** · rules **89** —
+**1495 total**.
 
 **Everything in this file is deployed.** `main` = production, local and on GitHub. A full both-legs cycle ran on 2026-08-18 — see *Verified
 2026-08-18* below.
@@ -1849,13 +1849,35 @@ interrupting it with a permission ask is the worst possible timing.
 One consequence worth knowing: `RiderHome` now renders a component that reads
 `useAuth`, so its tests mock `AuthContext` the way `Layout.test.tsx` does.
 
+### Step 4 landed: "I have arrived"
+
+`functions/src/http/sarthiArrived.ts`, plus a button in `ActiveRide` above
+Complete. The `arriving` status is finally written by something.
+
+**Two traps, both now covered by tests named for them:**
+
+1. **Only `ride.studentId` is told — never `ride.students`.**
+   `globalAssignDriver` copies the ENTIRE car's roster onto every one of that
+   car's ride documents, so iterating `students` here would tell all four riders
+   the Sarthi is outside their house, and three would walk out to an empty
+   street. `tells only this stop's rider` fails if anyone reintroduces
+   `startRide`'s loop.
+2. **`in_progress → arriving`, never before the start.** `startRide` refuses
+   anything not `assigned` and fans out over that same query, so an earlier
+   placement would make Start refuse outright and silently skip the one flipped
+   document in a grouped car. `refuses a ride that has not started` covers it.
+
+Idempotent on **`arrivedAt`, not status** — `completeRide` moves the document off
+`arriving`, so a status guard would let a tap after completion re-announce.
+
+Needed no edits anywhere else: `completeRide`, `driverDoneForToday`,
+`managerReleaseVehicle` and `releaseIdleVehicles` all already listed `arriving`
+among their active statuses. `driver_en_route` stays unwritten — deleting it
+would fail `vocabulary.test.ts`, which pins it as stored vocabulary.
+
 ### Still to do
 
-- **"I've arrived"** — step 4. The `arriving` status is still never written.
-  Note it must go AFTER `in_progress`: `startRide` refuses anything not
-  `assigned` and fans out over that query, so an earlier placement would break a
-  grouped car.
-- **Manager broadcasts** — step 5.
+- **Manager broadcasts** — the last step.
 - Foreground messages still raise nothing in-app; a Sarthi with the app open
   does not see a toast for a new assignment.
 

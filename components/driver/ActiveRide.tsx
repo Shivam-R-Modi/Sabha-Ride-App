@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Navigation, Users, Clock, MapPin, Phone, CheckCircle2, Circle, Loader2, AlertCircle } from 'lucide-react';
-import { completeRide, CompleteRideResult } from '../../src/utils/cloudFunctions';
+import { ArrowLeft, Navigation, Users, Clock, MapPin, Phone, CheckCircle2, Circle, Loader2, AlertCircle, Bell } from 'lucide-react';
+import { completeRide, sarthiArrived, CompleteRideResult } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
 import { useDriverLocation } from '../../hooks/useDriverLocation';
 import { useAuth } from '../../contexts/AuthContext';
@@ -128,6 +128,23 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
         // window.open outright. The URL carries no origin, so Maps routes from
         // the device's live location anyway — better than one stale GPS fix.
         openGoogleMaps(mapsUrl);
+    };
+
+    const [isArriving, setIsArriving] = useState(false);
+    const [hasArrived, setHasArrived] = useState(false);
+
+    const handleArrived = async () => {
+        setIsArriving(true);
+        try {
+            await sarthiArrived(ride.id);
+            setHasArrived(true);
+        } catch (err) {
+            // Best-effort: the Sarthi is outside either way, and the rider can
+            // still be phoned. A failure here must not block Complete.
+            setError(messageOf(err, 'Could not send the arrival message.'));
+        } finally {
+            setIsArriving(false);
+        }
     };
 
     const handleCompleteRide = async () => {
@@ -263,6 +280,22 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                     <p className="text-center text-xs text-coffee-500">
                         No route available for this ride — ask a manager to reassign it.
                     </p>
+                )}
+
+                {/* Sits ABOVE Complete, because it happens first and is the
+                    lighter action. Disappears once tapped — the server is
+                    idempotent on `arrivedAt`, so the button has nothing left to
+                    do and leaving it would be a control that does nothing. */}
+                {!hasArrived && (
+                    <button
+                        onClick={handleArrived}
+                        disabled={isArriving}
+                        className="w-full py-3 rounded-2xl font-bold clay-button-secondary flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                        {isArriving
+                            ? <><Loader2 className="animate-spin" size={18} /> Telling them…</>
+                            : <><Bell size={18} /> I have arrived</>}
+                    </button>
                 )}
 
                 <button

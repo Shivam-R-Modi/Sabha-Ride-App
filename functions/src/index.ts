@@ -39,6 +39,7 @@ export { updateSabhaRecurrence } from './http/sabhaRecurrence';
 // is the assignment path, and it has all three fixed.
 export { globalAssignDriver } from './http/globalAssignDriver';
 export { startRide } from './http/startRide';
+export { sarthiArrived } from './http/sarthiArrived';
 export { completeRide } from './http/completeRide';
 export { releaseAssignment } from './http/releaseAssignment';
 export { driverDoneForToday } from './http/driverDoneForToday';
