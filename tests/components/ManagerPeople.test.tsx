@@ -21,6 +21,17 @@ vi.mock('../../hooks/useFirestore', () => ({
     updateUserStatus: (...a: unknown[]) => updateUserStatus(...a),
 }));
 
+// Approving now writes an audit row, so the component needs to know WHO is doing it.
+vi.mock('../../contexts/AuthContext', () => ({
+    useAuth: () => ({
+        currentUser: { uid: 'mgr_1' },
+        userProfile: { name: 'Mira' },
+    }),
+}));
+
+/** The actor every call must carry — an audit row that cannot name one is useless. */
+const ACTOR = { uid: 'mgr_1', name: 'Mira' };
+
 import { ManagerPeople } from '../../components/manager/ManagerPeople';
 import { ToastProvider } from '../../contexts/ToastContext';
 
@@ -91,7 +102,7 @@ describe('ManagerPeople — approving', () => {
 
         await user.click(screen.getAllByRole('button', { name: /approve/i })[0]);
 
-        await waitFor(() => expect(updateUserStatus).toHaveBeenCalledWith('drv1', 'approved'));
+        await waitFor(() => expect(updateUserStatus).toHaveBeenCalledWith('drv1', 'approved', ACTOR));
     });
 
     it('confirms it happened', async () => {
@@ -144,7 +155,7 @@ describe('ManagerPeople — turning someone down', () => {
         const dialog = await screen.findByRole('dialog');
         await user.click(within(dialog).getByRole('button', { name: 'Turn down' }));
 
-        await waitFor(() => expect(updateUserStatus).toHaveBeenCalledWith('drv1', 'rejected'));
+        await waitFor(() => expect(updateUserStatus).toHaveBeenCalledWith('drv1', 'rejected', ACTOR));
     });
 
     it('spells out the consequence for a driver', async () => {

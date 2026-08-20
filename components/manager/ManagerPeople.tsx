@@ -4,6 +4,7 @@ import { usePendingDrivers, usePendingRiders, updateUserStatus } from '../../hoo
 import { ManagerInvites } from './ManagerInvites';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../shared/useConfirm';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Driver, User } from '../../types';
 
 /**
@@ -22,6 +23,9 @@ import type { Driver, User } from '../../types';
  * Dispatch, and are only there now.
  */
 export const ManagerPeople: React.FC = () => {
+    // Who is doing the approving, for the audit row. An audit entry that cannot name
+    // the actor looks like a record and identifies nobody.
+    const { currentUser, userProfile } = useAuth();
     const { pendingDrivers, loading: driversLoading } = usePendingDrivers();
     const { pendingRiders, loading: ridersLoading } = usePendingRiders();
     const toast = useToast();
@@ -51,7 +55,10 @@ export const ManagerPeople: React.FC = () => {
 
         setBusyId(person.id);
         try {
-            await updateUserStatus(person.id, approve ? 'approved' : 'rejected');
+            await updateUserStatus(person.id, approve ? 'approved' : 'rejected', {
+                uid: currentUser?.uid ?? '',
+                name: (userProfile?.name as string) || 'A manager',
+            });
             toast.success(approve
                 ? `${person.name} approved.`
                 : `${person.name} turned down.`);

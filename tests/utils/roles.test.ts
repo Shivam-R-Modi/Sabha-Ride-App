@@ -14,6 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     recordedRoles, grantedRoles, hasRecordedRole, hasGrantedRole, isApprovedManager,
+    resolveActiveRole,
 } from '../../src/roles';
 
 describe('recordedRoles — what the document literally says', () => {
@@ -127,5 +128,62 @@ describe('isApprovedManager', () => {
     it('does not accept activeRole, or inherit from driver', () => {
         expect(isApprovedManager({ activeRole: 'manager', accountStatus: 'approved' })).toBe(false);
         expect(isApprovedManager({ role: 'driver', accountStatus: 'approved' })).toBe(false);
+    });
+});
+
+describe('resolveActiveRole — keep a deliberate switch, drop a revoked one', () => {
+    /**
+     * AuthContext seeded activeRole once and never looked again. That preserved
+     * role-switching state, which was the intent — and left the hat on after a
+     * demotion: the manager dashboard and its seven-item nav kept rendering while
+     * every read underneath failed, and RoleSwitcher hides itself at one available
+     * role, so there was no control to escape with.
+     */
+    const manager = { role: 'manager' as const, accountStatus: 'approved' };
+    const driver = { role: 'driver' as const, accountStatus: 'approved' };
+    const student = { role: 'student' as const, accountStatus: 'approved' };
+
+    it('keeps a hat the profile still grants', () => {
+        // A manager who switched to Bhulku stays there across an unrelated update.
+        expect(resolveActiveRole('student', manager)).toBe('student');
+        expect(resolveActiveRole('driver', manager)).toBe('driver');
+        expect(resolveActiveRole('student', driver)).toBe('student');
+    });
+
+    it('drops a hat that has been revoked, falling back to the recorded role', () => {
+        // The demotion case. manager → student: 'manager' is no longer granted.
+        expect(resolveActiveRole('manager', student)).toBe('student');
+        expect(resolveActiveRole('manager', driver)).toBe('driver');
+        expect(resolveActiveRole('driver', student)).toBe('student');
+    });
+
+    it('keeps a manager a manager', () => {
+        expect(resolveActiveRole('manager', manager)).toBe('manager');
+    });
+
+    it('seeds from the recorded role when there is no previous hat', () => {
+        expect(resolveActiveRole(null, manager)).toBe('manager');
+        expect(resolveActiveRole(null, student)).toBe('student');
+    });
+
+    it('returns null rather than guessing when the profile has no usable role', () => {
+        // App.tsx falls back to `userProfile.role`; a made-up value here would render
+        // a dashboard the person is not entitled to.
+        expect(resolveActiveRole('manager', {})).toBeNull();
+        expect(resolveActiveRole('manager', null)).toBeNull();
+        expect(resolveActiveRole('manager', { role: 'admin' })).toBeNull();
+        expect(resolveActiveRole(null, undefined)).toBeNull();
+    });
+
+    it('honours a role recorded only in roles[]', () => {
+        // The shape the old getAvailableRoles missed entirely.
+        expect(resolveActiveRole('student', { roles: ['manager'] })).toBe('student');
+    });
+
+    it('does not let activeRole on the document keep a revoked hat alive', () => {
+        // `activeRole` is a UI hat, never authority — and the document's copy is
+        // frozen at signup because firestore.rules makes it unwritable.
+        expect(resolveActiveRole('manager', { role: 'student', activeRole: 'manager' }))
+            .toBe('student');
     });
 });

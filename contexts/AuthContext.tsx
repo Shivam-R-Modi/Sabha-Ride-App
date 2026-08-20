@@ -4,7 +4,7 @@ import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth
 import { doc, onSnapshot, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { User, Driver, UserRole } from '../types';
-import { grantedRoles } from '../src/roles';
+import { grantedRoles, resolveActiveRole } from '../src/roles';
 import { readDeviceToken, writeDeviceToken, tokenKey } from '../src/utils/push';
 
 interface AuthContextType {
@@ -48,11 +48,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const profile = { id: uid, ...docSnap.data() } as User | Driver;
         setUserProfile(profile);
 
-        // Only set activeRole on initial load, not on subsequent updates
-        // This preserves role-switching state
+        // Seed once, then RE-VALIDATE on every update.
+        //
+        // The guard used to be `if (!initialized)` alone, so later snapshots updated
+        // `userProfile` and never touched `activeRole`. That preserved role-switching
+        // state, which was the intent — but it also meant a role revoked mid-session
+        // left the hat on: `getAvailableRoles()` shrank to ['student'] while
+        // `activeRole` stayed 'manager', so App.tsx kept rendering the manager
+        // dashboard and the full seven-item manager nav. Worse, RoleSwitcher hides
+        // itself at one available role, so the person had no control to leave a
+        // screen whose every read was failing underneath them.
+        //
+        // Nothing was exposed — firestore.rules re-reads the document on every
+        // request, so the data was already refused. It was a stale privileged UI over
+        // broken data, which is this repo's signature defect wearing a hat.
+        //
+        // Still preserves a DELIBERATE switch: an activeRole the profile still grants
+        // is left exactly as it is.
         if (!activeRoleInitialized.current) {
           setActiveRoleState(profile.role || null);
           activeRoleInitialized.current = true;
+        } else {
+          setActiveRoleState(prev => resolveActiveRole(prev, profile));
         }
       } else {
         // Profile document does not exist yet (brand new signup / role not yet selected).

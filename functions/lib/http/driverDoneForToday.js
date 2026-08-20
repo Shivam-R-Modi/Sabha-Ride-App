@@ -44,6 +44,7 @@ const admin = __importStar(require("firebase-admin"));
 const fleet_1 = require("../utils/fleet");
 // The dispatch pool's own filter. Shared deliberately — see surveyTheQueue.
 const globalAssignDriver_1 = require("./globalAssignDriver");
+const authz_1 = require("../utils/authz");
 /**
  * Should this driver be warned before they finish?
  *
@@ -96,6 +97,12 @@ function decideDoneWarning(waitingCount, otherDriversOnShift) {
  * is the same argument: a request with no usable pickup point cannot be served
  * by staying, so warning about it only teaches the driver to tap through.
  *
+ * It shares `isAssignableTo`, not `isValidPendingRide`, for that same reason: the
+ * pool excludes the caller's OWN waiting request, because a driver is never their
+ * own passenger. Counting it here would warn "1 rider is still waiting" about
+ * themselves while "Find my next riders" answered "no one is left" — the identical
+ * pair of contradictory screens described above, from a new cause.
+ *
  * An absent `rideType` on the CONTEXT means no window is open, and
  * globalAssignDriver refuses outright in that state — so nothing is dispatchable
  * and there is nothing to warn about.
@@ -111,7 +118,7 @@ async function surveyTheQueue(db, driverId) {
     ]);
     const waitingCount = !eventId || !rideType
         ? 0
-        : requested.docs.filter(d => (0, globalAssignDriver_1.isValidPendingRide)(d.data(), eventId, rideType)).length;
+        : requested.docs.filter(d => (0, globalAssignDriver_1.isAssignableTo)(d.data(), driverId, eventId, rideType)).length;
     const otherDriversOnShift = new Set(held.docs
         .map(d => { var _a; return (_a = d.data()) === null || _a === void 0 ? void 0 : _a.assignedDriverId; })
         .filter((uid) => typeof uid === 'string' && uid !== driverId)).size;
@@ -133,17 +140,20 @@ exports.driverDoneForToday = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'driverId is required');
     }
     const db = admin.firestore();
+    // IDENTITY FIRST, THEN THE READ.
+    //
+    // The uid comparison used to sit AFTER the target document was fetched, so any
+    // authenticated caller could tell a real uid from a made-up one by which error
+    // came back — 'Driver not found' against 'permission-denied'. An existence
+    // oracle over the user collection, for free.
+    //
+    // The role check is new too. Self-only is not the same as allowed: a rejected
+    // account could still end a shift and release a car.
+    if (driverId !== context.auth.uid) {
+        throw new functions.https.HttpsError('permission-denied', 'Only the Sarthi can mark themselves done');
+    }
+    const driver = await (0, authz_1.assertApprovedDriver)(db, context.auth.uid, 'end their shift');
     try {
-        // Get driver details
-        const driverDoc = await db.collection('users').doc(driverId).get();
-        if (!driverDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Driver not found');
-        }
-        const driver = driverDoc.data();
-        // Verify the caller is the driver
-        if (driverId !== context.auth.uid) {
-            throw new functions.https.HttpsError('permission-denied', 'Only the Sarthi can mark themselves done');
-        }
         // Check if driver has an active ride
         if (driver === null || driver === void 0 ? void 0 : driver.activeRideId) {
             throw new functions.https.HttpsError('failed-precondition', 'Cannot mark done while in an active ride');

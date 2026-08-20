@@ -25,7 +25,14 @@ export type AuditAction =
     | 'doc.delete'
     | 'user.delete'
     | 'event.delete'
-    | 'manager.promote';
+    | 'manager.promote'
+    // Approval and revocation. `manager.promote` recorded a GRANT and nothing
+    // recorded the other direction, so an account being cut off left no trace at
+    // all — on a system holding children's data, where
+    // docs/compliance/ownership-and-handover.md requires "every grant, revocation
+    // and impersonation audited".
+    | 'account.approved'
+    | 'account.rejected';
 
 export interface AuditEntry {
     action: AuditAction;

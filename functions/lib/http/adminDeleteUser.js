@@ -93,6 +93,30 @@ exports.adminDeleteUser = functions.https.onCall(async (data, context) => {
         if (uidsToDelete.length === 0) {
             throw new functions.https.HttpsError('invalid-argument', 'targetUserId or targetUserIds is required');
         }
+        // NO SELF-DELETION, AND NO DELETING ANOTHER MANAGER.
+        //
+        // There was neither guard, so one approved manager could delete every other
+        // manager and their Auth accounts — and then themselves. Nothing in the app
+        // could appoint a replacement afterwards: manager creation goes through
+        // single-use invites, and creating an invite requires being an approved
+        // manager. A congregation could be locked out of its own coordination tool
+        // with no way back in short of the Admin SDK on the owner's Mac.
+        //
+        // `docs/compliance/ownership-and-handover.md` already states the intent —
+        // "the last one cannot be removed", "lockout is the most common
+        // self-inflicted outage in this design". This is the floor of that rule at
+        // the only level the app can enforce today, with one manager tier.
+        //
+        // Demotion is the intended route: clear the role, then delete if wanted.
+        if (uidsToDelete.includes(callerUid)) {
+            throw new functions.https.HttpsError('failed-precondition', 'You cannot delete your own account. Ask another manager to do it.');
+        }
+        for (const uid of uidsToDelete) {
+            const target = await db.collection('users').doc(uid).get();
+            if ((0, authz_1.isApprovedManagerData)(target.data())) {
+                throw new functions.https.HttpsError('failed-precondition', 'That account is a manager. Remove the manager role first, then delete it.');
+            }
+        }
         let deletedAuthCount = 0;
         let deletedFirestoreCount = 0;
         for (const uid of uidsToDelete) {

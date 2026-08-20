@@ -28,6 +28,12 @@ vi.mock('../../hooks/useFirestore', () => ({
     updateUserStatus: vi.fn(async () => undefined),
 }));
 
+// ManagerPeople reads useAuth now: approving or rejecting writes an audit row, and a
+// row that cannot name the actor identifies nobody.
+vi.mock('../../contexts/AuthContext', () => ({
+    useAuth: () => ({ currentUser: { uid: 'mgr_1' }, userProfile: { name: 'Mira' } }),
+}));
+
 vi.mock('../../src/utils/cloudFunctions', () => ({
     createManagerInvite: vi.fn(async (label?: string) => {
         created.push(label);

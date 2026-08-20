@@ -111,3 +111,34 @@ export function hasGrantedRole(profile: RoleBearing | null | undefined, role: Us
 export function isApprovedManager(profile: RoleBearing | null | undefined): boolean {
     return profile?.accountStatus === 'approved' && hasRecordedRole(profile, 'manager');
 }
+
+/**
+ * Which hat to wear after a profile update.
+ *
+ * Pulled out of AuthContext so the decision is reviewable and testable — the same
+ * reason `deriveRiderState` is a function rather than JSX. No test in this repo
+ * exercises the real AuthProvider; every suite mocks it, so a rule left inline there
+ * is a rule nothing checks.
+ *
+ * The rule: keep a deliberate switch, drop a revoked one.
+ *
+ * AuthContext used to seed `activeRole` once and never look again, which preserved
+ * role-switching state — the intent — but also left the hat on after a demotion.
+ * `getAvailableRoles()` would shrink to ['student'] while `activeRole` stayed
+ * 'manager', so the manager dashboard and its seven-item nav kept rendering; and
+ * because RoleSwitcher hides itself at one available role, the person had no control
+ * to leave a screen whose every read was failing underneath them.
+ *
+ * Nothing was exposed by that — firestore.rules re-reads the user document on every
+ * request, so the data was already refused. It was a stale privileged UI over broken
+ * data.
+ */
+export function resolveActiveRole(
+    previous: UserRole | null,
+    profile: RoleBearing | null | undefined,
+): UserRole | null {
+    if (previous && hasGrantedRole(profile, previous)) return previous;
+
+    const fallback = (profile as { role?: unknown } | null | undefined)?.role;
+    return isRole(fallback) ? fallback : null;
+}

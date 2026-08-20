@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
+import { writeAuditLog } from '../src/utils/audit';
 import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { Driver, StudentRequest, User } from '../types';
 import { handleSnapshotError } from '../src/utils/firestoreErrors';
@@ -166,10 +167,49 @@ export const usePendingRequests = () => {
     return { requests, loading };
 };
 
-export const updateUserStatus = async (userId: string, status: 'approved' | 'rejected') => {
+/**
+ * Approve or reject an account, and RECORD IT.
+ *
+ * The write itself is one field. What was missing is the trace: `manager.promote`
+ * audited a grant and nothing audited the other direction, so cutting an account
+ * off left no record of who did it or when — on a system holding children's names,
+ * phone numbers and addresses, where
+ * docs/compliance/ownership-and-handover.md requires "every grant, revocation and
+ * impersonation audited".
+ *
+ * `actor` is REQUIRED, not defaulted. An audit row whose actor is 'Manager' or ''
+ * is worse than none: it looks like a record and identifies nobody.
+ *
+ * WHAT THIS STILL DOES NOT DO, deliberately, rather than half-doing it:
+ * rejecting a manager does not clear their `mgr` custom claim, because a client
+ * cannot — that needs the Admin SDK. `isManagerForRead()` accepts that claim for up
+ * to an hour, so a just-revoked manager keeps READ access to rider lists for that
+ * long. Every write, delete and secret read is already on `isManager()`, which
+ * re-reads the document and so cuts them off immediately. The remedy today is
+ * `node scripts/mint-manager-claims.cjs`, which reconciles claims from documents and
+ * revokes refresh tokens. A callable that does it automatically is the real fix and
+ * is not this change.
+ */
+export const updateUserStatus = async (
+    userId: string,
+    status: 'approved' | 'rejected',
+    actor: { uid: string; name: string },
+) => {
     try {
         const userRef = doc(db, 'users', userId);
         await updateDoc(userRef, { accountStatus: status });
+
+        // After the write, so a refused update leaves no row claiming it happened.
+        await writeAuditLog({
+            action: status === 'approved' ? 'account.approved' : 'account.rejected',
+            actorUid: actor.uid,
+            actorName: actor.name,
+            targetCollection: 'users',
+            targetDocumentId: userId,
+            summary: status === 'approved'
+                ? 'Approved an account'
+                : 'Rejected an account, cutting off access',
+        });
     } catch (error) {
         console.error("Error updating user status:", error);
         throw error;

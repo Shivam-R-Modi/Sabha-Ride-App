@@ -41,6 +41,7 @@ exports.startRide = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const notifications_1 = require("../utils/notifications");
+const authz_1 = require("../utils/authz");
 /**
  * HTTP Callable: Start a ride
  * Input: { rideId: string }
@@ -56,6 +57,19 @@ exports.startRide = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'rideId is required');
     }
     const db = admin.firestore();
+    // OWNERSHIP IS NOT AUTHORISATION.
+    //
+    // This checked only that the caller was the Sarthi named on the ride. That
+    // let a REVOKED or rejected account keep full control of ride state for as
+    // long as its name sat on a document — flipping a whole car to in_progress,
+    // marking rides complete, moving every passenger's status. Revoking the
+    // account did not reach it. `sarthiArrived` already said as much in a
+    // comment: "Stricter than startRide/completeRide, which check ownership
+    // only."
+    //
+    // Placed before any document read, so nothing is fetched for a caller who
+    // has no business here.
+    await (0, authz_1.assertApprovedDriver)(db, context.auth.uid, 'start a ride');
     try {
         // Get ride details
         const rideDoc = await db.collection('rides').doc(rideId).get();

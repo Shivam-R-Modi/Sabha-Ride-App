@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { redeemManagerInvite } from '../../src/utils/cloudFunctions';
 import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../../src/constants/tenancy';
 import { UserRole } from '../../types';
+import { grantedRoles } from '../../src/roles';
 import { Eye, EyeOff } from 'lucide-react';
 
 interface RoleSelectionProps {
@@ -119,7 +120,26 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
             await setDoc(doc(db, 'users', currentUser.uid), {
                 role: selectedRole,
                 registeredRole: selectedRole,
-                roles: [selectedRole],
+                // THE GRANTED SET, not just the role they picked.
+                //
+                // This wrote `[selectedRole]` while the invite path
+                // (functions/src/http/managerInvites.ts) writes
+                // ['manager','driver','student'] with the comment "the granted set,
+                // so one query answers 'who can drive?' everywhere". Two writers,
+                // two different meanings for one field — and `useUsers` queries
+                // `roles array-contains 'driver'` to build the driver picker.
+                //
+                // So a manager created down THIS path got `roles: ['manager']` and
+                // was invisible to the picker, however many nights they drove. That
+                // is the same "lists nobody" bug the comment at useUsers.ts:206
+                // records fixing once already: it queried `role == 'driver'` and
+                // found none, because every driver here is recorded as a manager who
+                // also drives.
+                //
+                // `roles` is the GRANTED set everywhere now.
+                // tests/quality/role-table-parity.test.ts holds the table itself in
+                // step across all six copies.
+                roles: grantedRoles({ role: selectedRole }),
                 activeRole: selectedRole,
                 email: currentUser.email,
                 phone: currentUser.phoneNumber,

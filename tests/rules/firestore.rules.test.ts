@@ -1347,3 +1347,44 @@ describe('the notifications collection is closed', () => {
         }));
     });
 });
+
+describe('signup writes the GRANTED set, and the rules still allow it', () => {
+    /**
+     * RoleSelection used to write `roles: [selectedRole]` while the invite path wrote
+     * ['manager','driver','student'] — two meanings for one field, and `useUsers`
+     * queries it to build the driver picker, so a manager created down the signup
+     * path was invisible there however many nights they drove.
+     *
+     * These pin the exact shapes signup now writes, because
+     * `createsUnprivilegedProfile()` inspects the incoming document and a future
+     * tightening of it would break registration silently.
+     */
+    it('a rider can register themselves, approved, with roles ["student"]', async () => {
+        const fresh = testEnv.authenticatedContext('new_rider').firestore();
+        await assertSucceeds(setDoc(doc(fresh, 'users', 'new_rider'), {
+            role: 'student', registeredRole: 'student', activeRole: 'student',
+            roles: ['student'],
+            accountStatus: 'approved', name: 'New Rider',
+        }));
+    });
+
+    it('a Sarthi can register themselves pending, with the driver granted set', async () => {
+        // grantedRoles({ role: 'driver' }) === ['driver', 'student']
+        const fresh = testEnv.authenticatedContext('new_driver').firestore();
+        await assertSucceeds(setDoc(doc(fresh, 'users', 'new_driver'), {
+            role: 'driver', registeredRole: 'driver', activeRole: 'driver',
+            roles: ['driver', 'student'],
+            accountStatus: 'pending', name: 'New Sarthi',
+        }));
+    });
+
+    it('but a rider still cannot self-approve with a wider set than student', async () => {
+        // The escalation the create guard exists for: approved AND carrying driver.
+        const fresh = testEnv.authenticatedContext('sneaky').firestore();
+        await assertFails(setDoc(doc(fresh, 'users', 'sneaky'), {
+            role: 'student', registeredRole: 'student', activeRole: 'student',
+            roles: ['student', 'driver'],
+            accountStatus: 'approved', name: 'Sneaky',
+        }));
+    });
+});

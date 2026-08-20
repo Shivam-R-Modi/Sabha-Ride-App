@@ -46,7 +46,7 @@ export const ResponsiveLayout: React.FC<LayoutProps> = ({ children, role }) => {
       <div className={isFocusMode
         ? 'flex-1 flex flex-col'
         : `flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-60'}`}>
-        {!isFocusMode && <MobileHeader userName={userProfile?.name || 'User'} role={role} />}
+        {!isFocusMode && <MobileHeader />}
 
         <main className={isFocusMode ? 'flex-1' : 'flex-1 pb-safe-nav lg:pb-0'}>
           <div className={isFocusMode ? 'w-full' : 'max-w-7xl mx-auto w-full'}>
@@ -60,7 +60,9 @@ export const ResponsiveLayout: React.FC<LayoutProps> = ({ children, role }) => {
   );
 };
 
-const MobileHeader: React.FC<{ userName: string; role: UserRole }> = () => {
+// No props. It declared `userName` and `role` and destructured neither, so both were
+// dead weight that read as though the header rendered them.
+const MobileHeader: React.FC = () => {
   const { logout } = useAuth();
 
   return (

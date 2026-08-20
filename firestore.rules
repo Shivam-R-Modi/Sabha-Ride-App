@@ -172,8 +172,13 @@ service cloud.firestore {
     // could become an approved manager in a single browser-console write.
     // =====================================
 
-    // Fields on a user document that only the server (Admin SDK, which bypasses
-    // rules) or a manager may change. A user may never set these on themselves.
+    // Which keys a write actually changes.
+    //
+    // This comment used to describe touchesPrivilegeFields() below, not this
+    // function — a leftover from when the two were one thing.
+    //
+    // Note it dereferences `resource.data`, so it is UPDATE-ONLY: on a create there
+    // is no existing document and the diff errors. Every caller is on an update path.
     function changedKeys() {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
@@ -277,9 +282,13 @@ service cloud.firestore {
       // Managers are created by verifyManagerCode with the Admin SDK.
       allow create: if isOwner(userId) && createsUnprivilegedProfile();
 
-      // A user may edit their own PROFILE fields only. Privilege fields
-      // (role, roles, accountStatus, platformRole) are excluded, otherwise
-      // isManager() is circular and a student self-promotes in one write.
+      // A user may edit their own PROFILE fields only. All SIX privilege fields are
+      // excluded — role, registeredRole, roles, activeRole, accountStatus,
+      // platformRole — otherwise isManager() is circular and a student self-promotes
+      // in one write. This comment used to name only four of them, which mattered:
+      // `registeredRole` is one of the three fields recordsRole() reads, so a reader
+      // checking the comment rather than touchesPrivilegeFields() would conclude
+      // there was a hole. There is not; the function has always listed all six.
       //
       // The two `getUserData().role == 'manager'` clauses that used to be here
       // were removed deliberately: they bypassed the accountStatus == 'approved'
