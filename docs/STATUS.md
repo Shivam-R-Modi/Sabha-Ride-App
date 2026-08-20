@@ -2092,25 +2092,46 @@ the behaviour, not the markup: a click calls `onComplete`, thirty seconds of fak
 timers do NOT, and it is still tappable after being left. Confirmed by deleting the
 `onClick` on purpose.
 
-### Covering the screen: `100lvh` alone was not enough
+### Covering the screen — and the band that was never ours
 
-`position: fixed` is sized to the **visual viewport**. The canvas `html` paints
-extends further — under retracted browser chrome and into the home-indicator safe
-area — and that difference is the strip that kept appearing along the bottom. After
-the earlier fix it was still there, just canvas-coloured instead of black.
+**The band along the bottom of a phone is the BROWSER'S TOOLBAR, not this app.**
+It took three attempts to see that, and the evidence was in the screenshots the
+whole time:
 
-**The desktop emulator cannot reproduce it**, and that is worth knowing before
-trusting a green preview: measured at 375x812, the element covers 812 of 812 pixels
-with zero shortfall, because there are no insets to create a gap. So the fix stops
-trying to match the viewport exactly and overshoots instead:
+1. It **clips the app's own text.** Page content cannot be clipped by something
+   painted behind it, so it is drawn OVER the page — which no CSS in this app can
+   reach.
+2. It **changed colour when `html` got a background** (65da110): black before, the
+   app's warm near-black after. Safari and Chrome on iOS tint the toolbar area by
+   sampling the page background. Nothing in this app touched the browser's bar; it
+   sampled the new colour.
+3. It is absent on the dashboard screenshots, where the page had been scrolled —
+   which is when the toolbar retracts.
 
-```
-height: calc(100lvh + env(safe-area-inset-bottom, 0px))
-```
+Installing to the home screen removes it. There is no fourth round of viewport units
+that will, and the reasoning is recorded in `SplashScreen.tsx` so it is not
+rediscovered.
 
-Overshooting costs nothing — the excess is off-screen on a fixed element, and the
-page does not become scrollable (checked). If `lvh` is ever unsupported the calc is
-invalid, height falls back to auto and `inset-0` sizes it exactly as before.
+### The real bug in attempt two, which was mine
+
+Sizing the whole screen to `100lvh + env(safe-area-inset-bottom)` pushed
+"Tap to continue" off the bottom, because the content is bottom-aligned inside a box
+taller than the screen. The next screenshot came back with that line sliced in half.
+
+**Two viewports are in play and they are different sizes**, so one element cannot be
+both:
+
+- `svh` is the screen with browser chrome SHOWING — content must sit inside this;
+- `lvh` is the screen with chrome retracted — the picture must fill this.
+
+Now split: the content box is `100svh`, and the photograph is its own `aria-hidden`
+layer at `calc(100lvh + env(safe-area-inset-bottom, 0px))` behind it, `-z-10` and
+`pointer-events-none`. That last part matters because the tap is the only way off
+this screen — a decorative div must not be able to swallow it, and a test clicks the
+layer to prove it does not.
+
+Measured in `preview/splash.html` at 375x812: tap line fully inside the viewport at
+684-712, photo layer reaching the bottom, page not scrollable.
 
 ### Two things ruled out before changing anything
 
