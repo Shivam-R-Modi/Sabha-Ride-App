@@ -489,19 +489,33 @@ service cloud.firestore {
     // =====================================
     // NOTIFICATIONS COLLECTION
     // =====================================
+    // =====================================
+    // NOTIFICATIONS — closed, and the collection is not used
+    // =====================================
+    //
+    // Nothing in this app reads or writes /notifications: no client, no Cloud
+    // Function, no script. Push goes out through FCM (utils/notifications.ts), which
+    // never stores anything here.
+    //
+    // The block that stood here was therefore dead — and it carried a live hole. Its
+    // update rule gated on `resource.data.userId`, the EXISTING document, with no
+    // constraint on the incoming one:
+    //
+    //     allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    //
+    // So the owner of a row could rewrite every field of it, `userId` included —
+    // reassigning their own notification into somebody else's inbox and rewriting
+    // its title and body on the way. A forged message from the app, to anyone.
+    //
+    // Closed rather than repaired, for the same reason the legacy students/ and
+    // drivers/ mirrors above are closed: a rule granting access to a collection no
+    // code uses can only ever be a way in. If in-app notifications are wanted later
+    // they need a real access rule written for the read paths that will exist, not
+    // this one revived.
     match /notifications/{notificationId} {
-      // Users can read their own notifications
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      
-      // System/managers can create notifications
-      allow create: if isManager();
-      
-      // Users can update their notifications (mark as read)
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      
-      // Users can delete their notifications
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read, write: if false;
     }
+
     
     // =====================================
     // CARS / VEHICLES COLLECTION

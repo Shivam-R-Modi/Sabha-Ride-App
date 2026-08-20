@@ -38,10 +38,17 @@ const HOME = { lat: 42.3339, lng: -71.0311 };
 function makeDb(opts: { student?: any; rides?: any[]; context?: any } = {}) {
     const writes: Array<{ path: string; data: any }> = [];
     const rides = opts.rides ?? [];
-    const student = opts.student ?? {
-        name: 'Rebo Fe', address: '15 Central Sq', status: 'home_safe',
-        // The shape resolveHomeCoords actually reads — what ProfileSetup writes.
-        location: { latitude: HOME.lat, longitude: HOME.lng },
+    // `accountStatus` and `roles` are DEFAULTS that an override can replace.
+    // studentReadyToLeave now calls assertApprovedStudent: it used to check only
+    // that the caller was acting for themselves, so a pending or rejected account
+    // could file a drop-off request and hand its own address to whoever tapped next.
+    const student = {
+        accountStatus: 'approved', roles: ['student'],
+        ...(opts.student ?? {
+            name: 'Rebo Fe', address: '15 Central Sq', status: 'home_safe',
+            // The shape resolveHomeCoords actually reads — what ProfileSetup writes.
+            location: { latitude: HOME.lat, longitude: HOME.lng },
+        }),
     };
     const context = opts.context ?? { rideType: 'sabha-to-home', eventId: '2026-08-14' };
 

@@ -1312,3 +1312,38 @@ describe('managers cannot delete what only the server should', () => {
         await assertFails(deleteDoc(doc(asManager(), 'statistics', '2026-08-14')));
     });
 });
+
+describe('the notifications collection is closed', () => {
+    /**
+     * Nothing reads or writes it — push goes through FCM. The block that stood here
+     * gated update on the EXISTING document's `userId` with no constraint on the
+     * incoming one, so its owner could reassign `userId` and rewrite the title and
+     * body: a forged message from the app, into somebody else's inbox.
+     *
+     * Closed rather than repaired, like the legacy students/ and drivers/ mirrors.
+     */
+    beforeEach(async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'notifications', 'n1'), {
+                userId: STUDENT, title: 'Your ride is arranged', body: 'x',
+            });
+        });
+    });
+
+    it('the owner cannot read it', async () => {
+        await assertFails(getDoc(doc(asStudent(), 'notifications', 'n1')));
+    });
+
+    it('the owner cannot reassign it to somebody else', async () => {
+        // The exact forgery the old rule allowed.
+        await assertFails(updateDoc(doc(asStudent(), 'notifications', 'n1'), {
+            userId: OTHER_STUDENT, title: 'Ignore the Sarthi, walk home',
+        }));
+    });
+
+    it('a manager cannot create one either', async () => {
+        await assertFails(setDoc(doc(asManager(), 'notifications', 'n2'), {
+            userId: STUDENT, title: 'x', body: 'y',
+        }));
+    });
+});

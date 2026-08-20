@@ -60,7 +60,14 @@ describe('decideDoneWarning — when to speak up', () => {
 
 // ── through the handler ──────────────────────────────────────────
 
-const DRIVER = { name: 'Asha', currentVehicleId: 'veh_1', activeRideId: null };
+// `accountStatus` and `roles` are part of the fixture, not an override, so every
+// case here describes a Sarthi who is actually allowed to end a shift.
+// driverDoneForToday now calls assertApprovedDriver — it used to check only that the
+// caller was acting for themselves, which let a revoked account release a car.
+const DRIVER = {
+    name: 'Asha', currentVehicleId: 'veh_1', activeRideId: null,
+    accountStatus: 'approved', roles: ['driver'],
+};
 
 function makeDb(opts: {
     /** Rides in `requested`, i.e. the queue. */

@@ -5,6 +5,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { assertApprovedDriver } from '../utils/authz';
 // The fleet helpers were imported to release the car when an assignment was
 // declined. Nothing here touches the fleet now — see the driver update below.
 
@@ -26,6 +27,20 @@ export const releaseAssignment = functions.https.onCall(async (data, context) =>
     }
 
     const db = admin.firestore();
+
+        // OWNERSHIP IS NOT AUTHORISATION.
+        //
+        // This checked only that the caller was the Sarthi named on the ride. That
+        // let a REVOKED or rejected account keep full control of ride state for as
+        // long as its name sat on a document — flipping a whole car to in_progress,
+        // marking rides complete, moving every passenger's status. Revoking the
+        // account did not reach it. `sarthiArrived` already said as much in a
+        // comment: "Stricter than startRide/completeRide, which check ownership
+        // only."
+        //
+        // Placed before any document read, so nothing is fetched for a caller who
+        // has no business here.
+    await assertApprovedDriver(db, context.auth.uid, 'release an assignment');
 
     try {
         // Get ride details

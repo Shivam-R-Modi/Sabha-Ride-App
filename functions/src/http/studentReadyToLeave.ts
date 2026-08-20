@@ -5,6 +5,7 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { assertApprovedStudent } from '../utils/authz';
 // getZonedParts is gone from here deliberately: this function no longer decides
 // for itself whether the window is open.
 import { zonedDateKey, DEFAULT_TIME_ZONE } from '../utils/time';
@@ -81,19 +82,20 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
 
     const db = admin.firestore();
 
+    // IDENTITY FIRST, THEN THE READ — the comparison used to sit after the fetch,
+    // so 'Bhulku not found' against 'permission-denied' told any caller whether an
+    // arbitrary uid existed.
+    //
+    // And the role check is new: this was self-only with no account status at all, so
+    // a pending or rejected account could file a drop-off request, enter the dispatch
+    // pool, and hand its own address to whichever Sarthi tapped next.
+    if (studentId !== context.auth.uid) {
+        throw new functions.https.HttpsError('permission-denied', 'Only the Bhulku can mark themselves ready');
+    }
+
+    const student = await assertApprovedStudent(db, context.auth.uid, 'say they are ready to leave');
+
     try {
-        // Get student details
-        const studentDoc = await db.collection('users').doc(studentId).get();
-        if (!studentDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Bhulku not found');
-        }
-
-        const student = studentDoc.data();
-
-        // Verify the caller is the student
-        if (studentId !== context.auth.uid) {
-            throw new functions.https.HttpsError('permission-denied', 'Only the Bhulku can mark themselves ready');
-        }
 
         // HOW THEY GOT HERE IS RECORDED, NOT ENFORCED.
         //

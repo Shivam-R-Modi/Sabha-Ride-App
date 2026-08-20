@@ -11,6 +11,7 @@ import {
 // The dispatch pool's own filter. Shared deliberately — see surveyTheQueue.
 import { isAssignableTo } from './globalAssignDriver';
 import { RideType } from '../types';
+import { assertApprovedDriver } from '../utils/authz';
 
 /**
  * Should this driver be warned before they finish?
@@ -123,19 +124,22 @@ export const driverDoneForToday = functions.https.onCall(async (data, context) =
 
     const db = admin.firestore();
 
+    // IDENTITY FIRST, THEN THE READ.
+    //
+    // The uid comparison used to sit AFTER the target document was fetched, so any
+    // authenticated caller could tell a real uid from a made-up one by which error
+    // came back — 'Driver not found' against 'permission-denied'. An existence
+    // oracle over the user collection, for free.
+    //
+    // The role check is new too. Self-only is not the same as allowed: a rejected
+    // account could still end a shift and release a car.
+    if (driverId !== context.auth.uid) {
+        throw new functions.https.HttpsError('permission-denied', 'Only the Sarthi can mark themselves done');
+    }
+
+    const driver = await assertApprovedDriver(db, context.auth.uid, 'end their shift');
+
     try {
-        // Get driver details
-        const driverDoc = await db.collection('users').doc(driverId).get();
-        if (!driverDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Driver not found');
-        }
-
-        const driver = driverDoc.data();
-
-        // Verify the caller is the driver
-        if (driverId !== context.auth.uid) {
-            throw new functions.https.HttpsError('permission-denied', 'Only the Sarthi can mark themselves done');
-        }
 
         // Check if driver has an active ride
         if (driver?.activeRideId) {

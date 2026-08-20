@@ -127,3 +127,50 @@ export async function assertApprovedDriver(
 
     return data as Record<string, unknown>;
 }
+
+/**
+ * The same test for someone acting as a rider.
+ *
+ * `hasGrantedRole`, like the driver check above: the hierarchy grants a manager and
+ * a driver the student role on purpose, so a Sarthi who is not driving this week can
+ * still ask for a lift. Whether they are driving RIGHT NOW is a different question,
+ * answered by `isHoldingAVehicle()` in firestore.rules — a person cannot be both
+ * driver and passenger, and holding a car is what settles it.
+ */
+export function isApprovedStudentData(data: unknown): boolean {
+    const user = data as RoleBearing | null | undefined;
+    if (!user) return false;
+
+    return user.accountStatus === 'approved' && hasGrantedRole(user, 'student');
+}
+
+/**
+ * Throw unless `uid` belongs to an approved rider. Returns their document so the
+ * caller does not read it twice.
+ *
+ * ADDED 2026-08-20 by the role-access audit, and it was never there before.
+ * `studentReadyToLeave` checked that the caller was acting for themselves and
+ * nothing else — no account status, no role. So a rejected or pending account could
+ * still file a drop-off request, join the dispatch pool, and hand its own address to
+ * whichever Sarthi tapped next. Self-only is not the same as allowed.
+ *
+ * Read fresh every time, for the same reason as the two above: a custom claim
+ * survives on an ID token for up to an hour after a revocation.
+ */
+export async function assertApprovedStudent(
+    db: admin.firestore.Firestore,
+    uid: string,
+    action = 'do this',
+): Promise<Record<string, unknown>> {
+    const snap = await db.collection('users').doc(uid).get();
+    const data = snap.data();
+
+    if (!isApprovedStudentData(data)) {
+        throw new functions.https.HttpsError(
+            'permission-denied',
+            `Only approved riders can ${action}.`,
+        );
+    }
+
+    return data as Record<string, unknown>;
+}

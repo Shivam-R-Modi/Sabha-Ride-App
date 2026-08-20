@@ -51,9 +51,18 @@ vi.mock('firebase-admin', () => ({
     auth: () => ({ deleteUser: deleteUserMock }),
 }));
 
-vi.mock('../utils/authz', () => ({
-    assertApprovedManager: vi.fn(async () => ({ name: 'Manager Meera' })),
-}));
+// `assertApprovedManager` is stubbed — the caller's authority is not what these
+// cases are about. `isApprovedManagerData` is the REAL implementation, because the
+// new "cannot delete another manager" guard is exactly a question of whether that
+// function recognises a manager, and a stub would let it answer differently here
+// than in production.
+vi.mock('../utils/authz', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../utils/authz')>();
+    return {
+        ...actual,
+        assertApprovedManager: vi.fn(async () => ({ name: 'Manager Meera' })),
+    };
+});
 
 // Deleting a user is irreversible and takes a batch, so the handler is rate
 // limited. Stubbed to a no-op here: these cases are about the fleet cleanup, and
@@ -80,11 +89,27 @@ interface Recorder {
  * `holdings` maps collection name to the vehicle ids that collection reports as
  * held by the queried uid — i.e. what `where('assignedDriverId','==',uid)` returns.
  */
-function makeDb(holdings: Record<string, string[]>): { db: any; recorder: Recorder } {
+function makeDb(
+    holdings: Record<string, string[]>,
+    /**
+     * What `users/{uid}` reports for a DELETION TARGET. Defaults to an ordinary
+     * approved driver, because the endpoint now refuses to delete a manager — a
+     * fixture that looked like one would fail every unrelated case here.
+     */
+    targets: Record<string, any> = {},
+): { db: any; recorder: Recorder } {
     const recorder: Recorder = { deletes: [], sets: [], commits: 0 };
 
     const collection = (name: string) => ({
-        doc: (id: string) => ({ path: `${name}/${id}` }),
+        doc: (id: string) => ({
+            path: `${name}/${id}`,
+            get: async () => ({
+                exists: true,
+                data: () => (name === 'users'
+                    ? (targets[id] ?? { accountStatus: 'approved', roles: ['driver'] })
+                    : undefined),
+            }),
+        }),
         where: () => ({
             get: async () => ({ docs: (holdings[name] ?? []).map(id => ({ id })) }),
         }),
@@ -230,5 +255,99 @@ describe('adminDeleteUser — who may call it', () => {
         db = makeDb({}).db;
         await expect((adminDeleteUser as any)({}, { auth: { uid: 'manager_1' } }))
             .rejects.toThrow(/required/i);
+    });
+});
+
+describe('adminDeleteUser — the lockout guards', () => {
+    /**
+     * There were neither. One approved manager could delete every OTHER manager and
+     * their Auth accounts, then themselves — and nothing left in the app could
+     * appoint a replacement, because creating a manager invite requires being an
+     * approved manager. A congregation locked out of its own coordination tool with
+     * no way back short of the Admin SDK on the owner's Mac.
+     *
+     * `docs/compliance/ownership-and-handover.md` already stated the intent: "the
+     * last one cannot be removed", "lockout is the most common self-inflicted outage
+     * in this design".
+     */
+    it('refuses to delete the caller themselves', async () => {
+        const made = makeDb({});
+        db = made.db;
+
+        await expect((adminDeleteUser as any)(
+            { targetUserId: 'manager_1' }, { auth: { uid: 'manager_1' } },
+        )).rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(made.recorder.deletes).toEqual([]);
+    });
+
+    it('refuses to delete another manager', async () => {
+        const made = makeDb({}, {
+            manager_2: { accountStatus: 'approved', role: 'manager' },
+        });
+        db = made.db;
+
+        await expect((adminDeleteUser as any)(
+            { targetUserId: 'manager_2' }, { auth: { uid: 'manager_1' } },
+        )).rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(made.recorder.deletes).toEqual([]);
+    });
+
+    it('spots a manager recorded only in roles[]', async () => {
+        // The arm that has been missed before, in four separate places.
+        const made = makeDb({}, {
+            manager_3: { accountStatus: 'approved', roles: ['manager'] },
+        });
+        db = made.db;
+
+        await expect((adminDeleteUser as any)(
+            { targetUserId: 'manager_3' }, { auth: { uid: 'manager_1' } },
+        )).rejects.toMatchObject({ code: 'failed-precondition' });
+    });
+
+    it('refuses the whole batch if one of them is a manager', async () => {
+        // Nothing partial. A batch that deleted three riders and then stopped would
+        // be harder to reason about afterwards than one that did nothing.
+        const made = makeDb({}, {
+            manager_2: { accountStatus: 'approved', role: 'manager' },
+        });
+        db = made.db;
+
+        await expect((adminDeleteUser as any)(
+            { targetUserIds: ['driver_1', 'manager_2'] }, { auth: { uid: 'manager_1' } },
+        )).rejects.toMatchObject({ code: 'failed-precondition' });
+
+        expect(made.recorder.deletes).toEqual([]);
+    });
+
+    it('still deletes an ordinary account, and a demoted manager', async () => {
+        // Demotion is the intended route: clear the role, then delete.
+        const made = makeDb({}, {
+            ex_manager: { accountStatus: 'approved', roles: ['driver'] },
+        });
+        db = made.db;
+
+        const result = await (adminDeleteUser as any)(
+            { targetUserId: 'ex_manager' }, { auth: { uid: 'manager_1' } },
+        );
+
+        expect(result.success).toBe(true);
+        expect(made.recorder.deletes.length).toBeGreaterThan(0);
+    });
+
+    it('still refuses an unapproved "manager" as a delete target', async () => {
+        // isApprovedManagerData requires approval, so a pending self-declared
+        // manager is deletable — which is what the approval queue needs.
+        const made = makeDb({}, {
+            pending_mgr: { accountStatus: 'pending', role: 'manager' },
+        });
+        db = made.db;
+
+        const result = await (adminDeleteUser as any)(
+            { targetUserId: 'pending_mgr' }, { auth: { uid: 'manager_1' } },
+        );
+
+        expect(result.success).toBe(true);
     });
 });

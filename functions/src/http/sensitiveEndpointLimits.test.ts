@@ -45,12 +45,21 @@ vi.mock('firebase-admin', () => ({
     auth: () => ({ deleteUser: async (uid: string) => { deletedAuthUsers.push(uid); } }),
 }));
 
-vi.mock('../utils/authz', () => ({
-    assertApprovedManager: vi.fn(async (_db: any, uid: string) => {
-        managerChecks.push(uid);
-        return { name: 'Manager Meera', roles: ['manager'] };
-    }),
-}));
+// Only `assertApprovedManager` is stubbed, so the ORDER of the authority check
+// against the rate limit stays observable. The rest of the module is real —
+// adminDeleteUser also calls `isApprovedManagerData` now, to refuse deleting
+// another manager, and a stub of that would answer differently here than in
+// production.
+vi.mock('../utils/authz', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../utils/authz')>();
+    return {
+        ...actual,
+        assertApprovedManager: vi.fn(async (_db: any, uid: string) => {
+            managerChecks.push(uid);
+            return { name: 'Manager Meera', roles: ['manager'] };
+        }),
+    };
+});
 
 vi.mock('../utils/audit', () => ({ writeAuditLog: vi.fn(async () => null) }));
 vi.mock('../utils/fleet', () => ({ releaseVehiclesHeldBy: vi.fn(async () => []) }));

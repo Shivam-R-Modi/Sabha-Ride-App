@@ -6,6 +6,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { notifyStudentRideCompleted, tokensOf } from '../utils/notifications';
+import { assertApprovedDriver } from '../utils/authz';
 // The fleet helpers were imported here to release the car on every completed
 // run. Nothing in this file touches the fleet any more — see the comment on the
 // driver update below.
@@ -36,6 +37,18 @@ export const completeRide = functions.https.onCall(async (data, context) => {
     }
 
     const db = admin.firestore();
+
+    // OWNERSHIP IS NOT AUTHORISATION.
+    //
+    // This checked only that the caller was the Sarthi named on the ride, so a
+    // REVOKED account whose name still sat on a document could complete rides —
+    // which writes statistics, releases the vehicle, moves driver counters and sets
+    // every passenger's status. Revoking did not reach any of it. `sarthiArrived`
+    // already noted the gap: "Stricter than startRide/completeRide, which check
+    // ownership only."
+    //
+    // Before the ride read, so nothing is fetched for a caller with no business here.
+    await assertApprovedDriver(db, driverUid, 'complete a ride');
 
     try {
         // Get ride details

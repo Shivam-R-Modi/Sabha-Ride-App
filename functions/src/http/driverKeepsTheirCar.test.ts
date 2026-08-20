@@ -76,13 +76,22 @@ function makeDb(opts: {
     const snap = (exists: boolean, data?: any) => ({ exists, data: () => data });
     const assigned = opts.stillAssigned ?? [];
 
+    // `accountStatus` and `roles` are DEFAULTS, and the spread lets a test override
+    // them — the same shape globalAssignDriver.test.ts uses. completeRide and
+    // driverDoneForToday now call assertApprovedDriver, so every fixture has to
+    // describe a Sarthi who is actually allowed to act; a test that wants a revoked
+    // one says so explicitly.
+    const driverDoc = opts.driver === null
+        ? null
+        : { accountStatus: 'approved', roles: ['driver'], ...(opts.driver ?? {}) };
+
     const collection = (name: string) => {
         const chain: any = {
             doc: (id: string) => ({
                 path: `${name}/${id}`,
                 get: async () => {
                     if (name === 'rides') return snap(opts.ride !== null && opts.ride !== undefined, opts.ride);
-                    return snap(opts.driver !== null && opts.driver !== undefined, opts.driver);
+                    return snap(driverDoc !== null, driverDoc ?? undefined);
                 },
             }),
             where: () => chain,
