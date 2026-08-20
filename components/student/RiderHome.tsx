@@ -41,6 +41,11 @@ interface RiderHomeProps {
     /** The active ride, for the states that render one. */
     ride: React.ComponentProps<typeof RideStatusCard>['ride'] | null;
     onAttendanceAnswered: (response: 'yes' | 'no') => void;
+    /**
+     * Take back a request nobody has taken yet. Absent means the control is not
+     * offered — which is the correct state once a Sarthi is assigned.
+     */
+    onWithdraw?: () => Promise<void>;
 }
 
 /** Shared frame so every state reads as the same object changing, not a new page. */
@@ -69,7 +74,7 @@ const CardHead: React.FC<{
 );
 
 export const RiderHome: React.FC<RiderHomeProps> = ({
-    user, state, ride, onAttendanceAnswered,
+    user, state, ride, onAttendanceAnswered, onWithdraw,
 }) => {
     const toast = useToast();
     const { ask, confirmDialog } = useConfirm();
@@ -192,6 +197,29 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
         };
     };
 
+    const withdraw = async () => {
+        if (!onWithdraw) return;
+
+        // useConfirm, never window.confirm — that returned false silently and made
+        // every destructive button in this app inert.
+        const sure = await ask({
+            title: 'Cancel your ride?',
+            message: 'Your request will be taken out of the queue. You can ask again if you change your mind.',
+            confirmLabel: 'Yes, cancel it',
+            cancelLabel: 'Keep it',
+        });
+        if (!sure) return;
+
+        setBusy(true);
+        try {
+            await onWithdraw();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Could not cancel that. Please try again.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const askToLeave = async () => {
         setBusy(true);
         try {
@@ -295,6 +323,24 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
                     </StateCard>
                 );
 
+            case 'driving-tonight':
+                // A CARD, NOT A HIDDEN OR DISABLED BUTTON.
+                //
+                // This screen's whole job is to offer one action, and here the
+                // answer is "none, and here is why". A missing button reads as a
+                // broken app; a greyed-out one that cannot explain itself is the
+                // dead control this repo has spent releases removing. So it says
+                // what is true.
+                return (
+                    <StateCard>
+                        <CardHead
+                            icon={<Car size={22} />}
+                            title="You are driving tonight"
+                            detail="You are holding a car, so there is no lift to ask for. Hand the car back from the Sarthi dashboard if somebody else is driving instead."
+                        />
+                    </StateCard>
+                );
+
             case 'can-request':
                 return (
                     <StateCard tone="accent">
@@ -320,6 +366,21 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
                             title="Looking for a driver"
                             detail="Your request is in. We will show the driver's name here as soon as one takes it."
                         />
+                        {/* Withdraw, offered only while nobody has taken it. Once a
+                            Sarthi is assigned this card becomes 'driver-assigned',
+                            which has no withdraw — by then they are on their way and
+                            the seat is accounted for, so changing plans is a
+                            conversation rather than a button. firestore.rules
+                            enforces that boundary; this is the readable half. */}
+                        {onWithdraw && (
+                            <button
+                                onClick={withdraw}
+                                disabled={busy}
+                                className="clay-button w-full mt-5 text-coffee-700"
+                            >
+                                {busy ? 'Cancelling…' : 'I no longer need a ride'}
+                            </button>
+                        )}
                     </StateCard>
                 );
 

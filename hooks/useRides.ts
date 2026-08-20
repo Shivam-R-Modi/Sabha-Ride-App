@@ -494,3 +494,26 @@ export const useRideHistory = (userId: string, pageSize: number = 10) => {
 
     return { rides, loading, hasMore, loadMore };
 };
+
+/**
+ * Take back a ride request nobody has taken yet.
+ *
+ * The rules have always permitted a rider to write `cancelled` — no control was
+ * ever built, so the capability sat there unused and untested. This is that
+ * control's data half.
+ *
+ * ONLY WHILE STILL `requested`, and firestore.rules enforces that rather than
+ * trusting this. Once a Sarthi is assigned they are on their way, the seat is
+ * accounted for and the manifest is built; a rider disappearing from it silently is
+ * the wrong outcome, and putting that right needs the seat released and the driver
+ * told. That is a different job from a status flip.
+ *
+ * Writes `status` and nothing else, so it cannot touch a field the assignment
+ * pipeline owns — `touchesRideServerFields()` in the rules would refuse it anyway.
+ */
+export const withdrawRideRequest = async (rideId: string): Promise<void> => {
+    await updateDoc(doc(db, 'rides', rideId), {
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+    });
+};

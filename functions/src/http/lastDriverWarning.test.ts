@@ -31,7 +31,7 @@ vi.mock('firebase-functions', () => {
 vi.mock('firebase-admin', () => ({ firestore: () => db }));
 
 import { driverDoneForToday, decideDoneWarning } from './driverDoneForToday';
-import { isValidPendingRide } from './globalAssignDriver';
+import { isAssignableTo } from './globalAssignDriver';
 
 describe('decideDoneWarning — when to speak up', () => {
     it('warns when riders wait and nobody else is on shift', () => {
@@ -314,10 +314,14 @@ describe('the warning counts what dispatch would actually serve', () => {
         expect(result.success).toBe(true);
     });
 
-    it('agrees with isValidPendingRide row for row', () => {
+    it('agrees with isAssignableTo row for row', () => {
         // The drift guard. If the two ever answer differently for the same row,
         // one of the two screens is lying to a driver — and this fails rather
         // than waiting for somebody to notice in the field.
+        //
+        // Asserts against isAssignableTo, which is what surveyTheQueue actually
+        // calls. Left pointing at isValidPendingRide it would still pass while
+        // guarding a function this file's subject no longer uses.
         const rows = [
             pickup(),
             dropoff(),
@@ -325,11 +329,26 @@ describe('the warning counts what dispatch would actually serve', () => {
             pickup({ pickupLat: 0, pickupLng: 0 }),
             pickup({ studentId: undefined }),
             dropoff({ rideType: 'sabha-to-Home' }),
+            // The caller's own request. Dispatch refuses it, so the warning must
+            // too — a driver is never their own passenger.
+            dropoff({ studentId: 'driver_1' }),
         ];
-        const accepted = rows.filter(r => isValidPendingRide(r, '2026-08-14', 'sabha-to-home'));
+        const accepted = rows.filter(r => isAssignableTo(r, 'driver_1', '2026-08-14', 'sabha-to-home'));
 
-        // Exactly the one well-formed drop-off for this gathering.
+        // Exactly the one well-formed drop-off for this gathering, from somebody
+        // other than the driver.
         expect(accepted).toHaveLength(1);
         expect(accepted[0]!.rideType).toBe('sabha-to-home');
+        expect(accepted[0]!.studentId).toBe('stu_1');
+    });
+
+    it('does not warn a driver about their own waiting request', () => {
+        // The contradiction this file exists to prevent, from a new cause: the
+        // driver switched to Bhulku, asked for a ride, and came back. "End my
+        // shift" would have said 1 rider is still waiting while "Find my next
+        // riders" said no one is left — the same two lying screens as 2026-08-17.
+        const own = [dropoff({ studentId: 'driver_1' })];
+        expect(own.filter(r => isAssignableTo(r, 'driver_1', '2026-08-14', 'sabha-to-home')))
+            .toHaveLength(0);
     });
 });

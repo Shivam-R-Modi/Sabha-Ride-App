@@ -10,6 +10,7 @@ import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { ProfileEditor } from '../shared/ProfileEditor';
 import { RiderHome } from './RiderHome';
 import { deriveRiderState } from '../../src/utils/riderState';
+import { withdrawRideRequest } from '../../hooks/useRides';
 
 interface StudentDashboardProps {
     user: User | Driver;
@@ -59,9 +60,15 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
         hasResponded: hasResponded || justAnswered !== null,
         attendanceResponse: justAnswered ?? attendance?.response ?? null,
         dismissedRequest,
+        // Holding a car means driving tonight, so no lift is on offer. Same
+        // definition driverDoneForToday uses for "on shift": holding a car is
+        // exactly what lets a driver be assigned riders. A manager or Sarthi
+        // wearing the Bhulku hat lands here, which is the point.
+        onShift: !!(user as { currentVehicleId?: string }).currentVehicleId,
     }), [
         ridesLoading, attendanceLoading, hasEvent, dropoffOpen, activeRide, activeRides,
         hasResponded, justAnswered, attendance?.response, dismissedRequest,
+        (user as { currentVehicleId?: string }).currentVehicleId,
     ]);
 
     switch (currentTab) {
@@ -84,6 +91,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user }) => {
                     state={state}
                     ride={activeRide ?? null}
                     onAttendanceAnswered={setJustAnswered}
+                    // Offered ONLY while the request is still waiting. Passing it
+                    // unconditionally would put a cancel button on a ride whose
+                    // Sarthi is already on the way, which firestore.rules refuses —
+                    // so the control would be visible and dead, the exact shape this
+                    // repo keeps removing.
+                    onWithdraw={
+                        activeRide && activeRide.status === 'requested'
+                            ? () => withdrawRideRequest(activeRide.id)
+                            : undefined
+                    }
                 />
             );
     }

@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -65,7 +65,12 @@ const driverRide = {
     },
 } as never;
 
-const show = (state: RiderState, ride: unknown = null, userOverride: object = {}) =>
+const show = (
+    state: RiderState,
+    ride: unknown = null,
+    userOverride: object = {},
+    onWithdraw?: () => Promise<void>,
+) =>
     render(
         <ToastProvider>
             <RiderHome
@@ -73,6 +78,7 @@ const show = (state: RiderState, ride: unknown = null, userOverride: object = {}
                 state={state}
                 ride={ride as never}
                 onAttendanceAnswered={vi.fn()}
+                onWithdraw={onWithdraw}
             />
         </ToastProvider>,
     );
@@ -112,6 +118,9 @@ describe('RiderHome — one card, one action', () => {
         ['no-sabha', { kind: 'no-sabha' }],
         ['waiting-for-driver', { kind: 'waiting-for-driver' }],
         ['in-dropoff-queue', { kind: 'in-dropoff-queue' }],
+        // Driving tonight: no lift to ask for, and the card says why rather than
+        // showing a greyed-out button that cannot explain itself.
+        ['driving-tonight', { kind: 'driving-tonight' }],
     ];
 
     it.each(noActionStates)('%s offers no action at all, rather than a dead one', (_n, state) => {
@@ -459,5 +468,86 @@ describe('RiderHome — establishing presence without asking', () => {
         const claim: any = studentReadyToLeave.mock.calls[0]![1];
         expect(claim.method).toBe('manual');
         expect(claim.distanceMeters).toBeGreaterThan(1000);
+    });
+});
+
+describe('RiderHome — driving tonight', () => {
+    /**
+     * The Sarthi wearing the Bhulku hat. The role hierarchy grants that hat on
+     * purpose; this is the screen that stops it being used to book a lift while
+     * holding a car, which dispatch would otherwise answer by assigning them their
+     * own request.
+     */
+    it('says they are driving instead of offering a ride', () => {
+        show({ kind: 'driving-tonight' });
+        expect(screen.getByText('You are driving tonight')).toBeInTheDocument();
+    });
+
+    it('offers no Request a ride button', () => {
+        show({ kind: 'driving-tonight' });
+        expect(screen.queryByRole('button', { name: /request a ride/i })).toBeNull();
+    });
+
+    it('says how to change it, so it is not a dead end', () => {
+        // A screen that removes the only action has to point somewhere.
+        show({ kind: 'driving-tonight' });
+        expect(screen.getByText(/hand the car back/i)).toBeInTheDocument();
+    });
+});
+
+describe('RiderHome — taking a request back', () => {
+    /**
+     * The owner asked for this: "after request if bhulku decides not to go then he
+     * take that request back". firestore.rules had always permitted a rider to
+     * write `cancelled` — no control was ever built, so the capability sat unused.
+     *
+     * The boundary that matters is WHEN. Offered only while nobody has taken the
+     * ride; once a Sarthi is assigned they are on their way and the seat is
+     * accounted for, so the rules refuse it and the control is not rendered. A
+     * button that would be refused is worse than no button.
+     */
+    it('offers no withdraw when the caller does not supply one', () => {
+        // 'driver-assigned' passes no onWithdraw, so nothing to press.
+        show({ kind: 'waiting-for-driver' });
+        expect(screen.queryByRole('button', { name: /no longer need a ride/i })).toBeNull();
+    });
+
+    it('offers it while still waiting', () => {
+        show({ kind: 'waiting-for-driver' }, null, {}, vi.fn());
+        expect(screen.getByRole('button', { name: /no longer need a ride/i })).toBeInTheDocument();
+    });
+
+    it('asks before cancelling, and cancels on yes', async () => {
+        const onWithdraw = vi.fn(async () => undefined);
+        show({ kind: 'waiting-for-driver' }, null, {}, onWithdraw);
+
+        fireEvent.click(screen.getByRole('button', { name: /no longer need a ride/i }));
+
+        // useConfirm renders a dialog; window.confirm is banned in this repo.
+        const yes = await screen.findByRole('button', { name: /yes, cancel it/i });
+        fireEvent.click(yes);
+
+        await waitFor(() => expect(onWithdraw).toHaveBeenCalledTimes(1));
+    });
+
+    it('does nothing if they change their mind about changing their mind', async () => {
+        const onWithdraw = vi.fn(async () => undefined);
+        show({ kind: 'waiting-for-driver' }, null, {}, onWithdraw);
+
+        fireEvent.click(screen.getByRole('button', { name: /no longer need a ride/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /keep it/i }));
+
+        await waitFor(() => expect(onWithdraw).not.toHaveBeenCalled());
+    });
+
+    it('surfaces the reason when the write is refused', async () => {
+        // A silent failure here would leave a rider believing they had cancelled.
+        const onWithdraw = vi.fn(async () => { throw new Error('Missing or insufficient permissions.'); });
+        show({ kind: 'waiting-for-driver' }, null, {}, onWithdraw);
+
+        fireEvent.click(screen.getByRole('button', { name: /no longer need a ride/i }));
+        fireEvent.click(await screen.findByRole('button', { name: /yes, cancel it/i }));
+
+        expect(await screen.findByText(/insufficient permissions/i)).toBeInTheDocument();
     });
 });

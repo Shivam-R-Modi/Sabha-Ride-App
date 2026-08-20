@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, setDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, setDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { Vehicle } from '../types';
 import { maxPassengerSeats } from '../src/constants/seats';
 
@@ -170,8 +170,38 @@ export const useAvailableVehicles = () => {
     return { vehicles, loading };
 };
 
+/**
+ * Which uid a vehicle document says is holding it.
+ *
+ * Mirrors `resolveVehicleHolder` in functions/src/utils/fleet.ts — same two fields,
+ * same order — so the client, the callable and firestore.rules cannot disagree
+ * about whose car it is.
+ */
+const holderOf = (data: Record<string, unknown> | undefined): string | null =>
+    (data?.assignedDriverId as string | undefined)
+    ?? (data?.currentDriverId as string | undefined)
+    ?? null;
+
 export const assignVehicleToDriver = async (vehicle: Vehicle, driverId: string, driverName: string) => {
     try {
+        // REFUSE A CAR SOMEBODY ELSE IS HOLDING.
+        //
+        // This wrote the vehicle document straight out with no holder check at all,
+        // so a Sarthi could take a car another Sarthi was already driving — the
+        // second write simply won, and the first driver's dashboard kept showing a
+        // car that was no longer theirs. `globalAssignDriver` has always guarded this
+        // ("Vehicle is assigned to another Sarthi"); this path never reached it.
+        //
+        // firestore.rules now refuses it too, and the rule is the real boundary
+        // because it evaluates against committed state and therefore also settles a
+        // race between two taps. This check exists so the volunteer gets a sentence
+        // they can act on instead of a raw permission error.
+        const current = await getDoc(doc(db, 'vehicles', vehicle.id));
+        const holder = holderOf(current.data());
+        if (holder && holder !== driverId) {
+            throw new Error('Another Sarthi is already using that car. Please pick a different one.');
+        }
+
         const vehicleUpdates = {
             status: 'in_use',
             assignedDriverId: driverId,

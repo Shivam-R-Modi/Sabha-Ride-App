@@ -66,7 +66,7 @@ vi.mock('../utils/settings', () => ({
     },
 }));
 
-import { globalAssignDriver, isValidPendingRide } from './globalAssignDriver';
+import { globalAssignDriver, isAssignableTo, isValidPendingRide } from './globalAssignDriver';
 
 // ── fake Firestore ─────────────────────────────────────────
 
@@ -1016,5 +1016,94 @@ describe('globalAssignDriver — a pickup is never served by a drop-off run', ()
         const { result } = await runAs('driver-1', fixture);
 
         expect((result as any).status).not.toBe('no_students');
+    });
+});
+
+/**
+ * ONE PERSON CANNOT BE BOTH DRIVER AND PASSENGER.
+ *
+ * The hierarchy in firestore.rules grants a driver the student role and a manager
+ * both — deliberately, so a Sarthi can see the rider screens. Nothing stopped them
+ * USING those screens to request a ride, and the dispatch pool was every waiting
+ * request with no exclusion of the driver doing the tapping.
+ *
+ * So: switch to Bhulku, request a ride, switch back to Sarthi, tap "Find my next
+ * riders" — and be assigned yourself. A phantom passenger holding a real seat in
+ * their own car, with their own home address on the manifest, and a rider count
+ * that says one child is served who is not.
+ *
+ * Spotted by the owner, who asked what stops it. Nothing did.
+ */
+describe('globalAssignDriver — a driver is never their own passenger', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('reports no students when the only waiting request is the driver\'s own', async () => {
+        const fixture = baseFixture('home-to-sabha');
+        fixture.rides = [
+            { id: 'ride-self', data: {
+                studentId: 'driver-1', studentName: 'Asha',
+                pickupLat: 42.35, pickupLng: -71.07, pickupAddress: '1 St', status: 'requested',
+            } },
+        ];
+
+        const { result, recorder } = await run(fixture);
+
+        expect((result as any).status).toBe('no_students');
+        // And nothing was written: no ride assigned, no car taken.
+        expect(recorder.updates).toHaveLength(0);
+    });
+
+    it('skips the driver\'s own request but still serves everyone else', async () => {
+        // The operationally important case: one self-request must not poison a pool
+        // that also holds real riders.
+        const fixture = baseFixture('home-to-sabha');
+        fixture.rides = [
+            { id: 'ride-self', data: {
+                studentId: 'driver-1', studentName: 'Asha',
+                pickupLat: 42.35, pickupLng: -71.07, pickupAddress: '1 St', status: 'requested',
+            } },
+            { id: 'ride-b', data: {
+                studentId: 'stu-b', studentName: 'B',
+                pickupLat: 42.37, pickupLng: -71.05, pickupAddress: '2 St', status: 'requested',
+            } },
+        ];
+
+        const { result, recorder } = await run(fixture);
+
+        expect((result as any).status).not.toBe('no_students');
+
+        const touched = recorder.updates.map(u => u.path);
+        expect(touched.some(p => p.includes('ride-b'))).toBe(true);
+        expect(
+            touched.some(p => p.includes('ride-self')),
+            'the driver was assigned their own request',
+        ).toBe(false);
+    });
+});
+
+describe('isAssignableTo — the pool filter, including the caller', () => {
+    const good = {
+        studentId: 'stu-a', pickupLat: 42.35, pickupLng: -71.07,
+        eventDate: '2026-08-14', rideType: 'home-to-sabha',
+    };
+
+    it('accepts another rider\'s valid request', () => {
+        expect(isAssignableTo(good, 'driver-1', '2026-08-14', 'home-to-sabha')).toBe(true);
+    });
+
+    it('refuses a request belonging to the driver themselves', () => {
+        expect(isAssignableTo(
+            { ...good, studentId: 'driver-1' }, 'driver-1', '2026-08-14', 'home-to-sabha',
+        )).toBe(false);
+    });
+
+    it('still applies every gathering and direction rule underneath', () => {
+        // It must not become a laxer filter than isValidPendingRide by accident.
+        expect(isAssignableTo(
+            { ...good, eventDate: '2026-08-09' }, 'driver-1', '2026-08-14', 'home-to-sabha',
+        )).toBe(false);
+        expect(isAssignableTo(
+            { ...good, rideType: 'sabha-to-home' }, 'driver-1', '2026-08-14', 'home-to-sabha',
+        )).toBe(false);
     });
 });

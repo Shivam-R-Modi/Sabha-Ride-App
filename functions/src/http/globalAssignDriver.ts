@@ -110,6 +110,36 @@ export function isValidPendingRide(
     return true;
 }
 
+/**
+ * May this waiting request enter THIS driver's pool?
+ *
+ * `isValidPendingRide` answers "is this request real and for tonight" — a property
+ * of the ride alone. This adds the one property that depends on who is asking:
+ * A DRIVER IS NEVER THEIR OWN PASSENGER.
+ *
+ * The hierarchy in firestore.rules deliberately grants a driver the student role
+ * and a manager both, so a Sarthi can see the rider screens. Nothing stopped them
+ * requesting a ride there, and this pool was every waiting request with no
+ * exclusion of the caller. A Sarthi could switch to Bhulku, request a ride, switch
+ * back and be assigned themselves: a phantom passenger holding a real seat in
+ * their own car, their own address on the manifest, and a served count that
+ * includes somebody who was never collected.
+ *
+ * Kept as its own function rather than folded into `isValidPendingRide` because
+ * the two ask different questions, and because `driverDoneForToday` counts who is
+ * still waiting — a count that must exclude the caller's own request for the same
+ * reason. Sharing this is what stops the two disagreeing.
+ */
+export function isAssignableTo(
+    docData: any,
+    driverId: string,
+    expectedEventKey: string | null,
+    expectedRideType: RideType,
+): boolean {
+    if (docData.studentId === driverId) return false;
+    return isValidPendingRide(docData, expectedEventKey, expectedRideType);
+}
+
 // ── main function ──────────────────────────────────────────
 
 export const globalAssignDriver = functions.https.onCall(async (data, context) => {
@@ -302,7 +332,7 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
             // and the direction can never disagree with the window being served:
             // a leftover request from a previous sabha, or one asking for the
             // opposite direction, cannot enter this pool.
-            if (!isValidPendingRide(d, eventId, rideType)) continue;
+            if (!isAssignableTo(d, driverId, eventId, rideType)) continue;
             requestMap.set(doc.id, {
                 id: doc.id,
                 rideRequestId: doc.id,

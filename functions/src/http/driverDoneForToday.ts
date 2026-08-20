@@ -9,7 +9,7 @@ import {
     writeVehicleState, resolveDriverVehicleId, VEHICLE_RELEASED, DRIVER_VEHICLE_CLEARED,
 } from '../utils/fleet';
 // The dispatch pool's own filter. Shared deliberately — see surveyTheQueue.
-import { isValidPendingRide } from './globalAssignDriver';
+import { isAssignableTo } from './globalAssignDriver';
 import { RideType } from '../types';
 
 /**
@@ -67,6 +67,12 @@ export function decideDoneWarning(
  * is the same argument: a request with no usable pickup point cannot be served
  * by staying, so warning about it only teaches the driver to tap through.
  *
+ * It shares `isAssignableTo`, not `isValidPendingRide`, for that same reason: the
+ * pool excludes the caller's OWN waiting request, because a driver is never their
+ * own passenger. Counting it here would warn "1 rider is still waiting" about
+ * themselves while "Find my next riders" answered "no one is left" — the identical
+ * pair of contradictory screens described above, from a new cause.
+ *
  * An absent `rideType` on the CONTEXT means no window is open, and
  * globalAssignDriver refuses outright in that state — so nothing is dispatchable
  * and there is nothing to warn about.
@@ -86,7 +92,7 @@ async function surveyTheQueue(
 
     const waitingCount = !eventId || !rideType
         ? 0
-        : requested.docs.filter(d => isValidPendingRide(d.data(), eventId, rideType)).length;
+        : requested.docs.filter(d => isAssignableTo(d.data(), driverId, eventId, rideType)).length;
 
     const otherDriversOnShift = new Set(
         held.docs

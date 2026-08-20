@@ -18,6 +18,7 @@ const base: RiderInputs = {
     hasResponded: true,
     attendanceResponse: 'yes',
     dismissedRequest: null,
+    onShift: false,
 };
 
 const state = (over: Partial<RiderInputs> = {}) => deriveRiderState({ ...base, ...over });
@@ -184,5 +185,57 @@ describe('splitInfo — a family in two cars', () => {
 
         expect(result).toMatchObject({ kind: 'driver-assigned' });
         expect(result.kind === 'driver-assigned' && result.split?.waitingSeats).toBe(2);
+    });
+});
+
+describe('deriveRiderState — driving tonight', () => {
+    /**
+     * ONE PERSON CANNOT BE BOTH DRIVER AND PASSENGER.
+     *
+     * The role hierarchy grants a Sarthi the Bhulku hat on purpose, so they can see
+     * these screens. Nothing stopped them USING the request button, and dispatch
+     * would then happily assign them their own request — a phantom passenger in
+     * their own car. The server refuses that now; this is the half that stops the
+     * request being made at all, and says why.
+     *
+     * "On shift" is holding a car, the same definition driverDoneForToday uses:
+     * holding a car is exactly what lets a driver be assigned riders.
+     */
+    it('tells a driver holding a car that they are driving, instead of offering a ride', () => {
+        expect(state({ onShift: true })).toEqual({ kind: 'driving-tonight' });
+    });
+
+    it('outranks the attendance question — driving IS attending', () => {
+        expect(state({ onShift: true, hasResponded: false })).toEqual({ kind: 'driving-tonight' });
+        expect(state({ onShift: true, attendanceResponse: 'no' })).toEqual({ kind: 'driving-tonight' });
+    });
+
+    it('outranks the offer of a lift home', () => {
+        // They have a car. Asking whether they want driving home is nonsense.
+        expect(state({ onShift: true, dropoffOpen: true })).toEqual({ kind: 'driving-tonight' });
+    });
+
+    it('outranks a stale dismissal', () => {
+        expect(state({ onShift: true, dismissedRequest: { managerName: 'Mira' } }))
+            .toEqual({ kind: 'driving-tonight' });
+    });
+
+    it('does NOT hide a ride they are already holding as a passenger', () => {
+        // The conflict state: they asked for a lift and then went on shift. Showing
+        // the ride is what lets them resolve it; hiding it behind "you are driving"
+        // would strand a real request nobody can see.
+        expect(state({ onShift: true, activeRide: { status: 'requested' } }))
+            .toEqual({ kind: 'waiting-for-driver' });
+        expect(state({ onShift: true, activeRide: { status: 'assigned' } }))
+            .toEqual({ kind: 'driver-assigned', split: null });
+    });
+
+    it('still never guesses while loading, or with no sabha', () => {
+        expect(state({ onShift: true, loading: true })).toEqual({ kind: 'loading' });
+        expect(state({ onShift: true, hasEvent: false })).toEqual({ kind: 'no-sabha' });
+    });
+
+    it('changes nothing for a rider who is not on shift', () => {
+        expect(state({ onShift: false })).toEqual({ kind: 'can-request' });
     });
 });

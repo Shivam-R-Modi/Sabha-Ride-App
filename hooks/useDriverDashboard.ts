@@ -34,9 +34,23 @@ export const useDriverAssignments = (driverId: string) => {
     useEffect(() => {
         if (!driverId) return;
 
-        // Watch for rides where I am the pickup driver or the return driver
+        // SCOPED TO THIS DRIVER, and that is the point of it.
+        //
+        // This asked for every ride in those four states and sorted them out below
+        // with `if (ride.driver?.id === driverId)`. The filter was cosmetic: every
+        // Sarthi's phone had already downloaded every assigned and completed ride in
+        // the congregation — every child's name, phone number and pickup address,
+        // including families they were not driving, and previous weeks' history.
+        //
+        // `firestore.rules` now refuses an unscoped list, so this clause is also
+        // what keeps the dashboard working. The composite index it needs
+        // (driverId + status) already exists in firestore.indexes.json.
+        //
+        // `driverId` is the canonical field — globalAssignDriver writes it alongside
+        // `driver.id` precisely so this query can key on it.
         const q = query(
             collection(db, 'rides'),
+            where('driverId', '==', driverId),
             where('status', 'in', ['assigned', 'driver_en_route', 'arriving', 'completed'])
         );
 
@@ -50,7 +64,15 @@ export const useDriverAssignments = (driverId: string) => {
                 if (ride.driver?.id === driverId) {
                     pickupRides.push(ride);
                 }
-                // Dropoff check
+                // Dropoff check.
+                //
+                // `returnDriver` is vestigial: nothing in the app, the functions or
+                // the scripts has ever written it, so this has always been false.
+                // The return leg is re-dispatched by home proximity rather than
+                // paired to the outbound driver, so a return ride arrives with this
+                // driver in `driverId` and is caught by the branch above. Left in
+                // place rather than removed with the query change, so one commit does
+                // one thing.
                 if (ride.returnDriver?.id === driverId) {
                     dropoffRides.push(ride);
                 }

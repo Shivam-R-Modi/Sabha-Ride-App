@@ -116,6 +116,49 @@ service cloud.firestore {
       return isApprovedAs('student');
     }
 
+    // Is the caller holding a car right now — i.e. driving tonight?
+    //
+    // ONE PERSON CANNOT BE BOTH DRIVER AND PASSENGER. The hierarchy above grants a
+    // driver the student role and a manager both, deliberately, so a Sarthi can see
+    // the rider screens. Nothing stopped them REQUESTING a ride there, and dispatch
+    // would then assign them their own request: a phantom passenger holding a real
+    // seat in their own car, their own address on the manifest, and a served count
+    // that includes somebody who was never collected.
+    //
+    // Holding a car is the definition driverDoneForToday uses for "on shift",
+    // because holding a car is exactly what lets a driver be assigned riders. Both
+    // field names are read for the reason given in functions/src/utils/fleet.ts:
+    // `currentVehicleId` is canonical and `currentCarId` is the server's older name
+    // for the same thing.
+    //
+    // Ride requests are direct client writes with no callable in between, so this is
+    // the boundary. The rider screen's "you are driving tonight" card is the
+    // readable half, not the enforcement.
+    function isHoldingAVehicle() {
+      let data = getUserData();
+      return data.get('currentVehicleId', null) != null
+             || data.get('currentCarId', null) != null;
+    }
+
+    // Who a vehicle document says is holding it. Mirrors resolveVehicleHolder in
+    // functions/src/utils/fleet.ts, which reads the same two fields in the same
+    // order — so the rule and the callable cannot disagree about whose car it is.
+    function vehicleHolder() {
+      return resource.data.get('assignedDriverId', resource.data.get('currentDriverId', null));
+    }
+
+    // A driver may claim a car nobody holds, and release the one they hold. They may
+    // not touch one somebody else is holding.
+    //
+    // This was `isDriver()` alone, unconditional, on both `cars` and `vehicles`, so
+    // any approved driver could rewrite ANY vehicle document. The callable guards the
+    // holder — globalAssignDriver refuses "Vehicle is assigned to another Sarthi" —
+    // but assignVehicleToDriver writes the document straight from the browser and
+    // never reaches it. Two Sarthis, one car, and the second one silently wins.
+    function isFreeOrMine() {
+      return vehicleHolder() == null || vehicleHolder() == request.auth.uid;
+    }
+
     // isAssignedDriver(rideId) lived here. Its only caller was the /students
     // update rule, which is gone, so it was a billed get() that nothing reached.
     // A driver's authority over a ride is checked directly in the /rides rules.
@@ -202,9 +245,19 @@ service cloud.firestore {
 
     // Statuses a student may set on their own ride. Everything else is the
     // server's to write.
+    // `cancelled` is settable only FROM `requested`.
+    //
+    // The rules already permitted a rider to cancel; the UI never shipped a control
+    // for it, so this was untested and unexercised. Adding the control tightened it:
+    // once a Sarthi is assigned they are on their way, the seat is accounted for and
+    // the manifest is built, so a rider vanishing from it silently is the wrong
+    // outcome. Cancelling after assignment needs the seat released and the Sarthi
+    // told, which is a separate job — not a status flip from a phone.
     function isStudentSettableStatus() {
       return !('status' in changedKeys())
-             || request.resource.data.status in ['requested', 'cancelled'];
+             || request.resource.data.status == 'requested'
+             || (request.resource.data.status == 'cancelled'
+                 && resource.data.status == 'requested');
     }
 
     // =====================================
@@ -301,20 +354,49 @@ service cloud.firestore {
                   || (resource.data.assignedStudentIds != null && request.auth.uid in resource.data.assignedStudentIds)
                   || resource.data.driverId == request.auth.uid;
 
-      // Managers and drivers list rides to run dispatch. Students read their
-      // own by direct query, which `allow read` above covers per-document.
-      allow list: if isManagerForRead() || isDriver()
-                  || (request.auth != null && resource.data.studentId == request.auth.uid);
+      // SCOPED, because `read` is `get` + `list` and allow rules are OR'd: an
+      // unconditional arm here cannot be narrowed by the per-document `allow read`
+      // above it. This carried a bare `isDriver()`, so every approved driver — and,
+      // since the hierarchy makes a manager a driver, every manager without their
+      // claim being checked — could list the WHOLE collection: every child's name,
+      // phone number and pickup address, other drivers' rides included, and
+      // completed ones from previous weeks.
+      //
+      // useDriverDashboard was doing exactly that and filtering in the browser, so
+      // the leak was live rather than hypothetical.
+      //
+      // A driver's own rides are matched on `driverId` alone. `returnDriver` is
+      // vestigial — nothing in the app or the functions has ever written it, because
+      // the return leg is re-dispatched by home proximity rather than paired to the
+      // outbound driver.
+      allow list: if isManagerForRead()
+                  || (request.auth != null
+                      && resource.data.get('driverId', '') == request.auth.uid)
+                  || (request.auth != null
+                      && resource.data.get('studentId', '') == request.auth.uid);
 
       // A student may only create a ride for THEMSELVES, and only as a new
       // request — previously any student could forge a ride for another user,
       // or create one already marked 'assigned'.
+      // NO BARE `isDriver()` ARM. It sat above the guarded student arm and OR
+      // short-circuits, so a driver reached it first and none of the student
+      // constraints applied — they could create a ride for any child, already marked
+      // 'assigned', with seats out of bounds. The comment above describes exactly
+      // that hole; the fix had been applied to the student arm only.
+      //
+      // Nothing needed it. The only client-side ride creation is a rider asking for
+      // themselves (hooks/useRides.ts); drivers get work through globalAssignDriver,
+      // which runs on the Admin SDK and bypasses these rules entirely. A Sarthi who
+      // wants a lift now goes through the student arm, like anybody else — which is
+      // the point of the hierarchy granting them that role.
+      //
+      // `isManager()` stays: the Raw records console creates ride documents directly.
       allow create: if isManager()
-                    || isDriver()
                     || (isStudent()
                         && request.resource.data.studentId == request.auth.uid
                         && request.resource.data.status == 'requested'
-                        && hasValidSeats());
+                        && hasValidSeats()
+                        && !isHoldingAVehicle());
 
       // Students may cancel their own ride, but must not touch the fields the
       // assignment pipeline owns, nor set a status the server is responsible
@@ -338,7 +420,12 @@ service cloud.firestore {
       // Managers can read/write statistics
       // Others cannot access
       allow read: if isManagerForRead();
-      allow write: if isManager();
+      // create + update, NOT `write`: that includes DELETE, and allow rules are OR'd
+      // so a later `allow delete: if false` could not take it back — the hazard
+      // storage.rules spells out. Statistics are the only record of what a sabha
+      // actually did.
+      allow create, update: if isManager();
+      allow delete: if false;
     }
     
     // =====================================
@@ -426,8 +513,9 @@ service cloud.firestore {
       // Only managers can create cars
       allow create: if isManager();
       
-      // Managers can update any car, drivers can update for assignment/release
-      allow update: if isManager() || isDriver();
+      // Managers can move any car. A driver may claim a free one or release their
+      // own — see isFreeOrMine(), which mirrors the callable's holder check.
+      allow update: if isManager() || (isDriver() && isFreeOrMine());
       
       // Only managers can delete cars
       allow delete: if isManager();
@@ -436,7 +524,7 @@ service cloud.firestore {
     match /vehicles/{vehicleId} {
       allow read: if isAuthenticated();
       allow create: if isManager();
-      allow update: if isManager() || isDriver();
+      allow update: if isManager() || (isDriver() && isFreeOrMine());
       allow delete: if isManager();
     }
     
@@ -460,7 +548,13 @@ service cloud.firestore {
       match /responses/{userId} {
         // Users can read and write their own response
         allow read: if isOwner(userId) || isManagerForRead();
-        allow write: if isOwner(userId) || isManager();
+        // create + update, NOT `write`. `write` includes DELETE, so a rider could
+        // hard-delete their own answer and a manager anyone's — losing the record a
+        // manager plans the evening from, with no audit row and nothing on screen to
+        // say it had gone. Changing your mind is an update; there is no reason to
+        // destroy the row.
+        allow create, update: if isOwner(userId) || isManager();
+        allow delete: if false;
       }
     }
     // =====================================
@@ -592,8 +686,12 @@ service cloud.firestore {
       // signed-in user needs in order to see where and when sabha is.
       allow read: if isAuthenticated();
 
-      // Only managers can update settings
-      allow write: if isManager();
+      // create + update, NOT `write`, for the same reason as statistics above.
+      // settings/main holds the venue that drives the map and the pickup destination
+      // for every user; a manager deleting it takes the whole app's geography with
+      // it, and OR'd allow rules mean a delete denial below could not have stopped it.
+      allow create, update: if isManager();
+      allow delete: if false;
     }
   }
 }

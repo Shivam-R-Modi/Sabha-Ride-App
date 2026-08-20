@@ -1029,3 +1029,286 @@ describe('the notice board', () => {
         await assertFails(deleteDoc(doc(asDriver(), 'notices', 'n1')));
     });
 });
+
+describe('a Sarthi cannot read the whole congregation', () => {
+    /**
+     * `allow list` carried an unconditional `isDriver()`. In Firestore `read` is
+     * `get` + `list` and allow rules are OR'd, so the carefully scoped `allow read`
+     * beneath it could not narrow that: any approved driver could list EVERY ride —
+     * every child's name, phone number and pickup address, including rides assigned
+     * to other drivers, and completed ones from previous weeks.
+     *
+     * It was not theoretical. useDriverDashboard queried rides with no driver
+     * filter and sorted them out in the browser, so every Sarthi's phone held the
+     * lot. The client filter was cosmetic; the data had already left the server.
+     *
+     * And because the hierarchy makes every manager a driver, the same arm handed
+     * it to managers without their claim being checked too.
+     */
+    beforeEach(async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            const db = ctx.firestore();
+            await setDoc(doc(db, 'rides', 'ride_other'), {
+                studentId: OTHER_STUDENT, studentName: 'Bob', studentPhone: '556',
+                pickupAddress: '2 Main St', status: 'requested',
+            });
+            await setDoc(doc(db, 'rides', 'ride_mine'), {
+                studentId: OTHER_STUDENT, driverId: DRIVER, status: 'assigned',
+                studentName: 'Bob', pickupAddress: '2 Main St',
+            });
+        });
+    });
+
+    it('a driver cannot list every ride', async () => {
+        await assertFails(getDocs(collection(asDriver(), 'rides')));
+    });
+
+    it('a driver CAN still list the rides assigned to them', async () => {
+        // The dispatch screen has to keep working; it just has to ask for its own.
+        await assertSucceeds(getDocs(
+            query(collection(asDriver(), 'rides'), where('driverId', '==', DRIVER)),
+        ));
+    });
+
+    it('a driver cannot list another driver\'s rides by asking for them', async () => {
+        await assertFails(getDocs(
+            query(collection(asDriver(), 'rides'), where('driverId', '==', 'driver_other')),
+        ));
+    });
+
+    it('a rider CAN still list their own', async () => {
+        await assertSucceeds(getDocs(
+            query(collection(asStudent(), 'rides'), where('studentId', '==', STUDENT)),
+        ));
+    });
+
+    it('a manager can still list everything', async () => {
+        await assertSucceeds(getDocs(collection(asManager(), 'rides')));
+    });
+});
+
+describe('a Sarthi cannot forge a ride', () => {
+    /**
+     * `allow create` had a bare `isDriver()` arm above the guarded student one, and
+     * OR short-circuits — so a driver reached it first and none of the student
+     * constraints applied. The comment directly above it said "previously any
+     * student could forge a ride for another user, or create one already marked
+     * 'assigned'": that fix went onto the student arm only, while the arm above
+     * granted exactly what it described, plus a bypass of the seat bounds.
+     *
+     * Nothing needed it. The only client-side ride creation is a rider asking for
+     * themselves; drivers get work through globalAssignDriver, which runs on the
+     * Admin SDK and bypasses rules entirely.
+     */
+    it('a driver cannot create a ride for somebody else', async () => {
+        await assertFails(setDoc(doc(asDriver(), 'rides', 'forged'), {
+            studentId: OTHER_STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+        }));
+    });
+
+    it('a driver cannot create a ride already marked assigned', async () => {
+        await assertFails(setDoc(doc(asDriver(), 'rides', 'forged2'), {
+            studentId: DRIVER, status: 'assigned', driverId: DRIVER,
+            pickupLat: 42, pickupLng: -71,
+        }));
+    });
+
+    it('a driver cannot bypass the seat bounds', async () => {
+        await assertFails(setDoc(doc(asDriver(), 'rides', 'forged3'), {
+            studentId: DRIVER, status: 'requested', seatsRequested: 99,
+            pickupLat: 42, pickupLng: -71,
+        }));
+    });
+
+    it('a driver CAN still ask for a lift for themselves, properly', async () => {
+        // The hierarchy grants a Sarthi the Bhulku hat on purpose. Requesting is
+        // allowed — it just has to obey the same rules as any other rider.
+        await assertSucceeds(setDoc(doc(asDriver(), 'rides', 'dave_asks'), {
+            studentId: DRIVER, status: 'requested', seatsRequested: 1,
+            pickupLat: 42, pickupLng: -71,
+        }));
+    });
+
+    it('a manager can still create a ride, for the records console', async () => {
+        await assertSucceeds(setDoc(doc(asManager(), 'rides', 'by_manager'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+        }));
+    });
+});
+
+describe('nobody drives and rides at the same time', () => {
+    /**
+     * The server backstop for the driver/passenger rule. Ride requests are direct
+     * client writes with no callable in between, so this rule is the only thing
+     * enforcing it — the rider screen's card is the readable half, not the
+     * boundary.
+     */
+    it('somebody holding a car cannot request a lift', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'users', DRIVER), {
+                name: 'Dave', role: 'driver', roles: ['driver'], accountStatus: 'approved',
+                currentVehicleId: 'veh_1',
+            });
+        });
+
+        await assertFails(setDoc(doc(asDriver(), 'rides', 'dave_while_driving'), {
+            studentId: DRIVER, status: 'requested', seatsRequested: 1,
+            pickupLat: 42, pickupLng: -71,
+        }));
+    });
+
+    it('and can once they have handed the car back', async () => {
+        await assertSucceeds(setDoc(doc(asDriver(), 'rides', 'dave_off_shift'), {
+            studentId: DRIVER, status: 'requested', seatsRequested: 1,
+            pickupLat: 42, pickupLng: -71,
+        }));
+    });
+});
+
+describe('taking a request back', () => {
+    /**
+     * The rules already allowed a rider to write `cancelled` — the UI never shipped
+     * a control for it. Tightened while adding one: cancellable only from
+     * `requested`, so nobody can vanish from the manifest of a car already on its
+     * way. Cancelling after assignment needs the seat released and the Sarthi told,
+     * which is a different job.
+     */
+    it('a rider can withdraw a request nobody has taken', async () => {
+        // The EXACT payload withdrawRideRequest writes, `cancelledAt` included. A
+        // test that asserts a tidier write than the client makes can pass while
+        // production is refused.
+        await assertSucceeds(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            status: 'cancelled',
+            cancelledAt: '2026-08-20T18:00:00.000Z',
+        }));
+    });
+
+    it('a rider cannot cancel once a Sarthi is on the way', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'rides', 'ride_alice'), {
+                studentId: STUDENT, status: 'assigned', driverId: DRIVER,
+                pickupLat: 42, pickupLng: -71,
+            });
+        });
+
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            status: 'cancelled',
+        }));
+    });
+
+    it('a rider still cannot cancel somebody else\'s request', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'rides', 'ride_bob'), {
+                studentId: OTHER_STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+            });
+        });
+
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_bob'), {
+            status: 'cancelled',
+        }));
+    });
+});
+
+describe('the fleet — a Sarthi cannot take a car somebody else is holding', () => {
+    /**
+     * `allow update: if isManager() || isDriver()` was unconditional on both
+     * `cars` and `vehicles`, so any approved driver could rewrite ANY vehicle
+     * document. The server callable does guard the holder
+     * (globalAssignDriver: "Vehicle is assigned to another Sarthi") but
+     * assignVehicleToDriver writes the document straight from the browser and never
+     * reaches it. Two Sarthis, one car.
+     *
+     * Neither collection had a single rules test before this.
+     */
+    beforeEach(async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            const db = ctx.firestore();
+            await setDoc(doc(db, 'vehicles', 'veh_free'), { name: 'Odyssey', status: 'available' });
+            await setDoc(doc(db, 'vehicles', 'veh_taken'), {
+                name: 'Sienna', status: 'in_use', assignedDriverId: 'driver_other',
+            });
+            await setDoc(doc(db, 'vehicles', 'veh_mine'), {
+                name: 'Civic', status: 'in_use', assignedDriverId: DRIVER,
+            });
+        });
+    });
+
+    it('a driver can claim a free car', async () => {
+        await assertSucceeds(updateDoc(doc(asDriver(), 'vehicles', 'veh_free'), {
+            status: 'in_use', assignedDriverId: DRIVER,
+        }));
+    });
+
+    it('a driver cannot take a car another Sarthi is holding', async () => {
+        await assertFails(updateDoc(doc(asDriver(), 'vehicles', 'veh_taken'), {
+            status: 'in_use', assignedDriverId: DRIVER,
+        }));
+    });
+
+    it('a driver can hand back the car they hold', async () => {
+        await assertSucceeds(updateDoc(doc(asDriver(), 'vehicles', 'veh_mine'), {
+            status: 'available', assignedDriverId: null,
+        }));
+    });
+
+    it('a manager can still move any car', async () => {
+        await assertSucceeds(updateDoc(doc(asManager(), 'vehicles', 'veh_taken'), {
+            status: 'available', assignedDriverId: null,
+        }));
+    });
+
+    it('a rider cannot touch the fleet at all', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'vehicles', 'veh_free'), {
+            status: 'in_use', assignedDriverId: STUDENT,
+        }));
+    });
+});
+
+describe('managers cannot delete what only the server should', () => {
+    /**
+     * `allow write` includes DELETE, and allow rules are OR'd — so a later
+     * `allow delete: if false` could not take it back. storage.rules documents this
+     * hazard; three blocks here still had it.
+     */
+    it('nobody deletes the venue settings', async () => {
+        // settings/main drives the map and the pickup destination for everyone.
+        await assertFails(deleteDoc(doc(asManager(), 'settings', 'main')));
+    });
+
+    it('a manager can still change the venue', async () => {
+        await assertSucceeds(setDoc(doc(asManager(), 'settings', 'main'), {
+            sabhaLocation: { lat: 43, lng: -72 },
+        }, { merge: true }));
+    });
+
+    it('nobody deletes an attendance response', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'weeklyAttendance', '2026-08-14', 'responses', STUDENT), {
+                studentName: 'Alice', response: 'yes',
+            });
+        });
+
+        // Not even their own: the record is what a manager plans the evening from.
+        await assertFails(deleteDoc(
+            doc(asStudent(), 'weeklyAttendance', '2026-08-14', 'responses', STUDENT),
+        ));
+        await assertFails(deleteDoc(
+            doc(asManager(), 'weeklyAttendance', '2026-08-14', 'responses', STUDENT),
+        ));
+    });
+
+    it('a rider can still answer and change their mind', async () => {
+        await assertSucceeds(setDoc(
+            doc(asStudent(), 'weeklyAttendance', '2026-08-14', 'responses', STUDENT),
+            { response: 'no' },
+        ));
+    });
+
+    it('nobody deletes statistics', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'statistics', '2026-08-14'), { rides: 11 });
+        });
+
+        await assertFails(deleteDoc(doc(asManager(), 'statistics', '2026-08-14')));
+    });
+});

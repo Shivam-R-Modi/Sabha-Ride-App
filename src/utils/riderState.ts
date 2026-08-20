@@ -52,7 +52,16 @@ export type RiderState =
     /** They said they are not coming. */
     | { kind: 'not-coming' }
     /** Coming, and free to book. */
-    | { kind: 'can-request' };
+    | { kind: 'can-request' }
+    /**
+     * They are driving tonight, so they are not a passenger.
+     *
+     * The role hierarchy grants a Sarthi the Bhulku hat deliberately, so they can
+     * see these screens. This is what stops them USING the request button while
+     * holding a car — dispatch would otherwise assign them their own request, a
+     * phantom passenger occupying a real seat in their own vehicle.
+     */
+    | { kind: 'driving-tonight' };
 
 interface RideLike {
     status?: string;
@@ -74,6 +83,17 @@ export interface RiderInputs {
     hasResponded: boolean;
     attendanceResponse: 'yes' | 'no' | null;
     dismissedRequest: DismissedInfo | null | undefined;
+    /**
+     * Is this person holding a car right now?
+     *
+     * Holding a car is the definition `driverDoneForToday` uses for "on shift",
+     * because holding a car is exactly what lets a driver be assigned riders.
+     * Reusing it keeps the two screens agreeing about who is driving.
+     *
+     * Required, not optional: a default here would silently offer a lift to a
+     * Sarthi who is about to drive, which is the bug this input exists to stop.
+     */
+    onShift: boolean;
 }
 
 /**
@@ -109,6 +129,18 @@ export function deriveRiderState(input: RiderInputs): RiderState {
 
     // 2. No gathering means every other branch is about nothing.
     if (!input.hasEvent) return { kind: 'no-sabha' };
+
+    // 2b. Driving tonight outranks every branch below, because none of them apply
+    //     to somebody behind the wheel: they need no lift out, no lift home, and
+    //     their attendance is settled by the fact that they are driving to it. It
+    //     sits above the dismissal too — a turned-down lift request stops mattering
+    //     once you are holding a car.
+    //
+    //     BUT NOT above a live ride, which is why the guard is here rather than the
+    //     ordering. If they asked for a lift and then went on shift, that request is
+    //     real and needs resolving; hiding it behind "you are driving" would strand
+    //     it where nobody can see it. Showing it is what lets them withdraw it.
+    if (input.onShift && !input.activeRide) return { kind: 'driving-tonight' };
 
     // 3. Above the ride states on purpose. A dismissal is the one thing here the
     //    rider cannot discover any other way, and it needs acting on tonight.
