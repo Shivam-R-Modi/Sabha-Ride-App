@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-19** (notice board + sabha agenda deployed).
+at the end. Last updated **2026-08-20** (role-access audit: 16 findings fixed).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -2143,6 +2143,123 @@ Measured in `preview/splash.html` at 375x812: tap line fully inside the viewport
 
 `preview/splash.html` was added to the screen harness for this. It is what turned
 the question from argument into measurement.
+
+---
+
+## 2026-08-20: the role-access audit — 16 findings, all fixed and deployed
+
+The owner asked whether the manager → Sarthi → Bhulku hierarchy had flaws, and for
+**every** issue in that logic. **The hierarchy itself is sound.** `grantsRole`
+expands downward only, nothing implies manager, and self-promotion is properly
+blocked — `touchesPrivilegeFields()` covers all six privilege fields, including
+`registeredRole` and `activeRole`. Also checked and NOT problems:
+`settings/managerCode` is gone (single-use invites replaced it), and `activeRole` is
+never trusted as authority anywhere.
+
+The problems were **what a role could reach**, and one domain rule nobody had
+written down.
+
+### The one the owner found unaided: a Sarthi could be assigned to drive themselves
+
+`globalAssignDriver` built its pool from every waiting request with no exclusion of
+the driver doing the tapping. Switch to Bhulku, ask for a lift, switch back, tap
+"Find my next riders" — and be assigned **yourself**. A phantom passenger holding a
+real seat in your own car, your own address on the manifest, and a served count
+including somebody who was never collected.
+
+Fixed at three levels because one is not enough: `isAssignableTo` excludes the
+caller from the pool (shared with `driverDoneForToday`, whose "1 rider still waiting"
+would otherwise have been about the driver themselves — the same pair of contradictory
+screens that file documents from 2026-08-17); `deriveRiderState` gained `onShift` and
+the rider screen says **"You are driving tonight"**; and the rules refuse a ride
+create from anyone holding a car, because ride requests are direct client writes with
+no callable in between.
+
+### Every Sarthi could read every family's name, phone and home address
+
+`allow list` on rides carried a bare `isDriver()`. `read` is `get` + `list` and allow
+rules are **OR'd**, so the scoped `allow read` beneath it could narrow nothing. And
+it was live: `useDriverDashboard` queried rides with **no driver filter** and sorted
+them in the browser, so every Sarthi's phone held every assigned and completed ride
+in the congregation. The client filter was cosmetic — the data had already left the
+server.
+
+Both scoped now. The `driverId + status` composite index it needs already existed.
+
+### A Sarthi could forge a ride for any child
+
+`allow create` had a bare `isDriver()` arm above the guarded student one, and OR
+short-circuits — so a driver could create a ride for anyone, already marked
+`assigned`, with seats out of bounds. **The comment directly above it described that
+exact hole**; the fix had been applied to the student arm only. The arm is gone:
+nothing needed it, because drivers get work through `globalAssignDriver` on the Admin
+SDK.
+
+### Five callables checked who you were and never whether you were allowed
+
+`startRide`, `completeRide`, `releaseAssignment`, `driverDoneForToday`,
+`studentReadyToLeave` — ownership only. A revoked account kept full control of ride
+state for as long as its name sat on a document. `sarthiArrived` had already named
+the gap in a comment. All five now assert before any document read, which also closes
+two existence oracles ('not found' vs 'permission-denied' over arbitrary uids).
+Adds `assertApprovedStudent`, which had never existed.
+
+### The rest
+
+- **A Sarthi could take a car another Sarthi was driving** — unconditional vehicle
+  update, and `assignVehicleToDriver` wrote the document with no holder check. The
+  callable guards it; that path never reached it.
+- **No way to take a request back** — the rules had always allowed `cancelled`; no
+  control was ever built. Now there is one, and the rule is *tightened* to
+  `requested`-only so nobody vanishes from a moving car's manifest.
+- **`allow write` where delete should be denied** on settings, statistics and
+  attendance responses. A manager could have deleted `settings/main`.
+- **A manager could lock the congregation out** — `adminDeleteUser` had no
+  self-delete and no manager-protects-manager guard, and manager creation requires
+  being a manager.
+- **The `notifications` collection was dead and carried a live hole** — its update
+  rule gated on the existing document, so its owner could reassign `userId` and
+  forge a message into another inbox. Closed.
+- **Six copies of the role hierarchy with nothing holding them together** — now
+  `tests/quality/role-table-parity.test.ts`.
+- **A demoted manager kept the manager UI** until reload, with the switcher hidden so
+  there was no way out. `resolveActiveRole` re-validates every snapshot.
+- **`roles[]` meant two different things** — signup wrote the recorded role, the
+  invite path the granted set, and the driver picker queries that field.
+- **A revocation left no trace** — `account.approved` / `account.rejected` now
+  written, actor required.
+
+### Stated plainly, and NOT half-fixed
+
+Rejecting a manager still does not clear their `mgr` custom claim, because a client
+cannot. `isManagerForRead()` honours it for up to an hour, so a just-revoked manager
+keeps READ access to rider lists for that long; every write, delete and secret read
+is on `isManager()`, which re-reads the document and cuts them off at once.
+`node scripts/mint-manager-claims.cjs` is the remedy today. **A callable that does it
+automatically is the real fix and is deliberately not done.**
+
+### Deployment order was changed on purpose
+
+`functions → hosting → rules`, not the standing rules-first. The rules change and the
+client change are **coupled**: the new list rule refuses the unscoped query the
+live bundle was making, so rules-first would have broken every Sarthi's dashboard
+until they reloaded — and the service worker caches hard. Owner's call, taken with
+the trade stated: a few more minutes of a months-old read exposure against breaking
+dispatch.
+
+### Verification
+
+**1820 tests** — 1032 client, 637 functions, 151 rules. Typecheck 0, both builds
+clean. Every new test was observed RED before its fix; deliberate breakages caught
+the self-exclusion (5), a removed role guard (6), a drifted role table (3), the
+stale hat (3) and the missing audit row (4).
+
+The **live** ruleset was then read back through the Firebase Rules API and all seven
+properties confirmed present — a compile success only proves some ruleset shipped.
+
+**Cannot be verified from here:** that a real Sarthi on a real phone sees "You are
+driving tonight" instead of the request button, and that the withdraw button works
+end to end. That needs the owner's account on a sabha evening.
 
 ---
 
