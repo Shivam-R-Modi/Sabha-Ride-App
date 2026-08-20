@@ -61,12 +61,13 @@ describe('the root element paints itself', () => {
 });
 
 describe('the splash screen reaches the bottom of a phone', () => {
-    it('overshoots the bottom rather than matching the viewport', () => {
-        // `min-height: 100lvh` alone was tried and did NOT fix it on the device.
-        // `position: fixed` is sized to the visual viewport while the canvas html
-        // paints can extend past it, so the height now adds the bottom inset on
-        // top. Behaviour is covered in tests/components/SplashScreen.test.tsx; this
-        // is the CSS shape.
+    it('paints past the bottom on a separate layer from the content', () => {
+        // Both units, deliberately: `svh` for the content box so the tap line stays
+        // above browser chrome, `lvh` (+ the inset) for the photograph so no strip
+        // is left when that chrome retracts. Sizing ONE element to lvh was tried and
+        // sliced "Tap to continue" in half. Behaviour lives in
+        // tests/components/SplashScreen.test.tsx; this is the CSS shape.
+        expect(splash).toMatch(/100svh/);
         expect(splash).toMatch(/100lvh/);
         expect(splash).toMatch(/env\(safe-area-inset-bottom/);
     });

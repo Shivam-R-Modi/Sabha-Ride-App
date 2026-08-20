@@ -91,25 +91,67 @@ describe('the quote', () => {
 });
 
 describe('covering the screen', () => {
-    it('overshoots the bottom instead of matching the viewport exactly', () => {
-        // `position: fixed` is sized to the VISUAL viewport; the canvas html paints
-        // can extend past it, under retracted chrome and into the home-indicator
-        // inset. That difference was the strip along the bottom of a phone.
+    /**
+     * Two viewports are in play on a phone and they are DIFFERENT SIZES: `svh` is
+     * the screen with browser chrome showing, `lvh` is the screen with it
+     * retracted. Content must live inside the small one to stay visible; the
+     * picture must fill the large one so no strip is left when the chrome hides.
+     * One element cannot be both — hence two.
+     *
+     * The first attempt sized the whole thing to `100lvh + safe-area` and the
+     * report came back with "Tap to continue" sliced in half, because the content
+     * was bottom-aligned inside a box taller than the screen.
+     */
+    const boxOf = (c: HTMLElement) => c.firstElementChild as HTMLElement;
+    const photoOf = (c: HTMLElement) => c.querySelector('[aria-hidden="true"]') as HTMLElement;
+
+    it('sizes the CONTENT box to the small viewport, so the tap line stays visible', () => {
         const { container } = render(<SplashScreen onComplete={vi.fn()} />);
-        const style = (container.firstElementChild as HTMLElement).getAttribute('style') ?? '';
+        expect(boxOf(container).style.height).toBe('100svh');
+    });
+
+    it('never sizes the content box to the large viewport', () => {
+        // The exact regression: lvh on the content box hides the bottom of it.
+        const { container } = render(<SplashScreen onComplete={vi.fn()} />);
+        expect(boxOf(container).style.height).not.toMatch(/lvh/);
+    });
+
+    it('paints the photograph past the bottom, on its own layer', () => {
+        const { container } = render(<SplashScreen onComplete={vi.fn()} />);
+        const style = photoOf(container).getAttribute('style') ?? '';
 
         expect(style).toMatch(/100lvh/);
         expect(style).toMatch(/safe-area-inset-bottom/);
+        expect(style).toMatch(/background-image/);
     });
 
-    it('has a dark colour behind the photograph', () => {
+    it('keeps the photo layer behind the words and out of the tap path', () => {
+        // It is decoration. If it ever swallowed the click, the tap would be the
+        // only way out of this screen and it would be gone.
         const { container } = render(<SplashScreen onComplete={vi.fn()} />);
-        // jsdom normalises hex to rgb(), so assert on the colour rather than the
-        // notation. #1C1815 is rgb(28, 24, 21) — the same warm near-black as the
-        // dark canvas, but written literally and NOT as a theme token: this screen
-        // is dark in both themes, so `--canvas` would put a near-white band under a
-        // dark photograph in light mode.
-        const el = container.firstElementChild as HTMLElement;
-        expect(el.style.backgroundColor).toBe('rgb(28, 24, 21)');
+        const photo = photoOf(container);
+
+        expect(photo.className).toMatch(/-z-10/);
+        expect(photo.className).toMatch(/pointer-events-none/);
+        expect(photo.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('still dismisses when the tap lands on the photo layer', () => {
+        // pointer-events-none means the click retargets to the box; prove it.
+        const onComplete = vi.fn();
+        const { container } = render(<SplashScreen onComplete={onComplete} />);
+
+        fireEvent.click(photoOf(container));
+
+        expect(onComplete).toHaveBeenCalledTimes(1);
+    });
+
+    it('has a dark colour behind everything', () => {
+        const { container } = render(<SplashScreen onComplete={vi.fn()} />);
+        // jsdom normalises hex to rgb(). #1C1815 is rgb(28, 24, 21) — the same warm
+        // near-black as the dark canvas, written literally and NOT as a theme token:
+        // this screen is dark in both themes, so `--canvas` would put a near-white
+        // band under a dark photograph in light mode.
+        expect(boxOf(container).style.backgroundColor).toBe('rgb(28, 24, 21)');
     });
 });

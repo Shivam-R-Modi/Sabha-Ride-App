@@ -50,33 +50,54 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             className="fixed inset-0 flex flex-col items-center justify-end cursor-pointer animate-in fade-in duration-500 pb-16"
             onClick={onComplete}
             style={{
-                /* COVER THE SCREEN BY OVERSHOOTING IT, rather than by trying to match
-                   it exactly.
-                   `position: fixed` is sized to the VISUAL viewport, while the page
-                   canvas — which `html` paints — can extend further, under retracted
-                   browser chrome and into the home-indicator safe area. The difference
-                   is the strip that kept showing along the bottom of a phone. It is
-                   not reproducible on a desktop emulator: measured there, the element
-                   covers 812 of 812 pixels with nothing missing, because there are no
-                   insets and no chrome to create the gap.
-                   `min-height: 100lvh` alone did not fix it on the device, so this
-                   stops chasing the exact number and adds the bottom inset on top.
-                   Overshooting is free: the excess is off-screen on a fixed element.
-                   If `lvh` is unsupported the whole calc is invalid, height falls back
-                   to auto, and `inset-0` sizes it as before — no worse than it was. */
-                height: 'calc(100lvh + env(safe-area-inset-bottom, 0px))',
-                /* Behind the photo, for the moment before it decodes and for any
-                   sliver the crop cannot reach. A FIXED dark brown, not a theme
-                   token: this screen is dark in both themes, so `--canvas` would put
-                   a near-white band under a dark photo in light mode. Matches the
-                   dark canvas, rgb(28 24 21). */
+                /* CONTENT box: the SMALL viewport — the screen with browser chrome
+                   SHOWING. Sized this way on purpose, so "Tap to continue" is never
+                   underneath a browser toolbar. The previous attempt used
+                   `100lvh + safe-area`, which is the opposite end of the range, and
+                   pushed that line off the bottom of a phone: the report came back
+                   with the text sliced in half.
+                   If `svh` is unsupported the declaration is dropped and `inset-0`
+                   sizes this exactly as it always did. */
+                height: '100svh',
+                /* Behind the photo, and behind the layer below, for the moment before
+                   the image decodes. A FIXED dark brown, not a theme token: this
+                   screen is dark in both themes, so `--canvas` would put a near-white
+                   band under a dark photograph in light mode. */
                 backgroundColor: '#1C1815',
-                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), url(${backgroundImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
             }}
         >
+            {/* THE PHOTOGRAPH, on its own layer, deliberately TALLER than the box
+                above.
+
+                Two viewports are in play on a phone and they are different sizes:
+                `svh` is the screen with browser chrome showing, `lvh` is the screen
+                with it retracted. Content has to live inside the small one to stay
+                visible; the picture has to fill the large one so no strip is left
+                behind when the chrome hides. One element cannot be both, which is
+                why this is split in two.
+
+                `aria-hidden`: it is decoration, and the quote below is the content.
+
+                NOTE for whoever reads this next: a flat, featureless band along the
+                bottom of a phone that CLIPS this screen's text is not this element.
+                Page content cannot be clipped by something painted behind it — that
+                band is the browser's own toolbar, drawn over the page, which Safari
+                and Chrome on iOS tint by sampling the page background. It went from
+                black to the app's colour the moment `html` got a background, which is
+                how it was identified. Installing to the home screen removes it; no
+                amount of CSS here can. */}
+            <div
+                aria-hidden="true"
+                className="absolute inset-x-0 top-0 -z-10 pointer-events-none"
+                style={{
+                    height: 'calc(100lvh + env(safe-area-inset-bottom, 0px))',
+                    backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), url(${backgroundImage})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                }}
+            />
+
             {/* Rotating Spiritual Quote */}
             <div className="text-center px-6 mb-8 animate-in fade-in slide-in-from-bottom duration-700">
                 <p
