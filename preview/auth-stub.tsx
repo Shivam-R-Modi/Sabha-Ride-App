@@ -2,9 +2,10 @@
 // so the RoleSwitcher renders rather than returning null.
 //
 // The profile is LIVE, the way the real one is. `AuthContext` holds an onSnapshot
-// on the user document, so a saved sidebar order comes back to the sidebar
-// through the profile — and a stub returning a frozen object could show a drag
-// beginning but never landing.
+// on the user document, so anything a screen writes there comes back to it
+// through the profile — and a stub returning a frozen object shows a write
+// starting and never landing, which makes a preview unable to tell working code
+// from broken.
 import React from 'react';
 
 const BASE = {
@@ -13,7 +14,7 @@ const BASE = {
     avatarUrl: 'https://ui-avatars.com/api/?name=Tonny+Stark&background=FF6B35&color=fff',
 } as Record<string, unknown>;
 
-/** Applies a dotted field path, which is how the sidebar writes `navOrder.<role>`. */
+/** Applies a dotted field path, which is how a component writes one nested field. */
 function applyWrite(profile: Record<string, unknown>, data: Record<string, unknown>) {
     const next = { ...profile };
     for (const [key, value] of Object.entries(data)) {

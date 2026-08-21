@@ -216,33 +216,6 @@ service cloud.firestore {
       ]);
     }
 
-    // The sidebar tab order a person has dragged for themselves, per role.
-    //
-    // Writing it needed no new permission — a user could already write any
-    // non-privilege field on their own document. What it needs is a BOUND. This
-    // document is read on every page load and by every manager listing people, so
-    // an unbounded array here is paid for by everyone, and "it is only their own
-    // document" is not a reason to skip validating at a trust boundary.
-    //
-    // 16 mirrors MAX_NAV_ORDER in src/utils/navOrder.ts. Rules cannot import it,
-    // so tests/quality/nav-order-cap.test.ts fails if the two ever drift.
-    //
-    // Absence has to pass: every other write to this document — a phone number,
-    // an fcm token, a status — sends no navOrder at all.
-    function navListWithinLimit(role) {
-      let list = request.resource.data.navOrder.get(role, []);
-      return list is list && list.size() <= 16;
-    }
-
-    function navOrderWithinLimits() {
-      return !('navOrder' in request.resource.data)
-             || (request.resource.data.navOrder is map
-                 && request.resource.data.navOrder.keys().hasOnly(['manager', 'driver', 'student'])
-                 && navListWithinLimit('manager')
-                 && navListWithinLimit('driver')
-                 && navListWithinLimit('student'));
-    }
-
     // Fields on a ride that the assignment pipeline owns. A student must not be
     // able to forge an assignment or shortcut completion — completeRide also
     // releases the vehicle, updates driver counters and sets student status, so
@@ -328,7 +301,7 @@ service cloud.firestore {
       // were removed deliberately: they bypassed the accountStatus == 'approved'
       // conjunct that isManager() applies, so an UNAPPROVED self-declared
       // manager had write access to every user document.
-      allow update: if (isOwner(userId) && !touchesPrivilegeFields() && navOrderWithinLimits())
+      allow update: if (isOwner(userId) && !touchesPrivilegeFields())
                     || isManager();
 
       // Only approved managers can delete users.

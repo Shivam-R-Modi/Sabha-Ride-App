@@ -1,9 +1,9 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-21** (live ride progress shipped; then this
-file audited against the code and against production — three entries claiming to
-be open were already fixed, and rides are currently closed. See *Open items*).
+at the end. Last updated **2026-08-21** (live ride progress; the sabha calendar
+as one card; the standing schedule set to Friday 20:30–22:00 and rides reopened;
+reorderable sidebar tabs built and then removed again — see *Open items*).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -3211,6 +3211,51 @@ driver, the throw was swallowed, and the `finally` block logged "Processing
 complete", so it read as success while assigning nothing. Nothing needs push
 dispatch today. It becomes real work only when a second location exists, because
 a client-side dispatcher replicated across cities would double-assign riders.
+
+### Built, shipped, and removed again — reorderable sidebar tabs
+
+**Do not rebuild this without reading the whole entry.** Shipped 2026-08-21,
+reverted the same day at the owner's instruction. `git show 6c6fc1f 4415b64` has
+the implementation if it is ever wanted.
+
+The ask was to make the sidebar tabs draggable so a manager could prioritise
+their own order. It worked on a desktop — the owner's saved order was
+`home, people, setup, fleet, notices, history, profile, records`, which is how we
+know the desktop half genuinely worked. Then:
+
+**It did nothing on a phone, for two reasons, and the smaller one was the drag.**
+
+1. **The sidebar does not exist below `lg`.** `hidden lg:flex`, so under 1024px
+   it never renders and every handle lived on it. Measured in a browser at phone
+   width: eight handles in the DOM, all zero pixels wide. Nothing to touch.
+2. **HTML5 drag-and-drop is mouse-only.** `dragstart` is never produced from a
+   finger on iOS Safari or Android Chrome. The first implementation used it, so
+   it worked on a laptop and did nothing at all on a phone — no error, nothing
+   to notice. That is the silent-failure class this repo keeps deleting, shipped
+   by the very work that keeps deleting it.
+
+The second was then fixed properly with pointer events (mouse, touch and pen in
+one path), handles were added to the mobile drawer so a phone had a surface at
+all, and it was verified with a simulated finger. The owner's call after that was
+to remove the feature rather than carry it.
+
+**What the revert did:** `git revert` of both commits, so `components/Layout.tsx`,
+`firestore.rules`, `types.ts` and the rules test are byte-identical to `ddc4133`.
+`src/utils/navOrder.ts`, `hooks/useReorderDrag.ts` and four test files are gone.
+Test counts returned exactly to 1093 client / 157 rules, which is the check that
+the revert was clean. One `navOrder` field left on the owner's user document was
+deleted from production — nothing read it any more, and it sat on a document read
+on every page load.
+
+**Kept deliberately, because it is not part of the feature:** the preview
+harness's `firebase/firestore` stub and its live user profile. Those are what let
+`preview/shell.html` and `preview/manager.html` render at all, and they make a
+preview able to tell working code from broken. Removing them would regress the
+harness for every screen.
+
+**If it is ever revisited**, the two things that decide the design: a phone has no
+sidebar, so the mobile surface is the drawer or nothing; and the reorder must use
+pointer events, never drag events.
 
 ### Settled policy — do not re-raise either of these
 

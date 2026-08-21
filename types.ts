@@ -39,20 +39,6 @@ export interface User {
   fcmTokens?: Record<string, { label?: string; updatedAt?: string }>;
   /** @deprecated The pre-map shape. Still READ so older documents keep working; nothing writes it. */
   fcmToken?: string;
-  /**
-   * The order this person has dragged their sidebar tabs into, per role.
-   *
-   * A preference about SEQUENCE only — never the set of tabs to show. A role
-   * whose entry is missing, stale or malformed gets the default order, and a
-   * destination absent from the stored list still appears. See
-   * `applyOrder` in src/utils/navOrder.ts for why that matters: the list is
-   * partly decided by data written months ago, and the failure worth designing
-   * against is a tab that quietly never renders.
-   *
-   * Bounded in firestore.rules, because this document is read on every page load
-   * and by every manager listing people.
-   */
-  navOrder?: Partial<Record<UserRole, TabView[]>>;
   accountStatus: AccountStatus;
   // Optional properties for when User is merged with Driver data
   address?: string;
