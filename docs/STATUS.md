@@ -1,9 +1,12 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-21** (live ride progress; the sabha calendar
-as one card; the standing schedule set to Friday 20:30–22:00 and rides reopened;
-reorderable sidebar tabs built and then removed again — see *Open items*).
+at the end. Last updated **2026-08-21**. That day shipped, in order: live ride
+progress and the venue roster; the nudge; the sabha calendar as one card; the
+standing schedule set to **Friday 20:30–22:00** and rides reopened; reorderable
+sidebar tabs, built and then removed again at the owner's instruction; four UI
+defects reported from screenshots; and **feedback on every profile with a CSV
+export**, tested end to end against production. Each has its own section below.
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -114,6 +117,214 @@ was broken on purpose to confirm the test catches it: the whole-roster nudge, th
 missing cooldown, the missing roster check, un-ticking, the bare distance check,
 the client reporting success regardless of delivery, closing every document as
 `completed`, and the three stamps removed from the denylist.
+
+## Shipped 2026-08-21 — the sabha calendar, and the schedule that was never missing
+
+**One card, not twelve rows.** `SabhaCalendar` rendered up to twelve near-identical
+rows, each with its own times, derived ride window, Edit and delete. Under a
+repeating rule those rows are identical by construction, so the screen grew with
+how far ahead you could see and said nothing more — and twelve one-tap deletes
+beside twelve identical rows is how you cancel the wrong Friday. Now: the next
+sabha in full, the rest as date chips, and only the weeks that DIVERGE coloured.
+There is deliberately no "cancelled" chip — `useUpcomingEvents` filters those out
+before they arrive, so one could never render, and a state the data cannot reach
+is the dead-control bug this repo keeps removing.
+
+**Two clock formats on one card**, found by looking at it rather than by a test:
+the header printed the stored `20:30–22:00` directly above `8:30 PM – 10:00 PM`.
+`describeRule` could not use `formatTime` because that helper lived in
+`hooks/useSettings.ts`, which imports `firebase/config` — out of reach of every
+pure module. Moved to `src/constants/schedule.ts`; `useSettings` re-exports it, so
+no import changed.
+
+### Rides were closed, and not for the reason the notes gave
+
+Diagnosed wrong twice before it was diagnosed right, which is worth keeping:
+
+1. The first check looked for a recurrence rule on `settings/main` and concluded
+   there was no standing schedule. **It lives at `settings/sabhaRecurrence`.** The
+   rule existed and was enabled, and being a rule with no horizon it cannot run
+   dry.
+2. What actually closed rides was **17 `override` documents**, one per Friday from
+   28 August to 18 December, all written within 40 seconds on 2026-08-19 during
+   time-shift testing. Under the rule model a document IS an exception, so those
+   masked the rule for four months.
+
+Cleared narrowly — override, cancelled, and dated today or later only — with one
+audit row naming the dates. **The schedule is now every Friday 20:30–22:00**, and
+the fallback times on `settings/main` were moved off `04:00–04:30` at the same
+time: those stand in for a gathering with no times of its own, so any such date
+would have opened a ride window at four in the morning.
+
+**`SABHA_DAY = 5 // Friday` deleted** from `functions/src/utils/schedule.ts` — an
+exported hardcoded weekday with zero consumers, sitting in the first file anyone
+would search when asking which day sabha is. `settings/sabhaRecurrence` was also
+written out twice, once exported and once inline in `RecurringSabha.tsx`; a typo in
+the client copy would not have errored, it would have looked like the rule
+resetting itself. Both pinned by `tests/quality/schedule-not-hardcoded.test.ts`.
+
+## Shipped 2026-08-21 — four defects reported from screenshots
+
+All four were **chrome that looked like content, or a control that looked like
+text**. None of them could fail a test as written, which is the theme.
+
+**1. The withdraw button was a line of text.** `RiderHome`'s "I no longer need a
+ride" carried `clay-button` — a deliberately COLOURLESS base that supplies
+geometry and the 44px target and nothing else, because the utilities on the
+element are meant to own the colour. Every other user pairs it with a background
+and a radius; this one supplied only `text-coffee-700`, so the app's one way to
+withdraw a ride rendered as a caption. Now `clay-button-secondary`, labelled
+**"Cancel request"**.
+
+Nothing could have caught it: the screen's tests query
+`getByRole('button', { name })`, which passes on unstyled text inside a button
+exactly as happily as on a button. Proved rather than assumed — with the bug put
+back, all 49 of RiderHome's own tests still passed. `silent-css` case **2b** now
+requires `clay-button` to bring a background or a border.
+
+**2. Reports opened with a two-step no other tab did.** It returned a full-page
+spinner while fetching, so switching to it was: page gone, "LOADING REPORTS…",
+page fading in. Its siblings render their frame and load inside it. The `duration-500`
+on that screen LOOKS like the culprit and is not — `.animate-in` and `.fade-in` are
+both hardcoded to `0.3s` in index.css, and `duration-*` is Tailwind's
+**transition**-duration, which does nothing to an animation. The new guard
+immediately found `DriverHistory` doing the same thing, unreported.
+
+A first version of that guard pinned every tab to `duration-300`. It passed and was
+worthless — it asserted a class that changes nothing on an animated element.
+Deleted before committing; a guard that pins a no-op reads like cover.
+
+**3. The selected Records tab inverted between themes.** `bg-coffee` is
+`--text-strong`, a TEXT token, and the text ramp inverts by design — so the pill
+was dark brown in light mode and **near-white in dark**, among `--surface`
+siblings. Contrast was fine both ways, which is why no ratchet saw it, and it was
+the only control in the app that inverted, so it read as a glitch. Now
+`bg-cream-400 text-coffee` with the accent on the icon — the sidebar's language,
+measured 10.48:1 light and 14.62:1 dark. Two more sites had the same fill (the
+bulk-action bar, and a RideWindowControl button) and were fixed with it.
+
+**The guard's own advice had caused it.** `silent-css` case 3 prescribed
+`bg-coffee text-cream` as "an inverted PAIR where both tokens flip together" —
+true about contrast, wrong about appearance, and all three sites took the advice.
+It now rejects the text ramp as a fill at all.
+
+**4. The orange bar under the table was the scrollbar.** A full-strength accent
+gradient at 10px with an inset white highlight, over a gradient track — on a wide
+element that draws a solid saffron slab that reads as a progress bar.
+`.no-scrollbar` was not the fix: the records table genuinely is wider than its
+card, so the affordance is wanted and the colour was wrong. Thumb is now
+`--text-faint` at 55%, accent on hover only, and `scrollbar-color` is set on
+`html` so Firefox matches instead of being left native.
+
+**Swept all four preview pages in dark mode for anything rendering near-white:
+zero.** The first run of that sweep reported 13 hits on the manager page, every one
+a mid-transition sample. See the warning at the end of this section.
+
+## Shipped 2026-08-21 — feedback, on every profile
+
+A **Give feedback** card at the bottom of Profile for every role, and the
+collected feedback both **listed in Reports and downloadable as a CSV**.
+
+`ProfileEditor` is the one screen all three roles reach — manager and driver
+through `App.tsx`'s switch, riders through `StudentDashboard.tsx` — and already
+carries ThemeToggle, InstallAppButton and PushToggle for exactly that reason, so
+one component covered every role. 1–5 rating as a radiogroup with `sr-only` radios
+copying ThemeToggle, and it **says "sent with your name" above the box**: named was
+the owner's decision, and somebody who would rather not be identified needs to
+know before they type.
+
+**One submission per person per day, enforced by the database.** The document id is
+`feedback/{uid}_{YYYY-MM-DD}` and the rules deny `update`; `create` only applies to
+a document that does not exist. No callable, no rate limiter, and unlike a
+client-side counter it cannot be got around by reloading. The cost, stated rather
+than hidden: a second thought that afternoon waits until tomorrow.
+
+**No name on the document** — only `uid`, pinned to the caller by the rule. A
+client-supplied name is unverifiable, and a forged one on a complaint about a
+named volunteer would send a manager to the wrong person. `useFeedback` joins the
+display name from `users` at read time; an unresolvable account reads `Unknown`.
+
+Rules follow `clientErrors` exactly: anyone signed in may file one, size and rating
+bounded server-side, append-only for everyone **including managers**, and a
+manager-only read that never touches `resource.data` so the collection query
+cannot fail wholesale.
+
+**The list matters as much as the export.** This app already writes crash reports
+to `clientErrors` that no screen has ever displayed — collected since the
+collection existed, never read once. Download-only goes the same way.
+
+### The CSV bug that was already shipping
+
+Excel reads a UTF-8 file without a BOM as Latin-1 and mangles every non-ASCII
+name, while the file still opens and the columns still line up. **Both existing
+exports were missing it** — attendance downloads have been quietly corrupting
+names — and all three now carry it. No spreadsheet library was added; Excel opens
+a CSV directly.
+
+### Tested end to end against production
+
+21 checks, all passed, with **real signed-in accounts** — tokens minted from the
+project's own service account, so the live rules and the live database answered
+and no password was involved. Every test document was removed; the collection is
+back to zero.
+
+A rider could file their own and was refused: filing under another uid, a rating of
+6, a rating as a string, a 1001-character comment, a second submission the same
+day, reading one back, and listing the collection. A manager could read and list
+and was refused editing and deleting.
+
+**One result was not taken at face value.** The second-submission test first
+returned `409 ALREADY_EXISTS`, because the REST call used `createDocument` — a
+different code from what the app sees. The friendly "you have already sent
+feedback today" message depends on which error arrives, so it was re-tested using
+the write `setDoc` actually performs: `PERMISSION_DENIED`, which is what the card
+translates, **and the first submission survives untouched**.
+
+The export was then built by the real function from real documents, including a
+comment containing a comma, a quote and a newline, and one from a non-existent
+account: names resolved, `Unknown` rather than `undefined`, the awkward comment
+kept in one cell, BOM first.
+
+**Still unproven: nobody has tapped the button on a real phone.** Everything
+behind it is verified; the last mile needs a sign-in, which this session could not
+do.
+
+### Where the suite stands at the end of the day
+
+**1152 client, 681 functions, 170 rules.** Both builds and typecheck clean — typecheck
+is at **0** errors, not the 22 that `CLAUDE.md` still records as the baseline;
+that line in CLAUDE.md is stale and worth correcting, and it is untracked so it
+will not arrive with a pull.
+
+### Harness gaps this work closed
+
+`preview/` gained a `firebase/firestore` stub, a live user profile that echoes
+writes back, `ManagerReports`, `ProfileEditor`, and a snapshot that supports
+`forEach` — without which any hook walking a collection crashed the whole preview
+tree. **ProfileEditor had never been previewable at all**, which is why the
+feedback card and the three toggles beside it had never been looked at outside a
+sign-in.
+
+## A warning to the next session: measure with transitions off
+
+Colour and geometry were measured wrongly **five times** on 2026-08-21, and every
+one produced a confident, plausible, wrong number:
+
+- clicking at coordinates in the wrong frame, and concluding a `draggable` row
+  swallowed its own click — it does not;
+- reading a computed colour from a stale element reference after removing sibling
+  nodes;
+- sampling a colour **mid CSS-transition**, which made light and dark look nearly
+  identical;
+- the same again on the manager page, reporting 13 near-white elements that were
+  all one animation caught halfway;
+- scraping `rgb(...)` out of a `backgroundImage` string and picking up a **shadow**
+  colour, then a gradient stop that is not behind the text.
+
+The habit that works: inject `*{transition:none!important;animation:none!important}`,
+re-query the element inside each theme, walk up to the first genuinely opaque
+ancestor for the backdrop, and compare against the worst stop. Every number in
+these sections was taken that way.
 
 ## Incident, 2026-08-13 — a fix was reverted in production for ~20 minutes
 
@@ -3160,10 +3371,17 @@ component to confirm they fail (8 of 14 did).
   time: those stand in for a gathering with no times of its own, so any such date
   would have opened a ride window at four in the morning.
 
-- **Production is nearly empty**, as of 2026-08-21: 3 users, 2 rides, 3 vehicles,
-  1 statistics document, 0 notices, 18 events. The 11-rider evening from
-  2026-08-14 is no longer in the database. Worth knowing before reading any claim
-  in this file as "proven at scale" — the scale is three people.
+- **Production is small.** Counted at the end of 2026-08-21: **4 users, 6 rides,
+  3 vehicles, 1 events document, 1 statistics document, 0 notices, 0 feedback,
+  109 audit rows.** The 11-rider evening from 2026-08-14 is no longer in the
+  database. Worth knowing before reading any claim in this file as "proven at
+  scale" — the scale is four people.
+
+  Two of those numbers moved during the day and are worth reading as signals.
+  `rides` went 2 → 6, so somebody has been exercising the app rather than only
+  reading it. `events` went 18 → 1 because 17 of them were the stale cancellations
+  cleared that afternoon; the one left is the past 2026-08-19 one-off, and every
+  future Friday now comes from the rule rather than from a document.
 - **Test events are still in the calendar.** Several past entries are time-shift
   test sabhas from the 7th–14th. Harmless; worth deleting.
 - **Sabha Calendar is now viewable in the harness** — `preview/manager.html`
@@ -3179,6 +3397,13 @@ component to confirm they fail (8 of 14 did).
   "Keep us in one car", and the "no sabha on the calendar" line); Manager →
   **Request Center** (Seats column). Note that is Request Center, *not* Live
   Operations.
+
+  The list was longer. Sabha Calendar, Reports and **Profile** were all added to
+  `preview/` during 2026-08-21 and are now viewable without signing in — which is
+  how the two-clock-format bug and the missing feedback control were found. The
+  route for the remaining two is the same: add the component to a `preview/*.tsx`
+  entry and stub only the Firestore boundary. Anything holding its own listener
+  works now that the harness has a `firebase/firestore` stub.
 
 **Known gap — fixed 2026-08-12 in Phase 5.** Bulk-select on the manager's queue
 used to exist only in the desktop table, leaving the checkboxes and "Assign Bulk"
