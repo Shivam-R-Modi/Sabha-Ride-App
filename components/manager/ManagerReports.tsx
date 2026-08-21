@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Download, Users, Car, TrendingUp, Calendar, CheckCircle2, XCircle, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { Download, Users, Car, TrendingUp, Calendar, CheckCircle2, XCircle, FileSpreadsheet, Loader2, MessageSquare, Star } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { collection, query, getDocs, where } from 'firebase/firestore';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
 import { downloadAttendanceCSV } from '../../hooks/useFirestore';
 import '../../claymorphism.css';
 import { seatsOnRide } from '../../src/constants/seats';
+import { useFeedback } from '../../hooks/useFeedback';
+import { buildFeedbackCsv } from '../../src/utils/feedback';
 import { useToast } from '../../contexts/ToastContext';
 
 interface WeeklyStats {
@@ -36,6 +38,25 @@ export const ManagerReports: React.FC = () => {
     // Attendance is per gathering. eventId comes from the server, so this agrees
     // with what students wrote whatever timezone their devices are in.
     const { eventId } = useCurrentEvent();
+    const { rows: feedback, loading: feedbackLoading } = useFeedback();
+
+    /**
+     * The same Blob-and-anchor as downloadAttendanceCSV. No library: a CSV opens
+     * in Excel as a spreadsheet, and `buildFeedbackCsv` puts a UTF-8 BOM in front
+     * so non-ASCII names survive the trip.
+     */
+    const downloadFeedback = () => {
+        const blob = new Blob([buildFeedbackCsv(feedback)], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `sabha-feedback-${new Date().toLocaleDateString('en-CA')}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
 
     // `fetchStats` is memoised on `eventId` so it can be a real dependency
     // below. Without useCallback it is a new function every render, and listing
@@ -304,6 +325,29 @@ export const ManagerReports: React.FC = () => {
                         </div>
                     </button>
 
+                    {/* Disabled with a REASON when there is nothing to export,
+                        rather than handing over an empty file that looks like a
+                        failure of the export. */}
+                    <button
+                        onClick={downloadFeedback}
+                        disabled={feedbackLoading || feedback.length === 0}
+                        className="flex items-center gap-4 p-4 bg-cream/50 rounded-xl border border-hairline/10 hover:bg-cream transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <div className="w-12 h-12 bg-[rgb(var(--info-bg))] rounded-xl flex items-center justify-center shrink-0">
+                            <FileSpreadsheet className="w-6 h-6 text-[rgb(var(--info-text))]" />
+                        </div>
+                        <div>
+                            <p className="font-bold text-coffee">Feedback CSV</p>
+                            <p className="text-xs text-coffee-500 mt-0.5">
+                                {feedbackLoading
+                                    ? 'Loading…'
+                                    : feedback.length === 0
+                                        ? 'Nobody has sent feedback yet'
+                                        : `Download ${feedback.length} ${feedback.length === 1 ? 'response' : 'responses'}`}
+                            </p>
+                        </div>
+                    </button>
+
                     <div className="flex items-center gap-4 p-4 bg-cream-200 rounded-xl border border-hairline/20 opacity-50 cursor-not-allowed">
                         <div className="w-12 h-12 bg-cream-300 rounded-xl flex items-center justify-center shrink-0">
                             <FileSpreadsheet className="w-6 h-6 text-coffee-500" />
@@ -314,6 +358,64 @@ export const ManagerReports: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* ON SCREEN, not only in a download.
+                This app already writes crash reports to `clientErrors` that no
+                screen has ever displayed — they are collected and never read.
+                A download-only feature goes the same way, so the list is the
+                point and the export is the convenience. */}
+            <div className="clay-card p-6">
+                <div className="flex items-center gap-2 mb-4">
+                    <MessageSquare size={18} className="text-saffron-800" />
+                    <h2 className="text-lg font-header font-bold text-coffee">Feedback</h2>
+                </div>
+
+                {feedbackLoading ? (
+                    <div className="h-24 flex items-center justify-center gap-3" aria-busy="true">
+                        <Loader2 className="animate-spin w-5 h-5 text-saffron" />
+                        <span className="text-sm text-coffee-500">Loading feedback…</span>
+                    </div>
+                ) : feedback.length === 0 ? (
+                    <div className="text-center py-8 text-coffee-500">
+                        <MessageSquare size={40} className="mx-auto mb-3 opacity-50" />
+                        <p>No feedback yet. Everyone can send it from their Profile.</p>
+                    </div>
+                ) : (
+                    <ul className="space-y-3">
+                        {feedback.map((row, index) => (
+                            <li key={`${row.createdAt}-${index}`} className="bg-cream-200 rounded-xl p-3">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-1.5">
+                                        {[1, 2, 3, 4, 5].map(n => (
+                                            <Star
+                                                key={n}
+                                                size={13}
+                                                aria-hidden="true"
+                                                className={n <= row.rating ? 'text-saffron-800' : 'text-coffee-400'}
+                                            />
+                                        ))}
+                                        <span className="sr-only">{row.rating} out of 5</span>
+                                        <span className="text-xs font-bold text-coffee ml-1.5">
+                                            {row.name || 'Unknown'}
+                                        </span>
+                                        {row.role && (
+                                            <span className="text-[10px] uppercase tracking-wider text-coffee-500">
+                                                {row.role}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span className="text-[11px] text-coffee-500 tabular-nums">
+                                        {(row.createdAt || '').slice(0, 10)}
+                                    </span>
+                                </div>
+                                {/* `whitespace-pre-line`: the person typed line
+                                    breaks in a textarea and they carry meaning. */}
+                                <p className="text-sm text-coffee-700 mt-1.5 whitespace-pre-line">{row.comment}</p>
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </div>
         </div>
     );

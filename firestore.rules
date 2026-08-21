@@ -669,6 +669,54 @@ service cloud.firestore {
     }
 
     // =====================================
+    // FEEDBACK — what people think of the app
+    // =====================================
+    //
+    // Modelled on clientErrors above, and for the same reasons: anyone signed in
+    // may file one because anyone may have something to say, the `uid` is pinned
+    // to the caller, the size cap is enforced HERE and not only in the form
+    // because a client is a trust boundary even when it belongs to a manager, and
+    // nothing is editable afterwards.
+    //
+    // THE DOCUMENT ID IS THE THROTTLE. It is `{uid}_{YYYY-MM-DD}`, and `create`
+    // only applies to a document that does not exist — so with `update` denied,
+    // one person gets one submission per day, decided by the database rather than
+    // by a counter in a browser that can be reloaded. No callable and no rate
+    // limiter for it.
+    //
+    // The id is not verified against `uid` here. It does not need to be: `uid` is
+    // pinned to the caller either way, so the worst a forged id achieves is
+    // filing your OWN feedback under a different key, which costs nobody
+    // anything. Requiring the two to match would mean string-building the date in
+    // rules, which cannot be done reliably.
+    //
+    // 1000 mirrors MAX_FEEDBACK in src/utils/feedback.ts. Rules cannot import it,
+    // so tests/quality/feedback-cap.test.ts fails if the two ever drift.
+    match /feedback/{feedbackId} {
+      allow create: if isAuthenticated()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.rating is int
+                    && request.resource.data.rating >= 1
+                    && request.resource.data.rating <= 5
+                    && request.resource.data.comment is string
+                    && request.resource.data.comment.size() <= 1000;
+
+      // Append-only, including for the author and for managers. This is a record
+      // of what somebody said; a manager who could edit it could soften a
+      // complaint about themselves.
+      allow update, delete: if false;
+
+      // Managers only. Feedback may name a volunteer, so it is not for the
+      // congregation to browse — and not for the author to re-read either, which
+      // costs them nothing and keeps one rule instead of two.
+      //
+      // Deliberately does NOT touch `resource.data`: the manager's screen reads
+      // this as a collection query, and a condition that inspects the document
+      // makes the whole query fail. Same trap as the notices block below.
+      allow read: if isManagerForRead();
+    }
+
+    // =====================================
     // NOTICES — the notice board
     // =====================================
     match /notices/{noticeId} {

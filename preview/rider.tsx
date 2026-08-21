@@ -7,6 +7,8 @@ import '../index.css';
 import '../claymorphism.css';
 import '../tailwind.css';
 import { RiderHome } from '../components/student/RiderHome';
+import { ProfileEditor } from '../components/shared/ProfileEditor';
+import { ThemeProvider } from '../contexts/ThemeContext';
 import { ToastProvider } from '../contexts/ToastContext';
 import type { RiderState } from '../src/utils/riderState';
 
@@ -35,6 +37,14 @@ const states: [string, RiderState][] = [
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 8, padding: 12 }}>
+    <div>
+      {/* Profile has never been previewable, which is why the feedback card and
+          the three toggles beside it had never been looked at outside a sign-in. */}
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Profile — feedback card at the bottom</p>
+      {/* ThemeProvider as well as ToastProvider: ProfileEditor renders
+          ThemeToggle, which throws without it. */}
+      <ThemeProvider><ToastProvider><ProfileEditor /></ToastProvider></ThemeProvider>
+    </div>
     {states.map(([label, state]) => (
       <div key={label}>
         <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>{label}</p>

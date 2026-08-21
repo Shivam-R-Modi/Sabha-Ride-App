@@ -444,7 +444,12 @@ export async function adminDeleteUserViaCloud(targetUserId: string | string[]): 
 // ============================================
 
 export function downloadCSV(csvContent: string, filename: string): void {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // BOM first. Without it Excel reads a UTF-8 file as Latin-1 and mangles every
+    // non-ASCII name — and for this congregation that is most of them. The file
+    // still opens and the columns still line up, so the damage survives being
+    // checked. Added 2026-08-21 alongside the feedback export, which is where the
+    // defect was noticed; it had been shipping in both existing exports.
+    const blob = new Blob([`﻿${csvContent}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
 

@@ -16,6 +16,7 @@ import { Save, X, CheckCircle, AlertCircle, Pencil } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { InstallAppButton } from './InstallAppButton';
 import { PushToggle } from './PushToggle';
+import { FeedbackCard } from './FeedbackCard';
 
 export const ProfileEditor: React.FC = () => {
     const { currentUser, userProfile, refreshProfile, logout } = useAuth();
@@ -226,6 +227,15 @@ export const ProfileEditor: React.FC = () => {
                     the device, and Profile is the destination all roles share. */}
                 <div className="mt-3 max-w-sm mx-auto text-left">
                     <PushToggle />
+                </div>
+
+                {/* Feedback. Same reasoning as the three above — Profile is the
+                    one destination all three roles share, so putting it here
+                    gives every rider, Sarthi and manager the same route with no
+                    per-role wiring. Sits after them because it is the least
+                    frequent of the four. */}
+                <div className="mt-3 max-w-sm mx-auto text-left">
+                    <FeedbackCard />
                 </div>
 
                 {/* Edit & Sign Out buttons */}

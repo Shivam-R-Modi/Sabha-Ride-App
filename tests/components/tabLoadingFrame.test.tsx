@@ -50,6 +50,12 @@ vi.mock('../../contexts/ToastContext', () => ({
 vi.mock('../../contexts/AuthContext', () => ({
     useAuth: () => ({ currentUser: { uid: 'u1' }, userProfile: { name: 'Asha' } }),
 }));
+// Reports gained a feedback list after this file was written. Stubbed rather than
+// added to the firestore mock: what these tests are about is the FRAME rendering
+// while the figures load, and the feedback hook holds its own listeners.
+vi.mock('../../hooks/useFeedback', () => ({
+    useFeedback: () => ({ rows: [], loading: false, error: null }),
+}));
 
 import { ManagerReports } from '../../components/manager/ManagerReports';
 

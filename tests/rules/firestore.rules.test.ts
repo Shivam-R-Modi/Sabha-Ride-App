@@ -498,6 +498,115 @@ describe('ride integrity', () => {
     });
 });
 
+describe('feedback — anyone may give it, only a manager may read it', () => {
+    /**
+     * Same shape as `clientErrors`: any signed-in account may file one, the `uid`
+     * is pinned to the caller by the rule, the size cap is enforced here because a
+     * client is a trust boundary even when it belongs to a manager, and nothing is
+     * editable afterwards.
+     *
+     * The document id is `{uid}_{YYYY-MM-DD}`, and that is the entire anti-spam
+     * mechanism: `create` only applies to a document that does not exist, so with
+     * `update` denied a person gets one submission per day — enforced by the
+     * database rather than by a counter in a browser that can be reloaded. The
+     * test for that is the one worth keeping.
+     */
+    const TODAY = '2026-08-21';
+    const mine = `${STUDENT}_${TODAY}`;
+    const good = { uid: STUDENT, rating: 4, comment: 'The pickup was on time.', createdAt: `${TODAY}T19:30:00.000Z` };
+
+    it('a rider may file their own', async () => {
+        await assertSucceeds(setDoc(doc(asStudent(), 'feedback', mine), good));
+    });
+
+    it('a Sarthi and a manager may file one too', async () => {
+        await assertSucceeds(setDoc(doc(asDriver(), 'feedback', `${DRIVER}_${TODAY}`),
+            { ...good, uid: DRIVER }));
+        await assertSucceeds(setDoc(doc(asManager(), 'feedback', `${MANAGER}_${TODAY}`),
+            { ...good, uid: MANAGER }));
+    });
+
+    it('cannot be filed under somebody else', async () => {
+        // Otherwise one account could put words in another person's mouth, and the
+        // manager would follow up with the wrong person.
+        await assertFails(setDoc(doc(asStudent(), 'feedback', `${OTHER_STUDENT}_${TODAY}`),
+            { ...good, uid: OTHER_STUDENT }));
+    });
+
+    it('refuses a rating outside 1 to 5', async () => {
+        for (const rating of [0, 6, -1, 99]) {
+            await assertFails(setDoc(doc(asStudent(), 'feedback', mine), { ...good, rating }));
+        }
+    });
+
+    it('refuses a rating that is not a whole number', async () => {
+        for (const rating of ['5', 4.5, null, true]) {
+            await assertFails(setDoc(doc(asStudent(), 'feedback', mine), { ...good, rating }));
+        }
+    });
+
+    it('refuses a comment past the cap', async () => {
+        await assertFails(setDoc(doc(asStudent(), 'feedback', mine),
+            { ...good, comment: 'x'.repeat(1001) }));
+    });
+
+    it('refuses a comment that is not a string', async () => {
+        await assertFails(setDoc(doc(asStudent(), 'feedback', mine), { ...good, comment: 42 }));
+    });
+
+    it('refuses a SECOND submission on the same day', async () => {
+        // The throttle. One write per person per day, decided by the database.
+        await assertSucceeds(setDoc(doc(asStudent(), 'feedback', mine), good));
+        await assertFails(setDoc(doc(asStudent(), 'feedback', mine),
+            { ...good, comment: 'Actually, one more thing.' }));
+    });
+
+    it('allows the next day', async () => {
+        await assertSucceeds(setDoc(doc(asStudent(), 'feedback', mine), good));
+        await assertSucceeds(setDoc(doc(asStudent(), 'feedback', `${STUDENT}_2026-08-22`),
+            { ...good, createdAt: '2026-08-22T19:30:00.000Z' }));
+    });
+
+    it('cannot be edited or deleted, including by the person who wrote it', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'feedback', mine), good);
+        });
+        await assertFails(updateDoc(doc(asStudent(), 'feedback', mine), { comment: 'changed' }));
+        await assertFails(deleteDoc(doc(asStudent(), 'feedback', mine)));
+        // Not even a manager: this is a record of what somebody said.
+        await assertFails(updateDoc(doc(asManager(), 'feedback', mine), { rating: 1 }));
+        await assertFails(deleteDoc(doc(asManager(), 'feedback', mine)));
+    });
+
+    it('is readable by a manager and by nobody else', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'feedback', mine), good);
+        });
+        await assertSucceeds(getDoc(doc(asManager(), 'feedback', mine)));
+        // Not even the author: feedback about a named volunteer is not for the
+        // congregation to browse.
+        await assertFails(getDoc(doc(asStudent(), 'feedback', mine)));
+        await assertFails(getDoc(doc(asAnon(), 'feedback', mine)));
+    });
+
+    it('a manager can LIST the whole collection', async () => {
+        // The read rule must not touch `resource.data` — the manager's screen reads
+        // this as a collection query, and a condition that inspects the document
+        // makes the query fail wholesale. The trap recorded on the notices block.
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            const db = ctx.firestore();
+            await setDoc(doc(db, 'feedback', mine), good);
+            await setDoc(doc(db, 'feedback', `${DRIVER}_${TODAY}`), { ...good, uid: DRIVER });
+        });
+        await assertSucceeds(getDocs(collection(asManager(), 'feedback')));
+        await assertFails(getDocs(collection(asStudent(), 'feedback')));
+    });
+
+    it('a signed-out client can do nothing at all', async () => {
+        await assertFails(setDoc(doc(asAnon(), 'feedback', `x_${TODAY}`), good));
+    });
+});
+
 describe('stop progress is written by the Sarthi driving the run, and nobody else', () => {
     /**
      * ActiveRide saves `route[].visited` straight to the ride as each stop is

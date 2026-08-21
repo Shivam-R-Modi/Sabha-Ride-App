@@ -35,6 +35,12 @@ const snapshotFor = (ref: Ref) => ({
     id: ref.path.split('/').pop(),
     data: () => CANNED[ref.path],
     docs: [] as unknown[],
+    size: 0,
+    empty: true,
+    // A real QuerySnapshot is iterable. Without this, any hook that walks a
+    // collection with `snap.forEach` throws and takes the whole preview tree with
+    // it — which is how `useFeedback` was found to need it.
+    forEach: (_fn: (doc: unknown) => void) => undefined,
 });
 
 export const onSnapshot = (ref: Ref, next: (snap: unknown) => void) => {
