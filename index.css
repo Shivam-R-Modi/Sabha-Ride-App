@@ -171,19 +171,42 @@ p {
     height: 10px;
 }
 
+/* A SCROLLBAR THAT LOOKS LIKE A SCROLLBAR.
+ *
+ * The thumb used to be a full-strength accent gradient with an inset white
+ * highlight, and the track a second gradient. At 10px on a wide element — the
+ * Raw records table, say — that draws a solid saffron slab under the content and
+ * reads as a progress bar. Reported from a screenshot; the person seeing it had
+ * no reason to think it was a scrollbar at all.
+ *
+ * `.no-scrollbar` is NOT the fix for that case: the records table really is wider
+ * than its card, so the affordance is wanted. What was wrong is that chrome was
+ * painted in a content colour — the same mistake as `bg-coffee` on a selected tab.
+ *
+ * `--text-faint` is 140 123 104 light and 128 118 108 dark: a mid grey-brown that
+ * reads as chrome in both themes. The accent is kept for hover, where it means
+ * "you are holding this".
+ */
 ::-webkit-scrollbar-track {
-    background: linear-gradient(145deg, rgb(var(--sunken)), rgb(var(--canvas-mid)));
+    background: rgb(var(--sunken) / 0.5);
     border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: linear-gradient(145deg, rgb(var(--accent-light)), rgb(var(--accent-dark)));
+    background: rgb(var(--text-faint) / 0.55);
     border-radius: 10px;
-    box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.3);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(145deg, rgb(var(--accent)), rgb(var(--cta-dark)));
+    background: rgb(var(--accent));
+}
+
+/* Firefox, which never had the orange bar because none of the above applies to
+   it. Set so the two engines agree rather than leaving one styled and one not.
+   On `html` rather than `*`: scrollbar-color inherits, so one declaration does
+   it, and `.no-scrollbar` still wins on `scrollbar-width` regardless. */
+html {
+    scrollbar-color: rgb(var(--text-faint) / 0.55) rgb(var(--sunken) / 0.5);
 }
 /* ───────────────────────────────────────────────────────────────
    NOTE: the hand-rolled utility layer that used to live here

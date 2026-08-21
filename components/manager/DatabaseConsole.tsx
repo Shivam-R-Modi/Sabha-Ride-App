@@ -267,13 +267,35 @@ export const DatabaseConsole: React.FC = () => {
               // the inactive ones carry a 1px border, so without it the active pill
               // is 2px narrower than the others and every pill after it shifts 2px
               // on each switch. Measured before and after.
+              // `bg-cream-400`, NOT `bg-coffee`.
+              //
+              // `bg-coffee` is `--text-strong` — a TEXT token, and the text ramp
+              // inverts by design: 61 41 20 in light, 232 227 220 in dark. So the
+              // selected pill was a dark brown chip in light mode and a
+              // NEAR-WHITE one in dark, among `--surface` siblings at 46 40 34.
+              // Contrast was fine both ways, which is why no ratchet saw it; it
+              // was the only control in the app that inverted, so it read as a
+              // rendering glitch rather than as "selected". Reported from a
+              // screenshot with an arrow on it.
+              //
+              // `cream-400` is `--sunken`, and it is the right token rather than
+              // `cream-300` for the reason already written down at
+              // Layout.tsx:146 — in DARK mode `--canvas-deep` (cream-300) and
+              // `--surface` are the same colour, so a cream-300 pill would have
+              // no fill at all against these siblings. `--sunken` differs from
+              // `--surface` in both themes.
+              //
+              // This is the sidebar's language: recessed tint, strong label,
+              // accent on the icon. The label stays `text-coffee` because
+              // `--accent-text` on `--sunken` is ~4.15:1 — over the 3:1 floor for
+              // a non-text mark like the icon, under the 4.5 a label needs.
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-colors whitespace-nowrap border ${
                 isActive
-                  ? 'bg-coffee text-cream shadow-md border-transparent'
+                  ? 'bg-cream-400 text-coffee shadow-sm border-transparent'
                   : 'bg-surface text-coffee-500 hover:bg-cream-300 border-hairline/10'
               }`}
             >
-              <Icon size={16} className={isActive ? 'text-saffron' : 'text-coffee-500'} />
+              <Icon size={16} className={isActive ? 'text-saffron-800' : 'text-coffee-500'} />
               <span>{tab.label}</span>
             </button>
           );
@@ -282,19 +304,23 @@ export const DatabaseConsole: React.FC = () => {
 
       {/* Floating Bulk Action Bar */}
       {selectedDocIds.length > 0 && activeTab !== 'auditLogs' && (
-        <div className="clay-card bg-coffee text-cream p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in slide-in-from-bottom duration-200">
+        // Same inverted fill as the tab pill above, same fix. `clay-card` already
+        // supplies a surface that behaves in both themes; the prominence this bar
+        // needs comes from `shadow-xl`, the slide-in, and the saffron count chip
+        // inside it — not from painting it in a text colour.
+        <div className="clay-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in slide-in-from-bottom duration-200">
           <div className="flex items-center gap-3">
             <span className="bg-saffron text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
               {selectedDocIds.length} Selected
             </span>
-            <span className="text-xs text-cream/70">
-              Bulk actions ready for collection <strong className="text-cream capitalize">{activeTab}</strong>
+            <span className="text-xs text-coffee-500">
+              Bulk actions ready for collection <strong className="text-coffee capitalize">{activeTab}</strong>
             </span>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               onClick={() => setSelectedDocIds([])}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-cream/70 hover:text-cream hover:bg-surface/10 transition-colors"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-coffee-500 hover:text-coffee hover:bg-cream-300 transition-colors"
             >
               Deselect All
             </button>

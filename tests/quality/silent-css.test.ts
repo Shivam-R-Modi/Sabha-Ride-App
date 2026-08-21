@@ -184,12 +184,29 @@ describe('2b. the colourless button base is never left colourless', () => {
 describe('3. text-ramp tokens are not used as backgrounds', () => {
     /**
      * `bg-coffee` is `--text-strong`. The text ramp INVERTS between themes by
-     * design — dark on light, light on dark — so anything using it as a background
-     * flips from dark to light, and whatever text sits on it stops being readable
-     * in exactly one theme. `bg-coffee text-white` measured 1.28:1 in dark.
+     * design — dark on light, light on dark — so anything filled with it changes
+     * character between themes.
      *
-     * The fix is an inverted PAIR: `bg-coffee text-cream`, where both tokens flip
-     * together (13.07:1 light, 13.82:1 dark).
+     * THIS RULE USED TO SAY SOMETHING ELSE, AND THE ADVICE CAUSED A BUG.
+     *
+     * It was written for `bg-coffee text-white`, which measured 1.28:1 in dark —
+     * white on near-white — and it prescribed "an inverted PAIR: `bg-coffee
+     * text-cream`, where both tokens flip together (13.07:1 light, 13.82:1 dark)".
+     * That is true about contrast and wrong about appearance, and three places
+     * took the advice. The worst was DatabaseConsole's selected collection tab: a
+     * dark brown pill in light mode, a NEAR-WHITE pill in dark, sitting among
+     * `--surface` siblings at 46 40 34. Perfectly readable, and the only control in
+     * the app that inverted, so it was reported as a rendering glitch — with an
+     * arrow drawn on a screenshot.
+     *
+     * So the rule is no longer about the pairing. The text ramp is not a fill at
+     * all. Fills are `--surface`, `--sunken` (`bg-cream-400`) and the accent, all
+     * of which keep their character in both themes. `bg-cream-400 text-coffee` is
+     * what the selected tab uses now, which is also what the sidebar has always
+     * used.
+     *
+     * The exception is a mark with nothing rendered on it, where "the strongest
+     * colour available against the page" is exactly the right intent.
      */
     const ALLOWED = new Map<string, string>([
         // A 3px dot with no text on it. There, "the strongest text colour" is exactly
@@ -198,28 +215,40 @@ describe('3. text-ramp tokens are not used as backgrounds', () => {
         ['components/RideStatus.tsx', 'a bare dot marker, nothing rendered on top of it'],
     ]);
 
-    it('bg-coffee is always paired with text-cream', () => {
-        // The rule is the PAIRING, not a ban. `bg-coffee` is a legitimate
-        // maximum-contrast fill; what breaks is putting a non-inverting text colour
-        // on it. So: if a span sets bg-coffee, it must set text-cream in the same
-        // breath. `bg-coffee text-white` fails. So does bg-coffee with no text
-        // colour at all, which inherits whatever the parent had.
+    it('the text ramp is never used as a fill', () => {
+        // Not "must be paired with an inverting text colour" — that was the old
+        // rule and it is what produced the near-white selected tab. A fill has to
+        // keep its character in both themes, and the text ramp cannot.
         const hits: string[] = [];
         for (const f of tsxFiles()) {
             if (ALLOWED.has(rel(f))) continue;
             for (const { line, text } of spans(f)) {
-                const usesFill = /(?<![\w-])bg-coffee(-\d+)?(\/\d+)?(?![\w-])/.test(text)
-                    && !/hover:bg-coffee/.test(text);
-                if (usesFill && !/(?<![\w-])text-cream(-\d+)?(\/\d+)?(?![\w-])/.test(text)) {
+                // State variants are STRIPPED, not used to skip the span.
+                //
+                // The first draft did `&& !/hover:bg-coffee/.test(text)`, which
+                // let any element carrying BOTH an opaque `bg-coffee` and a
+                // `hover:bg-coffee/90` out entirely — and that is exactly the
+                // shape RideWindowControl had, so the guard passed with the bug
+                // restored. Found by breaking all three on purpose and only
+                // getting two back. Same trap as the `className=` hole in
+                // theme-tokens.test.ts: a scanner that reads part of the source
+                // reports on part of the source.
+                //
+                // `bg-coffee/10` and friends stay allowed: a 10% text colour over
+                // a surface is a wash, and stays a tint of that surface in both
+                // themes. Hence the `/` in the trailing lookahead.
+                const withoutVariants = text.replace(/\b(hover|focus|active|group-hover|focus-visible|disabled):bg-coffee[\w/-]*/g, ' ');
+                if (/(?<![\w-])bg-coffee(-\d+)?(?![\w-/])/.test(withoutVariants)) {
                     hits.push(`${rel(f)}:${line}  ${text.slice(0, 70)}`);
                 }
             }
         }
         expect(
             hits,
-            `bg-coffee is the TEXT ramp and inverts between themes, so text on it must ` +
-            `invert too. Pair it with text-cream (13.07:1 light, 13.82:1 dark), or ` +
-            `allowlist the file if nothing is rendered on the fill:\n  ${hits.join('\n  ')}`,
+            `bg-coffee is the TEXT ramp: it inverts between themes, so anything ` +
+            `filled with it is dark in one mode and near-white in the other. Use a ` +
+            `surface fill — bg-surface, bg-cream-400 (--sunken) — or the accent. ` +
+            `Allowlist the file only if NOTHING is rendered on the fill:\n  ${hits.join('\n  ')}`,
         ).toEqual([]);
     });
 

@@ -119,7 +119,13 @@ export const RideWindowControl: React.FC = () => {
                         { rideType: 'sabha-to-home' },
                     )}
                     disabled={!!busy}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-coffee text-cream rounded-lg font-semibold text-sm hover:bg-coffee/90 disabled:opacity-50 transition-all"
+                    // An accent OUTLINE, not `bg-coffee text-cream`. That fill is
+                    // `--text-strong`, which inverts between themes, so this
+                    // button was dark in light mode and near-white in dark. It is
+                    // the middle of three rungs here — filled saffron above,
+                    // neutral outline below — and an accent outline keeps that
+                    // order while behaving the same in both themes.
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-saffron-800 text-saffron-800 rounded-lg font-semibold text-sm hover:bg-cream-200 disabled:opacity-50 transition-all"
                 >
                     {busy === 'dropoff' ? <Loader2 size={16} className="animate-spin" /> : <Clock size={16} />}
                     Open drop-off now
