@@ -5,9 +5,9 @@ conventions that take precedence over it**. Read the second part; it exists
 because one rule in the first part conflicts with how this repo is built.
 
 Ponytail is vendored at tag `v4.9.0`, licence and provenance in
-`.claude/skills/PONYTAIL-LICENSE`. Intensity: **full**. Both this file and
-`.claude/skills/` are deliberately untracked — they are a preference about how
-code gets written, not part of the app.
+`.claude/skills/PONYTAIL-LICENSE`. Intensity: **full**. This file and
+`.claude/skills/` are committed (`0406ab8`) so that a session started from the
+phone gets a fresh clone that already knows the conventions.
 
 ---
 
@@ -55,8 +55,8 @@ session reads the ladder above with no counterweight otherwise.
 ## Tests are the standing ask
 
 Ponytail says "no frameworks, no fixtures... trivial one-liners need no test."
-**That does not apply here.** This repo runs **396 tests** — 245 in `functions/`,
-70 client, 81 Firestore rules — and the convention is that every fixed defect
+**That does not apply here.** This repo runs **2,003 tests** — 1,152 client,
+681 in `functions/`, 170 Firestore rules — and the convention is that every fixed defect
 leaves a named test that fails if the defect returns. Those tests have caught real
 bugs, including ones written in this repo by an agent: a seed function that could
 never run once a slot was cancelled, and a manager check that let a revoked
@@ -90,7 +90,9 @@ npx vitest run           # client. NOT `npm test` at the root — that is watch 
 npm test --prefix functions
 npm run test:rules       # starts its own emulator
 npm run build
-npm run typecheck        # clean baseline is 22 pre-existing errors; 22 means clean
+npm run typecheck        # must be zero errors. The 22 pre-existing errors this note
+                         # used to allow were all cleared on 2026-08-21 — a
+                         # non-zero count now means something you touched
 ```
 
 `npm run lint` is configured but has no ESLint config file, so it always errors
