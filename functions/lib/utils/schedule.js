@@ -21,7 +21,7 @@
  * know what day of the week it is. That is what lets the date move.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ATTENDANCE_LOCK_HOUR = exports.DEFAULT_SABHA_END = exports.DEFAULT_SABHA_START = exports.DROPOFF_LEAD_MINUTES = exports.SABHA_DAY = exports.PICKUP_LEAD_DAYS = void 0;
+exports.ATTENDANCE_LOCK_HOUR = exports.DEFAULT_SABHA_END = exports.DEFAULT_SABHA_START = exports.DROPOFF_LEAD_MINUTES = exports.PICKUP_LEAD_DAYS = void 0;
 exports.buildCurrentEvent = buildCurrentEvent;
 exports.parseTimeToMinutes = parseTimeToMinutes;
 exports.formatTimeForDisplay = formatTimeForDisplay;
@@ -34,13 +34,19 @@ const time_1 = require("./time");
  * for a Friday sabha and keeps working when the date moves, which it now can.
  */
 exports.PICKUP_LEAD_DAYS = 2;
-/**
- * 0 = Sunday. The day the weekly template generates events on.
+/*
+ * `SABHA_DAY = 5 // Friday` used to live here. It is deleted, not moved.
  *
- * No longer the source of truth for when sabha IS — that comes from the events
- * collection. This is only the default slot new events are generated in.
+ * Its comment already recorded it as no longer the source of truth — "only the
+ * default slot new events are generated in" — and then the weekly template that
+ * generated them was itself deleted in the move to a recurrence rule. So it was
+ * an exported hardcoded Friday with zero consumers, sitting in the one file a
+ * future reader would go to when asking "which day is sabha".
+ *
+ * There is exactly one answer to that now: `settings/sabhaRecurrence.daysOfWeek`,
+ * set by a manager, read live. Nothing in this codebase may name a weekday for
+ * scheduling — see tests/quality/schedule-not-hardcoded.test.ts.
  */
-exports.SABHA_DAY = 5; // Friday
 /** Drop-off opens this many minutes before sabha ends. */
 exports.DROPOFF_LEAD_MINUTES = 15;
 exports.DEFAULT_SABHA_START = '19:00';

@@ -44,14 +44,28 @@ export const onSnapshot = (ref: Ref, next: (snap: unknown) => void) => {
 export const getDoc = async (ref: Ref) => snapshotFor(ref);
 export const getDocs = async (ref: Ref) => snapshotFor(ref);
 export const setDoc = async () => undefined;
-export const updateDoc = async () => undefined;
+
+/**
+ * Writes go nowhere — except that a write to a user document is echoed on the
+ * window, so auth-stub can feed it back as a profile change.
+ *
+ * Without this the harness could show a drag starting and could not show it
+ * finishing: `AuthContext` is what carries a saved tab order back to the
+ * sidebar, and a stub that swallows the write leaves the list frozen. A preview
+ * that cannot tell a working reorder from a broken one is worse than no preview.
+ */
+export const updateDoc = async (ref: Ref, data: Record<string, unknown>) => {
+    if (ref.path.startsWith('users/')) {
+        window.dispatchEvent(new CustomEvent('preview:userWrite', { detail: data }));
+    }
+};
 export const deleteDoc = async () => undefined;
 export const addDoc = async () => ({ id: 'preview' });
 export const serverTimestamp = () => new Date().toISOString();
 export const Timestamp = { now: () => ({ toDate: () => new Date() }) };
 export const arrayUnion = (...v: unknown[]) => v;
 export const arrayRemove = (...v: unknown[]) => v;
-export const deleteField = () => undefined;
+export const deleteField = () => '__DELETE__';
 export const increment = (n: number) => n;
 export const writeBatch = () => ({
     set: () => undefined, update: () => undefined, delete: () => undefined,

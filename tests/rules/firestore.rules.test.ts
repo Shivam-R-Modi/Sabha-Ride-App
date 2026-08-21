@@ -498,6 +498,74 @@ describe('ride integrity', () => {
     });
 });
 
+describe('the sidebar order a person chooses for themselves', () => {
+    /**
+     * Stored on the user's own document so it follows them between machines.
+     * Writing it needed no new permission — a user could already write any
+     * non-privilege field on their own profile — so what these pin is the BOUND,
+     * and that adding the bound did not close the door on the ordinary write.
+     *
+     * The document is read on every page load and by every manager listing
+     * people, which is why an unbounded array here is everyone's problem and not
+     * just the writer's.
+     */
+    const order = (n: number) => Array.from({ length: n }, (_, i) => `tab_${i}`);
+
+    it('the owner may save an order', async () => {
+        await assertSucceeds(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            navOrder: { student: ['profile', 'home', 'rides'] },
+        }));
+    });
+
+    it('the owner may save an order for each role they hold', async () => {
+        await assertSucceeds(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            navOrder: { student: ['profile'], driver: ['history'], manager: ['setup'] },
+        }));
+    });
+
+    it('refuses a list long enough to be storage rather than a preference', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            navOrder: { student: order(17) },
+        }));
+    });
+
+    it('refuses a key that is not a role', async () => {
+        // `navOrder` is a map keyed by role. Anything else is somebody using a
+        // profile field as a scratch pad.
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            navOrder: { student: ['home'], notes: ['anything'] },
+        }));
+    });
+
+    it('refuses a value that is not a list', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            navOrder: { student: 'home,profile' },
+        }));
+    });
+
+    it('cannot smuggle a role change alongside the order', async () => {
+        // The reason the privilege guard is ANDed with the new one rather than
+        // replacing it.
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            navOrder: { student: ['home'] },
+            role: 'manager',
+        }));
+    });
+
+    it('cannot be written onto somebody else', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', OTHER_STUDENT), {
+            navOrder: { student: ['home'] },
+        }));
+    });
+
+    it('still allows an ordinary profile write that sends no order', async () => {
+        // The absence case. Every other write to this document — a phone number,
+        // a push token, a presence claim — sends no navOrder at all, and a rule
+        // requiring it would break all of them.
+        await assertSucceeds(updateDoc(doc(asStudent(), 'users', STUDENT), { phone: '5551234' }));
+    });
+});
+
 describe('stop progress is written by the Sarthi driving the run, and nobody else', () => {
     /**
      * ActiveRide saves `route[].visited` straight to the ride as each stop is

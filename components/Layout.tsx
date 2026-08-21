@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LotusIcon } from '../constants';
 import { TabView, UserRole } from '../types';
-import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database, Megaphone } from 'lucide-react';
+import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database, Megaphone, GripVertical, RotateCcw } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { RoleSwitcher } from './RoleSwitcher';
 import { InstallAppButton } from './shared/InstallAppButton';
+import { doc, updateDoc, deleteField } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { applyOrder, moveItem } from '../src/utils/navOrder';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -90,11 +93,107 @@ const MobileHeader: React.FC = () => {
   );
 };
 
+/**
+ * The sidebar order a person has chosen, and the two ways they change it.
+ *
+ * Stored on their own user document, per role, so it follows them between a
+ * laptop and a desktop. `AuthContext` already holds a listener on that document,
+ * so nothing here subscribes — and Firestore applies a local write to its cache
+ * before the network, so the sidebar reorders under the cursor rather than after
+ * a round trip.
+ *
+ * `applyOrder` decides what is rendered. Read the note at the top of
+ * src/utils/navOrder.ts before changing anything here: a stored order is a
+ * preference about sequence and must never be able to decide which tabs exist.
+ */
+function useNavOrder(role: UserRole, defaults: NavItem[]) {
+  const { currentUser, userProfile } = useAuth();
+  const stored = (userProfile as { navOrder?: Partial<Record<UserRole, TabView[]>> } | null)
+    ?.navOrder?.[role];
+
+  const items = applyOrder(defaults, stored);
+  const isCustomised = Array.isArray(stored) && stored.length > 0;
+
+  /** What a screen reader is told after a move. Silent until one happens. */
+  const [announcement, setAnnouncement] = useState('');
+
+  const write = (value: TabView[] | ReturnType<typeof deleteField>) => {
+    if (!currentUser) return;
+    // A computed field path, the same shape nudgeRider uses for `nudges.<uid>`.
+    // `role` is a three-value union rather than caller input, so unlike that case
+    // it needs no pattern guard.
+    updateDoc(doc(db, 'users', currentUser.uid), { [`navOrder.${role}`]: value })
+      .catch(err => console.error('[Sidebar] Could not save the tab order:', err));
+  };
+
+  /**
+   * Move the item at `from` to `to`.
+   *
+   * Writes the FULL resolved order, not the stored fragment — otherwise the first
+   * drag on a fresh account would save a two-entry list and leave the rest to be
+   * appended by `applyOrder` in an order nobody chose.
+   */
+  const move = (from: number, to: number) => {
+    const ids = items.map(item => item.id);
+    const next = moveItem(ids, from, to);
+    if (next.every((id, index) => id === ids[index])) return;
+
+    write(next);
+    const landed = next.indexOf(ids[from]);
+    setAnnouncement(`${items[from].label} moved to position ${landed + 1} of ${next.length}`);
+  };
+
+  const reset = () => {
+    write(deleteField());
+    setAnnouncement('Tab order reset to the default');
+  };
+
+  return { items, isCustomised, move, reset, announcement };
+}
+
 const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const { logout, userProfile } = useAuth();
   const { currentTab, setCurrentTab, isSidebarCollapsed, toggleSidebar } = useNavigation();
 
-  const navItems = getNavItems(role);
+  const { items: navItems, isCustomised, move, reset, announcement } = useNavOrder(role, getNavItems(role));
+
+  /** The item being dragged, and the one the cursor is currently over. */
+  const [draggingId, setDraggingId] = useState<TabView | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<TabView | null>(null);
+
+  const indexOfId = (id: TabView) => navItems.findIndex(item => item.id === id);
+
+  const endDrag = () => { setDraggingId(null); setDropTargetId(null); };
+
+  /**
+   * The dragged id comes from the dataTransfer, not from React state.
+   *
+   * `draggingId` exists for the visual — it is what dims the row being moved —
+   * but reading it here would make the drop depend on React having COMMITTED the
+   * dragstart before the drop arrives. A real gesture leaves hundreds of
+   * milliseconds between the two, so it always would; a drop fired in the same
+   * tick silently does nothing, which is how this was found. The dataTransfer is
+   * what the platform provides for exactly this, and it is already being set.
+   */
+  const onDrop = (event: React.DragEvent, targetId: TabView) => {
+    const draggedId = (event.dataTransfer.getData('text/plain') || draggingId) as TabView | '';
+    if (draggedId && draggedId !== targetId) move(indexOfId(draggedId), indexOfId(targetId));
+    endDrag();
+  };
+
+  /**
+   * Alt + arrow, not bare arrow.
+   *
+   * A nav is a list of buttons: bare arrows and Enter already mean something to
+   * the browser and to a screen reader, and HTML5 drag is mouse-only, so a
+   * keyboard user would otherwise have no way to reorder at all. The shortcut is
+   * named in a visually-hidden line below rather than left to be discovered.
+   */
+  const onKeyDown = (event: React.KeyboardEvent, index: number) => {
+    if (!event.altKey) return;
+    if (event.key === 'ArrowUp') { event.preventDefault(); move(index, index - 1); }
+    if (event.key === 'ArrowDown') { event.preventDefault(); move(index, index + 1); }
+  };
 
   return (
     // Same rung as the mobile header: it is chrome, and it holds a RoleSwitcher too.
@@ -123,18 +222,43 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
 
       {/* Nav Links */}
       <nav className="flex-1 px-3 py-4 space-y-2">
-        {navItems.map((item) => {
+        {/* Named, not left to be discovered. HTML5 drag is mouse-only, so this
+            shortcut is the whole of the keyboard path. */}
+        <p className="sr-only">
+          Drag a tab to reorder it, or press Alt with the up and down arrow keys
+          while it is focused.
+        </p>
+        {navItems.map((item, index) => {
           const isActive = currentTab === item.id;
           const Icon = item.icon;
+          const isDropTarget = dropTargetId === item.id && draggingId !== item.id;
           return (
             <React.Fragment key={item.id}>
               {/* Everyday destinations end here. What follows edits live records
-                  directly, so it gets visual distance rather than adjacency. */}
-              {item.separated && (
+                  directly, so it gets visual distance rather than adjacency.
+                  The rule travels with the item — Records can be dragged, and a
+                  divider left behind above whatever landed in that slot would
+                  mean nothing. Skipped at the top, where it would just be a
+                  stray line above the first tab. */}
+              {item.separated && index > 0 && (
                 <hr className="border-0 border-t border-hairline/10 !mt-4 mb-2 mx-1" aria-hidden="true" />
               )}
+            {/* The row is a drop TARGET; only the grip is draggable.
+                Why a handle rather than the whole row: a drag that starts on the
+                button and ends before the browser's drag threshold IS a click,
+                so an intended reorder navigates instead. With the handle outside
+                the button that cannot happen — a grab is never a navigation and
+                a click is never a grab. It also stops the row wearing a grab
+                cursor, which tells a button it is not a button. */}
+            <div
+              className="relative flex items-center"
+              onDragOver={(event) => { event.preventDefault(); setDropTargetId(item.id); }}
+              onDragLeave={() => setDropTargetId(current => (current === item.id ? null : current))}
+              onDrop={(event) => { event.preventDefault(); onDrop(event, item.id); }}
+            >
             <button
               onClick={() => setCurrentTab(item.id)}
+              onKeyDown={(event) => onKeyDown(event, index)}
               title={isSidebarCollapsed ? item.label : undefined}
               // `cream-400`, not `cream-300`. In DARK mode `--canvas-deep`
               // (cream-300) and `--surface` are the SAME colour, 39 34 29, so the
@@ -143,7 +267,15 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
               // an UNselected item (cream-200) looked more selected than the
               // selected one. `cream-400` is `--sunken`, which differs from
               // `--surface` in both themes. See tests/quality/theme-tokens.test.ts.
-              className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all group relative btn-feedback ${isActive
+              // `border-saffron` REPLACES the transparent border rather than
+              // adding one, for the reason spelled out below: with transition-all
+              // a border that appears only on hover animates its width from 0 to
+              // 1px and nudges the icon inward — which during a drag reads as the
+              // list shifting under the cursor.
+              className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all group relative btn-feedback ${draggingId === item.id ? 'opacity-50' : ''
+                } ${isDropTarget
+                  ? 'border border-saffron bg-cream-200'
+                  : isActive
                 ? 'bg-cream-400 text-saffron shadow-sm border border-hairline/10'
                 // `border border-transparent`, not "no border": with transition-all
                 // a border that appears only when selected animates its WIDTH from
@@ -154,7 +286,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
                 : 'border border-transparent text-coffee-500 hover:bg-cream-200 hover:text-coffee'
                 }`}
             >
-              <Icon size={22} className={`${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
+              <Icon size={22} className={`shrink-0 ${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
               {!isSidebarCollapsed && (
                 <span className={`text-sm font-bold animate-in fade-in slide-in-from-left-2 ${isActive ? 'text-coffee' : ''}`}>
                   {item.label}
@@ -164,9 +296,56 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
                 <div className="absolute left-0 w-1 h-6 bg-saffron-800 rounded-r-full shadow-lg" />
               )}
             </button>
+
+            {/* The only draggable thing. Sits over the row's right edge rather
+                than inside the button, so a grab can never be a navigation and a
+                click can never be a grab.
+
+                Hidden in the collapsed rail: 80px has no room for a handle
+                beside the icon, and a 14px target there would be a control that
+                barely works. Alt+arrow still reorders, and expanding gives the
+                handle back — stated here because it is a real limitation rather
+                than an oversight. */}
+            {!isSidebarCollapsed && (
+              <span
+                draggable
+                onDragStart={(event) => {
+                  setDraggingId(item.id);
+                  event.dataTransfer.effectAllowed = 'move';
+                  // Firefox ignores a dragstart that sets no data at all.
+                  event.dataTransfer.setData('text/plain', item.id);
+                }}
+                onDragEnd={endDrag}
+                aria-label={`Reorder ${item.label}`}
+                title={`Drag to move ${item.label}`}
+                // A token, not an opacity. `opacity` on a control multiplies
+                // against whatever is behind it, so one value reads differently
+                // on the selected pill and on the panel — and at 40% over
+                // `--text-faint` the handle was hard to find at all. coffee-500
+                // is `--text-soft`, the theme's AA floor in both modes.
+                className="absolute right-2 p-1 cursor-grab active:cursor-grabbing text-coffee-500 hover:text-coffee transition-colors"
+              >
+                <GripVertical size={14} aria-hidden="true" />
+              </span>
+            )}
+            </div>
             </React.Fragment>
           );
         })}
+
+        {/* Silent until a move happens, so a drag is not a page full of noise. */}
+        <p aria-live="polite" className="sr-only">{announcement}</p>
+
+        {/* Only once an order has actually been saved. A Reset that resets nothing
+            is the dead control this repo keeps deleting. */}
+        {isCustomised && !isSidebarCollapsed && (
+          <button
+            onClick={reset}
+            className="w-full flex items-center justify-center gap-1.5 !mt-4 py-2 text-[11px] font-bold text-coffee-500 hover:text-coffee rounded-lg hover:bg-cream-200 transition-colors"
+          >
+            <RotateCcw size={12} /> Reset tab order
+          </button>
+        )}
       </nav>
 
       {/* Profile & Footer */}
