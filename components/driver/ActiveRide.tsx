@@ -1,16 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Navigation, Users, Clock, MapPin, Phone, CheckCircle2, Circle, Loader2, AlertCircle, Bell } from 'lucide-react';
 import { completeRide, sarthiArrived, CompleteRideResult } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
 import { useDriverLocation } from '../../hooks/useDriverLocation';
 import { useAuth } from '../../contexts/AuthContext';
-import { useConfirm } from '../shared/useConfirm';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { Sheet } from '../shared/Sheet';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { seatsOnRide } from '../../src/constants/seats';
 import { messageOf } from '../../src/utils/errorText';
+import { advanceVisits, hasReachedEnd } from '../../src/utils/rideProgress';
+import type { Fix } from '../../src/utils/presence';
 
 interface ActiveRideProps {
     ride: {
@@ -41,7 +42,6 @@ interface ActiveRideProps {
 
 export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack }) => {
     const { currentUser } = useAuth();
-    const { ask, confirmDialog } = useConfirm();
     const { setFocusMode } = useNavigation();
 
     /**
@@ -58,59 +58,84 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
         return () => setFocusMode(false);
     }, [setFocusMode]);
 
-    // Enable real-time GPS location tracking during active ride
-    useDriverLocation({
-        driverId: currentUser?.uid || '',
-        rideId: ride?.id || null,
-        isRideActive: true
-    });
-
-    const [visitedWaypoints, setVisitedWaypoints] = useState<Set<string>>(() => {
-        const visited = new Set<string>();
-        ride.route.forEach((wp, idx) => {
-            if (wp.visited) visited.add(`${wp.type}-${idx}`);
-        });
-        return visited;
-    });
+    /**
+     * The route, ticks and all — ONE representation.
+     *
+     * This used to be a `Set` of `"${type}-${idx}"` keys derived from the route
+     * and mapped back on every write, which meant two models of the same fact and
+     * an `indexOf` lookup that picks the wrong stop whenever two stops share
+     * coordinates. Holding the waypoints themselves is both smaller and the shape
+     * `advanceVisits` and Firestore already want.
+     *
+     * Seeded from the document, which is what makes progress survive the trip out
+     * to Google Maps: iOS discards suspended pages, so the Sarthi comes back to a
+     * fresh mount and reads their ticks back off the ride.
+     */
+    const [route, setRoute] = useState(() => ride.route.map(wp => ({ ...wp })));
     const [isCompleting, setIsCompleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showBackConfirm, setShowBackConfirm] = useState(false);
 
-    // Calculate progress
-    const pickupDropoffWaypoints = ride.route.filter(wp => wp.type === 'pickup' || wp.type === 'dropoff');
-    const visitedCount = pickupDropoffWaypoints.filter((wp) => {
-        const routeIdx = ride.route.indexOf(wp);
-        return visitedWaypoints.has(`${wp.type}-${routeIdx}`);
-    }).length;
-    const totalCount = pickupDropoffWaypoints.length;
+    const stops = route.filter(wp => wp.type === 'pickup' || wp.type === 'dropoff');
+    const visitedCount = stops.filter(wp => wp.visited).length;
+    const totalCount = stops.length;
     const allVisited = visitedCount >= totalCount;
 
-    const handleToggleWaypoint = async (waypoint: typeof ride.route[0], index: number) => {
-        const key = `${waypoint.type}-${index}`;
-        const newVisited = new Set(visitedWaypoints);
-        const isNowVisited = !newVisited.has(key);
-        if (isNowVisited) {
-            newVisited.add(key);
-        } else {
-            newVisited.delete(key);
-        }
-        setVisitedWaypoints(newVisited);
-
+    /**
+     * Save the ticks where they will outlive this screen.
+     *
+     * The local state moves first and the write follows: a Sarthi who tapped a
+     * stop must see it tick even on a dead signal outside somebody's house. A
+     * failed write costs the round trip to Maps, not the tap.
+     */
+    const persistRoute = useCallback(async (next: typeof route) => {
+        setRoute(next);
         try {
-            // Update route progress in Firestore in real-time
-            const updatedRoute = ride.route.map((wp, idx) => {
-                if (idx === index) {
-                    return { ...wp, visited: isNowVisited };
-                }
-                return wp;
-            });
-            await updateDoc(doc(db, 'rides', ride.id), {
-                route: updatedRoute
-            });
+            await updateDoc(doc(db, 'rides', ride.id), { route: next });
         } catch (err) {
-            console.error('[ActiveRide] Failed to update waypoint status in Firestore:', err);
+            console.error('[ActiveRide] Failed to save stop progress:', err);
         }
+    }, [ride.id]);
+
+    const handleToggleWaypoint = (index: number) => {
+        persistRoute(route.map((wp, idx) => (idx === index ? { ...wp, visited: !wp.visited } : wp)));
     };
+
+    /** Opened once by the geofence; after that only by hand. */
+    const [rosterOpen, setRosterOpen] = useState(false);
+    const venuePromptedRef = useRef(false);
+    const [travelled, setTravelled] = useState<Set<string>>(
+        () => new Set(ride.students.map(s => s.id)));
+
+    /**
+     * One location fix, arriving whenever the Sarthi glances back at the app.
+     *
+     * Display only. It ticks stops the car has reached so the screen looks like
+     * the evening actually went, and it raises the roster once at the venue. It
+     * decides nothing: reaching a house is not proof anyone boarded, and the
+     * record is the roster the Sarthi confirms.
+     */
+    const handleFix = useCallback((fix: Fix) => {
+        const advanced = advanceVisits(route, fix);
+        if (advanced.changed) persistRoute(advanced.waypoints);
+
+        // Only once, and only after the run has actually started — a Sarthi whose
+        // own home sits near the venue must not be asked to confirm a roster
+        // before they have driven anywhere.
+        if (!venuePromptedRef.current && visitedCount > 0 && hasReachedEnd(route, fix)) {
+            venuePromptedRef.current = true;
+            setRosterOpen(true);
+        }
+    }, [route, visitedCount, persistRoute]);
+
+    // Real-time GPS during the run: one watch, shared. It writes the driver's
+    // position for the riders' tracking screen and hands the same fix here.
+    useDriverLocation({
+        driverId: currentUser?.uid || '',
+        rideId: ride?.id || null,
+        isRideActive: true,
+        onFix: handleFix,
+    });
 
     // Prefer the URL the assignment persisted; rebuild it from `route` for rides
     // assigned before that field was written, so an in-flight ride still
@@ -120,6 +145,8 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
         () => ride.googleMapsUrl || buildGoogleMapsNavigationUrl(ride.route || []),
         [ride.googleMapsUrl, ride.route]
     );
+
+    const arrivalWord = ride.rideType === 'home-to-sabha' ? 'at the sabha' : 'home safe';
 
     const handleOpenMaps = () => {
         // Opened synchronously from the click. This used to run inside the
@@ -147,25 +174,35 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
         }
     };
 
+    /**
+     * Close the run against the roster the Sarthi just confirmed.
+     *
+     * Anyone unticked did not travel, and is reported as such: their ride is
+     * cancelled rather than completed, and nobody is told they arrived somewhere
+     * they never reached.
+     *
+     * This replaces a warning that could never be read. "Complete Ride" was
+     * `disabled` until every stop was ticked, so the `!allVisited` confirmation
+     * behind it was unreachable — and a single Bhulku who did not come out left
+     * the Sarthi with no way to end the run at all except to tick a child off as
+     * collected. The dead button and the lie were the same bug.
+     */
     const handleCompleteRide = async () => {
-        if (!allVisited) {
-            const ok = await ask({
-                title: 'Complete this ride?',
-                message: 'Not all students have been picked up or dropped off.',
-                confirmLabel: 'Complete anyway',
-                cancelLabel: 'Go back',
-                destructive: true,
-            });
-            if (!ok) return;
-        }
+        const absentStudentIds = ride.students
+            .filter(s => !travelled.has(s.id))
+            .map(s => s.id);
 
+        setRosterOpen(false);
         setIsCompleting(true);
         setError(null);
         try {
-            const result: CompleteRideResult = await completeRide(ride.id);
+            const result: CompleteRideResult = await completeRide(ride.id, absentStudentIds);
             onComplete(
                 {
-                    students: seatsOnRide(ride),
+                    students: seatsOnRide({
+                        ...ride,
+                        students: ride.students.filter(s => travelled.has(s.id)),
+                    }),
                     distance: ride.estimatedDistance,
                     time: ride.estimatedTime,
                 },
@@ -298,13 +335,14 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                     </button>
                 )}
 
+                {/* Never disabled. It used to be dark until every stop was
+                    ticked, which meant one Bhulku who did not come out of the
+                    house left the Sarthi with no way to end the run — the roster
+                    below is exactly the place to say what happened. */}
                 <button
-                    onClick={handleCompleteRide}
-                    disabled={isCompleting || !allVisited}
-                    className={`w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all ${allVisited
-                        ? 'clay-btn-cta-large'
-                        : 'bg-cream-400 text-coffee-500 cursor-not-allowed'
-                        }`}
+                    onClick={() => setRosterOpen(true)}
+                    disabled={isCompleting}
+                    className="w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all clay-btn-cta-large disabled:opacity-60"
                 >
                     {isCompleting ? (
                         <><Loader2 className="animate-spin" size={20} /> Completing...</>
@@ -315,7 +353,8 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
 
                 {!allVisited && (
                     <p className="text-center text-xs text-coffee-500">
-                        Complete all stops to enable ride completion
+                        {totalCount - visitedCount} of {totalCount} stops still open — you can
+                        still finish, and say who did not travel.
                     </p>
                 )}
             </div>
@@ -325,9 +364,8 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                 <h3 className="text-sm font-bold text-coffee-500 uppercase tracking-wider mb-3">Bhulka</h3>
                 <div className="space-y-3">
                     {ride.students.map((student) => {
-                        const routePoint = ride.route.find(r => r.studentId === student.id);
-                        const routeIdx = routePoint ? ride.route.indexOf(routePoint) : -1;
-                        const isVisited = routeIdx >= 0 ? visitedWaypoints.has(`${routePoint?.type}-${routeIdx}`) : false;
+                        const routeIdx = route.findIndex(r => r.studentId === student.id);
+                        const isVisited = routeIdx >= 0 ? route[routeIdx].visited : false;
 
                         return (
                             <div
@@ -351,7 +389,10 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                     </div>
                                     <div className="flex flex-col gap-2">
                                         <button
-                                            onClick={() => routePoint && handleToggleWaypoint(routePoint, routeIdx)}
+                                            aria-label={isVisited
+                                                ? `Undo ${student.name}'s stop`
+                                                : `Mark ${student.name}'s stop done`}
+                                            onClick={() => routeIdx >= 0 && handleToggleWaypoint(routeIdx)}
                                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isVisited
                                                 ? 'bg-[rgb(var(--success-fill))] text-[rgb(var(--text-on-accent))]'
                                                 : 'bg-cream-300 text-coffee-500 hover:bg-cream-400'
@@ -360,6 +401,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                             {isVisited ? <CheckCircle2 size={20} /> : <Circle size={20} />}
                                         </button>
                                         <a
+                                            aria-label={`Call ${student.name}`}
                                             href={`tel:${student.phone || (student as any).studentPhone || ''}`}
                                             className="w-10 h-10 rounded-full bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))] flex items-center justify-center hover:opacity-90 transition-colors"
                                         >
@@ -377,23 +419,23 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
             <div className="px-4 mt-6 pb-8">
                 <h3 className="text-sm font-bold text-coffee-500 uppercase tracking-wider mb-3">Route</h3>
                 <div className="clay-card p-4 space-y-2">
-                    {ride.route.map((waypoint, idx) => (
+                    {route.map((waypoint, idx) => (
                         <div
                             key={`${waypoint.type}-${idx}`}
                             className={`flex items-center gap-3 py-2 ${waypoint.type === 'start' || waypoint.type === 'end'
                                 ? 'text-coffee-500 text-sm'
-                                : visitedWaypoints.has(`${waypoint.type}-${idx}`)
+                                : waypoint.visited
                                     ? 'text-[rgb(var(--success-text))]'
                                     : 'text-coffee'
                                 }`}
                         >
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${waypoint.type === 'start' ? 'bg-cream-400' :
                                 waypoint.type === 'end' ? 'bg-cream-400' :
-                                    visitedWaypoints.has(`${waypoint.type}-${idx}`) ? 'bg-[rgb(var(--success-fill))] text-[rgb(var(--text-on-accent))]' : 'bg-saffron/20 text-saffron-800'
+                                    waypoint.visited ? 'bg-[rgb(var(--success-fill))] text-[rgb(var(--text-on-accent))]' : 'bg-saffron/20 text-saffron-800'
                                 }`}>
                                 {waypoint.type === 'start' ? 'S' :
                                     waypoint.type === 'end' ? 'E' :
-                                        visitedWaypoints.has(`${waypoint.type}-${idx}`) ? '✓' : idx}
+                                        waypoint.visited ? '✓' : idx}
                             </div>
                             <span className="flex-1 text-sm truncate">{waypoint.name}</span>
                         </div>
@@ -401,7 +443,75 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                 </div>
             </div>
 
-            {confirmDialog}
+            {/* THE RECORD.
+                Pre-ticked, so a normal night is one tap. Untick anyone who did
+                not get in the car: their ride is cancelled rather than completed
+                and they are not reported as having arrived — which matters most
+                on the way back, where the alternative is telling a parent their
+                child is home safe. */}
+            <Sheet
+                open={rosterOpen}
+                onClose={() => setRosterOpen(false)}
+                title="Who travelled?"
+                maxWidth="max-w-sm"
+                footer={
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setRosterOpen(false)}
+                            className="flex-1 clay-button-secondary"
+                        >
+                            Go back
+                        </button>
+                        <button
+                            onClick={handleCompleteRide}
+                            disabled={isCompleting}
+                            className="flex-1 clay-button-primary disabled:opacity-60"
+                        >
+                            {isCompleting ? 'Completing…' : 'Complete run'}
+                        </button>
+                    </div>
+                }
+            >
+                <p className="text-sm text-coffee-700 mb-3">
+                    Untick anyone who did not travel. Everyone left ticked is recorded as
+                    {' '}{arrivalWord}.
+                </p>
+                <div className="space-y-2">
+                    {ride.students.map((student) => {
+                        const came = travelled.has(student.id);
+                        return (
+                            <button
+                                key={student.id}
+                                onClick={() => setTravelled(prev => {
+                                    const next = new Set(prev);
+                                    if (came) next.delete(student.id); else next.add(student.id);
+                                    return next;
+                                })}
+                                aria-pressed={came}
+                                aria-label={came
+                                    ? `${student.name} travelled — tap to say they did not`
+                                    : `${student.name} did not travel — tap to undo`}
+                                className="w-full flex items-center gap-3 p-3 rounded-xl bg-cream-300/50 text-left min-h-11"
+                            >
+                                {came
+                                    ? <CheckCircle2 size={20} className="text-[rgb(var(--success-text))] shrink-0" />
+                                    : <Circle size={20} className="text-coffee-500 shrink-0" />}
+                                <span className={`flex-1 text-sm font-medium ${came ? 'text-coffee' : 'text-coffee-500 line-through'}`}>
+                                    {student.name}
+                                </span>
+                                {!came && (
+                                    <span className="text-xs text-coffee-500">did not travel</span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+                {ride.students.every(s => !travelled.has(s.id)) && (
+                    <p className="text-xs text-coffee-500 mt-3">
+                        Nobody is ticked. The run will be recorded as carrying no one.
+                    </p>
+                )}
+            </Sheet>
 
             <Sheet
                 open={showBackConfirm}

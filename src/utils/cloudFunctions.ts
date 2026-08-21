@@ -150,8 +150,19 @@ export async function sarthiArrived(rideId: string): Promise<{ success: boolean;
     return callFunction<{ success: boolean; alreadyArrived: boolean }>('sarthiArrived', { rideId });
 }
 
-export async function completeRide(rideId: string): Promise<CompleteRideResult> {
-    return callFunction<CompleteRideResult>('completeRide', { rideId });
+/**
+ * Close the run, and say who actually travelled.
+ *
+ * `absentStudentIds` names anyone who did not get in the car. Their ride is
+ * cancelled rather than completed and they are not recorded as having arrived —
+ * which matters most on the way home, where the alternative is telling a parent
+ * their child is `home_safe`. Omitted or empty is the normal night.
+ */
+export async function completeRide(
+    rideId: string,
+    absentStudentIds: string[] = [],
+): Promise<CompleteRideResult> {
+    return callFunction<CompleteRideResult>('completeRide', { rideId, absentStudentIds });
 }
 
 export interface ReleaseAssignmentResult {

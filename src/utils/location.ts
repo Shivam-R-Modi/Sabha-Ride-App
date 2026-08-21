@@ -93,7 +93,13 @@ export function getCurrentPosition(
  * @returns Watch ID for clearing
  */
 export function watchPosition(
-    callback: (position: { lat: number; lng: number }) => void,
+    /**
+     * `accuracy` is the device's own 95%-confidence radius in metres, and it is
+     * carried through deliberately: a caller deciding "is the car at this house"
+     * cannot answer that from coordinates alone. A reading good to ±300m cannot
+     * tell one neighbour's house from another's. See `judgeFix` in ./presence.
+     */
+    callback: (position: { lat: number; lng: number; accuracy: number }) => void,
     errorCallback?: (error: Error) => void
 ): number | null {
     if (!navigator.geolocation) {
@@ -106,6 +112,12 @@ export function watchPosition(
             callback({
                 lat: position.coords.latitude,
                 lng: position.coords.longitude,
+                // Infinity, not 0: a browser that will not say how good the fix
+                // is has given us a fix we cannot trust, and every accuracy
+                // guard compares with `>`.
+                accuracy: Number.isFinite(position.coords.accuracy)
+                    ? position.coords.accuracy
+                    : Number.POSITIVE_INFINITY,
             });
         },
         (error) => {

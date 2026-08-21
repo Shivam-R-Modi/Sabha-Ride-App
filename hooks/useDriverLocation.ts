@@ -8,11 +8,22 @@ import { useEffect, useRef } from 'react';
 import { db } from '../firebase/config';
 import { doc, updateDoc } from 'firebase/firestore';
 import { watchPosition, clearPositionWatch } from '../src/utils/location';
+import type { Fix } from '../src/utils/presence';
 
 interface UseDriverLocationOptions {
     driverId: string;
     rideId: string | null;
     isRideActive: boolean;
+    /**
+     * Handed each throttled fix, so a caller can tick stops off without opening
+     * a second `watchPosition` — two watches on one screen is double the battery
+     * for the same answer.
+     *
+     * Held in a ref, so passing an inline arrow does not tear down and rebuild
+     * the watch on every render. Called *before* the Firestore writes: a failed
+     * write must not cost the caller its fix.
+     */
+    onFix?: (fix: Fix) => void;
 }
 
 /**
@@ -23,11 +34,15 @@ interface UseDriverLocationOptions {
 export function useDriverLocation({
     driverId,
     rideId,
-    isRideActive
+    isRideActive,
+    onFix
 }: UseDriverLocationOptions): void {
     const watchIdRef = useRef<number | null>(null);
     const lastUpdateRef = useRef<number>(0);
     const UPDATE_INTERVAL_MS = 5000; // 5 seconds
+
+    const onFixRef = useRef(onFix);
+    onFixRef.current = onFix;
 
     useEffect(() => {
         // Only track location during active ride
@@ -53,6 +68,12 @@ export function useDriverLocation({
                 }
 
                 lastUpdateRef.current = now;
+
+                onFixRef.current?.({
+                    lat: position.lat,
+                    lng: position.lng,
+                    accuracy: position.accuracy,
+                });
 
                 try {
                     // Update driver location in users collection

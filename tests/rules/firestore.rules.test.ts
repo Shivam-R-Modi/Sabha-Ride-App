@@ -498,6 +498,61 @@ describe('ride integrity', () => {
     });
 });
 
+describe('stop progress is written by the Sarthi driving the run, and nobody else', () => {
+    /**
+     * ActiveRide saves `route[].visited` straight to the ride as each stop is
+     * reached, because the Sarthi is in Google Maps for most of the run and iOS
+     * discards the suspended page — ticks kept only in React state are gone by the
+     * time they come back.
+     *
+     * No rule was added for it: the assigned driver already had update. These pin
+     * that, so the write the run depends on cannot be closed off by a later tidy
+     * of the driver arm, and cannot be opened to any other driver.
+     */
+    const ROUTE = [
+        { lat: 42.37, lng: -71.08, name: 'Start', type: 'start', visited: false },
+        { lat: 42.35, lng: -71.08, name: 'Alice', type: 'pickup', studentId: STUDENT, visited: false },
+        { lat: 42.34, lng: -71.09, name: 'End', type: 'end', visited: false },
+    ];
+    const OTHER_DRIVER = 'driver_dina';
+
+    beforeEach(async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            const db = ctx.firestore();
+            await setDoc(doc(db, 'users', OTHER_DRIVER), {
+                name: 'Dina', role: 'driver', roles: ['driver'], accountStatus: 'approved',
+            });
+            await updateDoc(doc(db, 'rides', 'ride_alice'), {
+                driverId: DRIVER, status: 'in_progress', route: ROUTE,
+            });
+        });
+    });
+
+    const ticked = ROUTE.map((wp, i) => (i === 1 ? { ...wp, visited: true } : wp));
+
+    it('the assigned Sarthi may tick a stop off', async () => {
+        await assertSucceeds(updateDoc(doc(asDriver(), 'rides', 'ride_alice'), { route: ticked }));
+    });
+
+    it('another Sarthi may not touch it', async () => {
+        // Not a hypothetical: every Sarthi on shift is an approved driver, and
+        // the arm that allows this write is `isDriver()` AND the ownership check.
+        // Losing the second half would let any driver rewrite anyone's run.
+        const asOther = testEnv.authenticatedContext(OTHER_DRIVER).firestore();
+        await assertFails(updateDoc(doc(asOther, 'rides', 'ride_alice'), { route: ticked }));
+    });
+
+    it('the rider may not tick their own stop off', async () => {
+        // `route` is one of the fields the assignment pipeline owns. A rider
+        // marking themselves collected would make the Sarthi's screen lie.
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), { route: ticked }));
+    });
+
+    it('a signed-out client may not touch it at all', async () => {
+        await assertFails(updateDoc(doc(asAnon(), 'rides', 'ride_alice'), { route: ticked }));
+    });
+});
+
 describe('server-owned documents', () => {
     it('nobody can write the assignment lock', async () => {
         // globalAssignDriver computes lockAge = now - timestamp and only checks
@@ -1038,9 +1093,12 @@ describe('a Sarthi cannot read the whole congregation', () => {
      * every child's name, phone number and pickup address, including rides assigned
      * to other drivers, and completed ones from previous weeks.
      *
-     * It was not theoretical. useDriverDashboard queried rides with no driver
-     * filter and sorted them out in the browser, so every Sarthi's phone held the
-     * lot. The client filter was cosmetic; the data had already left the server.
+     * A hook in this repo — `useDriverDashboard`, since deleted — queried rides
+     * with no driver filter and sorted them out in the browser, which is the shape
+     * of the mistake this arm invited. It turned out never to have been mounted, so
+     * that particular query was not shipping data; the hole itself needed no help
+     * from it, because the grant was to any approved driver's credentials and a
+     * hand-written query is one line.
      *
      * And because the hierarchy makes every manager a driver, the same arm handed
      * it to managers without their claim being checked too.

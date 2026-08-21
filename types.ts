@@ -374,10 +374,6 @@ export interface NavigationState {
   isSidebarCollapsed: boolean;
 }
 
-// --- Assignment Types ---
-
-export type AssignmentType = 'pickup' | 'dropoff';
-
 export interface StudentRequest {
   id: string;
   name: string;
@@ -423,25 +419,6 @@ export interface RideGroup {
   routeColor: string;
 }
 
-export interface DriverAssignment {
-  id: string;
-  type: AssignmentType;
-  date: string;
-  status: 'pending' | 'active' | 'completed';
-  passengers: Array<{
-    id: string;
-    name: string;
-    address: string;
-    phone?: string;
-    stopStatus: 'pending' | 'completed' | 'skipped';
-    sequenceOrder: number;
-    eta: string;
-    notes?: string;
-  }>;
-  totalDistance: string;
-  totalTime: string;
-  venueAddress: string;
-}
 
 // --- Weekly Attendance Types ---
 

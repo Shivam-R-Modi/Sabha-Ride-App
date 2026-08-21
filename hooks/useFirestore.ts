@@ -10,6 +10,5 @@
 export * from './useRides';
 export * from './useUsers';
 export * from './useVehicles';
-export * from './useDriverDashboard';
 export * from './useAutoDispatch';
 export * from './useAttendance';
