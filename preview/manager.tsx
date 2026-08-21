@@ -8,6 +8,7 @@ import '../tailwind.css';
 import { DriverPicker } from '../components/manager/DriverPicker';
 import { ManagerPeople } from '../components/manager/ManagerPeople';
 import { SabhaCalendar } from '../components/manager/SabhaCalendar';
+import { ManagerReports } from '../components/manager/ManagerReports';
 import { ToastProvider } from '../contexts/ToastContext';
 import type { Driver } from '../types';
 
@@ -28,6 +29,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <div>
       <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>People — approvals</p>
       <ToastProvider><ManagerPeople /></ToastProvider>
+    </div>
+    <div>
+      {/* Added because this is the screen a full-page spinner was reported on,
+          and it had never been rendered outside a sign-in. */}
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Reports — frame first, figures after</p>
+      <ToastProvider><ManagerReports /></ToastProvider>
     </div>
     <div>
       <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Sabha calendar — one card, twelve weeks behind it</p>

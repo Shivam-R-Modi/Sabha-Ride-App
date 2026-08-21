@@ -45,15 +45,6 @@ export const DriverHistory: React.FC = () => {
     const totalStudents = rides.reduce((acc, r) => acc + seatsOnRide(r), 0);
     const totalDistance = rides.reduce((acc, r) => acc + (r.estimatedDistance || 0), 0);
 
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center h-64">
-                <Loader2 className="animate-spin w-10 h-10 text-saffron" />
-                <p className="text-xs font-bold text-gold-700 mt-4 tracking-widest uppercase">Loading Seva History...</p>
-            </div>
-        );
-    }
-
     return (
         <div className="pb-6 pt-6 px-4 space-y-4 max-w-4xl mx-auto animate-in fade-in duration-300">
             <div>
@@ -61,6 +52,19 @@ export const DriverHistory: React.FC = () => {
                 <p className="text-coffee-500 text-sm mt-0.5">Your record of transportation seva</p>
             </div>
 
+            {/* THE HEADING RENDERS AT ONCE. Only the figures wait.
+                This screen used to `return` a full-page spinner while it fetched
+                — "Loading Seva History..." replacing everything — so opening
+                History was a two-step: page gone, spinner, then page fading in.
+                Found by the guard that caught the same shape on Reports, which
+                is the one that got reported. Same fix, same reason. */}
+            {loading ? (
+                <div className="clay-card p-6 h-32 flex items-center justify-center gap-3" aria-busy="true">
+                    <Loader2 className="animate-spin w-5 h-5 text-saffron" />
+                    <span className="text-sm text-coffee-500">Loading your history…</span>
+                </div>
+            ) : (
+            <>
             {/* Stats Overview Grid */}
             <div className="grid grid-cols-3 gap-3 mb-6">
                 <div className="clay-card p-4 border-l-4 border-l-saffron">
@@ -137,6 +141,8 @@ export const DriverHistory: React.FC = () => {
                     </div>
                 )}
             </div>
+            </>
+            )}
         </div>
     );
 };

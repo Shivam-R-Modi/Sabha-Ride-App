@@ -32,3 +32,6 @@ export const usePendingRiders = () => ({
 });
 
 export const updateUserStatus = async () => undefined;
+
+/** Reports' CSV export. Resolves without downloading anything in the harness. */
+export const downloadAttendanceCSV = async () => undefined;

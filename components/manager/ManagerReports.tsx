@@ -125,19 +125,10 @@ export const ManagerReports: React.FC = () => {
         }
     };
 
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center h-64">
-                <Loader2 className="animate-spin w-10 h-10 text-saffron" />
-                <p className="text-xs font-bold text-gold-700 mt-4 tracking-widest">LOADING REPORTS...</p>
-            </div>
-        );
-    }
-
     const currentWeekStats = weeklyStats[0];
 
     return (
-        <div className="p-6 space-y-6 animate-in fade-in duration-500">
+        <div className="p-6 space-y-6 animate-in fade-in duration-300">
             {/* Header */}
             {/* `min-w-0` on the text and `shrink-0` on the action: in a
                 justify-between row a flex child will not shrink below its
@@ -156,121 +147,144 @@ export const ManagerReports: React.FC = () => {
                 </button>
             </div>
 
-            {/* Statistics Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Total Rides */}
-                <div className="clay-card p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-[rgb(var(--info-bg))] rounded-xl flex items-center justify-center">
-                            <Car className="w-5 h-5 text-[rgb(var(--info-text))]" />
-                        </div>
-                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Total Rides</span>
-                    </div>
-                    <p className="text-3xl font-header font-bold text-coffee">{rideStats.totalRides}</p>
-                    <p className="text-xs text-coffee-500 mt-1">{rideStats.completedRides} completed</p>
-                </div>
+            {/* THE FRAME RENDERS AT ONCE. Only the figures wait.
+                This screen used to `return` a full-page spinner while it
+                fetched, so switching to Reports was a two-step nobody else's tab
+                did: whole page replaced by "LOADING REPORTS...", then the whole
+                page fading in. Reported as "extra animation", and that is what
+                it was — not the fade itself, which is 0.3s here and everywhere.
 
-                {/* Students Served */}
-                <div className="clay-card p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-[rgb(var(--success-bg))] rounded-xl flex items-center justify-center">
-                            <Users className="w-5 h-5 text-[rgb(var(--success-text))]" />
-                        </div>
-                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Bhulka Served</span>
-                    </div>
-                    <p className="text-3xl font-header font-bold text-coffee">{rideStats.totalStudentsServed}</p>
-                    <p className="text-xs text-coffee-500 mt-1">across all rides</p>
+                Same shape as ManagerPeople, which renders its header and shows
+                its loading state inside the list. The header and the export
+                buttons never depended on the fetch, so waiting for it before
+                drawing them bought nothing. */}
+            {loading ? (
+                <div
+                    className="clay-card p-6 h-40 flex items-center justify-center gap-3"
+                    aria-busy="true"
+                >
+                    <Loader2 className="animate-spin w-5 h-5 text-saffron" />
+                    <span className="text-sm text-coffee-500">Loading figures…</span>
                 </div>
-
-                {/* Active Drivers */}
-                <div className="clay-card p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-cream-300 rounded-xl flex items-center justify-center">
-                            <TrendingUp className="w-5 h-5 text-saffron" />
-                        </div>
-                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Active Sarthis</span>
-                    </div>
-                    <p className="text-3xl font-header font-bold text-coffee">{rideStats.activeDrivers}</p>
-                    <p className="text-xs text-coffee-500 mt-1">approved volunteers</p>
-                </div>
-
-                {/* This Week Attendance */}
-                <div className="clay-card p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-cream-300 rounded-xl flex items-center justify-center">
-                            <Calendar className="w-5 h-5 text-saffron" />
-                        </div>
-                        <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">This Week</span>
-                    </div>
-                    <p className="text-3xl font-header font-bold text-coffee">{currentWeekStats?.totalResponses || 0}</p>
-                    <p className="text-xs text-coffee-500 mt-1">attendance responses</p>
-                </div>
-            </div>
-
-            {/* Weekly Attendance Section */}
-            <div className="clay-card p-6">
-                <div className="flex items-start justify-between gap-3 mb-6">
-                    <div className="min-w-0">
-                        <h2 className="text-lg font-header font-bold text-coffee">Weekly Attendance</h2>
-                        {/* The date is one token. Left to wrap it broke at its own
-                            hyphens — "Week ending 2026-08-" / "21" — which reads as
-                            two different dates for a moment. Only the date is held
-                            together; the words before it may still wrap. */}
-                        <p className="text-sm text-coffee-500">
-                            Week ending <span className="whitespace-nowrap">{currentWeekStats?.weekId || 'N/A'}</span>
-                        </p>
-                    </div>
-                    <button
-                        onClick={handleDownloadAttendance}
-                        disabled={isDownloading}
-                        className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl text-sm font-bold hover:bg-saffron/90 transition-colors disabled:opacity-50"
-                    >
-                        {isDownloading ? (
-                            <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                            <Download size={16} />
-                        )}
-                        {isDownloading ? 'Downloading...' : 'Download CSV'}
-                    </button>
-                </div>
-
-                {currentWeekStats ? (
-                    <div className="grid grid-cols-2 gap-4">
-                        {/* Yes Responses */}
-                        <div className="bg-[rgb(var(--success-bg))] rounded-2xl p-4 text-center border border-[rgb(var(--success))]/25">
-                            <div className="w-12 h-12 bg-[rgb(var(--success-bg))] rounded-full flex items-center justify-center mx-auto mb-3">
-                                <CheckCircle2 className="w-6 h-6 text-[rgb(var(--success-text))]" />
+            ) : (
+                <>
+                {/* Statistics Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Total Rides */}
+                    <div className="clay-card p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 bg-[rgb(var(--info-bg))] rounded-xl flex items-center justify-center">
+                                <Car className="w-5 h-5 text-[rgb(var(--info-text))]" />
                             </div>
-                            <p className="text-2xl font-bold text-[rgb(var(--success-text))]">{currentWeekStats.totalYes}</p>
-                            <p className="text-xs text-[rgb(var(--success-text))] font-medium mt-1">Attending</p>
+                            <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Total Rides</span>
                         </div>
+                        <p className="text-3xl font-header font-bold text-coffee">{rideStats.totalRides}</p>
+                        <p className="text-xs text-coffee-500 mt-1">{rideStats.completedRides} completed</p>
+                    </div>
 
-                        {/* No Responses */}
-                        <div className="bg-[rgb(var(--danger-bg))] rounded-2xl p-4 text-center border border-[rgb(var(--danger))]/25">
-                            <div className="w-12 h-12 bg-[rgb(var(--danger-bg))] rounded-full flex items-center justify-center mx-auto mb-3">
-                                <XCircle className="w-6 h-6 text-[rgb(var(--danger-text))]" />
+                    {/* Students Served */}
+                    <div className="clay-card p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 bg-[rgb(var(--success-bg))] rounded-xl flex items-center justify-center">
+                                <Users className="w-5 h-5 text-[rgb(var(--success-text))]" />
                             </div>
-                            <p className="text-2xl font-bold text-[rgb(var(--danger-text))]">{currentWeekStats.totalNo}</p>
-                            <p className="text-xs text-[rgb(var(--danger-text))] font-medium mt-1">Not Attending</p>
+                            <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Bhulka Served</span>
                         </div>
+                        <p className="text-3xl font-header font-bold text-coffee">{rideStats.totalStudentsServed}</p>
+                        <p className="text-xs text-coffee-500 mt-1">across all rides</p>
+                    </div>
 
-                        {/* A third "Pending" tile used to sit here showing the
-                            literal '-'. Pending means eligible students who
-                            have not answered, and that needs a denominator this
-                            screen does not have — the attendance documents only
-                            record people who DID answer. Getting it would mean
-                            listing every user, which is exactly the query the
-                            roadmap's city-scoping work changes. A permanent '-'
-                            reads as "zero pending" at a glance, which is a
-                            worse answer than not showing the tile. */}
+                    {/* Active Drivers */}
+                    <div className="clay-card p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 bg-cream-300 rounded-xl flex items-center justify-center">
+                                <TrendingUp className="w-5 h-5 text-saffron" />
+                            </div>
+                            <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">Active Sarthis</span>
+                        </div>
+                        <p className="text-3xl font-header font-bold text-coffee">{rideStats.activeDrivers}</p>
+                        <p className="text-xs text-coffee-500 mt-1">approved volunteers</p>
                     </div>
-                ) : (
-                    <div className="text-center py-8 text-coffee-500">
-                        <Calendar size={40} className="mx-auto mb-3 opacity-50" />
-                        <p>No attendance data for this week yet</p>
+
+                    {/* This Week Attendance */}
+                    <div className="clay-card p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 bg-cream-300 rounded-xl flex items-center justify-center">
+                                <Calendar className="w-5 h-5 text-saffron" />
+                            </div>
+                            <span className="text-xs font-bold text-coffee-500 uppercase tracking-wider">This Week</span>
+                        </div>
+                        <p className="text-3xl font-header font-bold text-coffee">{currentWeekStats?.totalResponses || 0}</p>
+                        <p className="text-xs text-coffee-500 mt-1">attendance responses</p>
                     </div>
-                )}
-            </div>
+                </div>
+
+                {/* Weekly Attendance Section */}
+                <div className="clay-card p-6">
+                    <div className="flex items-start justify-between gap-3 mb-6">
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-header font-bold text-coffee">Weekly Attendance</h2>
+                            {/* The date is one token. Left to wrap it broke at its own
+                                hyphens — "Week ending 2026-08-" / "21" — which reads as
+                                two different dates for a moment. Only the date is held
+                                together; the words before it may still wrap. */}
+                            <p className="text-sm text-coffee-500">
+                                Week ending <span className="whitespace-nowrap">{currentWeekStats?.weekId || 'N/A'}</span>
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleDownloadAttendance}
+                            disabled={isDownloading}
+                            className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl text-sm font-bold hover:bg-saffron/90 transition-colors disabled:opacity-50"
+                        >
+                            {isDownloading ? (
+                                <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                                <Download size={16} />
+                            )}
+                            {isDownloading ? 'Downloading...' : 'Download CSV'}
+                        </button>
+                    </div>
+
+                    {currentWeekStats ? (
+                        <div className="grid grid-cols-2 gap-4">
+                            {/* Yes Responses */}
+                            <div className="bg-[rgb(var(--success-bg))] rounded-2xl p-4 text-center border border-[rgb(var(--success))]/25">
+                                <div className="w-12 h-12 bg-[rgb(var(--success-bg))] rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <CheckCircle2 className="w-6 h-6 text-[rgb(var(--success-text))]" />
+                                </div>
+                                <p className="text-2xl font-bold text-[rgb(var(--success-text))]">{currentWeekStats.totalYes}</p>
+                                <p className="text-xs text-[rgb(var(--success-text))] font-medium mt-1">Attending</p>
+                            </div>
+
+                            {/* No Responses */}
+                            <div className="bg-[rgb(var(--danger-bg))] rounded-2xl p-4 text-center border border-[rgb(var(--danger))]/25">
+                                <div className="w-12 h-12 bg-[rgb(var(--danger-bg))] rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <XCircle className="w-6 h-6 text-[rgb(var(--danger-text))]" />
+                                </div>
+                                <p className="text-2xl font-bold text-[rgb(var(--danger-text))]">{currentWeekStats.totalNo}</p>
+                                <p className="text-xs text-[rgb(var(--danger-text))] font-medium mt-1">Not Attending</p>
+                            </div>
+
+                            {/* A third "Pending" tile used to sit here showing the
+                                literal '-'. Pending means eligible students who
+                                have not answered, and that needs a denominator this
+                                screen does not have — the attendance documents only
+                                record people who DID answer. Getting it would mean
+                                listing every user, which is exactly the query the
+                                roadmap's city-scoping work changes. A permanent '-'
+                                reads as "zero pending" at a glance, which is a
+                                worse answer than not showing the tile. */}
+                        </div>
+                    ) : (
+                        <div className="text-center py-8 text-coffee-500">
+                            <Calendar size={40} className="mx-auto mb-3 opacity-50" />
+                            <p>No attendance data for this week yet</p>
+                        </div>
+                    )}
+                </div>
+                </>
+            )}
 
             {/* Export Section */}
             <div className="clay-card p-6">
