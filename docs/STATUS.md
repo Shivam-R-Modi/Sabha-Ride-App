@@ -1,7 +1,8 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-20** (role-access audit: 16 findings fixed).
+at the end. Last updated **2026-08-21** (live ride progress: stops tick
+themselves off, the venue roster is the record, and a Sarthi can nudge).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -16,6 +17,102 @@ delivered anything in this app.
 
 The UI/UX redesign and the sabha-times fix are also deployed. The incident note
 below is history, kept because its lesson is a standing deploy rule.
+
+## Shipped 2026-08-21 — the run records who actually travelled
+
+Deployed rules -> functions -> hosting, `main` fast-forwarded. Live bundle
+`index-0y4OnqVz.js` matched `dist/`, and the deployed ruleset was read back
+through the Rules API to confirm the new fields are in it.
+
+### What was actually wrong
+
+A Sarthi collects three or four Bhulka in one run. `startRide` flipped the whole
+carload to `in_progress`, `completeRide` closed it all together, and **nothing
+recorded who got in the car**. So a rider who never came out of the house was
+written down as `completed` and `at_sabha`. Three consequences, worsening:
+
+1. The manager's board said a child was at the temple who was at home.
+2. The attendance figures and the exported CSV counted them present.
+3. `at_sabha` is what unlocks "I need a lift home", so the app would later offer
+   a ride home from a sabha they never reached.
+
+And the screen made it worse rather than better. **"Complete Ride" was `disabled`
+until every stop was ticked**, so the `!allVisited` confirmation sitting behind
+it could never be reached — and one Bhulku who did not travel left the Sarthi
+with no way to end the run *at all* except by ticking a child off as collected.
+The dead button and the lie were the same bug.
+
+### What it does now
+
+- **`src/utils/rideProgress.ts`** — `advanceVisits` / `hasReachedEnd`, built on
+  `judgeFix`, so a fix too vague to tell one neighbour's house from another's
+  ticks nothing. Never un-ticks; the car drives away from every house it visits.
+- **Display only.** Reaching a house is not proof anybody boarded. A web page
+  gets no location while backgrounded and a service worker cannot read location
+  at all, so while the Sarthi is in Google Maps nothing is observed — one fresh
+  fix arrives when they glance back, with no history.
+- **`route[].visited` persists** to the ride, which is what makes progress
+  survive the trip out to Maps. iOS discards suspended pages.
+- **The roster at the venue is the record.** Pre-ticked, one tap on a normal
+  night. `completeRide` takes `absentStudentIds`; those rides are `cancelled`
+  with a `noShowAt` stamp, left out of seat counts and attendance rows, given no
+  arrival push, and the rider's status says what happened — `missed_pickup` on
+  the way there, `at_sabha` on the way back, where it is both the truth and what
+  lets somebody who missed their car ask again. **Never `home_safe`.**
+- **`nudgeRider(rideId, studentId)`** — the wait-and-nudge policy's other half.
+  Fixed text chosen server-side, one rider not the car, cooldown per rider in a
+  transaction, and `delivered` comes back so a bell that reached no phone says
+  "No phone registered. Call instead" rather than showing a tick.
+
+### Deleted
+
+- `updateWaypointVisits` / `isNearWaypoint` in `functions/src/utils/routing.ts`:
+  a 50m geofence with no accuracy guard, exported, never called, never tested.
+- **`hooks/useDriverDashboard.ts`, all 159 lines.** It held the second model of
+  stop progress (`passengers[].stopStatus`, with an unused `'skipped'`) rendered
+  nowhere — and the whole hook turned out to have **no consumer**, barrel
+  re-export included. This corrects a claim made during the role-access audit:
+  its unscoped rides query was the right shape for a real leak but the hook was
+  never mounted, so it was not shipping data. The rules hole it illustrated was
+  real on its own and is closed either way.
+
+### Rules
+
+`arrivedAt`, `nudges` and `noShowAt` joined `touchesRideServerFields()`.
+`arrivedAt` is what makes `sarthiArrived` idempotent, so a rider who could write
+it would silence their own "your Sarthi is outside"; clearing `nudges` turns one
+tap into twenty buzzes; and the rider named by `noShowAt` is the last person who
+should be able to erase it. The stop-progress write itself needed **no** rule
+change — the assigned driver already had update — but four tests now pin that it
+is the Sarthi driving the run and nobody else.
+
+### Cannot be reported as working, and was not tested
+
+- **How the geofence behaves in a moving car with real GPS.** Everything here was
+  driven by synthesised fixes. The radius is 100m, reused from the presence
+  check; two homes closer together than that will tick together, which is
+  marked with a `ponytail:` note naming the upgrade path.
+- **How often a Sarthi actually has the app in front of them.** The whole design
+  assumes rarely, which is why the roster and not the geofence is the record —
+  but the real number needs a sabha evening.
+
+Both need the owner's phone on a Friday.
+
+### Process note against myself
+
+I ran `git log --oneline HEAD..main` — the standing check from the 2026-08-13
+incident — **after** deploying rather than before. It was empty, so nothing was
+dropped, but the order was wrong and the check is worthless in that order.
+
+### Numbers
+
+1071 client tests, 681 functions, 157 rules. Both builds and typecheck clean
+(typecheck is now at **0** errors, not the 22 that CLAUDE.md still records as the
+baseline — worth updating there). Every new test was seen red first, and each fix
+was broken on purpose to confirm the test catches it: the whole-roster nudge, the
+missing cooldown, the missing roster check, un-ticking, the bare distance check,
+the client reporting success regardless of delivery, closing every document as
+`completed`, and the three stamps removed from the denylist.
 
 ## Incident, 2026-08-13 — a fix was reverted in production for ~20 minutes
 
