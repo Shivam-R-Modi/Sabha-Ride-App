@@ -241,13 +241,22 @@ export function upcomingOccurrences(
     return out;
 }
 
+// Pure module: this is the only import, and it is a pure string function too.
+import { formatTime } from '../constants/schedule';
+
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-/** How the rule reads on the manager's card. */
+/**
+ * How the rule reads on the manager's card.
+ *
+ * 12-hour, like every other time this app shows a person. It used to print the
+ * stored "20:30–22:00" straight through, which put two clock formats on one card:
+ * the header in 24-hour and the sabha beneath it in 12-hour.
+ */
 export function describeRule(rule: RecurrenceRule | null): string {
     if (!rule || !rule.enabled) return 'Not repeating';
     const days = rule.daysOfWeek.map(d => DAY_NAMES[d]).join(', ');
-    return `Every ${days}, ${rule.startTime}–${rule.endTime}`;
+    return `Every ${days}, ${formatTime(rule.startTime)}–${formatTime(rule.endTime)}`;
 }
 
 /** The label a calendar row carries, so a manager can see why a date looks the way it does. */

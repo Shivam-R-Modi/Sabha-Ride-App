@@ -29,17 +29,26 @@ const CF_STUB = path.resolve(__dirname, 'cloud-functions-stub.ts');
 const HOOKS_STUB = path.resolve(__dirname, 'hooks-stub.ts');
 const AUTH_STUB = path.resolve(__dirname, 'auth-stub.tsx');
 const ADMIN_DB_STUB = path.resolve(__dirname, 'admin-db-stub.ts');
+const EVENTS_STUB = path.resolve(__dirname, 'events-stub.ts');
+const FIRESTORE_STUB = path.resolve(__dirname, 'firestore-stub.ts');
 
 /** Any import ending in firebase/config becomes the stub, however it is spelled. */
 const stubFirebase = {
   name: 'stub-firebase',
   enforce: 'pre' as const,
-  resolveId(source: string) {
+  resolveId(source: string, importer: string | undefined) {
+    // A stub may import the real module for a pure helper — events-stub takes
+    // `formatTime` from useSettings rather than reimplementing it, and a second
+    // copy would let the preview show times the app would not. Without this the
+    // rewrite would point that import back at the stub itself.
+    if (importer && importer.includes('/preview/')) return null;
     if (/(^|\/)firebase\/config(\.ts)?$/.test(source)) return FIREBASE_STUB;
     if (/(^|\/)utils\/cloudFunctions(\.ts)?$/.test(source)) return CF_STUB;
     if (/(^|\/)hooks\/(useCurrentEvent|useFirestore)(\.ts)?$/.test(source)) return HOOKS_STUB;
     if (/(^|\/)contexts\/AuthContext(\.tsx)?$/.test(source)) return AUTH_STUB;
     if (/(^|\/)hooks\/useAdminDatabase(\.ts)?$/.test(source)) return ADMIN_DB_STUB;
+    if (/(^|\/)hooks\/(useEvents|useSettings)(\.ts)?$/.test(source)) return EVENTS_STUB;
+    if (source === 'firebase/firestore') return FIRESTORE_STUB;
     return null;
   },
 };

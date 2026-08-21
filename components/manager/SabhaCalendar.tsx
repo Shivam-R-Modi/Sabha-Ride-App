@@ -23,13 +23,31 @@ import {
  * that was that. Each gathering now has its own date and times, and a manager can
  * move one, cancel one, or add a one-off.
  *
- * WHAT THESE ROWS ARE
- * -------------------
+ * ONE CARD, NOT A LIST
+ * --------------------
+ * This used to render up to twelve stacked rows, each carrying the same times, the
+ * same derived ride window, its own Edit and its own delete button. Under a
+ * repeating rule those rows are near-identical by construction, so the screen grew
+ * in proportion to how far ahead you could see while telling you nothing more.
+ * Twelve one-tap deletes beside twelve identical rows is also how you cancel the
+ * wrong Friday.
+ *
+ * So: the next sabha in full, then the following weeks as date chips. Tap a chip
+ * to work on that week. The information that varies gets the space; the
+ * information that repeats gets a chip.
+ *
+ * WHAT THESE DATES ARE
+ * --------------------
  * Computed, not stored. The schedule is one rule in `settings/sabhaRecurrence`
- * that repeats with no end date; each row below is an occurrence of it, with any
- * exception for that date applied. Only the rows that DIVERGE carry a badge —
+ * that repeats with no end date; each date below is an occurrence of it, with any
+ * exception for that date applied. Only the ones that DIVERGE carry a badge —
  * "Edited" or "One-off" — because the old version listed up to 26 stored,
  * near-identical dates and labelling all of them would be the same noise again.
+ *
+ * There is deliberately no "cancelled" chip. `useUpcomingEvents` filters cancelled
+ * dates out before they arrive here, so a chip for one could never appear — and a
+ * state the UI can render but the data can never reach is the dead-control bug
+ * this codebase keeps removing.
  *
  * Editing one week writes an exception for that week alone: it keeps its own time
  * and venue and will not follow a later change to the rule. Cancelling goes
@@ -47,6 +65,14 @@ function formatDate(dateKey: string): string {
     const [year, month, day] = dateKey.split('-').map(Number);
     return new Intl.DateTimeFormat('en-US', {
         weekday: 'long', day: 'numeric', month: 'short',
+    }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
+/** "2026-08-29" -> "29 Aug". The chips carry the date and nothing else. */
+function shortDate(dateKey: string): string {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    return new Intl.DateTimeFormat('en-US', {
+        day: 'numeric', month: 'short',
     }).format(new Date(Date.UTC(year, month - 1, day, 12)));
 }
 
@@ -79,10 +105,18 @@ function windowSummary(event: SabhaEvent): string {
     return `Requests open ${requestsOpen} · Drop-off ${formatTime(`${hh}:${mm}`)}`;
 }
 
-const EventRow: React.FC<{
+/**
+ * One week, in full. Exactly one of these is on screen at a time — the week the
+ * manager has selected, which starts as the next one.
+ *
+ * Keyed on the date by its caller, so selecting a different week remounts it and
+ * the edit fields re-seed from that week rather than keeping the last one's.
+ */
+const EventDetail: React.FC<{
     event: SabhaEvent;
     isNext: boolean;
-}> = ({ event, isNext }) => {
+    ridesOpen: boolean;
+}> = ({ event, isNext, ridesOpen }) => {
     const { currentUser } = useAuth();
     const [editing, setEditing] = useState(false);
     const [start, setStart] = useState(event.startTime);
@@ -182,69 +216,66 @@ const EventRow: React.FC<{
     };
 
     return (
-        <div className="px-3 py-2.5 border-b border-hairline/10 last:border-0">
-            <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-coffee">
-                            {formatDate(event.date)}
+        <div className="px-4 py-4">
+            {!editing && (
+                <>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-coffee-500">
+                            {isNext ? 'Next sabha' : 'Selected week'}
                         </span>
-                        {isNext && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider bg-saffron/15 text-saffron-800 px-1.5 py-0.5 rounded">
-                                Next
+                        {/* Only shown on the next one, and only from the app's own
+                            answer — `calendarStatus`. A pill that says rides are
+                            open when they are not is worse than no pill. */}
+                        {isNext && ridesOpen && (
+                            <span className="text-[11px] font-bold bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))] px-2 py-0.5 rounded">
+                                Rides open
                             </span>
                         )}
-                        {/* Only rows that DIVERGE from the weekly schedule are
-                            badged. Labelling every row "from the schedule" is
+                        {/* Only dates that DIVERGE from the weekly schedule are
+                            badged. Labelling every one "from the schedule" is
                             noise, and noise is what made 26 near-identical rows
                             unreadable in the first place. */}
                         {labelForSource(event.source) && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider bg-cream-300 text-coffee-700 px-1.5 py-0.5 rounded">
+                            <span className="text-[11px] font-bold uppercase tracking-wider bg-cream-300 text-coffee-700 px-2 py-0.5 rounded">
                                 {labelForSource(event.source)}
                             </span>
                         )}
                     </div>
-                    {!editing && (
-                        <>
-                            <p className="text-xs text-coffee-500 mt-0.5">
-                                {formatTime(event.startTime)} – {formatTime(event.endTime)}
-                                {agendaSummary(event.agenda) ? ` · ${agendaSummary(event.agenda)}` : ''}
-                            </p>
-                            {event.venue?.address && (
-                                <p className="text-[10px] text-saffron-800 mt-0.5 truncate">
-                                    at {event.venue.address}
-                                </p>
-                            )}
-                            <p className="text-[10px] text-coffee-500 mt-0.5">
-                                {windowSummary(event)}
-                            </p>
-                        </>
-                    )}
-                </div>
 
-                <div className="flex items-center gap-1 shrink-0">
-                    {!editing && (
+                    <p className="text-xl font-bold text-coffee mt-1">{formatDate(event.date)}</p>
+                    <p className="text-sm text-coffee-700 mt-0.5">
+                        {formatTime(event.startTime)} – {formatTime(event.endTime)}
+                        {event.venue?.address ? ` · ${event.venue.address}` : ''}
+                    </p>
+                    {agendaSummary(event.agenda) && (
+                        <p className="text-xs text-coffee-500 mt-1">{agendaSummary(event.agenda)}</p>
+                    )}
+                    <p className="text-[11px] text-coffee-500 mt-1.5">{windowSummary(event)}</p>
+
+                    <div className="flex gap-2 mt-3">
                         <button
                             onClick={() => setEditing(true)}
                             disabled={busy}
-                            className="text-xs font-semibold text-saffron-800 px-2 py-1 rounded hover:bg-cream-300 disabled:opacity-50"
+                            className="min-h-11 px-3 rounded-lg text-xs font-bold text-saffron-800 border border-saffron-800/35 hover:bg-cream-300 disabled:opacity-50"
                         >
-                            Edit
+                            Edit this week
                         </button>
-                    )}
-                    <button
-                        onClick={remove}
-                        disabled={busy}
-                        title="Delete this sabha"
-                        className="p-1.5 rounded transition-colors disabled:opacity-50 text-[rgb(var(--danger-text))] hover:bg-[rgb(var(--danger-bg))]"
-                    >
-                        {busy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    </button>
-                </div>
-            </div>
+                        <button
+                            onClick={remove}
+                            disabled={busy}
+                            className="min-h-11 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 text-[rgb(var(--danger-text))] border border-[rgb(var(--danger))]/35 hover:bg-[rgb(var(--danger-bg))] disabled:opacity-50"
+                        >
+                            {busy
+                                ? <Loader2 size={14} className="animate-spin" />
+                                : <Trash2 size={14} />}
+                            Cancel this week
+                        </button>
+                    </div>
+                </>
+            )}
 
             {editing && (
-                <div className="mt-2 space-y-2">
+                <div className="space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input
                             type="time" value={start} onChange={(e) => { setStart(e.target.value); setError(null); }}
@@ -354,8 +385,24 @@ export const SabhaCalendar: React.FC = () => {
         setEnd(e);
     }, [adding, sabhaStartTime, sabhaEndTime]);
 
-    // Cancelled documents are filtered out upstream, so every row here is live.
+    // Cancelled documents are filtered out upstream, so every date here is live.
     const nextScheduled = events[0];
+
+    /**
+     * Which week the card is showing. Null means "the next one", which is what a
+     * manager wants nine times in ten — and it stays correct on its own as weeks
+     * pass, where storing the date would leave the card pinned to a sabha that has
+     * already happened.
+     */
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
+    const selected = events.find(e => e.date === selectedDate) ?? nextScheduled;
+
+    // A selection can outlive what it pointed at — cancel the week you are looking
+    // at and it leaves the list. Falling back above keeps the card populated; this
+    // clears the stale pointer so the chips do not show a selection that is gone.
+    useEffect(() => {
+        if (selectedDate && !events.some(e => e.date === selectedDate)) setSelectedDate(null);
+    }, [events, selectedDate]);
 
     const add = async () => {
         if (!currentUser) return;
@@ -404,8 +451,8 @@ export const SabhaCalendar: React.FC = () => {
                     has to maintain — and only the ones that diverge are badged. */}
                 <p className="text-xs text-coffee-500 mt-1">
                     {rule?.enabled
-                        ? <>Coming up from <strong>{describeRule(rule)}</strong>. Change or
-                            cancel one week and the rest stay as they are.</>
+                        ? <><strong>{describeRule(rule)}</strong>. Change or cancel one week
+                            and the rest stay as they are.</>
                         : <>Not repeating yet. Set the schedule above, or add a single date
                             below.</>}
                 </p>
@@ -440,13 +487,48 @@ export const SabhaCalendar: React.FC = () => {
                 </p>
             )}
 
-            {!loading && events.map(event => (
-                <EventRow
-                    key={event.id}
-                    event={event}
-                    isNext={event.id === nextScheduled?.id}
-                />
-            ))}
+            {!loading && selected && (
+                <>
+                    {/* Keyed on the date so switching weeks re-seeds the edit
+                        fields instead of carrying the previous week's values. */}
+                    <EventDetail
+                        key={selected.id}
+                        event={selected}
+                        isNext={selected.id === nextScheduled?.id}
+                        ridesOpen={calendarStatus === 'ok'}
+                    />
+
+                    {events.length > 1 && (
+                        <div className="px-4 pb-4 pt-1">
+                            <p className="text-[11px] text-coffee-500 mb-2">
+                                Then, from the schedule — tap a date to change just that week
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {events.map(event => {
+                                    const isSelected = event.id === selected.id;
+                                    const diverges = labelForSource(event.source);
+                                    return (
+                                        <button
+                                            key={event.id}
+                                            onClick={() => setSelectedDate(event.date)}
+                                            aria-pressed={isSelected}
+                                            className={`min-h-11 px-2.5 rounded-lg text-xs transition-colors ${isSelected
+                                                ? 'bg-saffron text-[rgb(var(--text-on-accent))] font-bold'
+                                                : diverges
+                                                    ? 'bg-[rgb(var(--accent-tint-badge-1))] text-saffron-800 font-semibold hover:bg-[rgb(var(--accent-tint-badge-2))]'
+                                                    : 'bg-cream-300 text-coffee-700 hover:bg-cream-400'
+                                                }`}
+                                        >
+                                            {shortDate(event.date)}
+                                            {diverges && <span className="ml-1 font-normal">· {diverges.toLowerCase()}</span>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
 
             <div className="px-4 py-3 border-t border-hairline/10 bg-cream-200/60">
                 {!adding ? (

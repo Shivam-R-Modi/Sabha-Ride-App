@@ -145,7 +145,7 @@ describe('RecurringSabha', () => {
         await user.click(save());
 
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith(
-            expect.stringMatching(/Every Sunday, 10:00–12:00, repeating until you change it/)));
+            expect.stringMatching(/Every Sunday, 10:00 AM–12:00 PM, repeating until you change it/)));
     });
 
     it('does not claim success when the server refuses', async () => {

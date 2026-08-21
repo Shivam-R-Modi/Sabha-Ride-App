@@ -102,7 +102,10 @@ describe('addDaysToDateKey', () => {
 describe('describeRule', () => {
     it('reads as a schedule', () => {
         expect(describeRule(asRule({ enabled: true, daysOfWeek: [5] })))
-            .toBe('Every Friday, 19:30–22:00');
+            // 12-hour, like every other time this app shows a person. It printed
+            // the stored 24-hour value until 2026-08-21, which put two clock
+            // formats on one card.
+            .toBe('Every Friday, 7:30 PM–10:00 PM');
     });
 
     it('names every day when there are several', () => {

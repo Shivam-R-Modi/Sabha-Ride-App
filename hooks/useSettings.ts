@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { DEFAULT_SABHA_START, DEFAULT_SABHA_END } from '../src/constants/schedule';
+import { DEFAULT_SABHA_START, DEFAULT_SABHA_END, formatTime } from '../src/constants/schedule';
 
 /**
  * Default Sabha location used as fallback when Firestore has no settings doc.
@@ -40,20 +40,15 @@ export interface AppSettings {
     updatedBy?: string;
 }
 
-/** "19:00" → "7:00 PM". Mirrors formatTimeForDisplay in functions/src/utils/schedule.ts. */
-export function formatTime(value: string): string {
-    const match = /^(\d{1,2}):(\d{2})$/.exec((value || '').trim());
-    if (!match) return value;
-
-    const hours24 = Number(match[1]);
-    const minutes = match[2];
-    if (hours24 < 0 || hours24 > 23) return value;
-
-    const suffix = hours24 < 12 ? 'AM' : 'PM';
-    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
-
-    return `${hours12}:${minutes} ${suffix}`;
-}
+/**
+ * Re-exported, not defined here.
+ *
+ * It is a pure string function, and living in this module — which imports
+ * firebase/config — put it out of reach of every pure module that needs to print
+ * a time. `describeRule` could not use it, so the manager's calendar header said
+ * "20:30-22:00" directly above a card saying "8:30 PM - 10:00 PM".
+ */
+export { formatTime } from '../src/constants/schedule';
 
 /**
  * Real-time hook that subscribes to `settings/main` in Firestore.

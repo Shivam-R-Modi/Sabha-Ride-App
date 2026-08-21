@@ -11,3 +11,8 @@ export const createManagerInvite = async (_label?: string): Promise<CreateInvite
     code: 'PREV-IEW0-CODE',
     expiresAt: new Date(Date.now() + 7 * 864e5).toISOString(),
 });
+
+// The sabha calendar's own callables.
+export const updateSabhaRecurrence = async (rule: unknown) => ({ rule });
+export const previewDeleteSabhaEvent = async () => ({ responseCount: 3, requestedRideCount: 1 });
+export const deleteSabhaEvent = async () => ({ success: true });

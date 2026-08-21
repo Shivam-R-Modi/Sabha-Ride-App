@@ -3140,17 +3140,25 @@ component to confirm they fail (8 of 14 did).
 
 **For the owner, not code:**
 
-- 🔴 **RIDES ARE CLOSED RIGHT NOW — checked against production 2026-08-21.**
-  Every upcoming sabha is **cancelled**: all 17 dates from 28 August through
-  18 December. The only `scheduled` event is 2026-08-19, which has passed. There
-  is **no recurrence rule saved** on `settings/main`, so nothing will refill the
-  calendar on its own. Until a manager schedules a date in **Setup → Sabha
-  Calendar**, no rider can request a lift. Whether the cancellations were
-  deliberate is a question for the owner and was left unanswered.
+- ✅ **Resolved 2026-08-21 — rides are open, and the schedule is real.** This
+  entry read "RIDES ARE CLOSED RIGHT NOW". Two corrections to how it was
+  diagnosed, both worth keeping:
 
-  This is the third time this condition has been recorded. It resolves itself
-  every time somebody adds a sabha and returns every time the calendar empties,
-  which is the argument for a standing schedule rather than another entry here.
+  **There was never a missing recurrence rule.** It lives at
+  `settings/sabhaRecurrence`, not on `settings/main` — the first check looked in
+  the wrong document and concluded "no standing schedule". The rule existed and
+  was enabled, and being a rule with no horizon it cannot run dry.
+
+  **What closed rides was 17 cancellations**, one per Friday from 28 August to
+  18 December, all written within 40 seconds on 2026-08-19 during time-shift
+  testing. Under the rule model a document IS an exception, so those masked the
+  rule for four months. Cleared, narrowly — override, cancelled, and dated today
+  or later only — with one audit row naming the dates.
+
+  **The schedule is now every Friday 20:30–22:00**, given by the owner. The
+  fallback times on `settings/main` were moved off `04:00–04:30` at the same
+  time: those stand in for a gathering with no times of its own, so any such date
+  would have opened a ride window at four in the morning.
 
 - **Production is nearly empty**, as of 2026-08-21: 3 users, 2 rides, 3 vehicles,
   1 statistics document, 0 notices, 18 events. The 11-rider evening from
@@ -3158,13 +3166,19 @@ component to confirm they fail (8 of 14 did).
   in this file as "proven at scale" — the scale is three people.
 - **Test events are still in the calendar.** Several past entries are time-shift
   test sabhas from the 7th–14th. Harmless; worth deleting.
-- **Three UI surfaces have never been seen rendered** — covered by tests and
+- **Sabha Calendar is now viewable in the harness** — `preview/manager.html`
+  renders it against stubbed Firestore, so the card, its chips and both themes can
+  be looked at without a sign-in. That needed a `firebase/firestore` stub, which
+  the harness had never had: hook stubs covered the hooks, but RecurringSabha
+  holds its own listener and threw before anything rendered. Any component with a
+  direct listener can be previewed now.
+
+- **Two UI surfaces have never been seen rendered** — covered by tests and
   confirmed present in the live bundle, but nobody has looked at them in a browser,
   because reaching them needs a sign-in. Rider → *Request Pickup* (seat stepper,
   "Keep us in one car", and the "no sabha on the calendar" line); Manager →
-  **Request Center** (Seats column); Manager → **Sabha Calendar** → *Add a sabha*
-  (the prefill from the Settings defaults). Note that is Request Center, *not*
-  Live Operations.
+  **Request Center** (Seats column). Note that is Request Center, *not* Live
+  Operations.
 
 **Known gap — fixed 2026-08-12 in Phase 5.** Bulk-select on the manager's queue
 used to exist only in the desktop table, leaving the checkboxes and "Assign Bulk"

@@ -2,7 +2,10 @@
 // open onSnapshot listeners against a stubbed db.
 export const useCurrentEvent = () => ({
   event: { startsAt: null, venue: { address: 'BAPS Mandir, Edison NJ' } },
-  eventId: '2026-08-14', hasEvent: true, canWithdraw: true, loading: false,
+  eventId: '2026-08-28', hasEvent: true, canWithdraw: true, loading: false,
+  // So the calendar's "Rides open" pill is visible in the harness. It is driven
+  // by the app's own answer, not by the presence of a date.
+  calendarStatus: 'ok' as const,
 });
 export const submitWeeklyAttendance = async () => undefined;
 export const updateAttendanceResponse = async () => ({ success: true });

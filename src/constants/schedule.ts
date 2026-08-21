@@ -31,6 +31,31 @@
  */
 export const RECURRENCE_DOC = 'settings/sabhaRecurrence';
 
+/**
+ * "19:00" -> "7:00 PM". Mirrors formatTimeForDisplay in
+ * functions/src/utils/schedule.ts.
+ *
+ * Moved here from hooks/useSettings.ts, which imports firebase/config — so a pure
+ * module that wanted to print a time could not have it, and `describeRule` ended
+ * up showing the manager "Every Friday, 20:30-22:00" one line above a card
+ * reading "8:30 PM - 10:00 PM". Two clock formats, same card.
+ *
+ * useSettings still re-exports it, so every existing import is unchanged.
+ */
+export function formatTime(value: string): string {
+    const match = /^(\d{1,2}):(\d{2})$/.exec((value || '').trim());
+    if (!match) return value;
+
+    const hours24 = Number(match[1]);
+    const minutes = match[2];
+    if (hours24 < 0 || hours24 > 23) return value;
+
+    const suffix = hours24 < 12 ? 'AM' : 'PM';
+    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+
+    return `${hours12}:${minutes} ${suffix}`;
+}
+
 /** Fallback sabha start and end, "HH:MM" in Sabha local time. */
 export const DEFAULT_SABHA_START = '19:00';
 export const DEFAULT_SABHA_END = '22:00';
