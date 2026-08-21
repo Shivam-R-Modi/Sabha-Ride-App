@@ -5,8 +5,10 @@ at the end. Last updated **2026-08-21**. That day shipped, in order: live ride
 progress and the venue roster; the nudge; the sabha calendar as one card; the
 standing schedule set to **Friday 20:30–22:00** and rides reopened; reorderable
 sidebar tabs, built and then removed again at the owner's instruction; four UI
-defects reported from screenshots; and **feedback on every profile with a CSV
-export**, tested end to end against production. Each has its own section below.
+defects reported from screenshots; **feedback on every profile with a CSV
+export**, tested end to end against production; and three stale facts corrected
+in `CLAUDE.md` itself. Each has its own section below. `main` was also pushed —
+it had been **39 commits** behind `origin`.
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -292,9 +294,10 @@ do.
 ### Where the suite stands at the end of the day
 
 **1152 client, 681 functions, 170 rules.** Both builds and typecheck clean — typecheck
-is at **0** errors, not the 22 that `CLAUDE.md` still records as the baseline;
-that line in CLAUDE.md is stale and worth correcting, and it is untracked so it
-will not arrive with a pull.
+is at **0** errors, not the 22 that `CLAUDE.md` recorded as the baseline. That
+line has since been corrected — see *The agent instructions were lying* below,
+which also corrects the claim made here that `CLAUDE.md` is untracked. It is
+tracked.
 
 ### Harness gaps this work closed
 
@@ -304,6 +307,44 @@ writes back, `ManagerReports`, `ProfileEditor`, and a snapshot that supports
 tree. **ProfileEditor had never been previewable at all**, which is why the
 feedback card and the three toggles beside it had never been looked at outside a
 sign-in.
+
+## Shipped 2026-08-21 — the agent instructions were lying, in three places
+
+`CLAUDE.md` is the first thing a session reads, and three of its statements of
+fact had gone stale. All three were true when written.
+
+- **"clean baseline is 22 pre-existing errors; 22 means clean."** It is **zero**,
+  and has been since the typecheck pass earlier the same day. This was the
+  dangerous one: a session that introduced 22 errors of its own would have
+  compared the count to the note and called it clean.
+- **"This repo runs 396 tests — 245 in `functions/`, 70 client, 81 rules."** All
+  three suites were re-run rather than copied from this file: **1,152 client, 681
+  functions, 170 rules — 2,003.**
+- **"Both this file and `.claude/skills/` are deliberately untracked."** Both are
+  tracked, committed in `0406ab8` *"commit the agent context so a phone session
+  starts informed"* — which is the reason a phone session sees the file at all.
+  The instructions were contradicting the commit that made them work.
+
+`CLAUDE.md` exists as **two separate files on disk** — the repo root and the
+worktree each have their own copy, same bytes, different inodes. Editing one
+leaves the other stale, and a session reads whichever is nearer. Both were
+updated.
+
+Committed `8e8214b`. Docs only, so nothing was deployed.
+
+### And `main` had not been pushed for 39 commits
+
+Discovered while pushing this: `origin/main` was **39 commits behind**, covering
+everything from the live-ride-progress work through the day's feedback form. All
+of it was already deployed to production, so the remote was the only thing
+lagging — production was never running unpushed code, which is the failure this
+would otherwise imply.
+
+Before pushing to what is a **public** repo, the outgoing diff was scanned for
+credential-shaped paths. The only config files in 39 commits were `firebase.json`
+and `package.json`; no `.env`, no admin SDK JSON, no keys. **Check this every
+time the remote is this far behind** — a gitignore only protects files it was
+already covering when they were created.
 
 ## A warning to the next session: measure with transitions off
 
