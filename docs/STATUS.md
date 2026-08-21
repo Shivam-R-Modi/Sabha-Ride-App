@@ -1,8 +1,9 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-21** (live ride progress: stops tick
-themselves off, the venue roster is the record, and a Sarthi can nudge).
+at the end. Last updated **2026-08-21** (live ride progress shipped; then this
+file audited against the code and against production — three entries claiming to
+be open were already fixed, and rides are currently closed. See *Open items*).
 
 **A full sabha ran end to end on 2026-08-14 — the first one this app has served
 in both directions.** 11 riders out, 4 home, one party of four split across two
@@ -636,7 +637,9 @@ which is faster feedback than the existing quality test.
 
 ### Three real defects, all from the first run
 
-**1. `useDriverDashboard` showed drivers the placeholder venue.** The one that was
+**1. `useDriverDashboard` showed drivers the placeholder venue.** (That file was
+deleted on 2026-08-21 — it had no consumer. Kept here as the record of a real
+dependency-array bug, not as a pointer to live code.) The one that was
 genuinely live. `venueAddress` was missing from a dep array; it resolves through
 `useSettings()`, which starts at `DEFAULT_SABHA_LOCATION` and only becomes the
 real venue once the snapshot lands. With `[driverId]` alone the effect captured
@@ -2276,10 +2279,15 @@ no callable in between.
 
 `allow list` on rides carried a bare `isDriver()`. `read` is `get` + `list` and allow
 rules are **OR'd**, so the scoped `allow read` beneath it could narrow nothing. And
-it was live: `useDriverDashboard` queried rides with **no driver filter** and sorted
-them in the browser, so every Sarthi's phone held every assigned and completed ride
-in the congregation. The client filter was cosmetic — the data had already left the
-server.
+`useDriverDashboard` queried rides with **no driver filter** and sorted them in the
+browser, which is the shape of the mistake this arm invited.
+
+**Corrected 2026-08-21:** that hook had **no consumer** — not one, barrel
+re-export included — so it was never mounted and never actually shipped anybody's
+data. This entry originally said "it was live", and that was wrong. The rules hole
+itself needed no help from the hook: the grant was to any approved driver's
+credentials, and a hand-written query is one line. The hook has since been
+deleted outright.
 
 Both scoped now. The `driverId + status` composite index it needs already existed.
 
@@ -3036,20 +3044,35 @@ but it is no longer the blocking gap it was.
 Still unseen by anyone: how it behaves **in a dark car park on mobile data**, and
 whether the manager's dispatch flow holds up at speed with more than two drivers.
 
-### Known blank-screen branches — not yet fixed
+### ~~Known blank-screen branches~~ ✅ FIXED, verified 2026-08-21
 
-`DriverDashboard` has three `return null` branches: `preview` without
-`pendingAssignment`, `active` without `activeRide`, `completed` without stats.
-Each renders a **blank page with no way back**. Flagged three times across
-sessions and deferred each time. It is the same "silently does nothing" family
-this codebase keeps removing, and it is the oldest outstanding one.
+`DriverDashboard`'s three `return null` branches — `preview` without
+`pendingAssignment`, `active` without `activeRide`, `completed` without stats —
+each rendered a **blank page with no way back**, because ActiveRide puts the app
+in focus mode and hides every navigation control. Flagged three times across
+sessions and deferred each time; this entry described it as the oldest
+outstanding defect long after it had been closed.
 
-### Duplicate release paths
+It is fixed. No `return null` remains on a render path, and
+`tests/components/DriverDashboard.test.tsx` drives the reachable branch (the ride
+window closing mid-read) end to end through the real subscription rather than by
+poking state. The entry stays as a record of how long a fixed bug can sit in a
+handover note claiming to be open.
 
-Client-side `releaseVehicle` in `hooks/useVehicles.ts` (used by the
-ManagerDashboard hard-release) writes directly and does **not** clear
-`activeRideId` or refuse on live rides. The `managerReleaseVehicle` callable does
-both. Two paths, one of them weaker. Worth collapsing.
+### ~~Duplicate release paths~~ ✅ CLOSED, verified 2026-08-21
+
+Client-side `releaseVehicle` used to serve two callers that wanted different
+things: a manager hard-releasing another driver, and a driver swapping cars. It
+did the second one active harm — it set `status: 'offline'` and zeroed
+`ridesCompletedToday`, `totalStudentsToday` and `totalDistanceToday`, and nothing
+restored them, so a volunteer who changed cars mid-evening silently lost their
+whole day's tally and so did the manager's board.
+
+Now split. The manager path goes through the `managerReleaseVehicle` callable,
+which checks the role, writes an audit row and refuses while riders are aboard.
+The swap path is `handBackVehicle(vehicleId)`, which touches the **vehicle only**
+— both halves of the `vehicles`/`cars` mirror — because `assignVehicleToDriver`
+overwrites the user document immediately afterwards anyway.
 
 ### Deferred scaling ceilings
 
@@ -3117,12 +3140,22 @@ component to confirm they fail (8 of 14 did).
 
 **For the owner, not code:**
 
-- ✅ **Resolved 2026-08-14 — rides are open again.** This entry used to read
-  "RIDES ARE CLOSED RIGHT NOW". A sabha was added and ran in both directions the
-  same evening. The underlying condition still applies though: **there is no
-  standing schedule**, so once the calendar runs out nobody can request a ride
-  until a manager adds one in **Setup → Sabha Calendar**. Worth a look before each
-  Friday.
+- 🔴 **RIDES ARE CLOSED RIGHT NOW — checked against production 2026-08-21.**
+  Every upcoming sabha is **cancelled**: all 17 dates from 28 August through
+  18 December. The only `scheduled` event is 2026-08-19, which has passed. There
+  is **no recurrence rule saved** on `settings/main`, so nothing will refill the
+  calendar on its own. Until a manager schedules a date in **Setup → Sabha
+  Calendar**, no rider can request a lift. Whether the cancellations were
+  deliberate is a question for the owner and was left unanswered.
+
+  This is the third time this condition has been recorded. It resolves itself
+  every time somebody adds a sabha and returns every time the calendar empties,
+  which is the argument for a standing schedule rather than another entry here.
+
+- **Production is nearly empty**, as of 2026-08-21: 3 users, 2 rides, 3 vehicles,
+  1 statistics document, 0 notices, 18 events. The 11-rider evening from
+  2026-08-14 is no longer in the database. Worth knowing before reading any claim
+  in this file as "proven at scale" — the scale is three people.
 - **Test events are still in the calendar.** Several past entries are time-shift
   test sabhas from the 7th–14th. Harmless; worth deleting.
 - **Three UI surfaces have never been seen rendered** — covered by tests and
@@ -3146,10 +3179,24 @@ defects Phase 1 found by measuring rather than reading. Candidates, none started
 
 | | Phase | Why / why not |
 |---|---|---|
-| **Blank-screen branches** | `DriverDashboard`'s three `return null` paths | Oldest outstanding defect, and the cheapest real fix on this list. |
+| ~~Blank-screen branches~~ ✅ | ~~`DriverDashboard`'s three `return null` paths~~ | **Done.** Verified 2026-08-21; no `return null` remains on a render path. |
 | **Phase 3 part 2** | Named passengers — dependents, guests, guardians | **Blocked.** Needs roadmap §8 Q3 answered first: can a guest be a minor, and whose consent covers them? Do not design around this — ask. |
 | **Phase 2** | Cities and locations; scope every query by `cityId` | Invisible to users, but the gate before a second venue. **Gated on `node scripts/tenancy.cjs verify` reading zero** — a `cityId` filter against an unstamped document returns nothing rather than erroring, which looks exactly like "no rides tonight". |
-| ~~Phase 4~~ | ~~Move dispatch to the server~~ | ✅ **Done 2026-08-14.** `globalAssignDriver` is server-side and serialised by `system/assignmentLock` (10s TTL). Two managers can no longer assign the same riders. |
+| **Phase 4** | Move dispatch to the server | **Half done, and the half that mattered.** Corrected 2026-08-21 — this row read "✅ Done" while `roadmap.md` still listed Phase 4 as pending, and the roadmap was closer. See below. |
+
+**What "Phase 4" actually is now.** The hazard is closed: `useAutoDispatch` — the
+hook that ran in every manager's browser and described itself as "the Server
+logic" — is disabled, and assignment goes through `globalAssignDriver`, which is
+server-side and serialised by `system/assignmentLock`. Two managers can no longer
+assign the same riders.
+
+But that is **driver-pull**: the Sarthi taps "Assign Me" and the function does the
+work. The *push* auto-dispatch Phase 4 describes does not exist, and never
+really did — the old browser hook threw a `ReferenceError` on the first matched
+driver, the throw was swallowed, and the `finally` block logged "Processing
+complete", so it read as success while assigning nothing. Nothing needs push
+dispatch today. It becomes real work only when a second location exists, because
+a client-side dispatcher replicated across cities would double-assign riders.
 
 **Driver vetting is out of scope — permanently.** This used to be flagged here as
 an open policy question. The owner ruled on it on 2026-08-15: drivers are known
@@ -3159,14 +3206,22 @@ the app, and it is not to be raised again. This does not weaken anything else �
 audit rows all stand, because those protect children's PII rather than vet the
 volunteer.
 
-**Still open — a real defect found 2026-08-15, not yet fixed.** `at_sabha` is
-never cleared. `completeRide` sets it on a completed pickup and
-`studentReadyToLeave` reads it; nothing resets it. Five riders have been sitting
-at `at_sabha` since the 14th, which means **next Friday they can tap "Ready to
-leave" without ever having been picked up** and a driver is dispatched to collect
-somebody who is at home. Same rot as the stale requests, on the user record
-instead of the ride — and the natural fix is to fold it into
-`expireStaleRequests`, which already walks exactly these riders.
+**~~Still open~~ ✅ FIXED, and confirmed against production 2026-08-21.**
+`at_sabha` was never cleared: `completeRide` set it on a completed pickup and
+`studentReadyToLeave` read it, and nothing reset it — so five riders sat at
+`at_sabha` from the 14th onwards and could have tapped "Ready to leave" the
+following Friday without ever having been collected, sending a driver to a house.
+
+The fix went where this entry predicted, into `expireStaleRequests`, which
+already walks exactly these riders. `END_OF_EVENING_STATUSES = ['at_sabha',
+'in_ride']` are swept at the end of the evening, and the status field is
+**removed** rather than set to something new — signup writes no status at all, so
+absent is already what a rider with nothing going on looks like. `home_safe` is
+deliberately not swept: it is terminal and true, and resetting it would erase the
+only record that an evening finished properly.
+
+Verified in production, not just in tests: **zero** users are sitting at
+`at_sabha` or `in_ride` as of 2026-08-21.
 
 ---
 
