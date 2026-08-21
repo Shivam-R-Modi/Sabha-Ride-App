@@ -259,6 +259,23 @@ export async function notifyStudentSarthiArrived(recipients: Recipient[]): Promi
     );
 }
 
+/**
+ * The second ask, sent by hand.
+ *
+ * `notifyStudentSarthiArrived` fires once on its own. This is what the Sarthi
+ * taps when nobody has come out — deliberately more urgent in tone and
+ * deliberately still fixed text, because the caller is a volunteer driver and
+ * the recipient is somebody's child.
+ */
+export async function notifyStudentSarthiWaiting(recipients: Recipient[]): Promise<DispatchResult> {
+    return sendNotification(
+        recipients,
+        'Sarthi is waiting',
+        'Your Sarthi is outside waiting for you. Please come out now.',
+        { type: 'sarthi_waiting' },
+    );
+}
+
 export async function notifyStudentRideCompleted(recipients: Recipient[]): Promise<void> {
     // Was "Home Safe! You have arrived home safely" — which told anyone holding
     // the phone that this particular child is home, and when.

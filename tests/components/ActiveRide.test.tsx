@@ -24,6 +24,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const updateDoc = vi.fn(async () => undefined);
+const nudgeRider = vi.fn(async () => ({ success: true, delivered: 1 }));
 const completeRide = vi.fn(async () => ({
     success: true, rideId: 'ride_1', completedAt: 'now',
     driverStats: { ridesCompletedToday: 1, totalStudentsToday: 2, totalDistanceToday: 4 },
@@ -48,6 +49,7 @@ vi.mock('../../hooks/useDriverLocation', () => ({
 }));
 vi.mock('../../src/utils/cloudFunctions', () => ({
     completeRide: (...a: unknown[]) => completeRide(...(a as [])),
+    nudgeRider: (...a: unknown[]) => nudgeRider(...(a as [])),
     sarthiArrived: vi.fn(async () => ({ success: true, alreadyArrived: false })),
 }));
 vi.mock('../../src/utils/googleMaps', () => ({
@@ -287,5 +289,69 @@ describe('the return leg', () => {
 
         await waitFor(() => expect(screen.getByText('1/2 stops')).toBeTruthy());
         expect(lastRouteWrite()[2].visited).toBe(true);
+    });
+});
+
+describe('waiting outside, and the two things a Sarthi can do about it', () => {
+    /**
+     * The policy is wait and nudge: the roster never changes mid-run, so nothing
+     * is re-dispatched and no seat goes back into the pool while a car is parked
+     * outside a house. That makes these two buttons the whole of the Sarthi's
+     * options, and it makes it important that neither of them lies about having
+     * worked.
+     */
+    it('nudges one named rider, not the car', async () => {
+        renderRide();
+
+        await userEvent.click(screen.getByRole('button', { name: /Nudge Bhulku B/ }));
+
+        await waitFor(() => expect(nudgeRider).toHaveBeenCalledWith('ride_1', 'stu_b'));
+        expect(nudgeRider).toHaveBeenCalledTimes(1);
+    });
+
+    it('says plainly when the message reached no phone', async () => {
+        // A bell that buzzes nothing, reported as sent, is the silent-nothing
+        // failure with a tick on it. The call button is right beside it.
+        nudgeRider.mockResolvedValueOnce({ success: true, delivered: 0 });
+        renderRide();
+
+        await userEvent.click(screen.getByRole('button', { name: /Nudge Bhulku A/ }));
+
+        await waitFor(() => expect(screen.getByText(/No phone registered/i)).toBeTruthy());
+    });
+
+    it('confirms when it did reach them', async () => {
+        renderRide();
+
+        await userEvent.click(screen.getByRole('button', { name: /Nudge Bhulku A/ }));
+
+        await waitFor(() => expect(screen.getByText(/they have been told/i)).toBeTruthy());
+    });
+
+    it('passes the cooldown refusal straight through', async () => {
+        nudgeRider.mockRejectedValueOnce(new Error('Already nudged. You can nudge again in 42 seconds.'));
+        renderRide();
+
+        await userEvent.click(screen.getByRole('button', { name: /Nudge Bhulku A/ }));
+
+        await waitFor(() => expect(screen.getByText(/42 seconds/)).toBeTruthy());
+    });
+
+    it('offers a call for every rider', async () => {
+        renderRide();
+
+        expect(screen.getByRole('link', { name: /Call Bhulku A/ }).getAttribute('href')).toBe('tel:1');
+        expect(screen.getByRole('link', { name: /Call Bhulku B/ }).getAttribute('href')).toBe('tel:2');
+    });
+
+    it('takes the nudge away once they are aboard', async () => {
+        // Nudging somebody already collected cannot do anything, so the control
+        // does not sit there offering to.
+        const ride = makeRide();
+        ride.route[1].visited = true;
+        renderRide(ride);
+
+        expect(screen.queryByRole('button', { name: /Nudge Bhulku A/ })).toBeNull();
+        expect(screen.getByRole('button', { name: /Nudge Bhulku B/ })).toBeTruthy();
     });
 });

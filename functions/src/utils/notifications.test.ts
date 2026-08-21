@@ -31,7 +31,7 @@ vi.mock('firebase-admin', () => ({
     ),
 }));
 
-import { tokensOf, sendNotification, notifyEveryone } from './notifications';
+import { tokensOf, sendNotification, notifyEveryone, notifyStudentSarthiWaiting } from './notifications';
 
 const ok = () => ({ success: true });
 const fail = (code: string) => ({ success: false, error: { code } });
@@ -172,5 +172,29 @@ describe('notifyEveryone', () => {
 
         const tokens = sendEachForMulticast.mock.calls[0]![0].tokens;
         expect(tokens.sort()).toEqual(['laptop', 'legacy', 'phone']);
+    });
+});
+
+describe('the nudge a Sarthi sends by hand', () => {
+    /**
+     * The one message on this app written by a driver's tap rather than by the
+     * server's own state changes. Its wording is fixed here, and `nudgeRider`
+     * cannot reach past this function to change it — which is the whole reason
+     * the text lives in this file and not in the callable.
+     */
+    it('says who is waiting and what to do, and names no child', async () => {
+        await notifyStudentSarthiWaiting([{ uid: 'u1', token: 'a' }]);
+
+        const text = JSON.stringify(sendEachForMulticast.mock.calls[0][0]);
+        expect(text).toMatch(/Sarthi is waiting/);
+        expect(text).toMatch(/outside/i);
+        expect(text).toMatch(/sarthi_waiting/);
+    });
+
+    it('reports what was delivered, so a bell that reached nobody can say so', async () => {
+        sendEachForMulticast.mockResolvedValue({ successCount: 0, failureCount: 1, responses: [fail('messaging/internal-error')] });
+
+        await expect(notifyStudentSarthiWaiting([{ uid: 'u1', token: 'a' }]))
+            .resolves.toMatchObject({ delivered: 0 });
     });
 });

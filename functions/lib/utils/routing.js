@@ -6,8 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.optimizeRoute = optimizeRoute;
 exports.calculateRouteStats = calculateRouteStats;
 exports.buildGoogleMapsNavigationUrl = buildGoogleMapsNavigationUrl;
-exports.isNearWaypoint = isNearWaypoint;
-exports.updateWaypointVisits = updateWaypointVisits;
 const distance_1 = require("./distance");
 /**
  * Route Optimization using Nearest Neighbor algorithm
@@ -200,33 +198,5 @@ function buildGoogleMapsNavigationUrl(route) {
         `&destination=${end.lat},${end.lng}` +
         `${waypointsParam}` +
         `&travelmode=driving`;
-}
-/**
- * Check if driver is within proximity of a waypoint
- * Used for automatic waypoint visit detection
- */
-function isNearWaypoint(driverLocation, waypoint, thresholdMeters = 50) {
-    const distanceKm = (0, distance_1.haversineDistance)(driverLocation, waypoint);
-    const distanceMeters = distanceKm * 1000;
-    return distanceMeters <= thresholdMeters;
-}
-/**
- * Mark waypoints as visited based on driver location
- * Returns updated waypoints and whether all are visited
- */
-function updateWaypointVisits(waypoints, driverLocation, thresholdMeters = 50) {
-    const updatedWaypoints = waypoints.map(wp => {
-        if (wp.visited)
-            return wp;
-        const isNear = isNearWaypoint(driverLocation, wp, thresholdMeters);
-        if (isNear) {
-            return Object.assign(Object.assign({}, wp), { visited: true });
-        }
-        return wp;
-    });
-    // Check if all waypoints (except start and end) are visited
-    const middleWaypoints = updatedWaypoints.slice(1, -1);
-    const allVisited = middleWaypoints.length === 0 || middleWaypoints.every(wp => wp.visited);
-    return { waypoints: updatedWaypoints, allVisited };
 }
 //# sourceMappingURL=routing.js.map

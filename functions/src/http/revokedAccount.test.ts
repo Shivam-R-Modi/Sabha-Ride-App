@@ -77,6 +77,7 @@ import { completeRide } from './completeRide';
 import { releaseAssignment } from './releaseAssignment';
 import { driverDoneForToday } from './driverDoneForToday';
 import { studentReadyToLeave } from './studentReadyToLeave';
+import { nudgeRider } from './nudgeRider';
 
 const UID = 'dave';
 const ctx = { auth: { uid: UID } };
@@ -88,6 +89,10 @@ const CALLS: Array<[string, () => Promise<unknown>]> = [
     ['releaseAssignment', () => (releaseAssignment as any)({ rideId: 'r1' }, ctx)],
     ['driverDoneForToday', () => (driverDoneForToday as any)({ driverId: UID }, ctx)],
     ['studentReadyToLeave', () => (studentReadyToLeave as any)({ studentId: UID }, ctx)],
+    // The newest one, and the only path that pushes a message from a driver to a
+    // child's phone. It joins the list rather than growing a file of its own,
+    // because it is the same rule.
+    ['nudgeRider', () => (nudgeRider as any)({ rideId: 'r1', studentId: 'stu_1' }, ctx)],
 ];
 
 beforeEach(() => { vi.clearAllMocks(); });

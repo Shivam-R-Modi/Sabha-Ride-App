@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Navigation, Users, Clock, MapPin, Phone, CheckCircle2, Circle, Loader2, AlertCircle, Bell } from 'lucide-react';
-import { completeRide, sarthiArrived, CompleteRideResult } from '../../src/utils/cloudFunctions';
+import { completeRide, sarthiArrived, nudgeRider, CompleteRideResult } from '../../src/utils/cloudFunctions';
 import { buildGoogleMapsNavigationUrl, openGoogleMaps } from '../../src/utils/googleMaps';
 import { useDriverLocation } from '../../hooks/useDriverLocation';
 import { useAuth } from '../../contexts/AuthContext';
@@ -187,6 +187,39 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
      * the Sarthi with no way to end the run at all except to tick a child off as
      * collected. The dead button and the lie were the same bug.
      */
+    /**
+     * Ask one rider again while the car waits outside.
+     *
+     * The policy for a Bhulku who is not there is wait and nudge — nothing is
+     * re-dispatched and no seat goes back into the pool while a car is parked
+     * outside a house. So this and the phone button beside it are the whole of
+     * what a Sarthi can do, and both need to be honest about whether they did
+     * anything: `delivered: 0` means the message reached no device, and saying
+     * "Nudged" then would be the silent-nothing failure with a tick on it.
+     */
+    const [nudging, setNudging] = useState<string | null>(null);
+    const [nudgeNote, setNudgeNote] = useState<Record<string, string>>({});
+
+    const handleNudge = async (studentId: string) => {
+        setNudging(studentId);
+        try {
+            const { delivered } = await nudgeRider(ride.id, studentId);
+            setNudgeNote(prev => ({
+                ...prev,
+                [studentId]: delivered > 0
+                    ? 'Nudged — they have been told you are waiting'
+                    : 'No phone registered for them. Call instead.',
+            }));
+        } catch (err) {
+            setNudgeNote(prev => ({
+                ...prev,
+                [studentId]: messageOf(err, 'Could not nudge them. Call instead.'),
+            }));
+        } finally {
+            setNudging(null);
+        }
+    };
+
     const handleCompleteRide = async () => {
         const absentStudentIds = ride.students
             .filter(s => !travelled.has(s.id))
@@ -386,8 +419,11 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                                 <span className="truncate">{student.location.address}</span>
                                             </p>
                                         )}
+                                        {nudgeNote[student.id] && (
+                                            <p className="text-xs text-coffee-700 mt-1">{nudgeNote[student.id]}</p>
+                                        )}
                                     </div>
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col gap-2 items-end">
                                         <button
                                             aria-label={isVisited
                                                 ? `Undo ${student.name}'s stop`
@@ -400,13 +436,29 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                         >
                                             {isVisited ? <CheckCircle2 size={20} /> : <Circle size={20} />}
                                         </button>
-                                        <a
-                                            aria-label={`Call ${student.name}`}
-                                            href={`tel:${student.phone || (student as any).studentPhone || ''}`}
-                                            className="w-10 h-10 rounded-full bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))] flex items-center justify-center hover:opacity-90 transition-colors"
-                                        >
-                                            <Phone size={16} />
-                                        </a>
+                                        <div className="flex gap-2">
+                                            {/* Hidden once they are aboard: nudging somebody
+                                                already collected cannot do anything. */}
+                                            {!isVisited && (
+                                                <button
+                                                    aria-label={`Nudge ${student.name}`}
+                                                    onClick={() => handleNudge(student.id)}
+                                                    disabled={nudging === student.id}
+                                                    className="w-10 h-10 rounded-full bg-cream-300 text-coffee-500 flex items-center justify-center hover:bg-cream-400 transition-colors disabled:opacity-60"
+                                                >
+                                                    {nudging === student.id
+                                                        ? <Loader2 className="animate-spin" size={16} />
+                                                        : <Bell size={16} />}
+                                                </button>
+                                            )}
+                                            <a
+                                                aria-label={`Call ${student.name}`}
+                                                href={`tel:${student.phone || (student as any).studentPhone || ''}`}
+                                                className="w-10 h-10 rounded-full bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))] flex items-center justify-center hover:opacity-90 transition-colors"
+                                            >
+                                                <Phone size={16} />
+                                            </a>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

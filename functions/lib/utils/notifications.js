@@ -43,6 +43,7 @@ exports.notifyStudentDriverAssigned = notifyStudentDriverAssigned;
 exports.notifyDriverStudentsAssigned = notifyDriverStudentsAssigned;
 exports.notifyStudentRideStarting = notifyStudentRideStarting;
 exports.notifyStudentSarthiArrived = notifyStudentSarthiArrived;
+exports.notifyStudentSarthiWaiting = notifyStudentSarthiWaiting;
 exports.notifyStudentRideCompleted = notifyStudentRideCompleted;
 exports.notifyManagerUnassignedStudents = notifyManagerUnassignedStudents;
 const admin = __importStar(require("firebase-admin"));
@@ -225,6 +226,17 @@ async function notifyStudentRideStarting(recipients) {
 /** The new one: the Sarthi is outside. */
 async function notifyStudentSarthiArrived(recipients) {
     await sendNotification(recipients, 'Sarthi has arrived', 'Your Sarthi is outside. Please come out when you can.', { type: 'sarthi_arrived' });
+}
+/**
+ * The second ask, sent by hand.
+ *
+ * `notifyStudentSarthiArrived` fires once on its own. This is what the Sarthi
+ * taps when nobody has come out — deliberately more urgent in tone and
+ * deliberately still fixed text, because the caller is a volunteer driver and
+ * the recipient is somebody's child.
+ */
+async function notifyStudentSarthiWaiting(recipients) {
+    return sendNotification(recipients, 'Sarthi is waiting', 'Your Sarthi is outside waiting for you. Please come out now.', { type: 'sarthi_waiting' });
 }
 async function notifyStudentRideCompleted(recipients) {
     // Was "Home Safe! You have arrived home safely" — which told anyone holding

@@ -158,6 +158,20 @@ export async function sarthiArrived(rideId: string): Promise<{ success: boolean;
  * which matters most on the way home, where the alternative is telling a parent
  * their child is `home_safe`. Omitted or empty is the normal night.
  */
+/**
+ * Ask one rider again, while the Sarthi waits outside.
+ *
+ * Fixed text, chosen server-side — nothing said here reaches a phone. The
+ * cooldown is per rider, and `delivered: 0` means the message reached no device
+ * at all, which is when the Sarthi should use the phone button instead.
+ */
+export async function nudgeRider(
+    rideId: string,
+    studentId: string,
+): Promise<{ success: boolean; delivered: number }> {
+    return callFunction<{ success: boolean; delivered: number }>('nudgeRider', { rideId, studentId });
+}
+
 export async function completeRide(
     rideId: string,
     absentStudentIds: string[] = [],

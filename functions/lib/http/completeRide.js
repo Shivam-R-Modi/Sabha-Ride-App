@@ -53,8 +53,27 @@ const seats_1 = require("../constants/seats");
 const OPEN_RIDE_STATUSES = ['requested', 'assigned', 'driver_en_route', 'arriving', 'in_progress'];
 /**
  * HTTP Callable: Complete a ride
- * Input: { rideId: string }
+ * Input: { rideId: string, absentStudentIds?: string[] }
  * Output: Driver's today stats
+ *
+ * WHO ACTUALLY TRAVELLED
+ * ----------------------
+ * A run is several ride documents, and this closes all of them together. Until
+ * `absentStudentIds` existed it closed them *identically*, so a Bhulku who never
+ * came out of the house was recorded as `completed` and marked `at_sabha` — a
+ * plain lie on the manager's board, and the one that then let them request a lift
+ * home from a sabha they never reached.
+ *
+ * The Sarthi confirms the roster at the venue and names anyone who did not
+ * travel. Those riders' documents are `cancelled` with a `noShowAt` stamp, they
+ * are left out of the seat counts and the attendance figures, they get no "you
+ * have arrived" message, and their status says what happened instead of
+ * pretending. Empty list — which is every normal night — behaves exactly as
+ * before.
+ *
+ * Deliberately NOT re-dispatch: the roster never changes mid-run. Nobody's seat
+ * goes back into the pool while a car is out, because a seat handed to somebody
+ * else is a seat the Sarthi is still driving to collect.
  */
 exports.completeRide = functions.https.onCall(async (data, context) => {
     var _a, _b, _c;
@@ -63,10 +82,17 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const driverUid = context.auth.uid;
-    const { rideId } = data;
+    const { rideId, absentStudentIds } = data;
     if (!rideId) {
         throw new functions.https.HttpsError('invalid-argument', 'rideId is required');
     }
+    // Loud, not lenient. A malformed list here would silently mean "everybody
+    // travelled" — the exact wrong default, since it writes `at_sabha` for
+    // children who are still at home.
+    if (absentStudentIds !== undefined && !Array.isArray(absentStudentIds)) {
+        throw new functions.https.HttpsError('invalid-argument', 'absentStudentIds must be an array of rider ids');
+    }
+    const absent = new Set((absentStudentIds !== null && absentStudentIds !== void 0 ? absentStudentIds : []).filter((id) => typeof id === 'string' && id !== ''));
     const db = admin.firestore();
     // OWNERSHIP IS NOT AUTHORISATION.
     //
@@ -113,16 +139,16 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
             .where('status', 'in', ['assigned', 'in_progress', 'driver_en_route', 'arriving'])
             .get();
         const allStudentsMap = new Map();
+        /** Named as absent AND actually on one of these rides. */
+        const absentStudentsMap = new Map();
         /** The rides this call is closing, so a rider's OTHER open rides stand out. */
         const completingRideIds = new Set(activeRidesSnap.docs.map(d => d.id));
         for (const doc of activeRidesSnap.docs) {
-            batch.update(doc.ref, {
-                status: 'completed',
-                completedAt: now
-            });
             const data = doc.data();
+            /** Every rider named on this document, however they are recorded. */
+            const riders = [];
             if (data.studentId) {
-                allStudentsMap.set(data.studentId, {
+                riders.push({
                     id: data.studentId,
                     name: data.studentName || 'Student',
                     // People carried, not documents closed. Absent means one.
@@ -131,15 +157,25 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
             }
             if (Array.isArray(data.students)) {
                 for (const s of data.students) {
-                    allStudentsMap.set(s.id, {
+                    riders.push({
                         id: s.id,
                         name: s.name || 'Student',
                         seats: (0, seats_1.seatsOf)({ seatsRequested: s.seats }),
                     });
                 }
             }
+            for (const rider of riders) {
+                (absent.has(rider.id) ? absentStudentsMap : allStudentsMap).set(rider.id, rider);
+            }
+            // A document is only a no-show if NOBODY on it travelled. A car that
+            // collected two of a family of three still completed that ride.
+            const nobodyTravelled = riders.length > 0 && riders.every(r => absent.has(r.id));
+            batch.update(doc.ref, nobodyTravelled
+                ? { status: 'cancelled', noShowAt: now }
+                : { status: 'completed', completedAt: now });
         }
         const allStudents = Array.from(allStudentsMap.values());
+        const absentStudents = Array.from(absentStudentsMap.values());
         // Update driver stats and release vehicle
         const driverDoc = await db.collection('users').doc(driverUid).get();
         const driver = driverDoc.data();
@@ -148,8 +184,12 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         // this read 1, so their day's tally — and the manager's — undercounted
         // every group they moved.
         const seatsCarried = allStudents.reduce((n, s) => n + (s.seats || 1), 0);
+        // The `ride.students.length || 1` tail is the fallback for a ride with no
+        // usable roster, and it must not fire when the Sarthi HAS given us one:
+        // a run where nobody came out counts nobody, rather than falling back to
+        // the roster it was told to disregard.
         const newTotalStudents = ((driver === null || driver === void 0 ? void 0 : driver.totalStudentsToday) || 0)
-            + (seatsCarried || ((_c = ride === null || ride === void 0 ? void 0 : ride.students) === null || _c === void 0 ? void 0 : _c.length) || 1);
+            + (seatsCarried || (absent.size > 0 ? 0 : (((_c = ride === null || ride === void 0 ? void 0 : ride.students) === null || _c === void 0 ? void 0 : _c.length) || 1)));
         const newTotalDistance = ((driver === null || driver === void 0 ? void 0 : driver.totalDistanceToday) || 0) + ((ride === null || ride === void 0 ? void 0 : ride.estimatedDistance) || 0);
         // THE DRIVER KEEPS THEIR CAR.
         //
@@ -189,20 +229,51 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
         });
         // Determine student status after ride
         const newStudentStatus = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'at_sabha' : 'home_safe';
+        /**
+         * Where a no-show actually is.
+         *
+         * On the way to sabha they never left home — `missed_pickup`, a status
+         * this app has declared and labelled since the beginning and never once
+         * written. On the way back they are still standing at the venue, so
+         * `at_sabha` is the literal truth and leaves them able to ask for another
+         * lift home, which is exactly what somebody who missed their car needs.
+         *
+         * Neither is `home_safe`. That is the whole point.
+         */
+        const noShowStatus = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'missed_pickup' : 'at_sabha';
+        /**
+         * Has this rider got another leg still running?
+         *
+         * A group too large for one car is split across cars, so a rider can
+         * still have a leg outstanding when this one finishes. Writing a final
+         * status then would be a lie on the manager's screen — and clearing
+         * currentRideId would cut their remaining half loose.
+         *
+         * Single-field query filtered in memory, matching studentReadyToLeave:
+         * adding `status` would need a rides(studentId, status) composite.
+         */
+        const stillTravellingElsewhere = async (studentId) => {
+            const theirRides = await db.collection('rides')
+                .where('studentId', '==', studentId)
+                .get();
+            return theirRides.docs.some(d => { var _a; return !completingRideIds.has(d.id) && OPEN_RIDE_STATUSES.includes((_a = d.data()) === null || _a === void 0 ? void 0 : _a.status); });
+        };
+        // Riders the Sarthi says did not travel. Status corrected, ride already
+        // cancelled above, and pointedly NO "you have arrived" message.
+        for (const student of absentStudents) {
+            if (await stillTravellingElsewhere(student.id)) {
+                console.log(`[completeRide] ${student.id} did not travel on this leg but has another open — status held`);
+                continue;
+            }
+            console.log(`[completeRide] ${student.id} recorded as a no-show`);
+            batch.update(db.collection('users').doc(student.id), {
+                status: noShowStatus,
+                currentRideId: null
+            });
+        }
         // Update students status and notify
         for (const student of allStudents) {
-            // A group too large for one car is split across cars, so a rider can
-            // still have a leg outstanding when this one finishes. Marking them
-            // 'home_safe' then would be a plain lie on the manager's screen — and
-            // it would clear currentRideId, cutting their remaining half loose.
-            //
-            // Single-field query filtered in memory, matching studentReadyToLeave:
-            // adding `status` would need a rides(studentId, status) composite.
-            const theirRides = await db.collection('rides')
-                .where('studentId', '==', student.id)
-                .get();
-            const stillTravelling = theirRides.docs.some(d => { var _a; return !completingRideIds.has(d.id) && OPEN_RIDE_STATUSES.includes((_a = d.data()) === null || _a === void 0 ? void 0 : _a.status); });
-            if (stillTravelling) {
+            if (await stillTravellingElsewhere(student.id)) {
                 console.log(`[completeRide] ${student.id} has another leg open — status held`);
                 continue;
             }
@@ -220,10 +291,16 @@ exports.completeRide = functions.https.onCall(async (data, context) => {
             }
         }
         // Safe student list construction for statistics
-        const rawStudents = (Array.isArray(ride === null || ride === void 0 ? void 0 : ride.students) && ride.students.length > 0)
-            ? ride.students
-            : (allStudents.length > 0 ? allStudents : ((ride === null || ride === void 0 ? void 0 : ride.studentId) ? [{ id: ride.studentId, name: ride.studentName || 'Student' }] : []));
-        const rideStudents = rawStudents.map((s) => {
+        // Filtered, not raw: an attendance row for somebody who never got in the
+        // car is the same lie one layer down, and generateEventCSV reads it.
+        const rosterStudents = (Array.isArray(ride === null || ride === void 0 ? void 0 : ride.students) && ride.students.length > 0)
+            ? ride.students.filter((s) => !absent.has(s === null || s === void 0 ? void 0 : s.id))
+            : (allStudents.length > 0
+                ? allStudents
+                : ((ride === null || ride === void 0 ? void 0 : ride.studentId) && !absent.has(ride.studentId)
+                    ? [{ id: ride.studentId, name: ride.studentName || 'Student' }]
+                    : []));
+        const rideStudents = rosterStudents.map((s) => {
             var _a, _b;
             return ({
                 id: s.id || '',

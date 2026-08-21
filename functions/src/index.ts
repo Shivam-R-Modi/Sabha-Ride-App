@@ -40,6 +40,7 @@ export { updateSabhaRecurrence } from './http/sabhaRecurrence';
 export { globalAssignDriver } from './http/globalAssignDriver';
 export { startRide } from './http/startRide';
 export { sarthiArrived } from './http/sarthiArrived';
+export { nudgeRider } from './http/nudgeRider';
 export { managerBroadcast } from './http/managerBroadcast';
 export { publishNotice } from './http/publishNotice';
 export { deleteNotice } from './http/deleteNotice';

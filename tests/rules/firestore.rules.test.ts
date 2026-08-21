@@ -551,6 +551,19 @@ describe('stop progress is written by the Sarthi driving the run, and nobody els
     it('a signed-out client may not touch it at all', async () => {
         await assertFails(updateDoc(doc(asAnon(), 'rides', 'ride_alice'), { route: ticked }));
     });
+
+    it('the rider may not erase the stamps the run writes about them', async () => {
+        // `arrivedAt` is what makes sarthiArrived idempotent; `nudges` holds the
+        // per-rider cooldown; `noShowAt` records that they did not travel. Each
+        // one, written by the person it is about, undoes something.
+        for (const field of ['arrivedAt', 'nudges', 'noShowAt']) {
+            await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), { [field]: null }));
+        }
+    });
+
+    it('the Sarthi still may, because the callables are not the only writer', async () => {
+        await assertSucceeds(updateDoc(doc(asDriver(), 'rides', 'ride_alice'), { arrivedAt: 'now' }));
+    });
 });
 
 describe('server-owned documents', () => {

@@ -226,6 +226,13 @@ service cloud.firestore {
         'carLicensePlate', 'route', 'peers', 'students', 'assignedStudentIds',
         'estimatedDistance', 'estimatedTime', 'assignedAt', 'startedAt',
         'completedAt', 'rideType',
+        // The stamps the run itself writes. `arrivedAt` is what makes
+        // sarthiArrived idempotent, so a rider who could set it would silence
+        // their own "your Sarthi is outside". `nudges` holds the per-rider
+        // cooldown, and clearing it is how you would turn one tap into twenty
+        // buzzes. `noShowAt` records that somebody did not travel — the rider
+        // it names is the last person who should be able to erase it.
+        'arrivedAt', 'nudges', 'noShowAt',
         // Seats are set once, at create, and belong to the server from then on.
         // A rider able to raise seatsRequested after assignment would take places
         // from whoever was behind them; one able to write groupId or
