@@ -5,7 +5,7 @@ import { db } from '../../firebase/config';
 import { updateSabhaRecurrence } from '../../src/utils/cloudFunctions';
 import { normaliseRecurrence, describeRule } from '../../src/utils/recurrence';
 import { useToast } from '../../contexts/ToastContext';
-import { isUsableDuration } from '../../src/constants/schedule';
+import { isUsableDuration, RECURRENCE_DOC } from '../../src/constants/schedule';
 
 /**
  * The recurring sabha pattern — ONE record, no horizon.
@@ -36,7 +36,7 @@ const DAYS = [
     { value: 6, short: 'Sat', full: 'Saturday' },
 ];
 
-const RECURRENCE_DOC = 'settings/sabhaRecurrence';
+
 
 export const RecurringSabha: React.FC = () => {
     const toast = useToast();

@@ -3180,8 +3180,8 @@ defects Phase 1 found by measuring rather than reading. Candidates, none started
 | | Phase | Why / why not |
 |---|---|---|
 | ~~Blank-screen branches~~ ✅ | ~~`DriverDashboard`'s three `return null` paths~~ | **Done.** Verified 2026-08-21; no `return null` remains on a render path. |
-| **Phase 3 part 2** | Named passengers — dependents, guests, guardians | **Blocked.** Needs roadmap §8 Q3 answered first: can a guest be a minor, and whose consent covers them? Do not design around this — ask. |
-| **Phase 2** | Cities and locations; scope every query by `cityId` | Invisible to users, but the gate before a second venue. **Gated on `node scripts/tenancy.cjs verify` reading zero** — a `cityId` filter against an unstamped document returns nothing rather than erroring, which looks exactly like "no rides tonight". |
+| **Phase 3 part 2** | Named passengers — dependents and guests | **Unblocked 2026-08-21.** The consent question is settled — see *Settled policy* below. No guardian field, no consent record, no separate account: the adult who books is responsible for everyone in the car. |
+| **Phase 2** | Cities and locations; scope every query by `cityId` | **Deferred by the owner, reaffirmed 2026-08-21** — "keep the deferred expansion as deferred, I will get back to it later". Do not start it and do not re-raise it. The gate it was waiting on has since **passed**: `node scripts/tenancy.cjs verify` reads zero unstamped, checked 2026-08-21. So when the owner does return to it, the blocker is groundwork, not data. |
 | **Phase 4** | Move dispatch to the server | **Half done, and the half that mattered.** Corrected 2026-08-21 — this row read "✅ Done" while `roadmap.md` still listed Phase 4 as pending, and the roadmap was closer. See below. |
 
 **What "Phase 4" actually is now.** The hazard is closed: `useAutoDispatch` — the
@@ -3197,6 +3197,20 @@ driver, the throw was swallowed, and the `finally` block logged "Processing
 complete", so it read as success while assigning nothing. Nothing needs push
 dispatch today. It becomes real work only when a second location exists, because
 a client-side dispatcher replicated across cities would double-assign riders.
+
+### Settled policy — do not re-raise either of these
+
+**A guest child is never unaccompanied.** Ruled by the owner 2026-08-21: a child
+is always accompanied by their parent, guardian or an adult, that adult carries
+the responsibility, and everyone in the congregation understands this. So the
+question this file used to carry — *can a guest be a minor, and whose consent
+covers them* — has no content. Accompaniment is the standing condition.
+
+The practical consequence is that **naming passengers got smaller, not bigger**:
+no consent record, no guardian field, no shadow account for a child. The person
+who books the ride is the responsible adult for everybody in the car, which is
+already how the seat count behaves, so the passenger model extends today's shape
+rather than introducing a new one. Recorded as A10 in `roadmap.md` §8.
 
 **Driver vetting is out of scope — permanently.** This used to be flagged here as
 an open policy question. The owner ruled on it on 2026-08-15: drivers are known

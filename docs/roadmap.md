@@ -224,7 +224,7 @@ Sizes are relative (S/M/L/XL), not estimates.
 | **0** ✅ | Schedule timezone | — | S | No (fixes Friday) |
 | **1** ✅ | **Security groundwork.** Delivered: caller identity on `globalAssignDriver`; one shared manager check; audit log unified and append-only; one role model; custom claims for reads; single-use manager invites; `cityId`/`locationId` stamped and verified. **No `where('cityId', …)` — that is Phase 2.** | B1, B5 | M | No |
 | **2** | **Introduce cities + locations, one of each live.** `cities` and `locations` collections; per-location rideContext, lock, settings; **scope every query by `cityId`, all at once, gated on `node scripts/tenancy.cjs verify` reading zero** | B2, B3, B4, B6 | L | No |
-| **3** | **Passenger model.** Dependents, guests, manifests, seat-aware VRP | B8 | M | **Yes** |
+| **3** | **Passenger model.** Dependents, guests, manifests, seat-aware VRP. Seat-aware requesting shipped 2026-08-15; naming individual passengers is what remains, and it is **unblocked** as of 2026-08-21 (A10) | B8 | M | **Yes** |
 | **4** | **Server-side dispatch.** Auto-dispatch out of the browser into a Cloud Function, per location | B7 | XL | No |
 | **5** ✅ | **Events model + manager schedule UI.** Date, start/end, agenda, venue, cancellations | — | L | **Yes** |
 | **6** | **Super-manager + city-manager consoles.** Create/archive cities and locations, appoint managers at both levels, invites, governance, reporting | B9 | L | **Yes** |
@@ -326,10 +326,29 @@ Both lists are maintained by that city's managers. Both sides select because
 whichever side does not select has to be *inferred* — and that inference is
 exactly where cross-location mix-ups would originate.
 
-**Blocking Phase 3**
+**Decided — a guest child is never unaccompanied (was Q3)**
 
-3. Can a guest be a minor? If yes, whose consent covers them, and does the
-   guardian-accompaniment rule extend to them?
+**A10, ruled by the owner 2026-08-21.** *"This is never a question, because a
+child is always accompanied by the child's parents or guardian or adult. This
+responsibility lies on the shoulder of the adult with that child and everyone is
+aware of this."*
+
+So there is no consent question to answer and no guardian-accompaniment rule to
+extend: **accompaniment is the standing condition**, socially understood in the
+congregation, and the accompanying adult carries the duty of care. A guest child
+travels as part of the adult who brought them.
+
+What this means for Phase 3, concretely: a named passenger needs **no consent
+record, no guardian field and no separate account**. The person who books the
+ride is the responsible adult for everyone on it — which is already exactly how
+the seat count works today, so the passenger model extends the existing shape
+instead of introducing a new one.
+
+**Not to be raised again.** This joins driver vetting as a settled policy
+question; both were ruled on by the owner and both sit outside the app. It does
+not weaken anything else — the Firestore rules, `assertApprovedManager` and the
+audit rows all stand, because those protect the data rather than adjudicate who
+may travel.
 
 **Blocking Phase 4**
 

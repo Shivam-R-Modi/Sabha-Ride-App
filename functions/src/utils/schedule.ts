@@ -31,13 +31,19 @@ import type { RideType } from '../types';
  */
 export const PICKUP_LEAD_DAYS = 2;
 
-/**
- * 0 = Sunday. The day the weekly template generates events on.
+/*
+ * `SABHA_DAY = 5 // Friday` used to live here. It is deleted, not moved.
  *
- * No longer the source of truth for when sabha IS — that comes from the events
- * collection. This is only the default slot new events are generated in.
+ * Its comment already recorded it as no longer the source of truth — "only the
+ * default slot new events are generated in" — and then the weekly template that
+ * generated them was itself deleted in the move to a recurrence rule. So it was
+ * an exported hardcoded Friday with zero consumers, sitting in the one file a
+ * future reader would go to when asking "which day is sabha".
+ *
+ * There is exactly one answer to that now: `settings/sabhaRecurrence.daysOfWeek`,
+ * set by a manager, read live. Nothing in this codebase may name a weekday for
+ * scheduling — see tests/quality/schedule-not-hardcoded.test.ts.
  */
-export const SABHA_DAY = 5; // Friday
 
 /** Drop-off opens this many minutes before sabha ends. */
 export const DROPOFF_LEAD_MINUTES = 15;

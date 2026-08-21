@@ -14,6 +14,23 @@
  * a sabha already on the calendar.
  */
 
+/**
+ * Where the standing schedule lives. Mirror of `RECURRENCE_DOC` in
+ * functions/src/http/sabhaRecurrence.ts.
+ *
+ * This string was written out twice — once there, once inline in
+ * RecurringSabha.tsx — which is one path with two owners and no way to notice
+ * them diverging. A typo in the client copy would not error: `onSnapshot` on a
+ * document that does not exist reports "no rule", the form would show its
+ * placeholders, and saving would create a schedule at the wrong path while the
+ * server kept reading the old one. Silent, and it would look like the rule had
+ * simply reset itself.
+ *
+ * tests/quality/schedule-not-hardcoded.test.ts pins that there are exactly these
+ * two definitions and no third.
+ */
+export const RECURRENCE_DOC = 'settings/sabhaRecurrence';
+
 /** Fallback sabha start and end, "HH:MM" in Sabha local time. */
 export const DEFAULT_SABHA_START = '19:00';
 export const DEFAULT_SABHA_END = '22:00';
