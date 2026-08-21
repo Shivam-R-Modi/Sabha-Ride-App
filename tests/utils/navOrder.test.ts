@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { applyOrder, isNavOrder, moveItem } from '../../src/utils/navOrder';
+import { applyOrder, isNavOrder, moveItem, itemAtPoint } from '../../src/utils/navOrder';
 
 /** Stand-ins for NavItem — applyOrder only needs an id. */
 const items = (...ids: string[]) => ids.map(id => ({ id, label: id.toUpperCase() }));
@@ -165,5 +165,53 @@ describe('moveItem', () => {
         const list = ['a', 'b', 'c'];
         moveItem(list, 0, 2);
         expect(list).toEqual(['a', 'b', 'c']);
+    });
+});
+
+describe('itemAtPoint', () => {
+    /**
+     * What the finger is over, for the pointer-driven drag.
+     *
+     * HTML5 drag-and-drop does not exist on touch — no `dragstart` is ever
+     * produced from a finger on iOS Safari or Android Chrome — so a reorder built
+     * on it works with a mouse and silently does nothing on a phone. Pointer
+     * events replace it, and they report coordinates rather than a target, so the
+     * row under the finger has to be worked out.
+     *
+     * Two dimensions, not one: the mobile drawer lays its destinations out in a
+     * two-column grid, so a y-only calculation would put the finger on whichever
+     * of the pair happened to be first.
+     */
+    const grid = [
+        { id: 'home', rect: { left: 0, top: 0, right: 100, bottom: 50 } },
+        { id: 'people', rect: { left: 100, top: 0, right: 200, bottom: 50 } },
+        { id: 'fleet', rect: { left: 0, top: 50, right: 100, bottom: 100 } },
+        { id: 'setup', rect: { left: 100, top: 50, right: 200, bottom: 100 } },
+    ];
+
+    it('finds the row under the point', () => {
+        expect(itemAtPoint(grid, 50, 25)).toBe('home');
+        expect(itemAtPoint(grid, 50, 75)).toBe('fleet');
+    });
+
+    it('tells the two columns apart', () => {
+        // A y-only hit test would answer 'home' for both of these.
+        expect(itemAtPoint(grid, 150, 25)).toBe('people');
+        expect(itemAtPoint(grid, 150, 75)).toBe('setup');
+    });
+
+    it('returns null outside every row', () => {
+        // A finger dragged off the list must not land the item somewhere random.
+        expect(itemAtPoint(grid, 500, 25)).toBeNull();
+        expect(itemAtPoint(grid, 50, 500)).toBeNull();
+    });
+
+    it('includes the edges, so a point on a boundary belongs somewhere', () => {
+        expect(itemAtPoint(grid, 0, 0)).toBe('home');
+        expect(itemAtPoint(grid, 100, 50)).toBe('home');
+    });
+
+    it('survives an empty list', () => {
+        expect(itemAtPoint([], 10, 10)).toBeNull();
     });
 });

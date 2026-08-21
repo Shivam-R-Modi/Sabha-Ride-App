@@ -102,3 +102,38 @@ export function moveItem<T extends string>(ids: T[], from: number, to: number): 
     next.splice(target, 0, moved);
     return next;
 }
+
+/** The part of a DOMRect this needs. Passing the whole thing is fine. */
+interface Bounds {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+}
+
+/**
+ * Which row a pointer is over.
+ *
+ * Needed because the reorder is driven by POINTER events rather than HTML5
+ * drag-and-drop. That was not a preference: `dragstart` is never produced from a
+ * finger on iOS Safari or Android Chrome, so a reorder built on drag events works
+ * with a mouse and silently does nothing on a phone — the failure the owner
+ * reported. Pointer events cover mouse, touch and pen in one path, and they
+ * report coordinates instead of a drop target, so the row has to be found.
+ *
+ * Both axes, deliberately. The mobile drawer lays destinations out in two
+ * columns, and a y-only test would answer with whichever of a pair came first.
+ *
+ * Edges count as inside, so a point landing exactly on a boundary belongs to a
+ * row rather than to nothing.
+ */
+export function itemAtPoint<T extends string>(
+    rows: Array<{ id: T; rect: Bounds }>,
+    x: number,
+    y: number,
+): T | null {
+    for (const { id, rect } of rows) {
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return id;
+    }
+    return null;
+}

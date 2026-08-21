@@ -20,7 +20,7 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import userEvent from '@testing-library/user-event';
 
@@ -216,48 +216,186 @@ describe('moving a tab with the keyboard', () => {
     });
 });
 
-describe('dragging a tab', () => {
+describe('dragging a tab — with a finger as well as a mouse', () => {
     /**
-     * A drag is four events. jsdom will not synthesise them from a gesture, and a
-     * bare `new Event('dragstart')` is not a DragEvent — React's delegation
-     * ignores it, so the handlers never run and the test passes for no reason.
-     * fireEvent builds the shape React listens for.
+     * This used to be built on HTML5 drag-and-drop, and that is why the owner
+     * reported "drag does not work on mobile". `dragstart` is never produced from
+     * a finger on iOS Safari or Android Chrome, so the reorder worked on a laptop
+     * and did nothing at all on a phone — no error, nothing to notice.
+     *
+     * Pointer events replace it, one path for mouse, touch and pen. These drive
+     * the same handlers a finger drives, and `pointerType` is asserted so a
+     * regression to a mouse-only API cannot pass.
      */
-    const dragOnto = (fromLabel: string, toLabel: string) => {
-        // Stores and returns, like the real thing. A stub with a hardcoded
-        // getData hid a mismatch between what dragstart writes and what drop
-        // reads — the two halves agreeing is most of what this is testing.
-        const store = new Map<string, string>();
-        const dataTransfer = {
-            effectAllowed: '',
-            setData: (type: string, value: string) => { store.set(type, value); },
-            getData: (type: string) => store.get(type) ?? '',
-        };
-        const from = handle(fromLabel);
-        const to = tab(toLabel);
-        fireEvent.dragStart(from, { dataTransfer });
-        fireEvent.dragOver(to, { dataTransfer });
-        fireEvent.drop(to, { dataTransfer });
-        fireEvent.dragEnd(from, { dataTransfer });
+
+    /** jsdom does not implement pointer capture; the drag does not depend on it. */
+    const stubCapture = (el: Element) => {
+        (el as unknown as { setPointerCapture: () => void }).setPointerCapture = () => undefined;
+        (el as unknown as { releasePointerCapture: () => void }).releasePointerCapture = () => undefined;
+    };
+
+    /** Give each row a box, since jsdom measures everything as zero. */
+    const layOutRows = () => {
+        DEFAULT_LABELS.forEach((label, index) => {
+            const row = tab(label).parentElement!;
+            row.getBoundingClientRect = () => ({
+                left: 0, right: 200, top: index * 50, bottom: index * 50 + 50,
+                width: 200, height: 50, x: 0, y: index * 50, toJSON: () => ({}),
+            }) as DOMRect;
+        });
+    };
+
+    /** Drag `fromLabel`'s handle onto `toLabel`'s row, as a finger would. */
+    const dragOnto = (fromLabel: string, toLabel: string, pointerType = 'touch') => {
+        layOutRows();
+        const grip = handle(fromLabel);
+        stubCapture(grip);
+        const targetIndex = DEFAULT_LABELS.indexOf(toLabel);
+        const y = targetIndex * 50 + 25;
+
+        fireEvent.pointerDown(grip, { pointerId: 1, button: 0, pointerType, clientX: 100, clientY: 0 });
+        fireEvent.pointerMove(grip, { pointerId: 1, pointerType, clientX: 100, clientY: y });
+        fireEvent.pointerUp(grip, { pointerId: 1, pointerType, clientX: 100, clientY: y });
     };
 
     it('every tab has a drag handle', () => {
         renderSidebar();
 
         for (const label of DEFAULT_LABELS) {
-            expect(handle(label).getAttribute('draggable')).toBe('true');
+            expect(handle(label)).toBeTruthy();
         }
     });
 
-    it('the row itself is NOT draggable', () => {
-        // A drag begun on the button and released before the browser's drag
-        // threshold is a click — so an intended reorder would navigate instead.
-        // The handle sits outside the button so a grab is never a navigation.
+    it('the handle does not use the mouse-only drag API', () => {
+        // `draggable` is what did not work on a phone. Its absence is the fix.
         renderSidebar();
 
-        for (const label of DEFAULT_LABELS) {
-            expect(tab(label).getAttribute('draggable')).not.toBe('true');
-        }
+        expect(handle('Fleet').getAttribute('draggable')).toBeNull();
+        expect(tab('Fleet').getAttribute('draggable')).toBeNull();
+    });
+
+    it('lets the browser keep no part of the gesture', () => {
+        // Without `touch-action: none` the browser claims the gesture for
+        // scrolling as soon as the finger moves, and pointermove stops arriving
+        // half way through the drag.
+        renderSidebar();
+
+        expect((handle('Fleet') as HTMLElement).style.touchAction).toBe('none');
+    });
+
+    it('reorders from a TOUCH drag', () => {
+        renderSidebar();
+
+        dragOnto('Records', 'Dispatch', 'touch');
+
+        expect((lastWrite()!['navOrder.manager'] as string[])[0]).toBe('records');
+    });
+
+    it('reorders from a MOUSE drag too', () => {
+        renderSidebar();
+
+        dragOnto('Records', 'Dispatch', 'mouse');
+
+        expect((lastWrite()!['navOrder.manager'] as string[])[0]).toBe('records');
+    });
+
+    it('does not navigate', async () => {
+        renderSidebar();
+
+        dragOnto('Records', 'Fleet');
+
+        expect(tab('Dispatch').className).toMatch(/bg-cream-400/);
+    });
+
+    it('does nothing when released on itself', () => {
+        renderSidebar();
+
+        dragOnto('Fleet', 'Fleet');
+
+        expect(updateDoc).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when released off the list', () => {
+        // A finger dragged into the page must not land the tab somewhere random.
+        renderSidebar();
+        layOutRows();
+        const grip = handle('Fleet');
+        stubCapture(grip);
+
+        fireEvent.pointerDown(grip, { pointerId: 1, button: 0, pointerType: 'touch', clientX: 100, clientY: 0 });
+        fireEvent.pointerMove(grip, { pointerId: 1, pointerType: 'touch', clientX: 900, clientY: 900 });
+        fireEvent.pointerUp(grip, { pointerId: 1, pointerType: 'touch', clientX: 900, clientY: 900 });
+
+        expect(updateDoc).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the browser takes the gesture back', () => {
+        // A system swipe or an incoming call cancels the pointer. Nothing should
+        // move rather than moving to wherever the finger happened to be.
+        renderSidebar();
+        layOutRows();
+        const grip = handle('Records');
+        stubCapture(grip);
+
+        fireEvent.pointerDown(grip, { pointerId: 1, button: 0, pointerType: 'touch', clientX: 100, clientY: 350 });
+        fireEvent.pointerMove(grip, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 25 });
+        fireEvent.pointerCancel(grip, { pointerId: 1, pointerType: 'touch' });
+        fireEvent.pointerUp(grip, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 25 });
+
+        expect(updateDoc).not.toHaveBeenCalled();
+    });
+
+    it('ignores a right-click', () => {
+        renderSidebar();
+        layOutRows();
+        const grip = handle('Records');
+        stubCapture(grip);
+
+        fireEvent.pointerDown(grip, { pointerId: 1, button: 2, pointerType: 'mouse', clientX: 100, clientY: 350 });
+        fireEvent.pointerMove(grip, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 25 });
+        fireEvent.pointerUp(grip, { pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 25 });
+
+        expect(updateDoc).not.toHaveBeenCalled();
+    });
+
+    it('survives a move and a release delivered in one task', () => {
+        // A fast flick: the browser can deliver the last pointermove and the
+        // pointerup back to back within a single task, so React has not
+        // re-rendered in between and `overId` state is still stale. The ids are
+        // held in refs for exactly this, and the whole gesture goes inside ONE
+        // act() here — separate fireEvent calls each flush state, which is why an
+        // earlier version of this test passed against the broken code too.
+        renderSidebar();
+        layOutRows();
+        const grip = handle('Records');
+        stubCapture(grip);
+
+        fireEvent.pointerDown(grip, { pointerId: 1, button: 0, pointerType: 'touch', clientX: 100, clientY: 350 });
+        act(() => {
+            grip.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 25 }) as PointerEvent);
+            grip.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, clientX: 100, clientY: 25 }) as PointerEvent);
+        });
+
+        expect((lastWrite()!['navOrder.manager'] as string[])[0]).toBe('records');
+    });
+
+    it('still reorders when the browser refuses pointer capture', () => {
+        // Chrome throws NotFoundError if the pointer is not active. An unguarded
+        // call there would abort the handler before the drag had even been
+        // recorded — nothing moves, nothing is said. Capture is an improvement to
+        // the drag, not a precondition for it.
+        renderSidebar();
+        layOutRows();
+        const grip = handle('Records');
+        (grip as unknown as { setPointerCapture: () => void }).setPointerCapture = () => {
+            throw new DOMException('No active pointer with the given id is found.', 'NotFoundError');
+        };
+
+        fireEvent.pointerDown(grip, { pointerId: 9, button: 0, pointerType: 'touch', clientX: 100, clientY: 350 });
+        fireEvent.pointerMove(grip, { pointerId: 9, pointerType: 'touch', clientX: 100, clientY: 25 });
+        fireEvent.pointerUp(grip, { pointerId: 9, pointerType: 'touch', clientX: 100, clientY: 25 });
+
+        expect((lastWrite()!['navOrder.manager'] as string[])[0]).toBe('records');
     });
 
     it('the handle is named for the tab it moves', () => {
@@ -273,48 +411,6 @@ describe('dragging a tab', () => {
 
         expect(tab('Fleet').className).toMatch(/bg-cream-400/);
         expect(updateDoc).not.toHaveBeenCalled();
-    });
-
-    it('reorders on drop', async () => {
-        renderSidebar();
-
-        dragOnto('Records', 'Dispatch');
-
-        await waitFor(() => expect(updateDoc).toHaveBeenCalled());
-        expect((lastWrite()!['navOrder.manager'] as string[])[0]).toBe('records');
-    });
-
-    it('does not navigate', async () => {
-        // A drag that ends on a button must not also activate it.
-        renderSidebar();
-
-        dragOnto('Records', 'Fleet');
-
-        await waitFor(() => expect(updateDoc).toHaveBeenCalled());
-        expect(tab('Dispatch').className).toMatch(/bg-cream-400/);
-    });
-
-    it('does nothing when dropped on itself', async () => {
-        renderSidebar();
-
-        dragOnto('Fleet', 'Fleet');
-
-        expect(updateDoc).not.toHaveBeenCalled();
-    });
-
-    it('reorders on a drop that arrives before the dragstart has rendered', async () => {
-        // Found in a browser, not here: firing all four events in one tick left
-        // the drop reading React state that had not committed, and it silently
-        // did nothing. A real gesture leaves hundreds of milliseconds between
-        // them and would never have shown it. The dragged id now comes from the
-        // dataTransfer, which the platform provides for exactly this.
-        renderSidebar();
-
-        const to = tab('Dispatch');
-        fireEvent.drop(to, { dataTransfer: { getData: () => 'records', setData: vi.fn(), effectAllowed: '' } });
-
-        await waitFor(() => expect(updateDoc).toHaveBeenCalled());
-        expect((lastWrite()!['navOrder.manager'] as string[])[0]).toBe('records');
     });
 });
 

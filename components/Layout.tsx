@@ -10,6 +10,7 @@ import { InstallAppButton } from './shared/InstallAppButton';
 import { doc, updateDoc, deleteField } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { applyOrder, moveItem } from '../src/utils/navOrder';
+import { useReorderDrag } from '../hooks/useReorderDrag';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -143,43 +144,30 @@ function useNavOrder(role: UserRole, defaults: NavItem[]) {
     setAnnouncement(`${items[from].label} moved to position ${landed + 1} of ${next.length}`);
   };
 
+  /** Move by id, which is what a drag knows. */
+  const moveById = (from: TabView, to: TabView) => {
+    const ids = items.map(item => item.id);
+    move(ids.indexOf(from), ids.indexOf(to));
+  };
+
   const reset = () => {
     write(deleteField());
     setAnnouncement('Tab order reset to the default');
   };
 
-  return { items, isCustomised, move, reset, announcement };
+  return { items, isCustomised, move, moveById, reset, announcement };
 }
 
 const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const { logout, userProfile } = useAuth();
   const { currentTab, setCurrentTab, isSidebarCollapsed, toggleSidebar } = useNavigation();
 
-  const { items: navItems, isCustomised, move, reset, announcement } = useNavOrder(role, getNavItems(role));
+  const { items: navItems, isCustomised, move, moveById, reset, announcement } = useNavOrder(role, getNavItems(role));
 
-  /** The item being dragged, and the one the cursor is currently over. */
-  const [draggingId, setDraggingId] = useState<TabView | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<TabView | null>(null);
-
-  const indexOfId = (id: TabView) => navItems.findIndex(item => item.id === id);
-
-  const endDrag = () => { setDraggingId(null); setDropTargetId(null); };
-
-  /**
-   * The dragged id comes from the dataTransfer, not from React state.
-   *
-   * `draggingId` exists for the visual — it is what dims the row being moved —
-   * but reading it here would make the drop depend on React having COMMITTED the
-   * dragstart before the drop arrives. A real gesture leaves hundreds of
-   * milliseconds between the two, so it always would; a drop fired in the same
-   * tick silently does nothing, which is how this was found. The dataTransfer is
-   * what the platform provides for exactly this, and it is already being set.
-   */
-  const onDrop = (event: React.DragEvent, targetId: TabView) => {
-    const draggedId = (event.dataTransfer.getData('text/plain') || draggingId) as TabView | '';
-    if (draggedId && draggedId !== targetId) move(indexOfId(draggedId), indexOfId(targetId));
-    endDrag();
-  };
+  // Pointer, not HTML5 drag. See the note at the top of useReorderDrag: drag
+  // events are never produced from a finger, so the previous version worked with
+  // a mouse and did nothing at all on a touch screen.
+  const { draggingId, overId, rowRef, handleProps } = useReorderDrag<TabView>(moveById);
 
   /**
    * Alt + arrow, not bare arrow.
@@ -231,7 +219,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
         {navItems.map((item, index) => {
           const isActive = currentTab === item.id;
           const Icon = item.icon;
-          const isDropTarget = dropTargetId === item.id && draggingId !== item.id;
+          const isDropTarget = overId === item.id && draggingId !== item.id;
           return (
             <React.Fragment key={item.id}>
               {/* Everyday destinations end here. What follows edits live records
@@ -250,12 +238,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
                 the button that cannot happen — a grab is never a navigation and
                 a click is never a grab. It also stops the row wearing a grab
                 cursor, which tells a button it is not a button. */}
-            <div
-              className="relative flex items-center"
-              onDragOver={(event) => { event.preventDefault(); setDropTargetId(item.id); }}
-              onDragLeave={() => setDropTargetId(current => (current === item.id ? null : current))}
-              onDrop={(event) => { event.preventDefault(); onDrop(event, item.id); }}
-            >
+            <div ref={rowRef(item.id)} className="relative flex items-center">
             <button
               onClick={() => setCurrentTab(item.id)}
               onKeyDown={(event) => onKeyDown(event, index)}
@@ -308,14 +291,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
                 than an oversight. */}
             {!isSidebarCollapsed && (
               <span
-                draggable
-                onDragStart={(event) => {
-                  setDraggingId(item.id);
-                  event.dataTransfer.effectAllowed = 'move';
-                  // Firefox ignores a dragstart that sets no data at all.
-                  event.dataTransfer.setData('text/plain', item.id);
-                }}
-                onDragEnd={endDrag}
+                {...handleProps(item.id)}
                 aria-label={`Reorder ${item.label}`}
                 title={`Drag to move ${item.label}`}
                 // A token, not an opacity. `opacity` on a control multiplies
@@ -492,7 +468,18 @@ const GrabHandle: React.FC<{
  */
 const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
   const { currentTab, setCurrentTab } = useNavigation();
-  const navItems = getNavItems(role);
+  /**
+   * The SAME order the sidebar uses.
+   *
+   * One preference, two surfaces — a phone showing a different sequence from the
+   * laptop that set it would be a second model of the same fact.
+   *
+   * `primary` still decides WHICH four are docked; the order decides the sequence
+   * within the dock and within the drawer. Promoting a destination into the bar
+   * is a separate decision about the default four and is deliberately not taken
+   * here.
+   */
+  const { items: navItems, moveById, announcement } = useNavOrder(role, getNavItems(role));
   const [expanded, setExpanded] = useState(false);
 
   const primary = navItems.filter(item => item.primary);
@@ -518,6 +505,8 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
     setCurrentTab(id);
     setExpanded(false);
   };
+
+  const { draggingId, overId, rowRef, handleProps } = useReorderDrag<TabView>(moveById);
 
   // ── Swipe up to open, down to close ──────────────────────────────────────
   //
@@ -591,18 +580,32 @@ const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
           />
           <div className="clay-bottom-drawer animate-in slide-in-from-bottom-4" {...gestures}>
             <GrabHandle overflowIsActive={overflowIsActive} className="w-full pb-2" />
+            {/* The phone's reorder surface. The sidebar does not exist below
+                `lg`, so without handles here a phone has no way to change the
+                order at all — which is what "drag does not work on mobile"
+                actually meant. Two columns, so the hit test is 2D. */}
             <div className="max-w-md mx-auto grid grid-cols-2 gap-1">
               {overflow.map(item => (
-                <DockButton
-                  key={item.id}
-                  item={item}
-                  isActive={currentTab === item.id}
-                  onClick={() => choose(item.id)}
-                  heightClass="py-2"
-                  showActiveBar={false}
-                />
+                <div key={item.id} ref={rowRef(item.id)} className="relative">
+                  <DockButton
+                    item={item}
+                    isActive={currentTab === item.id}
+                    onClick={() => choose(item.id)}
+                    heightClass="py-2"
+                    showActiveBar={false}
+                  />
+                  <span
+                    {...handleProps(item.id)}
+                    aria-label={`Reorder ${item.label}`}
+                    className={`absolute right-1 top-1 p-1.5 rounded-lg text-coffee-500 ${overId === item.id && draggingId !== item.id ? 'bg-saffron/20' : ''
+                      } ${draggingId === item.id ? 'opacity-50' : ''}`}
+                  >
+                    <GripVertical size={14} aria-hidden="true" />
+                  </span>
+                </div>
               ))}
             </div>
+            <p aria-live="polite" className="sr-only">{announcement}</p>
           </div>
         </>
       )}
