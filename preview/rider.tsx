@@ -39,7 +39,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <div key={label}>
         <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>{label}</p>
         <ToastProvider>
-          <RiderHome user={user} state={state} ride={state.kind === 'driver-assigned' ? ride : null} onAttendanceAnswered={() => {}} />
+          {/* `onWithdraw` passed, because its absence hides the withdraw control
+              entirely — which is why nobody ever saw that it rendered as a bare
+              line of text instead of a button. A preview that silently omits a
+              control cannot report on it. */}
+          <RiderHome
+            user={user}
+            state={state}
+            ride={state.kind === 'driver-assigned' ? ride : null}
+            onAttendanceAnswered={() => {}}
+            onWithdraw={async () => {}}
+          />
         </ToastProvider>
       </div>
     ))}

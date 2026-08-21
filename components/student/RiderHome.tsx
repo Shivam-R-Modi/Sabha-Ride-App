@@ -373,12 +373,37 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
                             conversation rather than a button. firestore.rules
                             enforces that boundary; this is the readable half. */}
                         {onWithdraw && (
+                            // `clay-button-secondary`, not `clay-button`.
+                            //
+                            // `.clay-button` is a COLOURLESS base — geometry and
+                            // the 44px target and nothing else, by design, because
+                            // the utilities on the element are meant to own the
+                            // colour. Every other user of it supplies a background
+                            // and a radius; this one supplied only `text-coffee-700`,
+                            // so the app's one way to withdraw a ride rendered as a
+                            // bare line of text in the middle of a card. Reported
+                            // from a screenshot.
+                            //
+                            // Secondary rather than primary: backing out is the
+                            // quieter of the two things this card can do.
+                            //
+                            // `!text-saffron-800` overrides the class's own
+                            // `color: var(--cta-fill)`. Measured against the
+                            // lightest stop of its gradient with transitions
+                            // disabled: `--cta-fill` gives 4.80:1 in light and
+                            // **3.88:1 in dark**, under the 4.5 floor for 14px
+                            // semibold. `--accent-text` is the ramp's AA rung and
+                            // gives 4.80 and 5.35. That is a property of
+                            // `clay-button-secondary` everywhere it is used, not
+                            // of this button — fixed narrowly here rather than
+                            // changing a shared class from a bug report about a
+                            // missing button.
                             <button
                                 onClick={withdraw}
                                 disabled={busy}
-                                className="clay-button w-full mt-5 text-coffee-700"
+                                className="clay-button-secondary w-full mt-5 !text-saffron-800"
                             >
-                                {busy ? 'Cancelling…' : 'I no longer need a ride'}
+                                {busy ? 'Cancelling…' : 'Cancel request'}
                             </button>
                         )}
                     </StateCard>

@@ -509,19 +509,19 @@ describe('RiderHome — taking a request back', () => {
     it('offers no withdraw when the caller does not supply one', () => {
         // 'driver-assigned' passes no onWithdraw, so nothing to press.
         show({ kind: 'waiting-for-driver' });
-        expect(screen.queryByRole('button', { name: /no longer need a ride/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /cancel request/i })).toBeNull();
     });
 
     it('offers it while still waiting', () => {
         show({ kind: 'waiting-for-driver' }, null, {}, vi.fn());
-        expect(screen.getByRole('button', { name: /no longer need a ride/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /cancel request/i })).toBeInTheDocument();
     });
 
     it('asks before cancelling, and cancels on yes', async () => {
         const onWithdraw = vi.fn(async () => undefined);
         show({ kind: 'waiting-for-driver' }, null, {}, onWithdraw);
 
-        fireEvent.click(screen.getByRole('button', { name: /no longer need a ride/i }));
+        fireEvent.click(screen.getByRole('button', { name: /cancel request/i }));
 
         // useConfirm renders a dialog; window.confirm is banned in this repo.
         const yes = await screen.findByRole('button', { name: /yes, cancel it/i });
@@ -534,7 +534,7 @@ describe('RiderHome — taking a request back', () => {
         const onWithdraw = vi.fn(async () => undefined);
         show({ kind: 'waiting-for-driver' }, null, {}, onWithdraw);
 
-        fireEvent.click(screen.getByRole('button', { name: /no longer need a ride/i }));
+        fireEvent.click(screen.getByRole('button', { name: /cancel request/i }));
         fireEvent.click(await screen.findByRole('button', { name: /keep it/i }));
 
         await waitFor(() => expect(onWithdraw).not.toHaveBeenCalled());
@@ -545,7 +545,7 @@ describe('RiderHome — taking a request back', () => {
         const onWithdraw = vi.fn(async () => { throw new Error('Missing or insufficient permissions.'); });
         show({ kind: 'waiting-for-driver' }, null, {}, onWithdraw);
 
-        fireEvent.click(screen.getByRole('button', { name: /no longer need a ride/i }));
+        fireEvent.click(screen.getByRole('button', { name: /cancel request/i }));
         fireEvent.click(await screen.findByRole('button', { name: /yes, cancel it/i }));
 
         expect(await screen.findByText(/insufficient permissions/i)).toBeInTheDocument();

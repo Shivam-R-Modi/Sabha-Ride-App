@@ -138,6 +138,10 @@ const call = (absentStudentIds?: unknown) => (completeRide as any)(
 );
 
 const write = (r: Recorder, path: string) => r.updates.find(w => w.path === path)?.data;
+
+/** Every ISO timestamp replaced, so a comparison is about shape and not the clock. */
+const withoutTimestamps = (updates: Recorder['updates']) =>
+    JSON.parse(JSON.stringify(updates).replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, '<when>'));
 const driverWrite = (r: Recorder) => write(r, 'users/driver_1');
 
 beforeEach(() => vi.clearAllMocks());
@@ -169,7 +173,13 @@ describe('a normal night, where everybody travelled', () => {
         const withEmptyList = makeDb(CARLOAD);
         await call([]);
 
-        expect(withEmptyList.updates).toEqual(withoutList.updates);
+        // Timestamps blanked before comparing. The handler stamps
+        // `new Date().toISOString()`, so two calls a millisecond apart differ on
+        // `completedAt` and this assertion failed roughly one run in five —
+        // flaky, and flaky in the direction that trains people to re-run rather
+        // than read. What it is actually asking is whether the two payloads are
+        // the same SHAPE, and the clock is not part of that.
+        expect(withoutTimestamps(withEmptyList.updates)).toEqual(withoutTimestamps(withoutList.updates));
     });
 
     it('counts all three seats towards the day', async () => {

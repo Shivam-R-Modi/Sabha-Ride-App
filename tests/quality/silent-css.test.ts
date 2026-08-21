@@ -136,6 +136,51 @@ describe('2. every clay-* class exists', () => {
     });
 });
 
+describe('2b. the colourless button base is never left colourless', () => {
+    /**
+     * `.clay-button` exists, so guard 2 above cannot see this one.
+     *
+     * It is deliberately geometry-only — flex, gap, the 44px target, the
+     * transition — and sets NO background, border or radius, because the
+     * utilities on the element are meant to own the colour. That is a reasonable
+     * base and it has a trap: apply it with no colour utilities and you get a
+     * perfectly accessible `<button>` that renders as a bare line of text.
+     *
+     * It happened. RiderHome's withdraw control carried
+     * `clay-button w-full mt-5 text-coffee-700` — a text colour and nothing else
+     * — so the app's ONLY way to withdraw a ride request looked like a caption
+     * floating in the middle of a card. Reported from a screenshot, weeks after
+     * it shipped.
+     *
+     * Nothing else could have caught it. Its tests query
+     * `getByRole('button', { name })`, which passes on unstyled text inside a
+     * button element just as happily as on a button that looks like one — the
+     * same blind spot noted in LoginScreen.test.tsx, where `title` satisfied an
+     * accessible-name query against a broken control.
+     *
+     * A background OR a border is enough to count: `clay-button` beside
+     * `border-2 border-saffron` is a legitimate outline button.
+     */
+    const GIVES_APPEARANCE = /\b(bg-|border-\d|border-(?!hairline\/)[a-z]|clay-button-|clay-btn-)/;
+
+    it('every clay-button also brings a background or a border', () => {
+        const bare: string[] = [];
+        for (const f of tsxFiles()) {
+            for (const { line, text } of spans(f)) {
+                // The base on its own, not `clay-button-primary` / `-secondary`,
+                // which supply their own everything.
+                if (!/(?<![\w-])clay-button(?![\w-])/.test(text)) continue;
+                if (!GIVES_APPEARANCE.test(text)) bare.push(`${rel(f)}:${line}  ${text.trim().slice(0, 90)}`);
+            }
+        }
+        expect(
+            bare,
+            `\`clay-button\` sets no colour by design. These carry it with no ` +
+            `background and no border, so they render as plain text:\n  ${bare.join('\n  ')}`,
+        ).toEqual([]);
+    });
+});
+
 describe('3. text-ramp tokens are not used as backgrounds', () => {
     /**
      * `bg-coffee` is `--text-strong`. The text ramp INVERTS between themes by
