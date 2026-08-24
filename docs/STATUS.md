@@ -372,10 +372,24 @@ client plus new rules is a clean permission error, not a half-write.
 
 ### Cannot be reported as working, and was not tested
 
-- **No production document was read.** Whether any live record is currently
-  half-written — the `mixed` badge is the thing that would show it — is still
-  unknown. Worth opening Records → Users and looking for a `mixed` badge; that is
-  now a one-glance check and it did not exist before today.
+- ~~**No production document was read.**~~ ✅ **CHECKED 2026-08-24, and production
+  is clean.** All **4** user documents have role fields that agree with
+  themselves: 2 Bhulka, 1 Sarthi (`roles: ['driver','student']`, correct — driver
+  implies student), 1 manager (`['manager','driver','student']`). **Zero `mixed`.**
+  So the half-write this feature exists to prevent had not yet happened; the guard
+  went in ahead of the bug rather than after it, which is the unusual direction for
+  this repo.
+
+  Read through the **Firestore REST API with a `select`** limited to the four role
+  fields plus `accountStatus`, so no name, phone number or home address ever left
+  the database — only the fields the question is about, and the uids. Then re-run
+  through the **real `src/roles.ts`** rather than the throwaway script's own copy of
+  `recordedRoles`/`statesRoleConsistently`: a hand-copied role table drifting is the
+  entire defect class here, and trusting a re-implementation to answer "is
+  production clean?" would have been committing it one more time. Both agreed.
+
+  Worth repeating after any signup or invite: Records → Users, look for a `mixed`
+  badge. It is a one-glance check and it did not exist before today.
 - **Not exercised against real data.** No role was actually changed in
   production, no Bhulku has asked for an upgrade end to end, and the mid-run
   refusal has never fired against a real Friday-night run. All of it is proved by
