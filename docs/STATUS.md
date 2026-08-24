@@ -7,9 +7,14 @@ at the end. Last updated **2026-08-24**. Two separate pieces of work that day.
 never worked in production. Hosting only; `main` is fast-forwarded and pushed. See
 *Fixed 2026-08-24* below.
 
-**The other is user profile management in the manager's dashboard** — roles change
-in place, Bhulku <-> Sarthi. See *Built 2026-08-24* below for its deploy state,
-which is the section to read before releasing anything.
+**The second is user profile management in the manager's dashboard** — roles
+change in place, Bhulku <-> Sarthi. Rules, functions and hosting all released; see
+*Shipped 2026-08-24* below.
+
+**The third is housekeeping that came out of the second** — `functions/lib` was
+committed, and the sweep that ships it dirties the tree on every run. It is
+gitignored now, and functions were redeployed off a clean build. See
+*Housekeeping 2026-08-24* below.
 
 Before that, **2026-08-21** shipped, in order: live ride
 progress and the venue roster; the nudge; the sabha calendar as one card; the
@@ -385,6 +390,85 @@ written. Both installs were run (`--legacy-peer-deps`) and `.env.local` is
 symlinked to the main checkout. `functions/package-lock.json` was rewritten by
 the install and has been reverted — it is not part of this change.
 
+
+## Housekeeping 2026-08-24 — functions/lib was committed, and had drifted
+
+**Deployed**: `functions` redeployed off a clean build, `main` at `f305156`.
+Nothing else changed — this was about what goes into the upload, not about what
+runs.
+
+### What was wrong
+
+`functions/lib`, the compiled output of `functions/`, was **tracked** — all 102
+files. Two costs, one of them new that day.
+
+`npm --prefix functions run build` became step 5 of the verification sweep (see the
+section above for why it had to). That step rewrites every `.js` and `.js.map`, so
+**running the documented checks dirtied the tree**. Two branches touching one
+callable also conflicted in generated output as well as in source, which is noise
+that teaches nobody anything.
+
+And it had drifted, because **`tsc` does not prune its own output directory**. Git
+was carrying compiled code for three functions deleted from source long ago:
+
+| orphan | deleted because |
+|---|---|
+| `http/geocodeAddress.js` | returned 500 for its entire life — a referer-restricted browser key cannot work server-to-server |
+| `http/verifyManagerCode.js` | one shared, never-expiring code any manager could read back in plaintext; replaced by single-use invites |
+| `utils/clustering.js` | superseded in the dispatch overhaul |
+
+**Checked before claiming anything: none of the three was ever a live endpoint.**
+All three appear in `functions/src/index.ts` only inside the comments explaining
+their removal, never in an `export` statement, and the deployed function list has
+never contained them. They were dead weight in the upload archive, not a hole. The
+one that would have mattered is `verifyManagerCode`, since it was removed for a
+security reason.
+
+### What it does now
+
+`functions/lib/` is gitignored, and the 102 files are untracked. Verified this
+cannot affect a deploy **before** doing it, because getting it wrong would ship an
+empty function:
+
+- `firebase.json`'s `predeploy` hook is `npm --prefix "$RESOURCE_DIR" run build`,
+  so lib is rebuilt from source ahead of every functions deploy. A fresh clone with
+  no `lib/` deploys correctly. `functions/package.json` still points `main` at
+  `lib/index.js`, and that stays correct.
+- **firebase-tools never reads `.gitignore`.** It builds the upload archive from
+  `functions.ignore` in `firebase.json`, defaulting to `node_modules` and `.git`.
+  Read out of `lib/deploy/functions/prepareFunctionsUpload.js` rather than
+  recalled — `const ignore = config.ignore || ["node_modules", ".git"]`, and a grep
+  for "gitignore" across the whole `deploy/functions` path returns nothing.
+
+### The redeploy, and why lib was deleted first rather than rebuilt
+
+`tsc` does not prune, so an incremental rebuild would have left the three orphans
+exactly where they were. `functions/lib` was **deleted outright** and the predeploy
+hook allowed to regenerate it: 48 files, all corresponding to real source.
+
+`functions/src` was unchanged since the previous functions deploy, so this carried
+**no behaviour change** — and the log says so, 26 lines all reading *"Successful
+update operation"*, nothing created and nothing deleted.
+
+Run on a **Monday afternoon**. Redeploying cycles all 26 functions, and doing that
+during a Friday 20:30 sabha is the kind of avoidable risk this file exists to
+record.
+
+### Verification
+
+`firebase functions:list` compared against the real `export` statements in
+`index.ts`, in **both** directions, because each direction is a different bug:
+
+- **25 exported, 25 deployed, exact match.**
+- Nothing exported without a live endpoint — that would be a client control that
+  404s, which is precisely the notice-board bug fixed earlier the same day.
+- Nothing deployed that is not an export — that would be an orphan endpoint.
+
+Tree clean after a fresh build: **0 changed files**, where it was 102 before.
+
+`docs/environments.md` already said the predeploy hook made stale `lib` a
+non-footgun; it now also records that `lib` is ignored, and how to be certain what
+is being shipped.
 
 ## Shipped 2026-08-21 — the run records who actually travelled
 
