@@ -18,9 +18,8 @@ gitignored now, and functions were redeployed off a clean build. See
 
 **The fourth is the notice board becoming a list** — titled rows, one open at a
 time, a New badge, and the board moved BELOW the core action on both dashboards.
-**Written and tested, NOT DEPLOYED.** It needs rules -> functions -> hosting, all
-three, because notices gained a `title` field. See *Written 2026-08-24 — the
-collapsed notice board* below.
+**Deployed** as `2570f46`, all three steps, because notices gained a `title`
+field. See *Shipped 2026-08-24 — the collapsed notice board* below.
 
 Before that, **2026-08-21** shipped, in order: live ride
 progress and the venue roster; the nudge; the sabha calendar as one card; the
@@ -802,11 +801,35 @@ queries return 4 users, 5 rides, 3 vehicles, 5 audit rows. The audit trail shows
 `deleteNotice` callable, which is the path that removes file and document together.
 A raw document delete would have stranded the image; it did not.
 
-## Written 2026-08-24 — the collapsed notice board
+## Shipped 2026-08-24 — the collapsed notice board
 
-**NOT DEPLOYED.** Branch only. Needs the full order — **`firestore:rules` ->
-`functions` -> `hosting`** — because notices gained a field the rules constrain
-and the callable requires.
+**Deployed 2026-08-24** as `2570f46`, in the required order — **`firestore:rules`
+-> `functions` -> `hosting`** — because notices gained a field the rules constrain
+and the callable requires. `main` fast-forwarded `404a049..2570f46` and pushed.
+
+Verified after each step rather than trusting "Deploy complete":
+
+- **Rules**: live ruleset `8ffcf4ef-8175-491f-9f84-82e2636929dc`, read back through
+  the Rules API and **byte-identical** to `firestore.rules`. It carries the
+  `title.size() <= 80` bound and the `!('title' in ...)` arm that keeps the field
+  optional.
+- **Functions**: 25 functions updated, `publishNotice` among them. The predeploy
+  hook is the `functions/tsconfig.json` build — `strict` + `noUnusedLocals` — so
+  the uploaded artifact is the one that compiled with the title validation.
+- **Hosting**: live bundle `index-B8IM0eTr.js`, matching `dist/assets/index-*.js`,
+  fetched with a cache-buster rather than through the service worker. The live
+  bundle contains `sabha-seen-notices` and `aria-controls`, so it is this code and
+  not a cached previous build.
+
+**Not verified against production, and worth knowing:** nobody has POSTED a notice
+through the deployed callable. The success path writes a real notice to every
+family's dashboard, and the refusal path needs an approved-manager session, which
+would mean impersonating the owner with the Admin SDK key. What was checked
+instead is that the endpoint is live and refuses an anonymous caller
+(`UNAUTHENTICATED`). The title validation itself rests on the local suite and on
+the compiled artifact that was uploaded. **The first real notice posted after this
+release is the actual proof** — it now needs a title, and the composer will not let
+it be sent without one.
 
 The board did not scale past one notice. Every notice rendered its whole body,
 always open, newest-first, ABOVE the thing each dashboard exists for. Two notices
