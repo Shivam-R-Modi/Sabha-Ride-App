@@ -39,51 +39,58 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }
 
-    // The cheap manager test, and — since 2026-08-24 — the one that actually
-    // works. Mirrors isManagerToken() in firestore.rules.
+    // The claim test — kept as a FALLBACK, not the primary. Mirrors
+    // isManagerToken() in firestore.rules.
     //
-    // WHY THIS ARM EXISTS, AND WHY IT IS FIRST
+    // THE BUG THIS WAS ADDED FOR, AND ITS RESOLVED CAUSE
     //
     // isApprovedManager() below reads the caller's user document with
-    // `firestore.get()` — a CROSS-SERVICE rule — and that read FAILS in this
-    // project. `.data` on a failed get errors, an errored condition denies, and so
-    // posting a notice WITH AN IMAGE returned `storage/unauthorized` for every
-    // manager, for the whole life of the feature. Text-only notices were
-    // unaffected: those are plain Firestore writes.
+    // `firestore.get()` — a CROSS-SERVICE rule. That read failed for the whole life
+    // of the notice board: `.data` on a failed get errors, an errored condition
+    // denies, so posting a notice WITH AN IMAGE returned `storage/unauthorized` for
+    // every manager. Text-only notices were unaffected, being plain Firestore
+    // writes, which is why the board looked like it worked.
     //
-    // That the get is the failing part IS established: evaluating this ruleset
-    // through the Rules API `:test` endpoint with `firestore.get` mocked ALLOWS the
-    // very same request, and adding the arm below — which short-circuits before the
-    // get — fixed uploads immediately.
+    // The cause, established by measurement on 2026-08-24 after two wrong guesses:
+    // **the Cloud Storage for Firebase service agent had no Firestore permission at
+    // all.** Storage rules are evaluated in that service's context, and its own
+    // role, `roles/firebasestorage.serviceAgent`, contains zero datastore
+    // permissions. Granting `roles/firebaserules.firestoreServiceAgent` to
+    // `service-<project-number>@gcp-sa-firebasestorage.iam.gserviceaccount.com`
+    // fixed it — 403 for two minutes while IAM propagated, then 200.
     //
-    // WHY it fails is NOT established. An earlier version of this comment blamed a
-    // missing IAM role on the Rules service agent. That was wrong: the agent is
-    // `service-<n>@firebase-rules.iam.gserviceaccount.com` and it already holds
-    // `roles/firebaserules.system`, which includes `datastore.entities.get` — the
-    // only permission a cross-service read needs. Do not add
-    // `roles/firebaserules.firestoreServiceAgent` on the strength of that comment;
-    // it carries the same single permission. See docs/STATUS.md for the open
-    // hypothesis and the one cheap experiment that would settle it.
+    // The two wrong guesses are recorded because both are easy to repeat: it is NOT
+    // the Rules agent (`service-<n>@firebase-rules...`, which already holds
+    // `roles/firebaserules.system` including `datastore.entities.get`), and there is
+    // no `gcp-sa-firebaserules` agent on this project at all — asking IAM to grant
+    // to one answers "Service account does not exist".
     //
-    // Checked first, so the common case short-circuits before the get() is ever
-    // attempted: no cross-service call, no billed read, and no dependency on an
-    // IAM binding that nothing in this repo can assert.
+    // WHY THE DOCUMENT ARM IS NOW FIRST
     //
-    // THE TRADE, STATED
+    // Because it is the stronger of the two and it works. It re-reads the user
+    // document on every upload, so a demotion takes effect at once; the claim arm
+    // cannot do that. That immediacy was the entire point of chasing the IAM grant,
+    // and leaving the claim first would have thrown it away — the cheap arm would
+    // keep answering before the correct one was ever consulted.
+    //
+    // The claim stays behind it as a fallback rather than being deleted. If that
+    // IAM binding is ever removed — a project migration, someone tidying IAM — the
+    // document arm starts erroring again, and `||` lets the claim answer instead.
+    // Uploads degrade to "revocation lags by up to an hour" rather than failing
+    // outright with a message nobody can act on. That is the failure mode this repo
+    // keeps removing, and one line prevents it.
+    //
+    // THE TRADE ON THE FALLBACK, STATED
     //
     // A custom claim lives on an ID token for up to an hour after a demotion, and
-    // this arm does not look at `accountStatus` at all. So for that window a
-    // just-revoked manager could put a file in the bucket. That is accepted here
-    // and would NOT be accepted for reading rider data, for the same reasoning
-    // firestore.rules records at isManagerForRead(): an uploaded image is inert
-    // until a notice points at it, and `publishNotice` re-reads the user document
-    // through assertApprovedManager before it will publish one. The worst case is
-    // an orphaned file, which `expireNotices` and `deleteNotice` already sweep —
-    // not a notice anybody sees.
+    // this arm does not look at `accountStatus`. While it is only a fallback, that
+    // window is now unreachable in normal operation. It would be unacceptable for
+    // reading rider data — see isManagerForRead() in firestore.rules — and is
+    // acceptable here: an uploaded image is inert until a notice points at it, and
+    // `publishNotice` re-reads the user document through assertApprovedManager
+    // before it will publish one. The worst case is an orphaned file, which
+    // `deleteNotice` and `expireNotices` already sweep.
     //
-    // The document arm below is deliberately KEPT rather than replaced. Once the
-    // IAM grant is in place it is the stronger of the two, and it is the only one
-    // that reflects a demotion immediately.
     function isManagerToken() {
       return signedIn() && request.auth.token.get('mgr', false) == true;
     }
@@ -129,10 +136,12 @@ service firebase.storage {
       // isReasonableImage() reads request.resource, which is null on a delete,
       // and an errored condition denies. Security by accident is not security:
       // naming the two methods makes the denial below the actual reason.
-      // `isManagerToken() ||` first: see the comment on that function. Either
-      // arm proves the caller is a manager; isReasonableImage() still gates the
-      // file itself in both cases, because a manager's client is still a client.
-      allow create, update: if (isManagerToken() || isApprovedManager())
+      // Document arm FIRST, claim second: see the comment on isManagerToken().
+      // The document read honours a demotion immediately; the claim is the fallback
+      // that keeps uploads working if the cross-service IAM binding is ever lost.
+      // Either arm proves the caller is a manager; isReasonableImage() still gates
+      // the file itself in both cases, because a manager's client is still a client.
+      allow create, update: if (isApprovedManager() || isManagerToken())
                                && isReasonableImage();
 
       // Deletion goes through the deleteNotice callable, which removes the file

@@ -179,12 +179,22 @@ describe('storage.rules agrees about who is a manager', () => {
         expect(storage).toMatch(/request\.auth\.token\.get\('mgr', false\)/);
     });
 
-    it('checks the claim BEFORE the cross-service read', () => {
-        // Order is load-bearing twice over: `||` short-circuits, so the common case
-        // never attempts the get — no billed read, and no dependence on an IAM
-        // binding nothing in this repo can assert. Put the document arm first and
-        // the feature breaks again the moment that grant is missing.
-        expect(storage).toMatch(/isManagerToken\(\)\s*\|\|\s*isApprovedManager\(\)/);
+    it('checks the DOCUMENT before the claim', () => {
+        // This assertion was the other way round for a few hours, while the
+        // cross-service read was broken and the claim was the only arm that worked.
+        // The cause turned out to be IAM — the Cloud Storage service agent had no
+        // Firestore permission — and once granted, the ordering had to flip back:
+        // the document arm is the stronger of the two and the only one that honours
+        // a demotion immediately, which was the entire point of chasing the grant.
+        // Claim first would keep answering before the correct arm was consulted.
+        expect(storage).toMatch(/isApprovedManager\(\)\s*\|\|\s*isManagerToken\(\)/);
+    });
+
+    it('keeps the claim as a fallback, so a lost IAM binding degrades instead of failing', () => {
+        // If that binding is ever removed the document arm errors again, and `||`
+        // lets the claim answer. Deleting this arm would turn a silent IAM change
+        // into "notice images stop uploading" with a message nobody can act on.
+        expect(storage).toMatch(/request\.auth\.token\.get\('mgr', false\)/);
     });
 });
 

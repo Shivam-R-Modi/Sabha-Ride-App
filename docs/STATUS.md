@@ -576,71 +576,95 @@ orphaned file, which `deleteNotice` and `expireNotices` already sweep.
 The document arm is **kept**, not replaced. Once the IAM grant is in place it is the
 stronger of the two and the only one that honours a demotion immediately.
 
-### The experiment was run, and the document arm IS broken
+### RESOLVED — the Cloud Storage service agent had no Firestore permission
 
 Run at the owner's instruction, but **not** the way this entry originally proposed.
 Dropping the claim arm and redeploying would have broken notice uploads for the
 minutes it took to test. A better-controlled version answers the same question and
-touches neither the ruleset nor the owner's session:
+touches neither the ruleset nor the owner's session: a throwaway account made an
+approved manager in **Firestore only, with no `mgr` claim**, can be allowed by the
+document arm and by nothing else.
 
-A throwaway account made an approved manager in **Firestore only, with no `mgr`
-claim**, can be allowed by the document arm and by nothing else. Against the live
-ruleset:
+First run, before any IAM change:
 
 | arm | account | result |
 |---|---|---|
-| **document** | approved manager in Firestore, NO claim | **403 Permission denied** |
-| **control** | `mgr` claim, NO Firestore document | **200 OK** |
+| **document** | approved manager in Firestore, NO claim | **403** |
+| **control** | `mgr` claim, NO Firestore document | **200** |
 
-The control is what makes it conclusive rather than suggestive: the same harness, the
-same bucket, the same image bytes and the same live rules succeed via the claim and
-fail via the document. **The cross-service `firestore.get()` is broken in
-production.** So the original diagnosis was right about WHAT fails; only the
-explanation was wrong.
+Same harness, same bucket, same bytes, same live rules. So the cross-service
+`firestore.get()` really was the failing part.
+
+**The cause, after two wrong guesses.** Storage rules are evaluated in the Cloud
+Storage service's context, and
+`service-546868683884@gcp-sa-firebasestorage.iam.gserviceaccount.com` held
+`roles/firebasestorage.serviceAgent`, which contains **zero** datastore
+permissions. Granting **`roles/firebaserules.firestoreServiceAgent`** to that member
+fixed it: 403 at t+0s, t+20s and t+60s while IAM propagated, then **200 at t+120s**.
+
+Both wrong guesses are recorded, because both are easy to repeat:
+
+1. *"The Rules service agent lacks the role."* It does not —
+   `service-…@firebase-rules.iam.gserviceaccount.com` already holds
+   `roles/firebaserules.system`, which includes `datastore.entities.get`. That guess
+   came from filtering the IAM policy for `firebaserules` when the account is
+   spelled `firebase-rules`.
+2. *"Then it must be a newer `gcp-sa-firebaserules` agent."* There is no such agent
+   here — IAM answers *"Service account … does not exist"*, and
+   `services/firebaserules.googleapis.com:generateServiceIdentity` returns the
+   hyphenated `firebase-rules` address. The failed grant changed nothing; the policy
+   etag was untouched.
+
+The right member was found by asking which permissions each existing agent's role
+actually contains, rather than by recalling documentation.
+
+### The ordering was then flipped, because the grant is pointless otherwise
+
+`storage.rules` now reads `allow create, update: if (isApprovedManager() ||
+isManagerToken()) && isReasonableImage()` — **document arm first**. Immediate
+revocation was the entire reason for chasing the grant, and with the claim first the
+cheap arm would keep answering before the correct one was ever consulted, so the
+grant would have bought nothing.
+
+The claim stays **behind** it rather than being deleted. If that IAM binding is ever
+removed — a project migration, someone tidying IAM — the document arm errors again
+and `||` lets the claim answer, so uploads degrade to "revocation lags by up to an
+hour" instead of failing with a message nobody can act on.
+
+Verified against the **deployed** document-first ruleset, all three arms:
+
+| arm | result |
+|---|---|
+| document (Firestore manager, no claim) | **200 ALLOWED** |
+| claim (claim, no Firestore document) | **200 ALLOWED** — the fallback still works |
+| neither (plain signed-in account) | **403 denied** |
 
 Method, for repeating it: mint a custom token with the Admin SDK, exchange it at
 `accounts:signInWithCustomToken`, then `POST` to
 `firebasestorage.googleapis.com/v0/b/{bucket}/o?name=…` with
 `Authorization: Firebase <idToken>`, which is the path that honours Security Rules.
-No password is involved and the owner's account is never used. The temporary manager
-document existed for the duration of one upload attempt and was deleted immediately;
-teardown was then **verified independently** — 4 user documents (unchanged), 0
-objects in the bucket, no probe Auth account.
+No password, and the owner's account is never used. **Sign in BEFORE calling
+`setCustomUserClaims`** — the account is created by the sign-in, not by minting the
+token, and setting claims first throws "no user record", which silently swallowed a
+whole run's results.
 
-### WHY it fails is still open — but the hypothesis is now testable
+Teardown verified after every run: 4 user documents (unchanged), 0 objects in the
+bucket, 0 probe documents, 0 probe Auth accounts. One stray probe account did
+survive the second run's cleanup and was swept separately — the check is worth
+running, not assuming.
 
-The remaining puzzle is that `service-<n>@firebase-rules.iam.gserviceaccount.com`
-holds `roles/firebaserules.system`, which includes `datastore.entities.get`. So
-*some* Rules agent can read Firestore, and the Storage evaluation still cannot.
+### The IAM state to preserve
 
-The live hypothesis: **Storage cross-service reads use a different, newer agent**,
-`service-<n>@gcp-sa-firebaserules.iam.gserviceaccount.com`, which holds nothing here
-and would not appear in the IAM policy until it is granted something — Google-managed
-agents are invisible until then. That is now a one-step test rather than a guess:
-grant `roles/firebaserules.firestoreServiceAgent` to that member and re-run the
-document arm above. If it flips to 200, the hypothesis is confirmed and the grant is
-the real fix; if it stays 403, the grant should be removed again.
+One binding added on 2026-08-24, and it is not in this repo, so a project rebuild
+will not recreate it:
 
-**Not run**, because it is a privileged change to production IAM and the owner's
-call. Uploads work meanwhile.
+- role **`roles/firebaserules.firestoreServiceAgent`**
+- member **`serviceAccount:service-546868683884@gcp-sa-firebasestorage.iam.gserviceaccount.com`**
 
-### NOTHING TO DO — the claim arm carries uploads, and the old instruction was wrong
-
-**No IAM change was made, and none is needed.** Uploads work through the claim arm.
-The grant previously recommended here —
-`roles/firebaserules.firestoreServiceAgent` on a `gcp-sa-firebaserules` member —
-should NOT be run: the permission it carries (`datastore.entities.get`) is already
-held via `roles/firebaserules.system`, so at best it is redundant, and the member
-name was never verified to exist.
-
-If the document arm is ever wanted working — its only advantage is that a demotion
-takes effect for uploads immediately, rather than when the claim expires within the
-hour — the honest way to get there is to find out why the read fails, not to add
-roles speculatively. The cheap experiment: remove the claim arm on a branch, deploy
-storage rules alone, try one upload, and put it straight back. It touches nothing
-but notice-image uploads and reverses in seconds. Not run, because uploads currently
-work and breaking them to learn something optional is the owner's call, not a
-default.
+Without it, `storage.rules`' document arm errors and notice-image uploads fall back
+to the claim — which still works, so the symptom is not an outage but a silent loss
+of immediate revocation. `tests/quality/role-table-parity.test.ts` pins that the
+fallback arm stays in the rules for exactly that reason.
 
 ### A test that guarded the wrong thing
 
