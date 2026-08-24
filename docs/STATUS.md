@@ -597,7 +597,28 @@ extreme 800x3200 is fitted inside the 568px cap — whole, smaller, space either
 `object-fit: contain` in every case, so nothing is ever cropped. The cap only stops
 one very tall notice burying the sabha attendance card beneath it.
 
-Checked again at **375x812** afterwards, which is where it matters — the report came
+**Then the ceiling went too, at the owner's instruction.** Not cropping was not
+enough: a `max-h` with a contain fit still rendered a tall flyer smaller than it was
+sent. The image is now simply full width at its natural height, with **no height
+constraint and no object-fit at all** — the box already is the image's aspect ratio,
+so there is nothing to fit and an inert utility would read as though something were
+being handled. Measured at 375x812: a 900x1200 gives 285x380, an 800x3200 gives
+**285x1140** where the cap had held it to 285x568, and a 1600x500 gives 285x89 —
+every one exactly `width x natural-height/natural-width`. Accepted consequence,
+stated: a very tall flyer means a long scroll before the attendance card below it.
+
+**That change shipped three dead CSS rules, and the repo already knew why.**
+Tailwind scans source files as plain TEXT, comments included, so the comment
+explaining the fix — which named the superseded utilities literally — re-emitted
+them into the bundle: rules for a 288px cap, a 70vh cap and a contain fit, none of
+which anything renders. The same trap is recorded at `DatabaseConsole.tsx:180`.
+The comment now describes them in prose and the three rules are gone from
+`dist`, confirmed by grep; `object-cover` stays, because real avatars in
+`RideStatus` and `DriverShift` use it. Every other utility named in a comment
+across the files touched today was checked against real `className` usage — all
+legitimate.
+
+Checked at **375x812**, which is where it matters — the report came
 from a phone-shaped screen. A portrait 900x1200, the shape a phone camera actually
 produces, renders **285x380** in a 319px card: exactly `285 x 1200/900`, so the
 height is the uncropped one, natural aspect preserved, cap unused, no overflow and

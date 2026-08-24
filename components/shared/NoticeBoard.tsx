@@ -82,22 +82,36 @@ const BoardCard: React.FC<{ text: string; imageUrl?: string }> = ({ text, imageU
                     alt=""
                     loading="lazy"
                     onError={() => setImageFailed(true)}
-                    // NEVER CROPPED. This was `object-cover max-h-72`, which
-                    // capped the image at 288px and then cut whatever did not fit
-                    // — so a flyer lost its edges and a portrait photo lost its
-                    // top and bottom. A notice image is the message, not
-                    // decoration: cropping it silently removes information the
-                    // manager chose to send, and neither they nor the reader can
-                    // see that anything is missing.
+                    // FULL WIDTH, NATURAL HEIGHT, NO CEILING. A notice image is
+                    // the message, not decoration, so it is shown entire.
                     //
-                    // `h-auto` with no cover means the common case — a flyer or a
-                    // landscape photo — renders at its natural aspect, full width,
-                    // whole. `max-h-[70vh]` with `object-contain` only engages for
-                    // something very tall, and even then it FITS rather than
-                    // crops: the whole image stays visible, just smaller, with
-                    // space either side. A notice that filled three screens would
-                    // bury the sabha attendance card underneath it.
-                    className="w-full h-auto max-h-[70vh] object-contain rounded-2xl mb-3"
+                    // It used to be a cover fit under a 288px ceiling: capped, then
+                    // cut to fill, so a flyer lost its edges and a portrait photo
+                    // lost its top and bottom with nothing on screen to say
+                    // anything was missing. It then briefly had a 70vh ceiling with
+                    // a contain fit, which never cropped but did shrink a tall
+                    // flyer below the size it was sent at. The owner's call was to
+                    // drop the ceiling as well and show the image at full size.
+                    //
+                    // No object-fit is set here at all, deliberately: with no
+                    // height constraint the box already IS the image's aspect
+                    // ratio, so there is nothing to fit, and an inert utility would
+                    // read as though something were being handled.
+                    //
+                    // THE UTILITY NAMES ARE SPELLED OUT IN PROSE ABOVE, NOT AS
+                    // CLASSES, and that is not fussiness. Tailwind scans this file
+                    // as plain TEXT, comments included, so naming a utility here
+                    // re-emits its rule into the shipped stylesheet — the same trap
+                    // recorded at DatabaseConsole.tsx. Writing the three superseded
+                    // ones literally added three dead rules to the bundle for
+                    // classes nothing renders, which is precisely how a reverted
+                    // decision quietly comes back. What keeps cropping away is the
+                    // assertions in tests/quality/notice-card-plain.test.ts, which
+                    // strip comments before matching.
+                    //
+                    // The accepted consequence: a very tall flyer makes for a long
+                    // scroll before the sabha attendance card below it.
+                    className="w-full h-auto rounded-2xl mb-3"
                 />
             )}
             <LongText text={text} />

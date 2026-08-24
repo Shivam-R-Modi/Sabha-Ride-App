@@ -98,25 +98,30 @@ describe('a notice image is shown whole', () => {
     });
 
     it('never uses object-cover, which crops', () => {
+        // The one that actually cut the picture. `object-cover` is right for an
+        // avatar or a thumbnail, which is exactly why it is easy to reach for here.
         expect(img).not.toContain('object-cover');
     });
 
-    it('fits rather than fills, so a tall image stays whole', () => {
-        expect(img).toContain('object-contain');
-    });
-
-    it('lets the common case keep its natural height', () => {
-        // `h-auto` and no fixed height: a flyer or landscape photo renders at its
-        // own aspect ratio, full width, with no letterboxing at all.
+    it('takes the full width and its own natural height', () => {
+        expect(img).toContain('w-full');
         expect(img).toContain('h-auto');
         expect(img).not.toMatch(/\bh-\d+\b/);
     });
 
-    it('still caps how much of the screen one notice may take', () => {
-        // Without a ceiling a very tall image buries the sabha attendance card
-        // under it. The cap FITS the image rather than cropping it, so nothing is
-        // lost — it is only smaller.
-        expect(img).toMatch(/max-h-\[70vh\]/);
-        expect(img).not.toContain('max-h-72');
+    it('has NO height ceiling, so the image is never shrunk either', () => {
+        // Owner's call, 2026-08-24: not cropping was not enough — a `max-h` with
+        // `object-contain` still made a tall flyer smaller than it was sent. Any
+        // `max-h-*` reintroduces that, so the assertion is against the whole
+        // family rather than the one value that used to be here.
+        expect(img).not.toMatch(/max-h-/);
+    });
+
+    it('sets no object-fit at all, because there is nothing left to fit', () => {
+        // With no height constraint the box already IS the image's aspect ratio.
+        // An `object-contain` would be inert, and an inert utility reads as though
+        // something were being handled — this file exists partly because dead CSS
+        // is how a reverted decision quietly comes back.
+        expect(img).not.toMatch(/object-(cover|contain|fill|none|scale-down)/);
     });
 });
