@@ -44,7 +44,7 @@ const stubFirebase = {
     if (importer && importer.includes('/preview/')) return null;
     if (/(^|\/)firebase\/config(\.ts)?$/.test(source)) return FIREBASE_STUB;
     if (/(^|\/)utils\/cloudFunctions(\.ts)?$/.test(source)) return CF_STUB;
-    if (/(^|\/)hooks\/(useCurrentEvent|useFirestore)(\.ts)?$/.test(source)) return HOOKS_STUB;
+    if (/(^|\/)hooks\/(useCurrentEvent|useFirestore|useNotices)(\.ts)?$/.test(source)) return HOOKS_STUB;
     if (/(^|\/)contexts\/AuthContext(\.tsx)?$/.test(source)) return AUTH_STUB;
     if (/(^|\/)hooks\/useAdminDatabase(\.ts)?$/.test(source)) return ADMIN_DB_STUB;
     if (/(^|\/)hooks\/(useEvents|useSettings)(\.ts)?$/.test(source)) return EVENTS_STUB;

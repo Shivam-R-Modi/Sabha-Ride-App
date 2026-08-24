@@ -597,6 +597,32 @@ extreme 800x3200 is fitted inside the 568px cap — whole, smaller, space either
 `object-fit: contain` in every case, so nothing is ever cropped. The cap only stops
 one very tall notice burying the sabha attendance card beneath it.
 
+Checked again at **375x812** afterwards, which is where it matters — the report came
+from a phone-shaped screen. A portrait 900x1200, the shape a phone camera actually
+produces, renders **285x380** in a 319px card: exactly `285 x 1200/900`, so the
+height is the uncropped one, natural aspect preserved, cap unused, no overflow and
+no horizontal scroll. The proof in the screenshot is the `900 x 1200` label at the
+very bottom of the test image being legible — under `object-cover max-h-72` that
+label and the top of the head were both gone. An 800x3200 does engage the cap at
+285x568 and stays whole inside it; a 1600x500 banner renders 285x89.
+
+Seeing that at all needed a harness fix: **`useNotices` was not stubbed**, so
+`NoticeBoard` rendered nothing in the preview — on a component that sits on every
+dashboard. That is why the image path had never been looked at, at any width, and
+how it shipped cropped. `preview/hooks-stub.ts` now serves two notices, one with a
+PORTRAIT image, and `preview/vite.config.ts` routes the hook. (`preview/` is not
+part of `npm run build` — confirmed, zero preview files in `dist` — so this ships
+nothing.)
+
+Two false trails on the way, both worth knowing since the next person will hit
+them. The stub image read `naturalWidth: 0` and looked like a broken data URI; four
+MIME variants were tested and all four decode, so the URI was fine — it was
+`loading="lazy"` on an image below the fold, and the measurement simply ran before
+the load. And `max-h-[70vh]` appeared absent from the built CSS, which would have
+meant the cap silently did not exist; that was the grep, since Tailwind escapes it
+as `.max-h-\[70vh\]` and a BRE `\[` matches a literal `[`. A fixed-string search
+finds `.max-h-\[70vh\]{max-height:70vh}`.
+
 `tests/quality/notice-card-plain.test.ts` gains five cases, confirmed red against
 the old classes. Worth noting how they first failed: the assertions matched the
 COMMENT above the `<img>`, because it names `<img>`, `object-cover` and `max-h-72`
