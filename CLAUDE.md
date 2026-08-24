@@ -86,14 +86,34 @@ visible that cannot work.
 Run before any deploy. Do not substitute a shorter subset.
 
 ```
-npx vitest run           # client. NOT `npm test` at the root — that is watch mode and hangs
+npx vitest run                    # client. NOT `npm test` at the root — that is watch mode and hangs
 npm test --prefix functions
-npm run test:rules       # starts its own emulator
+npm run test:rules                # starts its own emulator
 npm run build
-npm run typecheck        # must be zero errors. The 22 pre-existing errors this note
-                         # used to allow were all cleared on 2026-08-21 — a
-                         # non-zero count now means something you touched
+npm --prefix functions run build  # see below — this one is NOT covered by npm run typecheck
+npm run typecheck                 # must be zero errors. The 22 pre-existing errors this note
+                                  # used to allow were all cleared on 2026-08-21 — a
+                                  # non-zero count now means something you touched
 ```
+
+**`npm --prefix functions run build` is not redundant with `npm run typecheck`,**
+and it was missing from this list until 2026-08-24, when a functions deploy failed
+on two errors the rest of the sweep had just reported clean.
+
+The two compilers are not the same. `npm run typecheck` is `tsc --noEmit` against
+the ROOT `tsconfig.json`; the functions build is `tsc` against
+`functions/tsconfig.json`, which adds **`strict`** and **`noUnusedLocals`**. So the
+root pass reports zero while the code that actually gets uploaded does not compile.
+It is also the exact command `npm run deploy:functions` runs as its predeploy hook,
+so skipping it does not avoid the failure — it just moves it to the middle of a
+deploy, after the rules are already live.
+
+The error worth remembering from that day, because the sweep cannot catch this
+class any other way: a callable's `data` argument is `any`, and **narrowing `any`
+with `!==` leaves it `any`**. Validating `role !== 'driver' && role !== 'student'`
+therefore gives `role` no type at all, and the next line indexing a
+`Record<UserRole, string>` with it is unchecked. Bind the validated value to a real
+type — untrusted until the check, typed after it.
 
 `npm run lint` is configured but has no ESLint config file, so it always errors
 and checks nothing. Ignore it; do not "fix" it by deleting the script.
