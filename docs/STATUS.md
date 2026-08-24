@@ -498,17 +498,45 @@ Reported from a screenshot of the Notices composer:
 ### What was actually wrong
 
 `storage.rules` authorises an upload by reading the caller's user document with
-`firestore.get()`. That is a **cross-service** rule, and a cross-service read
-requires the **Firebase Rules service agent** to hold a Firestore-read role on the
-project. The Firebase console grants that for you when you write such rules in its
-editor; **`firebase deploy --only storage` never does**, and this project had no
-`firebaserules` IAM binding at all — only
-`roles/firebasestorage.serviceAgent`.
+`firestore.get()` — a **cross-service** rule. That read was failing in production:
+`.data` on a failed get **errors**, and an errored condition denies. Every manager,
+every image, for the whole life of the feature. Text-only notices were unaffected,
+which is why the board looked like it worked: those are plain Firestore writes and
+never touch Storage.
 
-So the `get()` failed, `.data` on a failed get **errors**, and an errored condition
-denies. Every manager, every image, for the whole life of the feature. Text-only
-notices were unaffected, which is why the board looked like it worked: those are
-plain Firestore writes and never touch Storage.
+**WHY the cross-service read failed is NOT established, and an earlier version of
+this entry claimed it was.** That claim was: the Firebase Rules service agent lacked
+a Firestore-read role, because the console grants it and
+`firebase deploy --only storage` does not. It was based on filtering the IAM policy
+for members containing `firebaserules` — and the agent is spelled
+`firebase-rules`, hyphenated, so the filter missed it. Corrected on the owner's
+question ("did you already do it, or do I still need to?"), which is exactly the
+question that should have been asked of the evidence first.
+
+What the policy actually holds:
+`service-546868683884@firebase-rules.iam.gserviceaccount.com` has
+**`roles/firebaserules.system`**, and that role already includes
+`datastore.entities.get` — the one permission a cross-service read needs, and the
+*only* permission in `roles/firebaserules.firestoreServiceAgent`, the role this
+entry used to tell the owner to add. So the permission was already there and the
+grant would have been redundant.
+
+What IS established, and is enough to explain the fix:
+
+- The live ruleset **allows** the exact failing request once `firestore.get` is
+  mocked — proved through the Rules API `:test` endpoint. So the ruleset and the
+  request were both fine.
+- The bucket, the deployed ruleset, `contentType` and the 3 MB ceiling were each
+  ruled out with evidence (table below).
+- Adding an arm that short-circuits **before** the get made uploads work
+  immediately. That only follows if the get was the failing part.
+
+So the document arm was broken and the claim arm routes around it. The remaining
+unknown is *why* — one untested possibility is that Storage cross-service reads use
+a different, newer Rules service agent
+(`gcp-sa-firebaserules`) which holds nothing here and does not appear in the policy
+at all, since Google-managed agents only show up once granted. That is a
+hypothesis, not a finding, and it is written down as one.
 
 ### How it was pinned down, and what was ruled OUT
 
@@ -548,20 +576,23 @@ orphaned file, which `deleteNotice` and `expireNotices` already sweep.
 The document arm is **kept**, not replaced. Once the IAM grant is in place it is the
 stronger of the two and the only one that honours a demotion immediately.
 
-### STILL TO DO — one command, and it is not in this repo
+### NOTHING TO DO — and the IAM grant this entry used to demand was a wrong turn
 
-Grant the Firebase Rules service agent read access to Firestore, so the document arm
-works too:
+**No IAM change was made, and none is needed.** Uploads work through the claim arm.
+The grant previously recommended here —
+`roles/firebaserules.firestoreServiceAgent` on a `gcp-sa-firebaserules` member —
+should NOT be run: the permission it carries (`datastore.entities.get`) is already
+held via `roles/firebaserules.system`, so at best it is redundant, and the member
+name was never verified to exist.
 
-- role **`roles/firebaserules.firestoreServiceAgent`** ("Firebase Rules Firestore
-  Service Agent", GA — confirmed against the IAM API, not recalled)
-- member **`serviceAccount:service-546868683884@gcp-sa-firebaserules.iam.gserviceaccount.com`**
-  (546868683884 is the project number, the same value as `messagingSenderId`)
-
-Deliberately **not** done from here: it is a privileged change to production IAM.
-`gcloud` is not installed on this Mac, so it is the IAM page of the Google Cloud
-console, or saving the Storage rules once in the Firebase console, which prompts for
-the grant itself.
+If the document arm is ever wanted working — its only advantage is that a demotion
+takes effect for uploads immediately, rather than when the claim expires within the
+hour — the honest way to get there is to find out why the read fails, not to add
+roles speculatively. The cheap experiment: remove the claim arm on a branch, deploy
+storage rules alone, try one upload, and put it straight back. It touches nothing
+but notice-image uploads and reverses in seconds. Not run, because uploads currently
+work and breaking them to learn something optional is the owner's call, not a
+default.
 
 ### A test that guarded the wrong thing
 

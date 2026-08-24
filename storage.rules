@@ -45,16 +45,25 @@ service firebase.storage {
     // WHY THIS ARM EXISTS, AND WHY IT IS FIRST
     //
     // isApprovedManager() below reads the caller's user document with
-    // `firestore.get()`. That is a CROSS-SERVICE rule, and a cross-service read
-    // needs the Firebase Rules service agent to hold a Firestore-read role on the
-    // project. The console grants that when you write such rules there; a
-    // `firebase deploy --only storage` never does, and this project had no
-    // `firebaserules` IAM binding at all. So the get() failed, `.data` on a failed
-    // get errors, an errored condition denies — and posting a notice WITH AN IMAGE
-    // returned `storage/unauthorized` for every manager, for the whole life of the
-    // feature. Text-only notices were unaffected: those are plain Firestore
-    // writes. Proved by evaluating this ruleset through the Rules API `:test`
-    // endpoint with `firestore.get` mocked, where the very same request ALLOWS.
+    // `firestore.get()` — a CROSS-SERVICE rule — and that read FAILS in this
+    // project. `.data` on a failed get errors, an errored condition denies, and so
+    // posting a notice WITH AN IMAGE returned `storage/unauthorized` for every
+    // manager, for the whole life of the feature. Text-only notices were
+    // unaffected: those are plain Firestore writes.
+    //
+    // That the get is the failing part IS established: evaluating this ruleset
+    // through the Rules API `:test` endpoint with `firestore.get` mocked ALLOWS the
+    // very same request, and adding the arm below — which short-circuits before the
+    // get — fixed uploads immediately.
+    //
+    // WHY it fails is NOT established. An earlier version of this comment blamed a
+    // missing IAM role on the Rules service agent. That was wrong: the agent is
+    // `service-<n>@firebase-rules.iam.gserviceaccount.com` and it already holds
+    // `roles/firebaserules.system`, which includes `datastore.entities.get` — the
+    // only permission a cross-service read needs. Do not add
+    // `roles/firebaserules.firestoreServiceAgent` on the strength of that comment;
+    // it carries the same single permission. See docs/STATUS.md for the open
+    // hypothesis and the one cheap experiment that would settle it.
     //
     // Checked first, so the common case short-circuits before the get() is ever
     // attempted: no cross-service call, no billed read, and no dependency on an
