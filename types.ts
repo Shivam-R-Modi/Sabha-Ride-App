@@ -40,6 +40,26 @@ export interface User {
   /** @deprecated The pre-map shape. Still READ so older documents keep working; nothing writes it. */
   fcmToken?: string;
   accountStatus: AccountStatus;
+  /**
+   * A Bhulku's standing request to become a Sarthi, and its outcome.
+   *
+   * On this document rather than in a collection of its own because a rider may
+   * write their own non-privilege fields, so it needs no new rules block and no
+   * index — and the manager's queue already has the name and phone beside it.
+   *
+   * `pending` is the only status a rider may write; firestore.rules pins the
+   * shape. A `rejected` one is left here on purpose so the person can see they
+   * were turned down instead of watching the request silently vanish and asking
+   * again. Cleared to `null` on withdrawal, dismissal, or when it is granted —
+   * once the role has changed, the role IS the answer.
+   */
+  roleUpgrade?: {
+    status: 'pending' | 'rejected';
+    requestedAt: string;
+    decidedAt?: string;
+    decidedBy?: string;
+    decidedByName?: string;
+  } | null;
   // Optional properties for when User is merged with Driver data
   address?: string;
   role?: UserRole;
@@ -123,6 +143,14 @@ export interface Driver {
   registeredRole?: UserRole;
   roles?: UserRole[];
   activeRole?: UserRole;
+  /**
+   * Same field as on `User`, and the same document — a Sarthi and a Bhulku are
+   * one record. Declared here too because `useAuth().userProfile` is typed
+   * `User | Driver`, so a Sarthi-shaped profile would otherwise make the field
+   * unreadable on the one screen both roles share. Always null or absent for
+   * somebody who already drives; the card that reads it renders nothing for them.
+   */
+  roleUpgrade?: User['roleUpgrade'];
   address?: string;
   createdAt?: string;
   lastActive?: string;

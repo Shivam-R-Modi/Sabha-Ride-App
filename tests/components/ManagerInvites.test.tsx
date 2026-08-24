@@ -25,7 +25,12 @@ const created: Array<string | undefined> = [];
 vi.mock('../../hooks/useFirestore', () => ({
     usePendingDrivers: () => ({ pendingDrivers, loading: false }),
     usePendingRiders: () => ({ pendingRiders, loading: false }),
+    // The third queue on this page: Bhulka asking to become a Sarthi. Stubbed
+    // empty because this file is about the invites card surviving the EMPTY
+    // state — a populated third section would take the page out of it.
+    useRoleUpgradeRequests: () => ({ requests: [], loading: false }),
     updateUserStatus: vi.fn(async () => undefined),
+    declineRoleUpgrade: vi.fn(async () => undefined),
 }));
 
 // ManagerPeople reads useAuth now: approving or rejecting writes an audit row, and a

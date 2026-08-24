@@ -85,6 +85,126 @@ export const usePendingRiders = () => {
 };
 
 /**
+ * Bhulka who have asked to become a Sarthi.
+ *
+ * ON THE USER DOCUMENT, NOT A COLLECTION OF ITS OWN
+ * ------------------------------------------------
+ * A rider cannot write their own role fields — `touchesPrivilegeFields()` in
+ * firestore.rules blocks all six — but they CAN write any other field on their
+ * own document. So the request needs no new collection, no new rules block and no
+ * composite index: Firestore indexes nested map fields on its own, and the
+ * manager's row already carries the name, phone and address this queue wants to
+ * show, with no join.
+ *
+ * The rules do pin the SHAPE a rider may write, and that is not paranoia about
+ * escalation — the field grants nothing. It is that a forged
+ * `status: 'approved'` would make the rider's own screen and this queue disagree,
+ * and a request that has silently answered itself is precisely the failure mode
+ * this app keeps having to remove.
+ *
+ * `handleSnapshotError` is not optional. A listener with no error callback is how
+ * the whole driver-approval queue became silently invisible for want of an index:
+ * it rendered as "nobody is waiting", which is indistinguishable from working.
+ */
+export const useRoleUpgradeRequests = () => {
+    const [requests, setRequests] = useState<User[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const q = query(
+            collection(db, 'users'),
+            where('roleUpgrade.status', '==', 'pending')
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const list: User[] = [];
+            snapshot.forEach((doc) => {
+                list.push({ id: doc.id, ...doc.data() } as User);
+            });
+            setRequests(list);
+            setLoading(false);
+        }, handleSnapshotError('useRoleUpgradeRequests', () => setLoading(false)));
+
+        return unsubscribe;
+    }, []);
+
+    return { requests, loading };
+};
+
+/**
+ * A Bhulku asks to become a Sarthi.
+ *
+ * A plain field write, not a callable: it grants nothing, so there is nothing for
+ * a server to guard. What it must NOT do is claim an outcome — the status a rider
+ * may write is `pending` and firestore.rules holds them to it.
+ *
+ * Writing the whole map rather than merging a field keeps a previous rejection
+ * from surviving underneath a new request, which would show the person both "we
+ * are looking at this" and "you were turned down" at once.
+ */
+export const requestRoleUpgrade = async (userId: string) => {
+    await updateDoc(doc(db, 'users', userId), {
+        roleUpgrade: { status: 'pending', requestedAt: new Date().toISOString() },
+    });
+};
+
+/**
+ * The rider takes it back, or clears a rejection they have read.
+ *
+ * `null`, not a field delete, and the same value for both: the rules have to
+ * validate what a rider may put here, and `== null` is one clause where telling an
+ * absent field from a deleted one is three. Nothing reads the difference.
+ */
+export const clearRoleUpgradeRequest = async (userId: string) => {
+    await updateDoc(doc(db, 'users', userId), { roleUpgrade: null });
+};
+
+/**
+ * A manager turns a request down.
+ *
+ * Not the callable, because nothing about the person's access changes — the
+ * callable exists for the atomic four-field write and the car and rides that come
+ * with it, and none of that applies here. Same shape as `updateUserStatus`
+ * directly below: a direct write, then a row naming who decided.
+ *
+ * `actor` is REQUIRED, not defaulted, for the reason that function gives: a row
+ * whose actor is 'Manager' or '' looks like a record and identifies nobody.
+ *
+ * The rejection is LEFT ON THE DOCUMENT rather than clearing the request. A
+ * decline that just makes the request vanish tells the rider nothing, so they ask
+ * again, and again — the dead-end this app has spent releases removing. They can
+ * dismiss it themselves once they have seen it.
+ */
+export const declineRoleUpgrade = async (
+    userId: string,
+    requestedAt: string | undefined,
+    actor: { uid: string; name: string },
+) => {
+    await updateDoc(doc(db, 'users', userId), {
+        roleUpgrade: {
+            status: 'rejected',
+            requestedAt: requestedAt ?? new Date().toISOString(),
+            decidedAt: new Date().toISOString(),
+            decidedBy: actor.uid,
+            decidedByName: actor.name,
+        },
+    });
+
+    // After the write, so a refused update leaves no row claiming it happened.
+    // `doc.update` rather than a new action: no role changed, and the summary is
+    // what a human reads. Adding vocabulary for a decision that alters nothing
+    // would split the trail for no gain.
+    await writeAuditLog({
+        action: 'doc.update',
+        actorUid: actor.uid,
+        actorName: actor.name,
+        targetCollection: 'users',
+        targetDocumentId: userId,
+        summary: 'Declined a request to become a Sarthi',
+    });
+};
+
+/**
  * The riders a driver could actually be given right now.
  *
  * Scoped to the gathering and direction the server has published, because

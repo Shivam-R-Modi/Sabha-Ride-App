@@ -63,6 +63,12 @@ export { deleteSabhaEvent } from './http/deleteSabhaEvent';
 // minted and redeemed end to end.
 export { createManagerInvite, redeemManagerInvite } from './http/managerInvites';
 export { adminDeleteUser } from './http/adminDeleteUser';
+// Bhulku <-> Sarthi, in place, on the one user document. The route adminDeleteUser
+// has always told managers to take ("remove the manager role first", "demotion is
+// the intended route") and which had never been built — the only way to change a
+// role was the raw field editor, one field at a time, which is what produced
+// documents that were a driver to the rules and a rider to the driver picker.
+export { managerSetUserRole } from './http/managerSetUserRole';
 // The fleet's escape hatch. A car held by a driver who stopped without
 // finishing could previously be freed by nobody but that driver.
 export { managerReleaseVehicle } from './http/managerReleaseVehicle';

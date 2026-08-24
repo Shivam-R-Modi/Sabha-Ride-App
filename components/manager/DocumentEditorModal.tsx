@@ -133,20 +133,44 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             const val = formData[key];
             const isReadonlyKey = key === 'createdAt' || key === 'updatedAt';
 
-            // Select inputs for enum fields
-            if (key === 'role' || key === 'registeredRole' || key === 'activeRole') {
+            // THE ROLE FIELDS ARE READ-ONLY HERE, AND THAT IS THE FIX.
+            //
+            // These three used to be editable dropdowns, and `roles[]` was a
+            // plain text field beside them. A role lives in FOUR fields and
+            // different readers read different ones — `roles[]` is what the
+            // driver picker queries, `registeredRole` what the approval queues
+            // query — so changing one at a time produced somebody who was a
+            // Sarthi to firestore.rules and invisible to the driver picker, with
+            // no field that settled which was true. Nothing here could have
+            // prevented it: a form that edits arbitrary fields cannot know that
+            // four of them have to move together.
+            //
+            // firestore.rules now refuses all four from any browser
+            // (touchesRoleFields), so leaving these editable would be a control
+            // that silently failed — the exact thing this repo keeps deleting.
+            // Shown rather than hidden, because a manager needs to SEE the role on
+            // a record they are editing; they just change it in the place that can
+            // do it correctly.
+            if (key === 'role' || key === 'registeredRole' || key === 'activeRole' || key === 'roles') {
+              const shown = Array.isArray(val) ? val.join(', ') : String(val ?? '');
               return (
                 <div key={key}>
                   <label className="block text-xs font-bold text-coffee-500 uppercase tracking-wider mb-1">{key}</label>
-                  <select
-                    value={val || 'student'}
-                    onChange={(e) => handleFieldChange(key, e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-hairline/20 text-sm focus:outline-none focus:ring-2 focus:ring-saffron bg-surface"
-                  >
-                    <option value="student">Bhulku</option>
-                    <option value="driver">Sarthi</option>
-                    <option value="manager">Manager</option>
-                  </select>
+                  <input
+                    type="text"
+                    value={shown}
+                    readOnly
+                    aria-describedby="role-fields-note"
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline/20 text-sm bg-cream-300 text-coffee-500 cursor-not-allowed"
+                  />
+                  {key === 'role' && (
+                    <p id="role-fields-note" className="text-[11px] text-coffee-500 mt-1 leading-snug">
+                      Roles are changed by tapping the person&rsquo;s name in the table
+                      behind this dialog. That route moves all four role fields
+                      together, hands back any car and returns assigned riders to the
+                      queue &mdash; none of which editing one field here would do.
+                    </p>
+                  )}
                 </div>
               );
             }

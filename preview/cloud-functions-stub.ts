@@ -12,6 +12,15 @@ export const createManagerInvite = async (_label?: string): Promise<CreateInvite
     expiresAt: new Date(Date.now() + 7 * 864e5).toISOString(),
 });
 
+/**
+ * The role change. Resolves as if it worked, so the harness can show the confirm
+ * prompt and the success toast — the REFUSALS (mid-run, manager target) are
+ * proved by functions/src/http/managerSetUserRole.test.ts, not by looking.
+ */
+export const managerSetUserRole = async (
+    _targetUserId: string, role: 'driver' | 'student',
+) => ({ success: true, changed: true, role, name: 'Preview' });
+
 // The sabha calendar's own callables.
 export const updateSabhaRecurrence = async (rule: unknown) => ({ rule });
 export const previewDeleteSabhaEvent = async () => ({ responseCount: 3, requestedRideCount: 1 });

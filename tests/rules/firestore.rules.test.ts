@@ -198,6 +198,189 @@ describe('privilege escalation', () => {
     });
 });
 
+/**
+ * The four role fields are off limits to every browser, manager included.
+ *
+ * A role lives in `role`, `registeredRole`, `roles[]` and `activeRole`, and
+ * different readers read different ones — `roles[]` is what the driver picker
+ * queries, `registeredRole` what the approval queues query. The Records tab's raw
+ * editor wrote them ONE AT A TIME, so a manager could leave somebody who was a
+ * Sarthi to recordsRole() here and invisible to the driver picker, with no field
+ * that settled which was true. `roles: ['manager']` at signup already shipped that
+ * bug once.
+ *
+ * A browser cannot make four writes atomically, so it no longer makes them at all.
+ * managerSetUserRole does, on the Admin SDK, which bypasses these rules — and it
+ * also frees the demoted Sarthi's car and hands their riders back to the queue.
+ */
+describe('role fields are server-only', () => {
+    it('a MANAGER cannot change another user\'s role from the client', async () => {
+        await assertFails(updateDoc(doc(asManager(), 'users', STUDENT), {
+            role: 'driver', registeredRole: 'driver',
+            roles: ['driver', 'student'], activeRole: 'driver',
+        }));
+    });
+
+    it('a manager cannot change even ONE role field', async () => {
+        // The single-field write is the whole defect, not a lesser version of it.
+        await assertFails(updateDoc(doc(asManager(), 'users', STUDENT), { role: 'driver' }));
+        await assertFails(updateDoc(doc(asManager(), 'users', STUDENT), { registeredRole: 'driver' }));
+        await assertFails(updateDoc(doc(asManager(), 'users', STUDENT), { roles: ['driver', 'student'] }));
+        await assertFails(updateDoc(doc(asManager(), 'users', STUDENT), { activeRole: 'driver' }));
+    });
+
+    it('a manager CAN still approve an account', async () => {
+        // accountStatus is deliberately NOT in touchesRoleFields(): it is one
+        // field, it means one thing, and updateUserStatus writes it from People
+        // with an audit row. Approval is not the same problem as identity.
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'users', 'pending_role_test'), {
+                name: 'Pat', role: 'driver', roles: ['driver'], accountStatus: 'pending',
+            });
+        });
+        await assertSucceeds(updateDoc(doc(asManager(), 'users', 'pending_role_test'), {
+            accountStatus: 'approved',
+        }));
+    });
+
+    it('a manager CAN still edit somebody\'s contact details', async () => {
+        await assertSucceeds(updateDoc(doc(asManager(), 'users', STUDENT), {
+            phone: '555-0123', address: '4 Oak St',
+        }));
+    });
+
+    it('a student still cannot self-promote', async () => {
+        // Unchanged by the new guard, and it must stay that way — this is the
+        // arm the whole authorisation model rests on.
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), { role: 'driver' }));
+    });
+
+    it('the raw editor can still SAVE, because unchanged role fields are not a diff', async () => {
+        // This one is load-bearing for a screen, not for security.
+        // DocumentEditorModal posts the WHOLE form back — role fields included,
+        // at their existing values — so if `affectedKeys()` counted a field that
+        // was re-sent unchanged, the new guard would break Save for every user
+        // record outright. It does not, and this pins that rather than leaving it
+        // to be discovered by a manager editing a phone number.
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'users', 'raw_edit_target'), {
+                name: 'Raw', role: 'driver', registeredRole: 'driver',
+                roles: ['driver', 'student'], activeRole: 'driver',
+                accountStatus: 'approved', phone: '555-0001',
+            });
+        });
+
+        await assertSucceeds(updateDoc(doc(asManager(), 'users', 'raw_edit_target'), {
+            // Same four values, plus the one real edit.
+            role: 'driver', registeredRole: 'driver',
+            roles: ['driver', 'student'], activeRole: 'driver',
+            phone: '555-9999',
+        }));
+    });
+
+    it('but re-sending roles[] REORDERED is still refused', async () => {
+            // Firestore compares array VALUES, so a different order is a real
+            // diff. Worth knowing: it means a client that rebuilds the array
+            // before saving would be refused, which is a loud failure rather
+            // than a half-write, and therefore the right outcome.
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'users', 'reorder_target'), {
+                name: 'Reorder', role: 'driver', registeredRole: 'driver',
+                roles: ['driver', 'student'], activeRole: 'driver',
+                accountStatus: 'approved',
+            });
+        });
+
+        await assertFails(updateDoc(doc(asManager(), 'users', 'reorder_target'), {
+            roles: ['student', 'driver'],
+        }));
+    });
+});
+
+/**
+ * Asking to become a Sarthi.
+ *
+ * The field grants nothing — a role change is refused above whatever it says — so
+ * these are not escalation tests. They exist because a rider who could write
+ * `status: 'rejected'`, or a `decidedBy`, could make their own profile and the
+ * manager's queue disagree about whether anybody had looked at it. A request that
+ * appears to have answered itself is the silently-does-nothing failure this app
+ * keeps having to remove.
+ */
+describe('roleUpgrade — the request a rider may make', () => {
+    it('a rider CAN ask, as pending', async () => {
+        await assertSucceeds(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            roleUpgrade: { status: 'pending', requestedAt: '2026-08-24T10:00:00.000Z' },
+        }));
+    });
+
+    it('a rider CAN withdraw or dismiss by clearing it', async () => {
+        await assertSucceeds(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            roleUpgrade: null,
+        }));
+    });
+
+    it('a rider cannot approve their own request', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            roleUpgrade: { status: 'approved', requestedAt: '2026-08-24T10:00:00.000Z' },
+        }));
+    });
+
+    it('a rider cannot reject it either — that is a manager\'s decision to record', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            roleUpgrade: { status: 'rejected', requestedAt: '2026-08-24T10:00:00.000Z' },
+        }));
+    });
+
+    it('a rider cannot claim a manager decided it', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            roleUpgrade: {
+                status: 'pending', requestedAt: '2026-08-24T10:00:00.000Z',
+                decidedBy: MANAGER, decidedByName: 'Mira',
+            },
+        }));
+    });
+
+    it('a rider cannot smuggle extra keys into the map', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            roleUpgrade: {
+                status: 'pending', requestedAt: '2026-08-24T10:00:00.000Z', role: 'driver',
+            },
+        }));
+    });
+
+    it('a rider cannot write a non-string requestedAt', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            roleUpgrade: { status: 'pending', requestedAt: 12345 },
+        }));
+    });
+
+    it('a rider cannot put a request on somebody else', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'users', OTHER_STUDENT), {
+            roleUpgrade: { status: 'pending', requestedAt: '2026-08-24T10:00:00.000Z' },
+        }));
+    });
+
+    it('a manager CAN record the refusal', async () => {
+        await assertSucceeds(updateDoc(doc(asManager(), 'users', STUDENT), {
+            roleUpgrade: {
+                status: 'rejected',
+                requestedAt: '2026-08-24T10:00:00.000Z',
+                decidedAt: '2026-08-24T11:00:00.000Z',
+                decidedBy: MANAGER,
+                decidedByName: 'Mira',
+            },
+        }));
+    });
+
+    it('a rider editing their profile is unaffected by the request guard', async () => {
+        // The guard must only fire when `roleUpgrade` itself is in the diff.
+        await assertSucceeds(updateDoc(doc(asStudent(), 'users', STUDENT), {
+            name: 'Alice P', phone: '555-0111',
+        }));
+    });
+});
+
 describe('escalation at create time', () => {
     // Blocking privilege fields on UPDATE closed only half the hole. A brand-new
     // account has no document, so its first write is a create — and a create

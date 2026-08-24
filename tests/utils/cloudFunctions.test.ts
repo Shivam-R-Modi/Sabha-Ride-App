@@ -102,6 +102,7 @@ const WRAPPERS: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
         enabled: true, daysOfWeek: [0], startTime: '18:00', endTime: '20:00',
     })],
     ['managerReleaseVehicle', () => cloudFunctions.managerReleaseVehicle('v1')],
+    ['managerSetUserRole', () => cloudFunctions.managerSetUserRole('u1', 'driver')],
     ['studentReadyToLeave', () => cloudFunctions.studentReadyToLeave('s1')],
     ['manualAssignStudent', () => cloudFunctions.manualAssignStudent('s1', 'd1')],
     ['generateEventCSV', () => cloudFunctions.generateEventCSV('2026-08-24')],

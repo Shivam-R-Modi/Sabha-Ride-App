@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ShieldCheck } from 'lucide-react';
 import { DatabaseConsole } from './DatabaseConsole';
 
 /**
@@ -46,6 +46,25 @@ export const ManagerRecords: React.FC = () => (
                 These are the live records, edited without any of the checks the rest of the
                 app applies. They include riders’ names, phone numbers and home addresses.
                 There is no undo.
+            </p>
+        </div>
+
+        {/* The one exception to the warning above, and it is worth stating rather
+            than leaving a manager to assume the whole page is unguarded. Tapping a
+            name is NOT a raw edit: it goes through managerSetUserRole, which moves
+            all four role fields together, refuses a run already under way, hands
+            back the car and writes an audit row. The pencil beside it is still the
+            unguarded editor, which is why the role fields are read-only there. */}
+        <div
+            role="note"
+            className="flex items-start gap-3 p-4 rounded-2xl
+                       bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]"
+        >
+            <ShieldCheck size={18} className="shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-sm leading-snug">
+                Except roles. Tap somebody’s <strong>name</strong> to see their record and
+                change them between Bhulku and Sarthi — that route is checked, refuses
+                while a run is under way, and is written to the audit log.
             </p>
         </div>
 

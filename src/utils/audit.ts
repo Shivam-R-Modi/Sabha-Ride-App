@@ -32,7 +32,17 @@ export type AuditAction =
     // docs/compliance/ownership-and-handover.md requires "every grant, revocation
     // and impersonation audited".
     | 'account.approved'
-    | 'account.rejected';
+    | 'account.rejected'
+    // A role changed in place, Bhulku <-> Sarthi. WRITTEN BY THE SERVER
+    // (functions/src/http/managerSetUserRole.ts), never from here — a client
+    // cannot make the change atomically, so it must not be able to claim it did.
+    // Listed anyway because this union is also the vocabulary the Audit Logs tab
+    // reads, and the two copies of it have already drifted once.
+    //
+    // normaliseAuditRow needs no case for it: the tone is derived from the action
+    // string, and 'role.change' contains neither 'delete' nor 'create', so it
+    // renders neutral, which is right.
+    | 'role.change';
 
 export interface AuditEntry {
     action: AuditAction;

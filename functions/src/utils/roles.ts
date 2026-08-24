@@ -58,6 +58,62 @@ export function grantedRoles(profile: RoleBearing | null | undefined): UserRole[
     return ROLE_ORDER.filter(r => granted.has(r));
 }
 
+/**
+ * The four role fields as they SHOULD look for exactly this role.
+ *
+ * One place, because a role change has to write all four together and every
+ * writer in the app has historically written a different subset — signup wrote
+ * the recorded role into `roles[]`, the invite path wrote the granted set, and
+ * the Records tab's raw editor wrote whichever single field you clicked.
+ *
+ * `roles` is the GRANTED set, not `[role]`. `useAvailableDrivers` queries
+ * `roles array-contains 'driver'`, so a Sarthi whose array said only `['driver']`
+ * would drop out of every rider query, and `['manager']` once made every manager
+ * invisible to the driver picker.
+ */
+export function roleFieldsFor(role: UserRole): {
+    role: UserRole;
+    registeredRole: UserRole;
+    roles: UserRole[];
+    activeRole: UserRole;
+} {
+    return {
+        role,
+        registeredRole: role,
+        roles: grantedRoles({ role }),
+        activeRole: role,
+    };
+}
+
+/**
+ * Do all four fields already agree that the person is exactly this?
+ *
+ * NOT `hasRecordedRole`. That reads the three fields as a UNION, so it cannot
+ * tell a healthy Sarthi (`role: 'driver'`, `roles: ['driver','student']`) from the
+ * half-write the raw editor could always produce (`role: 'driver'`,
+ * `roles: ['student']`) — both report 'driver' among their recorded roles. The
+ * difference only shows when the fields are compared one by one, which is what
+ * this does.
+ *
+ * Used for two things that are the same question: whether a role change has any
+ * work to do, and whether a record needs repairing.
+ */
+export function statesRoleConsistently(
+    profile: RoleBearing | null | undefined,
+    role: UserRole,
+): boolean {
+    if (!profile) return false;
+
+    const want = roleFieldsFor(role);
+    const have = Array.isArray(profile.roles) ? profile.roles : [];
+
+    return profile.role === want.role
+        && profile.registeredRole === want.registeredRole
+        && profile.activeRole === want.activeRole
+        && have.length === want.roles.length
+        && want.roles.every(r => have.includes(r));
+}
+
 /** Does the document record this role outright? Authority question. */
 export function hasRecordedRole(profile: RoleBearing | null | undefined, role: UserRole): boolean {
     return recordedRoles(profile).includes(role);

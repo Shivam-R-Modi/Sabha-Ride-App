@@ -136,8 +136,29 @@ describe('the Raw records warning survived the move', () => {
         const { ManagerRecords } = await import('../../components/manager/ManagerRecords');
         render(<ManagerRecords />);
 
-        const note = screen.getByRole('note');
-        expect(note.textContent).toMatch(/names, phone numbers and home addresses/);
-        expect(note.textContent).toMatch(/no undo/i);
+        // TWO notes now: the standing danger warning, and the one carve-out from
+        // it. Found by content rather than by role alone, so neither can quietly
+        // replace the other.
+        const notes = screen.getAllByRole('note');
+        const danger = notes.find(n => /no undo/i.test(n.textContent || ''))!;
+
+        expect(danger).toBeDefined();
+        expect(danger.textContent).toMatch(/names, phone numbers and home addresses/);
+    });
+
+    it('says that changing a role is the one checked route on the page', async () => {
+        // Without this the warning above is misleading in the other direction: a
+        // manager would reasonably assume the role controls are as unguarded as
+        // the field editor beside them, when they are the opposite — checked,
+        // refused mid-run, and audited.
+        const { ManagerRecords } = await import('../../components/manager/ManagerRecords');
+        render(<ManagerRecords />);
+
+        const notes = screen.getAllByRole('note');
+        const carveOut = notes.find(n => /Except roles/i.test(n.textContent || ''))!;
+
+        expect(carveOut).toBeDefined();
+        expect(carveOut.textContent).toMatch(/name/i);
+        expect(carveOut.textContent).toMatch(/audit log/i);
     });
 });

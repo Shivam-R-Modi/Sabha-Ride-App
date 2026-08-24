@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { CheckCircle2, X, UserCheck, Loader2 } from 'lucide-react';
-import { usePendingDrivers, usePendingRiders, updateUserStatus } from '../../hooks/useFirestore';
+import { CheckCircle2, X, UserCheck, Loader2, Car } from 'lucide-react';
+import {
+    usePendingDrivers, usePendingRiders, updateUserStatus,
+    useRoleUpgradeRequests, declineRoleUpgrade,
+} from '../../hooks/useFirestore';
+import { managerSetUserRole } from '../../src/utils/cloudFunctions';
 import { ManagerInvites } from './ManagerInvites';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../shared/useConfirm';
@@ -28,12 +32,15 @@ export const ManagerPeople: React.FC = () => {
     const { currentUser, userProfile } = useAuth();
     const { pendingDrivers, loading: driversLoading } = usePendingDrivers();
     const { pendingRiders, loading: ridersLoading } = usePendingRiders();
+    // Bhulka already in the app who have asked to drive. A different decision from
+    // the two queues above — those are "may this person use the app at all".
+    const { requests: upgradeRequests, loading: upgradesLoading } = useRoleUpgradeRequests();
     const toast = useToast();
     const { ask, confirmDialog } = useConfirm();
     const [busyId, setBusyId] = useState<string | null>(null);
 
-    const loading = driversLoading || ridersLoading;
-    const total = pendingDrivers.length + pendingRiders.length;
+    const loading = driversLoading || ridersLoading || upgradesLoading;
+    const total = pendingDrivers.length + pendingRiders.length + upgradeRequests.length;
 
     const decide = async (
         person: { id: string; name: string },
@@ -72,6 +79,52 @@ export const ManagerPeople: React.FC = () => {
         }
     };
 
+    /**
+     * Grant or refuse a request to become a Sarthi.
+     *
+     * The grant goes through the callable, not a client write: the role lives in
+     * four fields that have to move together, and firestore.rules now refuses all
+     * four from a browser. The refusal is a plain write — nothing about the
+     * person's access changes, so there is nothing to make atomic.
+     */
+    const decideUpgrade = async (person: User, approve: boolean) => {
+        const actor = {
+            uid: currentUser?.uid ?? '',
+            name: (userProfile?.name as string) || 'A manager',
+        };
+
+        if (!approve) {
+            const ok = await ask({
+                title: `Turn down ${person.name}?`,
+                message: 'They stay a Bhulku. They will see that the request was not '
+                    + 'approved, and can ask again later.',
+                confirmLabel: 'Turn down',
+                cancelLabel: 'Go back',
+                destructive: true,
+            });
+            if (!ok) return;
+        }
+
+        setBusyId(person.id);
+        try {
+            if (approve) {
+                await managerSetUserRole(person.id, 'driver');
+                toast.success(`${person.name} is now a Sarthi.`);
+            } else {
+                await declineRoleUpgrade(person.id, person.roleUpgrade?.requestedAt, actor);
+                toast.success(`${person.name}'s request was turned down.`);
+            }
+        } catch (error) {
+            console.error('Error deciding a role upgrade:', error);
+            // The server's own words — it explains refusals a manager can act on.
+            toast.error(error instanceof Error
+                ? error.message
+                : `Could not update ${person.name}. Please try again.`);
+        } finally {
+            setBusyId(null);
+        }
+    };
+
     return (
         <div className="px-4 pt-6 pb-6 space-y-5 max-w-3xl mx-auto animate-in fade-in duration-300">
             <header>
@@ -97,6 +150,29 @@ export const ManagerPeople: React.FC = () => {
                 </div>
             ) : (
                 <>
+                    {/* First of the three. A request from somebody already in the
+                        congregation is rarer and more considered than a sign-up,
+                        and it is the only one of the three that changes what an
+                        existing account can do. */}
+                    {upgradeRequests.length > 0 && (
+                        <Section title="Wants to drive" count={upgradeRequests.length}>
+                            {upgradeRequests.map(person => (
+                                <PersonRow
+                                    key={person.id}
+                                    name={person.name}
+                                    detail={person.phone || person.email || 'No contact details'}
+                                    extra="Asked to become a Sarthi"
+                                    avatarUrl={person.avatarUrl}
+                                    busy={busyId === person.id}
+                                    approveLabel="Make Sarthi"
+                                    approveIcon={<Car size={16} />}
+                                    onApprove={() => decideUpgrade(person, true)}
+                                    onDeny={() => decideUpgrade(person, false)}
+                                />
+                            ))}
+                        </Section>
+                    )}
+
                     {pendingDrivers.length > 0 && (
                         <Section title="Sarthis" count={pendingDrivers.length}>
                             {pendingDrivers.map(driver => (
@@ -163,9 +239,16 @@ const PersonRow: React.FC<{
     extra: string;
     avatarUrl?: string;
     busy: boolean;
+    /**
+     * Overridable because this row now serves two different decisions. "Approve"
+     * is right for letting somebody into the app and wrong for handing them a
+     * carload of children — the button should say what it does.
+     */
+    approveLabel?: string;
+    approveIcon?: React.ReactNode;
     onApprove: () => void;
     onDeny: () => void;
-}> = ({ name, detail, extra, avatarUrl, busy, onApprove, onDeny }) => (
+}> = ({ name, detail, extra, avatarUrl, busy, approveLabel, approveIcon, onApprove, onDeny }) => (
     <div className="clay-card">
         <div className="flex items-center gap-3">
             <img
@@ -202,8 +285,10 @@ const PersonRow: React.FC<{
                            hover:opacity-90 transition-opacity disabled:opacity-50
                            flex items-center justify-center gap-2"
             >
-                {busy ? <Loader2 className="animate-spin" size={16} /> : <UserCheck size={16} />}
-                Approve
+                {busy
+                    ? <Loader2 className="animate-spin" size={16} />
+                    : (approveIcon ?? <UserCheck size={16} />)}
+                {approveLabel ?? 'Approve'}
             </button>
         </div>
     </div>

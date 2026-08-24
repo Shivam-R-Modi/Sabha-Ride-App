@@ -1,11 +1,15 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-24**.
+at the end. Last updated **2026-08-24**. Two separate pieces of work that day.
 
-**2026-08-24 is one fix, and it IS deployed** — the notice board's Publish and
-Take-down buttons, which had never worked in production. Hosting only; `main` is
-fast-forwarded and pushed. See *Fixed 2026-08-24* immediately below.
+**One IS deployed** — the notice board's Publish and Take-down buttons, which had
+never worked in production. Hosting only; `main` is fast-forwarded and pushed. See
+*Fixed 2026-08-24* below.
+
+**The other is user profile management in the manager's dashboard** — roles change
+in place, Bhulku <-> Sarthi. See *Built 2026-08-24* below for its deploy state,
+which is the section to read before releasing anything.
 
 Before that, **2026-08-21** shipped, in order: live ride
 progress and the venue roster; the nudge; the sabha calendar as one card; the
@@ -140,6 +144,196 @@ Note for the next session in this worktree: its `node_modules` was stale
 `@testing-library/*` entirely, so **no** client test could run here — every file
 failed to collect — until `npm install --legacy-peer-deps`. The lockfile did not
 change. Worth checking first in any worktree rather than trusting a green run.
+
+## 2026-08-24 — roles change in place, from the Records tab
+
+Branch `claude/manager-user-profile-management-c46c0c`, rebased onto the notice
+fix above. **Every gate below was run locally on the merged tree and is green.**
+Deploy state is recorded at the end of this section — read that before assuming.
+
+### What was actually wrong
+
+The owner asked for the ability to move somebody between **Bhulku** and
+**Sarthi** without creating a duplicate profile. The duplicate was never a second
+document — there is exactly one `users/{uid}` per person, and `students/` and
+`drivers/` have been `allow read, write: if false` for months. The duplicate was
+a **half-written identity**.
+
+A role lives in FOUR fields and different readers read different ones:
+
+| field | who reads it |
+|---|---|
+| `role` | ManagerReports, the Records role filter |
+| `registeredRole` | both pending-approval queues |
+| `roles[]` | `useAvailableDrivers` — the driver picker |
+| `activeRole` | a UI preference, authority nowhere |
+
+The only way to change any of them was `DocumentEditorModal`, which edits fields
+**one at a time**. Set `role: 'driver'`, leave `roles: ['student']`, and the
+person is a Sarthi to `recordsRole()` in firestore.rules and invisible to the
+driver picker, with no field that settles which is true. That exact shape had
+already shipped once: `roles: ['manager']` at signup made every manager invisible
+to `useAvailableDrivers`, so "assign to any driver" could only ever report none.
+
+`adminDeleteUser` has been telling managers to use a control that did not exist
+since it was written — *"That account is a manager. Remove the manager role
+first"* and *"Demotion is the intended route: clear the role, then delete if
+wanted."* There was no route.
+
+### What it does now
+
+- **`functions/src/http/managerSetUserRole.ts`** — one callable, one batch, one
+  authorisation check, one audit row, modelled on `managerReleaseVehicle`. Writes
+  all four fields from `roleFieldsFor(role)`, so they cannot drift apart again.
+  `roles` is the GRANTED set (`['driver','student']` up, `['student']` down),
+  because that is what every other writer in the app puts there.
+- **It REPAIRS a half-written document** rather than reporting it as already
+  done. `hasRecordedRole` cannot tell a healthy Sarthi from a half-write — both
+  report 'driver' among their recorded roles — so the new
+  `statesRoleConsistently()` compares all four fields one by one. Mirrored in
+  `src/roles.ts` and `functions/src/utils/roles.ts`, like the rest of that table.
+- **Demotion never strands a run.** Refuses once a ride is past `assigned`,
+  naming the riders (`"Nilesh is out on a run with 2 ride(s) — Asha, Ravi"`).
+  Rides still `assigned` are handed back to the pool, and the car is freed
+  through `releaseVehiclesHeldBy` — skipping that is how a three-car fleet
+  reached zero available cars on 2026-08-14.
+- **Promotion refuses while the person is riding as a passenger.** `status` on
+  this document is overloaded — DriverStatus for a Sarthi, StudentStatus for a
+  Bhulku — so writing `offline` over a live `in_progress` would take them off
+  their own driver's roster mid-journey. A `requested` ride is fine and is left
+  alone: a Sarthi is still a Bhulku, which is the point of changing role in
+  place.
+- **`functions/src/utils/assignments.ts`** — `releaseRideToPool` extracted from
+  `releaseAssignment` and now shared with the demotion, rather than copied. Also
+  the canonical `ACTIVE_RIDE_STATUSES`; `managerReleaseVehicle` and
+  `releaseIdleVehicles` import it now. Five other copies under three different
+  names remain, and are reachable from that file's comment.
+- **Records tab, Users: four columns.** Name / Role / Status / Actions. The
+  email-and-phone sub-line and the whole Address column are gone — four columns
+  of a child's contact details on a screen a manager leaves open, when the reason
+  for opening the tab is almost never either. Both are one tap away now. The
+  select checkbox and the raw-edit pencil stay; bulk delete still needs one and
+  hand-fixing a broken document still needs the other.
+- **The name is a button** — the first clickable name anywhere in the manager UI
+  — opening `UserDetailSheet`, built on `Sheet` because
+  `tests/quality/native-dialogs.test.ts` caps hand-rolled overlays at exactly
+  five with `.toBe()`.
+- **The role badge and filter read all four fields.** The filter used to be
+  `doc.role || doc.activeRole || doc.registeredRole`, which took the first field
+  that happened to be set, ignored `roles[]` entirely, and consulted a UI
+  preference. A disagreeing record now shows a **`mixed`** badge, and the dialog
+  says which fields disagree and offers BOTH directions — its current role is not
+  a fact, so offering only the opposite of a guess would make the manager demote
+  and re-promote to land where they wanted.
+- **A Bhulku can ask.** `roleUpgrade` on their own user document — no new
+  collection, no new index, and the manager's row already carries the name and
+  phone beside it. `UpgradeRequestCard` on Profile, last of the five cards,
+  rendering nothing at all for a Sarthi or manager.
+- **A refusal stays on screen until it is read.** The rejected state is a real
+  state the rider dismisses themselves. A decline that merely made the request
+  vanish would have them asking again, and again.
+- **People tab gains "Wants to drive"**, first of the three sections, with the
+  button reading **Make Sarthi** rather than Approve — approving a sign-up and
+  handing somebody a carload of children are not the same act.
+
+### Rules
+
+Two changes to `match /users/{userId}`, both tested.
+
+- **`touchesRoleFields()` — the four role fields are refused to every browser,
+  managers included.** The manager arm of `allow update` was unrestricted, which
+  is exactly what let the raw editor write one field and leave three stale. A
+  browser cannot make four writes atomically, so it no longer makes them at all.
+  `accountStatus` is deliberately NOT in the list: it is one field, it means one
+  thing, and `updateUserStatus` writes it from People with an audit row.
+- **`writesOwnRoleRequestOnly()`** pins what a rider may say about wanting to
+  drive. Not an escalation guard — the field grants nothing — but a rider who
+  could write `status: 'rejected'` or a `decidedBy` could make their own profile
+  and the manager's queue disagree about whether anyone had looked.
+
+Consequence, and the point: `DocumentEditorModal`'s three role dropdowns and its
+`roles` text field are now **read-only**, with a line pointing at the name in the
+table. Leaving them editable would have been a control that silently failed.
+
+`touchesPrivilegeFields()` is unchanged — all six fields stay in it, which is
+what `tests/quality/role-table-parity.test.ts` asserts.
+
+### Deliberately NOT done
+
+- **Manager promotion or demotion.** Manager targets are refused in both
+  directions. Removing the role also needs the `mgr` custom claim cleared and
+  refresh tokens revoked, plus a last-manager lockout guard — creating an invite
+  requires being a manager, so a congregation that demotes its only one cannot
+  appoint a replacement. That gap is already recorded at `hooks/useUsers.ts:183`.
+  Refusing beats half-doing it.
+- **Telling the rider their request was decided, by push.** Push has never
+  delivered anything in this app and is out of scope. The profile card is the
+  channel.
+- **A count badge on the People nav item.** `NavItem` has no support for one and
+  nothing in the app has one; it would mean threading a number through both the
+  sidebar and the mobile dock.
+
+### Verification
+
+**2163 tests — 1244 client, 732 functions, 187 rules.** Build clean.
+**Typecheck 0.** Up from 2003.
+
+Rebased onto `2fbaba5` and re-run there, not just on the branch point. That
+mattered: the notice fix landed a guard asserting every `callFunction` site's name
+is one `functions/src/index.ts` actually exports, **and** that the count of sites
+matches its own table. `managerSetUserRole` passed the first two checks and failed
+the third until it was registered in that table — which is the guard working
+exactly as intended, and the reason the sweep is worth re-running after a rebase
+rather than trusting the pre-rebase green.
+
+Three deliberate breakages, each observed RED before being reverted:
+
+| breakage | caught by |
+|---|---|
+| write only `role`, leave `roles[]` stale | 4 tests in `managerSetUserRole.test.ts` |
+| allow a demotion mid-run | 5 tests in the same file |
+| let a rider write `roleUpgrade.status = 'approved'` | 2 rules tests |
+
+One more was checked rather than assumed, because getting it wrong would have
+broken a screen silently: `DocumentEditorModal` posts the whole form back, role
+fields included at their existing values, so if `affectedKeys()` counted a field
+re-sent unchanged, the new guard would have refused **every** save of a user
+record. It does not — and there is now a rules test pinning both that and the
+fact that a REORDERED `roles[]` is still refused, which is a loud failure rather
+than a half-write.
+
+A fourth was found by a test rather than planted: the first version of the
+"disagrees with itself" badge used `recordedRoles(...).length > 1`, which flagged
+**every healthy Sarthi** in the congregation, because driver implies student.
+That is what `statesRoleConsistently` exists for.
+
+Looked at in the preview harness (`preview/records.html`, `preview/manager.html`)
+with `preview/admin-db-stub.ts` extended with a Sarthi holding a car, a Bhulku
+with a pending request, and a deliberately half-written record. Confirmed: four
+columns, no email or address in any row, the `mixed` badge on the broken record
+only, the detail sheet, the confirm naming the car and the riders, and
+"Wants to drive · 1" above the two sign-up queues. No console errors.
+
+### Cannot be reported as working, and was not tested
+
+- **Nothing was deployed.** Rules, functions and hosting are unreleased. Order is
+  the standing `firestore:rules` → `functions` → `hosting`, and it is safe in that
+  order here: rules-first makes the old raw role editor return a clean permission
+  error rather than half-writing.
+- **No production document was read.** Whether any live record is currently
+  half-written — the `mixed` badge is the thing that would show it — is unknown
+  from here. Worth a look at the Users table straight after deploying.
+- **Not seen on a real phone**, and not run against a real Bhulku asking for an
+  upgrade end to end.
+
+### One thing to know about this worktree
+
+It had no `node_modules`, no `functions/node_modules` and no `.env.local`, so the
+typecheck reported 422 errors and four test files failed before anything was
+written. Both installs were run (`--legacy-peer-deps`) and `.env.local` is
+symlinked to the main checkout. `functions/package-lock.json` was rewritten by
+the install and has been reverted — it is not part of this change.
+
 
 ## Shipped 2026-08-21 — the run records who actually travelled
 

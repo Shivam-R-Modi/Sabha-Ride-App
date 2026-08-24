@@ -35,6 +35,8 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { DEFAULT_TIME_ZONE } from '../utils/time';
 import { writeAuditLog } from '../utils/audit';
+// A ride in any of these is live: the car is out and must be left alone.
+import { ACTIVE_RIDE_STATUSES } from '../utils/assignments';
 import {
     writeVehicleState, resolveVehicleHolder, VEHICLE_RELEASED, DRIVER_VEHICLE_CLEARED,
 } from '../utils/fleet';
@@ -52,9 +54,6 @@ import {
  * alone until tomorrow.
  */
 const IDLE_HOURS = 6;
-
-/** A ride in any of these is live: the car is out and must be left alone. */
-const ACTIVE_RIDE_STATUSES = ['assigned', 'driver_en_route', 'arriving', 'in_progress'];
 
 /** Every status that means "this vehicle is claimed". */
 const HELD_STATUS = 'in_use';

@@ -34,12 +34,11 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { assertApprovedManager } from '../utils/authz';
 import { writeAuditLog } from '../utils/audit';
+import { ACTIVE_RIDE_STATUSES } from '../utils/assignments';
 import {
     writeVehicleState, resolveVehicleHolder, VEHICLE_RELEASED, DRIVER_VEHICLE_CLEARED,
 } from '../utils/fleet';
 
-/** A ride in any of these means the car is out on the road right now. */
-const ACTIVE_RIDE_STATUSES = ['assigned', 'driver_en_route', 'arriving', 'in_progress'];
 
 export const managerReleaseVehicle = functions.https.onCall(async (data, context) => {
     if (!context.auth) {

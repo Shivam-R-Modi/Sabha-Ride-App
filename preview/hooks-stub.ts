@@ -31,7 +31,21 @@ export const usePendingRiders = () => ({
   loading: false,
 });
 
+export const useRoleUpgradeRequests = () => ({
+  requests: [
+    { id: 'hop1', name: 'Priya Desai', phone: '+1 555 0102',
+      avatarUrl: avatar('Priya Desai', '7B3F00'),
+      roleUpgrade: { status: 'pending', requestedAt: '2026-08-24T09:00:00.000Z' } },
+  ],
+  loading: false,
+});
+
 export const updateUserStatus = async () => undefined;
+export const declineRoleUpgrade = async () => undefined;
+
+/** The rider's own side of the request, on ProfileEditor. */
+export const requestRoleUpgrade = async () => undefined;
+export const clearRoleUpgradeRequest = async () => undefined;
 
 /** Reports' CSV export. Resolves without downloading anything in the harness. */
 export const downloadAttendanceCSV = async () => undefined;

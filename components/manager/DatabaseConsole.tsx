@@ -3,8 +3,11 @@ import { Database, Search, Plus, Edit2, Trash2, ShieldAlert, Loader2, FileText, 
 import { useAuth } from '../../contexts/AuthContext';
 import { useAdminDatabase, SupportedCollection } from '../../hooks/useAdminDatabase';
 import { DocumentEditorModal } from './DocumentEditorModal';
+import { UserDetailSheet } from './UserDetailSheet';
 import { useConfirm } from '../shared/useConfirm';
 import { normaliseAuditRow } from '../../src/utils/audit';
+import { recordedRoles, statesRoleConsistently } from '../../src/roles';
+import { formatRole } from '../../src/utils/formatters';
 import { useToast } from '../../contexts/ToastContext';
 
 /**
@@ -66,6 +69,8 @@ export const DatabaseConsole: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedDocForEdit, setSelectedDocForEdit] = useState<Record<string, any> | null>(null);
+  // The person whose record is open for reading, as opposed to raw editing.
+  const [selectedUser, setSelectedUser] = useState<Record<string, any> | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -87,10 +92,16 @@ export const DatabaseConsole: React.FC = () => {
       const docString = JSON.stringify(doc).toLowerCase();
       const matchesSearch = !searchTerm.trim() || docString.includes(searchTerm.toLowerCase());
 
-      // Role filter for users
+      // Role filter for users.
+      //
+      // `recordedRoles`, not `doc.role || doc.activeRole || doc.registeredRole`.
+      // That chain read the FIRST field that happened to be set and ignored
+      // `roles[]` entirely, so filtering to Sarthis missed anyone recorded as one
+      // only in the array — which is every manager who drives. It also consulted
+      // `activeRole`, which is a UI preference and authority nowhere. Same reading
+      // the table and the detail sheet use, so the filter and the rows agree.
       if (activeTab === 'users' && roleFilter !== 'all') {
-        const userRole = doc.role || doc.activeRole || doc.registeredRole;
-        if (userRole !== roleFilter) return false;
+        if (!recordedRoles(doc as any).includes(roleFilter as any)) return false;
       }
 
       // Status filter for users/vehicles/rides
@@ -451,12 +462,20 @@ export const DatabaseConsole: React.FC = () => {
                       />
                     </th>
                   )}
+                  {/* Name, Role, Status — and Actions, shared below.
+                      The email/phone line under the name and the whole Address
+                      column are GONE. They were a child's contact details and home
+                      address on permanent display on a screen a manager leaves
+                      open, when the reason for opening this tab is almost never
+                      either of them. Both are one tap away in the detail sheet.
+                      Role stays before Status: tests/quality/records-tab-stability
+                      pins that order, because this group is right-anchored and
+                      reordering it slides the filters on every tab switch. */}
                   {activeTab === 'users' && (
                     <>
-                      <th className="py-3.5 px-4">Name / Contact</th>
+                      <th className="py-3.5 px-4">Name</th>
                       <th className="py-3.5 px-4">Role</th>
                       <th className="py-3.5 px-4">Status</th>
-                      <th className="py-3.5 px-4">Address</th>
                     </>
                   )}
                   {activeTab === 'vehicles' && (
@@ -511,19 +530,53 @@ export const DatabaseConsole: React.FC = () => {
                     )}
 
                     {/* USERS FIELDS */}
-                    {activeTab === 'users' && (
+                    {activeTab === 'users' && (() => {
+                      // The role as all FOUR fields report it, not as `role`
+                      // alone. A record saying `role: 'driver'` with
+                      // `roles: ['student']` is the half-write the raw editor
+                      // beside this one could always produce; rendering `role`
+                      // by itself showed it as a tidy, single, wrong answer.
+                      const roles = recordedRoles(docItem as any);
+                      const top = roles[0] ?? 'student';
+                      // NOT `roles.length > 1`. A healthy Sarthi records two —
+                      // driver implies student — so that test called every Sarthi
+                      // in the congregation broken. The question is whether all
+                      // four fields agree on the top recorded role.
+                      const mixed = roles.length > 0 && !statesRoleConsistently(docItem as any, top);
+                      return (
                       <>
                         <td className="py-3 px-4">
-                          <p className="font-bold">{docItem.name || 'Unnamed'}</p>
-                          <p className="text-[10px] text-coffee-500">{docItem.email || docItem.phone || 'No contact'}</p>
+                          {/* A real button, not a clickable row. The row also
+                              carries a checkbox and two icon buttons, and a row
+                              handler would fire when any of them was missed. */}
+                          <button
+                            onClick={() => setSelectedUser(docItem)}
+                            className="tap-target text-left font-bold text-coffee hover:text-saffron-800
+                                       underline decoration-hairline/40 decoration-1 underline-offset-2
+                                       hover:decoration-saffron-800 rounded
+                                       focus:outline-none focus:ring-2 focus:ring-saffron"
+                          >
+                            {docItem.name || 'Unnamed'}
+                          </button>
                         </td>
-                        <td className="py-3 px-4 capitalize font-medium">
+                        <td className="py-3 px-4 font-medium">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                            docItem.role === 'manager' ? 'bg-cream-400 text-coffee' :
-                            docItem.role === 'driver' ? 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]' : 'bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]'
+                            top === 'manager' ? 'bg-cream-400 text-coffee' :
+                            top === 'driver' ? 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]' : 'bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]'
                           }`}>
-                            {docItem.role || 'student'}
+                            {formatRole(top)}
                           </span>
+                          {/* Says so when the four fields disagree, rather than
+                              picking one and looking consistent. */}
+                          {mixed && (
+                            <span
+                              title={`This record says ${roles.map(r => formatRole(r)).join(' and ')} in different fields`}
+                              className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold
+                                         bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]"
+                            >
+                              mixed
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 capitalize">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -532,11 +585,9 @@ export const DatabaseConsole: React.FC = () => {
                             {docItem.accountStatus || 'approved'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 max-w-xs truncate text-[11px] text-coffee-500">
-                          {docItem.address || docItem.location?.formattedAddress || 'No address'}
-                        </td>
                       </>
-                    )}
+                      );
+                    })()}
 
                     {/* VEHICLES FIELDS */}
                     {activeTab === 'vehicles' && (
@@ -675,6 +726,12 @@ export const DatabaseConsole: React.FC = () => {
           onSave={handleSaveDocument}
         />
       )}
+
+      {/* Reading a person's record, and changing what they are. Separate from
+          the raw editor above on purpose: that one writes whatever is typed into
+          it, this one goes through managerSetUserRole, which moves all four role
+          fields together, frees the car and hands back any assigned riders. */}
+      <UserDetailSheet user={selectedUser} onClose={() => setSelectedUser(null)} />
 
       {confirmDialog}
     </div>

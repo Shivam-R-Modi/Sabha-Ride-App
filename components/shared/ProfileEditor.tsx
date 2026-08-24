@@ -17,6 +17,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { InstallAppButton } from './InstallAppButton';
 import { PushToggle } from './PushToggle';
 import { FeedbackCard } from './FeedbackCard';
+import { UpgradeRequestCard } from './UpgradeRequestCard';
 
 export const ProfileEditor: React.FC = () => {
     const { currentUser, userProfile, refreshProfile, logout } = useAuth();
@@ -236,6 +237,15 @@ export const ProfileEditor: React.FC = () => {
                     frequent of the four. */}
                 <div className="mt-3 max-w-sm mx-auto text-left">
                     <FeedbackCard />
+                </div>
+
+                {/* Asking to become a Sarthi. Last of the five for the same
+                    reason Feedback is fourth — this is the least frequent thing
+                    anybody does here, and a Bhulku does it at most once. Renders
+                    nothing at all for a Sarthi or a manager, who already have
+                    everything it would grant. */}
+                <div className="mt-3 max-w-sm mx-auto text-left">
+                    <UpgradeRequestCard />
                 </div>
 
                 {/* Edit & Sign Out buttons */}

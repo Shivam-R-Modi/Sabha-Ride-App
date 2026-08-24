@@ -36,6 +36,12 @@ export type AuditAction =
     | 'user.delete'
     | 'event.delete'
     | 'manager.promote'
+    // A Bhulku became a Sarthi or the other way round, in place, on the one user
+    // document. Its own action rather than a bare 'doc.update' because the row is
+    // the ONLY record that a person's access changed — the four role fields it
+    // writes carry no history of their own, and this app holds children's names,
+    // phone numbers and home addresses.
+    | 'role.change'
     | 'broadcast.send'
     | 'notice.publish'
     | 'notice.delete';

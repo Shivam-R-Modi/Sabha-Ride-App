@@ -254,6 +254,42 @@ export async function managerReleaseVehicle(vehicleId: string): Promise<ManagerR
     return callFunction<ManagerReleaseVehicleResult>('managerReleaseVehicle', { vehicleId });
 }
 
+export interface SetUserRoleResult {
+    success: boolean;
+    /** False when the document already said exactly this. Not an error. */
+    changed: boolean;
+    reason?: 'already';
+    role: 'driver' | 'student';
+    name: string;
+    releasedRideIds?: string[];
+    releasedRiderIds?: string[];
+    releasedVehicleIds?: string[];
+}
+
+/**
+ * A manager moves one person between Bhulku and Sarthi, in place.
+ *
+ * Server-side because a role lives in FOUR fields on the user document and
+ * different readers read different ones — `roles[]` is what the driver picker
+ * queries, `registeredRole` what the approval queues query. Writing some of them
+ * produces one person with two disagreeing identities, which is exactly what the
+ * raw field editor in Records could always do. firestore.rules now refuses role
+ * fields from a browser outright, so this is the only path.
+ *
+ * Refuses manager targets: removing the manager role also needs the `mgr` custom
+ * claim cleared, which is not done here.
+ *
+ * A demotion also hands back any car and returns any still-`assigned` carload to
+ * the pool, and REFUSES once a run is underway — so the thrown message is worth
+ * showing verbatim, which callFunction already does.
+ */
+export async function managerSetUserRole(
+    targetUserId: string,
+    role: 'driver' | 'student',
+): Promise<SetUserRoleResult> {
+    return callFunction<SetUserRoleResult>('managerSetUserRole', { targetUserId, role });
+}
+
 // ============================================
 // STUDENT FUNCTIONS
 // ============================================

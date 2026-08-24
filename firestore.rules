@@ -216,6 +216,54 @@ service cloud.firestore {
       ]);
     }
 
+    // The four fields that say what somebody IS. A subset of the six above, and
+    // separate from them because the two lists are refused to DIFFERENT people:
+    // the six are what a user may not write about themselves, these four are what
+    // NOBODY may write from a browser, manager included.
+    //
+    // Why a manager is refused a write they used to be trusted with: a role lives
+    // in four fields and different readers read different ones — `roles[]` is what
+    // the driver picker queries, `registeredRole` what the approval queues query.
+    // The Records tab's raw editor writes them ONE AT A TIME, so `role: 'driver'`
+    // with `roles: ['student']` produces one person who is a Sarthi to
+    // recordsRole() here and invisible to the driver picker, with no field that
+    // settles which is true. That shape has already shipped once: `roles:
+    // ['manager']` at signup made every manager invisible to useAvailableDrivers,
+    // so "assign to any driver" could only ever report none.
+    //
+    // A browser cannot make those four writes atomically, so it no longer makes
+    // them at all. managerSetUserRole does, on the Admin SDK, which bypasses these
+    // rules — and it also frees the demoted Sarthi's car and hands their assigned
+    // riders back to the pool, neither of which a raw field edit was ever going to
+    // remember to do.
+    //
+    // `accountStatus` is deliberately NOT here. It is one field, it means one
+    // thing, and updateUserStatus in hooks/useUsers.ts writes it from the People
+    // tab with an audit row. Approval is not the same problem as identity.
+    function touchesRoleFields() {
+      return changedKeys().hasAny(['role', 'registeredRole', 'roles', 'activeRole']);
+    }
+
+    // What a rider is allowed to say about wanting to become a Sarthi.
+    //
+    // The field grants nothing — a role change is refused above whatever this
+    // says — so this is not an escalation guard. It is there because a rider who
+    // could write `status: 'rejected'`, or a `decidedBy`, could make their own
+    // profile and the manager's approval queue disagree about whether anyone had
+    // looked at it. A request that appears to have answered itself is the
+    // silently-does-nothing failure this app keeps having to remove.
+    //
+    // Clearing it is always allowed: `null` is how a rider withdraws a pending
+    // request or dismisses a rejection they have read.
+    function writesOwnRoleRequestOnly() {
+      let d = request.resource.data;
+      return !changedKeys().hasAny(['roleUpgrade'])
+             || d.roleUpgrade == null
+             || (d.roleUpgrade.keys().hasOnly(['status', 'requestedAt'])
+                 && d.roleUpgrade.status == 'pending'
+                 && d.roleUpgrade.requestedAt is string);
+    }
+
     // Fields on a ride that the assignment pipeline owns. A student must not be
     // able to forge an assignment or shortcut completion — completeRide also
     // releases the vehicle, updates driver counters and sets student status, so
@@ -301,8 +349,15 @@ service cloud.firestore {
       // were removed deliberately: they bypassed the accountStatus == 'approved'
       // conjunct that isManager() applies, so an UNAPPROVED self-declared
       // manager had write access to every user document.
-      allow update: if (isOwner(userId) && !touchesPrivilegeFields())
-                    || isManager();
+      // Two arms, and each now carries the guard that belongs to it. A user may
+      // edit their own profile but not their privileges, and may ask to become a
+      // Sarthi but not answer themselves. A manager may do everything a manager
+      // did before EXCEPT write the four role fields, because those four have to
+      // move together and a browser cannot do that — see touchesRoleFields().
+      allow update: if (isOwner(userId)
+                        && !touchesPrivilegeFields()
+                        && writesOwnRoleRequestOnly())
+                    || (isManager() && !touchesRoleFields());
 
       // Only approved managers can delete users.
       allow delete: if isManager();
