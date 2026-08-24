@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, Car, ArrowUpCircle, ArrowDownCircle, ShieldAlert } from 'lucide-react';
+import { Loader2, Car, GraduationCap, ArrowUpCircle, ShieldAlert } from 'lucide-react';
 import { Sheet } from '../shared/Sheet';
 import { useConfirm } from '../shared/useConfirm';
 import { useToast } from '../../contexts/ToastContext';
@@ -34,6 +34,53 @@ interface UserDetailSheetProps {
     /** In-flight rides this person is driving. Drives the confirm wording. */
     activeRideCount?: number;
 }
+
+/**
+ * The role-change button, in one place for both directions.
+ *
+ * WHY THIS IS A COMPONENT AND NOT TWO BUTTONS
+ * -------------------------------------------
+ * It was two, written separately, and they drifted exactly as separately-written
+ * things do: promote was a FILLED green button with a car icon, demote was an
+ * OUTLINED red one with a generic down-arrow. Same act, same screen, same level of
+ * consequence — and only ever one of them visible at a time, so the difference did
+ * not read as "one of these is the safe option", it read as two unrelated controls.
+ * Which weight a manager saw depended purely on which direction they happened to
+ * be going.
+ *
+ * Now: identical geometry and weight, and the only things that vary are the ones
+ * that carry meaning — the colour, and the icon of the role the person is
+ * BECOMING. `Car` for Sarthi and `GraduationCap` for Bhulku are not new here; they
+ * are the app's existing role language, from RoleSwitcher's roleConfig.
+ *
+ * Filled in both directions rather than outlined in both. `--danger-fill` is the
+ * established weight for a consequential manager action — the bulk delete in this
+ * very console, the destructive arm of useConfirm — and a demotion frees a car and
+ * puts riders back in the queue, so it is not the lighter of the two.
+ */
+const RoleChangeButton: React.FC<{
+    to: 'driver' | 'student';
+    busy: boolean;
+    onClick: () => void;
+}> = ({ to, busy, onClick }) => (
+    <button
+        onClick={onClick}
+        disabled={busy}
+        className={`w-full min-h-11 rounded-xl font-semibold text-sm
+                    text-[rgb(var(--text-on-accent))]
+                    hover:opacity-90 transition-opacity disabled:opacity-50
+                    flex items-center justify-center gap-2 ${
+            to === 'driver'
+                ? 'bg-[rgb(var(--success-fill))]'
+                : 'bg-[rgb(var(--danger-fill))]'
+        }`}
+    >
+        {busy
+            ? <Loader2 className="animate-spin" size={16} />
+            : to === 'driver' ? <Car size={16} /> : <GraduationCap size={16} />}
+        {to === 'driver' ? 'Make Sarthi' : 'Return to Bhulku'}
+    </button>
+);
 
 const Fact: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
     <div className="flex items-baseline justify-between gap-4 py-2 border-b border-hairline/10 last:border-0">
@@ -232,55 +279,13 @@ export const UserDetailSheet: React.FC<UserDetailSheetProps> = ({
                         // Either button rewrites all four fields, so either one
                         // repairs it — they just pick which truth it should be.
                         <div className="space-y-2">
-                            <button
-                                onClick={() => change('driver')}
-                                disabled={busy}
-                                className="w-full min-h-11 rounded-xl bg-[rgb(var(--success-fill))]
-                                           text-[rgb(var(--text-on-accent))] font-semibold text-sm
-                                           hover:opacity-90 transition-opacity disabled:opacity-50
-                                           flex items-center justify-center gap-2"
-                            >
-                                {busy ? <Loader2 className="animate-spin" size={16} /> : <Car size={16} />}
-                                Make Sarthi
-                            </button>
-                            <button
-                                onClick={() => change('student')}
-                                disabled={busy}
-                                className="w-full min-h-11 rounded-xl border-2 border-[rgb(var(--danger))]
-                                           text-[rgb(var(--danger-text))] font-semibold text-sm
-                                           hover:bg-[rgb(var(--danger-bg))] transition-colors
-                                           disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                <ArrowDownCircle size={16} />
-                                Return to Bhulku
-                            </button>
+                            <RoleChangeButton to="driver" busy={busy} onClick={() => change('driver')} />
+                            <RoleChangeButton to="student" busy={busy} onClick={() => change('student')} />
                         </div>
                     ) : drives ? (
-                        <button
-                            onClick={() => change('student')}
-                            disabled={busy}
-                            className="w-full min-h-11 rounded-xl border-2 border-[rgb(var(--danger))]
-                                       text-[rgb(var(--danger-text))] font-semibold text-sm
-                                       hover:bg-[rgb(var(--danger-bg))] transition-colors
-                                       disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {busy
-                                ? <Loader2 className="animate-spin" size={16} />
-                                : <ArrowDownCircle size={16} />}
-                            Return to Bhulku
-                        </button>
+                        <RoleChangeButton to="student" busy={busy} onClick={() => change('student')} />
                     ) : (
-                        <button
-                            onClick={() => change('driver')}
-                            disabled={busy}
-                            className="w-full min-h-11 rounded-xl bg-[rgb(var(--success-fill))]
-                                       text-[rgb(var(--text-on-accent))] font-semibold text-sm
-                                       hover:opacity-90 transition-opacity disabled:opacity-50
-                                       flex items-center justify-center gap-2"
-                        >
-                            {busy ? <Loader2 className="animate-spin" size={16} /> : <Car size={16} />}
-                            Make Sarthi
-                        </button>
+                        <RoleChangeButton to="driver" busy={busy} onClick={() => change('driver')} />
                     )}
                 </div>
             </Sheet>

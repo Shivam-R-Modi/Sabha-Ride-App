@@ -277,7 +277,7 @@ what `tests/quality/role-table-parity.test.ts` asserts.
 
 ### Verification
 
-**2163 tests — 1244 client, 732 functions, 187 rules.** Build clean.
+**2169 tests — 1250 client, 732 functions, 187 rules.** Build clean.
 **Typecheck 0.** Up from 2003.
 
 Rebased onto `2fbaba5` and re-run there, not just on the branch point. That
@@ -315,6 +315,36 @@ with a pending request, and a deliberately half-written record. Confirmed: four
 columns, no email or address in any row, the `mixed` badge on the broken record
 only, the detail sheet, the confirm naming the car and the riders, and
 "Wants to drive · 1" above the two sign-up queues. No console errors.
+
+### Fixed same day — promote and demote did not look like the same act
+
+Reported from two screenshots of the same dialog. **Make Sarthi** was a FILLED
+green button with a car icon; **Return to Bhulku** was an OUTLINED red one with a
+generic down-arrow. Same screen, same consequence class — and because only one of
+them is visible at a time, the difference did not read as "one of these is the
+safer option" the way the Approve / Turn-down PAIR does on the People page. It
+read as two unrelated controls, and which weight a manager saw depended purely on
+which direction they happened to be going.
+
+They were two separately written `<button>` blocks, which is the whole reason they
+drifted. There is now exactly **one**, `RoleChangeButton`, taking the direction as
+a prop, so the geometry and weight cannot diverge again. Only the things that
+carry meaning vary: the fill, and the icon of the role the person is BECOMING —
+`Car` for Sarthi, `GraduationCap` for Bhulku, which is the app's existing role
+language from `RoleSwitcher`'s `roleConfig`, not something invented here.
+
+Filled in both directions rather than outlined in both. `--danger-fill` is already
+the weight this app gives a consequential manager action — the bulk delete in this
+same console, the destructive arm of `useConfirm` — and a demotion frees a car and
+puts riders back in the queue, so it is not the lighter of the two. Measured
+`--text-on-accent` against both fills in both themes: **5.02, 6.47, 6.10 and
+7.89:1**, all clear of the 4.5 floor.
+
+`tests/quality/role-button-parity.test.ts` pins it, and it is textual rather than a
+render test for the reason `records-tab-stability.test.ts` gives — jsdom computes
+no Tailwind, and `tests/setup.ts` bans class-name assertions from component tests,
+which is exactly why this kind of check belongs in `tests/quality/`. Six cases,
+five of which were confirmed to fail when the old outlined button was pasted back.
 
 ### The functions build is a gate the sweep in CLAUDE.md does not include
 
