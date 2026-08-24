@@ -55,7 +55,7 @@ session reads the ladder above with no counterweight otherwise.
 ## Tests are the standing ask
 
 Ponytail says "no frameworks, no fixtures... trivial one-liners need no test."
-**That does not apply here.** This repo runs **2,003 tests** — 1,152 client,
+**That does not apply here.** This repo runs **2,028 tests** — 1,177 client,
 681 in `functions/`, 170 Firestore rules — and the convention is that every fixed defect
 leaves a named test that fails if the defect returns. Those tests have caught real
 bugs, including ones written in this repo by an agent: a seed function that could

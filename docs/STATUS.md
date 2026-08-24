@@ -1,7 +1,13 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-21**. That day shipped, in order: live ride
+at the end. Last updated **2026-08-24**.
+
+**2026-08-24 is one fix, and it is NOT deployed** — the notice board's Publish and
+Take-down buttons, which have never worked in production. Client-side only, so it
+ships with a hosting deploy alone. See *Fixed 2026-08-24* immediately below.
+
+Before that, **2026-08-21** shipped, in order: live ride
 progress and the venue roster; the nudge; the sabha calendar as one card; the
 standing schedule set to **Friday 20:30–22:00** and rides reopened; reorderable
 sidebar tabs, built and then removed again at the owner's instruction; four UI
@@ -23,6 +29,100 @@ delivered anything in this app.
 
 The UI/UX redesign and the sabha-times fix are also deployed. The incident note
 below is history, kept because its lesson is a standing deploy rule.
+
+## Fixed 2026-08-24 — the notice board's two dead buttons
+
+**Not deployed.** Branch only. Client-side change: `firestore.rules` and
+`functions/` are untouched, so **`hosting` is the only deploy step this needs**.
+`main` is unchanged.
+
+### What was wrong
+
+`src/utils/cloudFunctions.ts` passed two callable names with **literal double
+quotes inside the string**:
+
+```
+callFunction('"publishNotice"', input)      // publishNotice
+callFunction('"deleteNotice"', { noticeId }) // deleteNotice
+```
+
+`httpsCallable(functions, name)` builds the URL from `name` verbatim, so both
+requests went to `.../"publishNotice"` and `.../"deleteNotice"` and returned 404.
+The functions themselves were fine and correctly exported at
+`functions/src/index.ts:45-46`; only the client's spelling of their names was
+wrong. All 20 other call sites in that file pass a bare name.
+
+Effect: the manager Notices tab's **Publish** and **Take-down** buttons
+(`components/manager/NoticeComposer.tsx:53` and `:73`) have never published or
+removed a notice. Both looked completely normal — enabled, clickable, no error.
+The house failure mode again: a control that looks wired up and silently does
+nothing.
+
+Both lines were **born quoted** in `766c51c` ("a notice board, and a Notices tab
+for managers", 2026-08-19) and have no other commit in their history, so the
+notice board has been inert for its whole life in production — about five days.
+It surfaced from reading the code, not from a report, which is the thing to take
+from it: a manager who posts a notice, sees no error, and then finds nothing on
+the board has no reason to think the app is broken rather than that they used it
+wrong. This class of bug does not generate reports.
+
+### Why 2,003 tests did not catch it
+
+`tests/utils/cloudFunctions.test.ts` existed and nominally covered this module.
+**It never imported it.** It kept a local copy of `downloadCSV` — "Replicate the
+logic here since the module import triggers Firebase init" — so not one wrapper
+in the file had ever been executed by a test. The copy had also drifted: the real
+`downloadCSV` prepends a UTF-8 BOM (added 2026-08-21, so Excel stops mangling
+non-ASCII names) and the replica did not, meaning a test asserting on the replica
+would have certified behaviour the shipped function does not have.
+
+Mocking `firebase/functions` and `@/firebase/config` costs six lines and makes the
+whole module reachable. That is the actual fix; the two strings are the symptom.
+
+### The check that now stands there
+
+25 new cases. Every one of the module's 22 `callFunction` sites is asserted three
+ways, cheapest first:
+
+1. the name equals the expected bare string;
+2. the name contains no quote character — the bug, stated as a class;
+3. the name is one that `functions/src/index.ts` **actually exports**.
+
+(3) is the one that earns its keep. A typo, a rename, or a callable deleted
+server-side all produce the same silent 404, and only parity against the deployed
+export list notices. Same reasoning as `tests/quality/agenda-cap.test.ts`: a value
+written down in two places must be checked, because the drift is invisible from
+either side alone.
+
+A table drives the common wrappers, so a new one is a single line. Three wrappers
+get their own cases because their callable name is not their own name and so
+cannot be derived: `previewDeleteSabhaEvent` and `deleteSabhaEvent` both call
+`deleteSabhaEvent`, and `adminDeleteUserViaCloud` calls `adminDeleteUser` from two
+branches. A final case asserts the number of covered sites equals the number of
+`callFunction` sites in the source, so adding a wrapper without a test fails
+loudly instead of going quietly uncovered.
+
+Both checks were confirmed to bite by breaking the code on purpose: re-adding the
+quote fails, and renaming to a plausible-but-undeployed `publishNoticeV2` — with
+the expected name in the test updated to match, so only (3) can object — fails
+with `no export of publishNoticeV2 in functions/src/index.ts`.
+
+One trap worth recording, since it cost a debugging pass: the BOM assertion has to
+read **bytes**, not `blob.text()`. `text()` runs UTF-8 decode, which per spec
+*strips* a leading BOM, so the string comparison comes back without the single
+character it exists to check and passes whether the BOM was written or not.
+
+### Verified
+
+Full sweep on the Mac, all green: **1,177 client** (up 25), **681 functions**,
+**170 rules**, `npm run build` clean, `npm run typecheck` **zero errors**. Total
+**2,028**; the count in `CLAUDE.md` was updated to match.
+
+Note for the next session in this worktree: its `node_modules` was stale
+(mtime 2026-08-10, predating the component-test suite) and missing
+`@testing-library/*` entirely, so **no** client test could run here — every file
+failed to collect — until `npm install --legacy-peer-deps`. The lockfile did not
+change. Worth checking first in any worktree rather than trusting a green run.
 
 ## Shipped 2026-08-21 — the run records who actually travelled
 

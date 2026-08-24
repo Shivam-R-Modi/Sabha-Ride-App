@@ -130,12 +130,12 @@ export async function publishNotice(input: {
     eventId?: string | null;
     push?: boolean;
 }): Promise<{ success: boolean; noticeId: string }> {
-    return callFunction('"publishNotice"', input);
+    return callFunction<{ success: boolean; noticeId: string }>('publishNotice', input);
 }
 
 /** Take a notice down. Deletes its image too — a client cannot do both. */
 export async function deleteNotice(noticeId: string): Promise<{ success: boolean }> {
-    return callFunction('"deleteNotice"', { noticeId });
+    return callFunction<{ success: boolean }>('deleteNotice', { noticeId });
 }
 
 /**
