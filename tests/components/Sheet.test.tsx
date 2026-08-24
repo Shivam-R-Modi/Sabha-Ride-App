@@ -77,11 +77,35 @@ describe('Sheet — closing', () => {
     it('closes when the backdrop is clicked', async () => {
         const user = userEvent.setup();
         const onClose = vi.fn();
-        const { container } = render(<Basic onClose={onClose} />);
+        render(<Basic onClose={onClose} />);
 
-        await user.click(container.firstElementChild as Element);
+        // Reached through the dialog rather than through the render container:
+        // Sheet portals to document.body, so the overlay is deliberately NOT a
+        // descendant of what render() returns. `container.firstElementChild` used
+        // to be the backdrop and is now empty, which made this pass for the wrong
+        // reason waiting to happen. The behaviour under test is unchanged.
+        await user.click(screen.getByRole('dialog').parentElement as Element);
 
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders outside the tree that opened it, so no ancestor can lay it out', async () => {
+        // The reason for the portal. Sheet used to render in place, and fifteen of
+        // its callers are `space-y-*` containers — Tailwind's
+        // `.space-y-6 > * ~ *` rule put `margin-top: 1.5rem` on the `position:
+        // fixed` overlay, so the scrim left the top 24px of the screen undimmed and
+        // every docked sheet sat 24px low. A transformed or `overflow: hidden`
+        // ancestor would have done worse.
+        const { container } = render(
+            <div className="space-y-6">
+                <p>something above it</p>
+                <Basic onClose={vi.fn()} />
+            </div>,
+        );
+
+        const overlay = screen.getByRole('dialog').parentElement!;
+        expect(container.contains(overlay)).toBe(false);
+        expect(document.body.contains(overlay)).toBe(true);
     });
 
     it('does not close when the click lands inside the panel', async () => {

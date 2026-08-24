@@ -282,7 +282,7 @@ what `tests/quality/role-table-parity.test.ts` asserts.
 
 ### Verification
 
-**2175 tests — 1256 client, 732 functions, 187 rules.** Build clean.
+**2180 tests — 1261 client, 732 functions, 187 rules.** Build clean.
 **Typecheck 0.** Up from 2003.
 
 Rebased onto `2fbaba5` and re-run there, not just on the branch point. That
@@ -379,6 +379,56 @@ confirmed red: `tests/quality/sheet-hidden-title.test.ts` (5 cases — CSS facts
 which jsdom cannot see) and a case in `tests/components/UserDetailSheet.test.tsx`
 that follows `aria-labelledby` to its element, which is the one that fails if
 somebody removes the title instead of hiding it.
+
+### Checked at 375x812, and it found two bugs in Sheet — plus one in the harness
+
+Asked to check the dialog at phone width. It reads fine there — the address wraps
+to two lines, nothing overflows, the panel caps at exactly 90dvh (730 of 731) and
+both role buttons are 44px. Getting to that answer turned up three things.
+
+**The preview harness could not show a phone at all.** Five of its six pages had no
+`<meta name="viewport">`, so a 375px viewport rendered at the 980px fallback and
+`resize_window` did nothing. Only `splash.html` had one, which is why the splash
+work was the only mobile-verified screen in the repo. The harness exists *because*
+screens behind sign-in never get looked at; it now carries the same meta as
+`index.html` on every page.
+
+**`Sheet` rendered in place instead of through a portal.** The overlay was a child
+of whatever opened it, and **fifteen** of those parents are `space-y-*` containers.
+Tailwind's `.space-y-6 > :not([hidden]) ~ :not([hidden])` sets
+`margin-top: 1.5rem`, and it landed on a `position: fixed` element: measured, the
+overlay reported `top: 24px, height: 788px` against `inset-0`. So the scrim left the
+top 24px of the screen undimmed and every docked sheet sat 24px low. **This was not
+mine and not new** — `useConfirm`'s prompt is rendered inside those same containers,
+so every confirmation in the app had it. `createPortal` to `document.body` fixes the
+class in one place; a transformed ancestor would have trapped `position: fixed`
+outright and an `overflow: hidden` one would have clipped it.
+
+**The docked variant's `p-0` was dead code.** The class list carried a base `p-4`
+AND `p-0` in the docked branch — both unprefixed utilities of equal specificity, so
+the winner is decided by Tailwind's *output* order, not by the order in the string,
+and `p-4` won. A bottom sheet meant to sit flush had 16px side gutters and a 16px
+gap beneath it while being rounded on the top corners only. Now `items-end p-0
+sm:items-center sm:p-4`, with the base padding moved into the branch so nothing
+competes.
+
+Verified by hit-testing rather than by eye, because the browser pane's screenshot
+was compositing at a stale scale and disagreeing with the DOM:
+`elementFromPoint(5, 5)` returns the scrim and the bottom-right corner returns the
+panel, with the overlay at `0, 0, 375, 812` and the panel flush at `bottom: 812`,
+full width.
+
+**One thing that looked like a defect and was not:** the close button's visual box
+is 36x36. `.tap-target` expands the HIT area with a pseudo-element rather than the
+box, and a probe confirmed it — a tap 21px off centre hits the button, 24px misses.
+Left alone.
+
+`tests/quality/sheet-overlay.test.ts` pins all of it (9 cases, CSS facts jsdom
+cannot see), and `tests/components/Sheet.test.tsx` gains a behavioural case that the
+overlay is not a descendant of the tree that opened it. Both breakages confirmed
+red. One existing test had to change: it clicked `container.firstElementChild` to
+reach the backdrop, which the portal empties — it now goes through the dialog, which
+is portal-agnostic.
 
 ### The functions build is a gate the sweep in CLAUDE.md does not include
 

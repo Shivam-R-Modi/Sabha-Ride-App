@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 /**
@@ -165,10 +166,28 @@ export const Sheet: React.FC<SheetProps> = ({
 
     const docked = variant === 'sheet';
 
-    return (
+    /**
+     * PORTALLED TO document.body, and that is a fix rather than a preference.
+     *
+     * This rendered in place, so the overlay was a child of whatever opened it —
+     * and fifteen of those parents are `space-y-*` containers. Tailwind's
+     * `.space-y-6 > :not([hidden]) ~ :not([hidden])` sets `margin-top: 1.5rem`,
+     * which lands on a `position: fixed` element: measured at 375x812, the
+     * overlay reported `top: 24px, height: 788px` against a `top: 0` and
+     * `inset-0`. So the scrim left the top 24px of the screen undimmed and every
+     * bottom-docked sheet sat 24px low. It was not a mobile bug — mobile is only
+     * where a 24px shift on a docked sheet becomes obvious.
+     *
+     * A modal that renders inside the page inherits the page's layout, and
+     * `space-y` is the mildest version of that: a transformed ancestor would trap
+     * `position: fixed` outright, and an `overflow: hidden` one would clip it. A
+     * portal is the fix for the whole class, in the one component every sheet
+     * already goes through, rather than fifteen call sites each avoiding it.
+     */
+    return createPortal((
         <div
-            className={`fixed inset-0 z-modal flex justify-center p-4 animate-in fade-in duration-150
-                        ${docked ? 'items-end sm:items-center sm:p-4 p-0' : 'items-center'}`}
+            className={`fixed inset-0 z-modal flex justify-center animate-in fade-in duration-150
+                        ${docked ? 'items-end p-0 sm:items-center sm:p-4' : 'items-center p-4'}`}
             style={{ background: 'rgb(var(--scrim) / var(--scrim-alpha))' }}
             onMouseDown={event => {
                 // mousedown, not click: a click fires on the backdrop when a
@@ -226,5 +245,5 @@ export const Sheet: React.FC<SheetProps> = ({
                 )}
             </div>
         </div>
-    );
+    ), document.body);
 };
