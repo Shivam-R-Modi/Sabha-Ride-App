@@ -3,9 +3,9 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-24**.
 
-**2026-08-24 is one fix, and it is NOT deployed** — the notice board's Publish and
-Take-down buttons, which have never worked in production. Client-side only, so it
-ships with a hosting deploy alone. See *Fixed 2026-08-24* immediately below.
+**2026-08-24 is one fix, and it IS deployed** — the notice board's Publish and
+Take-down buttons, which had never worked in production. Hosting only; `main` is
+fast-forwarded and pushed. See *Fixed 2026-08-24* immediately below.
 
 Before that, **2026-08-21** shipped, in order: live ride
 progress and the venue roster; the nudge; the sabha calendar as one card; the
@@ -32,9 +32,26 @@ below is history, kept because its lesson is a standing deploy rule.
 
 ## Fixed 2026-08-24 — the notice board's two dead buttons
 
-**Not deployed.** Branch only. Client-side change: `firestore.rules` and
-`functions/` are untouched, so **`hosting` is the only deploy step this needs**.
-`main` is unchanged.
+**Deployed 2026-08-24** as `234b2f9`. Client-side change, so `firestore.rules`
+and `functions/` were untouched and **hosting was the only step** — the usual
+rules -> functions -> hosting order still held, the first two were simply no-ops.
+`main` fast-forwarded to `234b2f9` and pushed to `origin`.
+
+Verified the way `CLAUDE.md` requires, against the service worker rather than
+around it: the live bundle is `index-Br9FPv2Y.js`, fetched fresh with a
+cache-buster, **byte-identical** to `dist/assets/index-Br9FPv2Y.js` (580,233
+bytes both). The bundle contains `"publishNotice"` and `"deleteNotice"` and zero
+occurrences of the quoted form.
+
+**Still unverified: nobody has pressed the button in production.** Doing that
+means posting a real notice to a live congregation, so it was left alone. The
+evidence above is that the correct code is being served, not that a manager has
+published a notice. Worth doing on the next real sabha.
+
+**Managers already running the PWA will not get this until they reload.**
+`registerType: 'prompt'` means the new worker waits and `UpdateBanner` offers the
+reload — so anyone with the app open still has the broken buttons until they
+accept it. That is the intended behaviour, not a second bug.
 
 ### What was wrong
 
