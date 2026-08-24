@@ -50,8 +50,14 @@ describe('storage.rules grants delete to nobody', () => {
 
     it('still spells out create and update for notice images', () => {
         // If this stops matching, the grant was rewritten and the guard above may
-        // be checking a rule that no longer exists.
-        expect(code).toMatch(/allow\s+create,\s*update:\s*if\s+isApprovedManager\(\)/);
+        // be checking a rule that no longer exists. Loosened from naming
+        // isApprovedManager() specifically to naming the two METHODS, which is what
+        // this file is actually about: the grant now reads
+        // `(isManagerToken() || isApprovedManager())` because the cross-service
+        // document read needs an IAM grant a CLI deploy does not create. Which
+        // predicates guard it is pinned in role-table-parity.test.ts.
+        expect(code).toMatch(/allow\s+create,\s*update:\s*if\s/);
+        expect(code).toMatch(/isReasonableImage\(\)/);
     });
 
     it('keeps an explicit delete denial and a catch-all', () => {

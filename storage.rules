@@ -39,6 +39,46 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }
 
+    // The cheap manager test, and — since 2026-08-24 — the one that actually
+    // works. Mirrors isManagerToken() in firestore.rules.
+    //
+    // WHY THIS ARM EXISTS, AND WHY IT IS FIRST
+    //
+    // isApprovedManager() below reads the caller's user document with
+    // `firestore.get()`. That is a CROSS-SERVICE rule, and a cross-service read
+    // needs the Firebase Rules service agent to hold a Firestore-read role on the
+    // project. The console grants that when you write such rules there; a
+    // `firebase deploy --only storage` never does, and this project had no
+    // `firebaserules` IAM binding at all. So the get() failed, `.data` on a failed
+    // get errors, an errored condition denies — and posting a notice WITH AN IMAGE
+    // returned `storage/unauthorized` for every manager, for the whole life of the
+    // feature. Text-only notices were unaffected: those are plain Firestore
+    // writes. Proved by evaluating this ruleset through the Rules API `:test`
+    // endpoint with `firestore.get` mocked, where the very same request ALLOWS.
+    //
+    // Checked first, so the common case short-circuits before the get() is ever
+    // attempted: no cross-service call, no billed read, and no dependency on an
+    // IAM binding that nothing in this repo can assert.
+    //
+    // THE TRADE, STATED
+    //
+    // A custom claim lives on an ID token for up to an hour after a demotion, and
+    // this arm does not look at `accountStatus` at all. So for that window a
+    // just-revoked manager could put a file in the bucket. That is accepted here
+    // and would NOT be accepted for reading rider data, for the same reasoning
+    // firestore.rules records at isManagerForRead(): an uploaded image is inert
+    // until a notice points at it, and `publishNotice` re-reads the user document
+    // through assertApprovedManager before it will publish one. The worst case is
+    // an orphaned file, which `expireNotices` and `deleteNotice` already sweep —
+    // not a notice anybody sees.
+    //
+    // The document arm below is deliberately KEPT rather than replaced. Once the
+    // IAM grant is in place it is the stronger of the two, and it is the only one
+    // that reflects a demotion immediately.
+    function isManagerToken() {
+      return signedIn() && request.auth.token.get('mgr', false) == true;
+    }
+
     // Mirrors recordsRole() + isApprovedAs('manager') in firestore.rules.
     //
     // firestore.rules routes isManager() through grantsRole(), not recordsRole().
@@ -80,7 +120,11 @@ service firebase.storage {
       // isReasonableImage() reads request.resource, which is null on a delete,
       // and an errored condition denies. Security by accident is not security:
       // naming the two methods makes the denial below the actual reason.
-      allow create, update: if isApprovedManager() && isReasonableImage();
+      // `isManagerToken() ||` first: see the comment on that function. Either
+      // arm proves the caller is a manager; isReasonableImage() still gates the
+      // file itself in both cases, because a manager's client is still a client.
+      allow create, update: if (isManagerToken() || isApprovedManager())
+                               && isReasonableImage();
 
       // Deletion goes through the deleteNotice callable, which removes the file
       // and the document together. A client delete could strand one without the

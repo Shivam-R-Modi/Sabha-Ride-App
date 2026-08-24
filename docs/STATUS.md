@@ -484,6 +484,108 @@ symlinked to the main checkout. `functions/package-lock.json` was rewritten by
 the install and has been reverted — it is not part of this change.
 
 
+## Fixed 2026-08-24 — notice images could never be uploaded, by anyone
+
+**Deployed** (`firestore:rules` → storage; no functions, no hosting). Live storage
+ruleset `321dd0aa`, read back through the Rules API and byte-identical to
+`storage.rules`.
+
+Reported from a screenshot of the Notices composer:
+
+    Firebase Storage: User does not have permission to access
+    'notices/f941b280-…/cropped-IMG_1744.jpeg'. (storage/unauthorized)
+
+### What was actually wrong
+
+`storage.rules` authorises an upload by reading the caller's user document with
+`firestore.get()`. That is a **cross-service** rule, and a cross-service read
+requires the **Firebase Rules service agent** to hold a Firestore-read role on the
+project. The Firebase console grants that for you when you write such rules in its
+editor; **`firebase deploy --only storage` never does**, and this project had no
+`firebaserules` IAM binding at all — only
+`roles/firebasestorage.serviceAgent`.
+
+So the `get()` failed, `.data` on a failed get **errors**, and an errored condition
+denies. Every manager, every image, for the whole life of the feature. Text-only
+notices were unaffected, which is why the board looked like it worked: those are
+plain Firestore writes and never touch Storage.
+
+### How it was pinned down, and what was ruled OUT
+
+Four plausible causes were eliminated with evidence before anything was changed —
+the bucket mismatch in particular looked likely, because `firebase.json` names no
+bucket and STATUS records an earlier *"name the Storage bucket"* fix:
+
+| suspected | checked | verdict |
+|---|---|---|
+| rules deployed to the wrong bucket | releases list | **no** — released to `firebase.storage/sabha-ride-app.firebasestorage.app`, exactly what `VITE_FIREBASE_STORAGE_BUCKET` and `getStorage(app)` use |
+| deployed ruleset stale | read back via Rules API | **no** — byte-identical to the repo |
+| `contentType` missing | `uploadNoticeImage` | **no** — passes `{ contentType: file.type }` explicitly |
+| over the 3 MB ceiling | `describeImageProblem` | **no** — the composer refuses before uploading |
+| the rule logic itself | Rules API **`:test`** with `firestore.get` **mocked** | **no** — the same request ALLOWS |
+
+That last one is what made it certain. If the ruleset allows the exact request once
+the document read is mocked, the ruleset is right and the *read* is what fails.
+
+### What it does now
+
+`isManagerToken()` — `request.auth.token.get('mgr', false)` — added as a **first**
+arm: `allow create, update: if (isManagerToken() || isApprovedManager()) &&
+isReasonableImage();`. Mirrors `isManagerToken()` / `isManagerForRead()` in
+firestore.rules, which already makes this trade for reads.
+
+Order is load-bearing twice: `||` short-circuits, so the common case never attempts
+the cross-service get — no billed read, and no dependence on an IAM binding that
+nothing in this repo can assert.
+
+**The trade, stated.** A claim lives on an ID token for up to an hour after a
+demotion, and this arm does not look at `accountStatus`. For that window a revoked
+manager could put a file in the bucket. Accepted here and not for rider data: an
+uploaded image is inert until a notice points at it, and `publishNotice` re-reads
+the document through `assertApprovedManager` before publishing. Worst case is an
+orphaned file, which `deleteNotice` and `expireNotices` already sweep.
+
+The document arm is **kept**, not replaced. Once the IAM grant is in place it is the
+stronger of the two and the only one that honours a demotion immediately.
+
+### STILL TO DO — one command, and it is not in this repo
+
+Grant the Firebase Rules service agent read access to Firestore, so the document arm
+works too:
+
+- role **`roles/firebaserules.firestoreServiceAgent`** ("Firebase Rules Firestore
+  Service Agent", GA — confirmed against the IAM API, not recalled)
+- member **`serviceAccount:service-546868683884@gcp-sa-firebaserules.iam.gserviceaccount.com`**
+  (546868683884 is the project number, the same value as `messagingSenderId`)
+
+Deliberately **not** done from here: it is a privileged change to production IAM.
+`gcloud` is not installed on this Mac, so it is the IAM page of the Google Cloud
+console, or saving the Storage rules once in the Firebase console, which prompts for
+the grant itself.
+
+### A test that guarded the wrong thing
+
+`tests/quality/role-table-parity.test.ts` asserted that storage.rules **never**
+mentions `request.auth.token`. The reasoning was sound — a claim outlives a
+demotion — but it forbade the only arm that could work while pinning the arm that
+could not. It now requires **both** arms and the claim-first ordering, which is
+stricter than the ban it replaces.
+
+`tests/rules/storage.rules.test.ts` gains the regression test: a manager with the
+`mgr` claim and **no user document at all** can upload — the closest available
+stand-in for "the document could not be read". Confirmed red with the claim arm
+removed. Plus two cases that the claim proves WHO and never WHAT: a PDF from a
+claim-holding manager is still refused, and a rider with `mgr: false` is still
+refused.
+
+**190 rules tests, 1262 client, 732 functions.** Typecheck 0, both builds clean.
+
+### Not verified from here
+
+That a real manager on a real phone can now post a notice with an image. The rules
+allow it and the regression test covers the failing shape, but nothing uploaded a
+byte to the production bucket — that needs the owner's signed-in session.
+
 ## Housekeeping 2026-08-24 — functions/lib was committed, and had drifted
 
 **Deployed**: `functions` redeployed off a clean build, `main` at `f305156`.

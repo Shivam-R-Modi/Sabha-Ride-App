@@ -36,6 +36,10 @@ const STUDENT = 'student_alice';
 const MANAGER = 'manager_mira';
 const ARRAY_MANAGER = 'manager_array_only';
 const PENDING_MANAGER = 'manager_pending';
+/** Carries the `mgr` claim and has NO user document — the production failure shape. */
+const CLAIM_ONLY_MANAGER = 'manager_claim_only';
+/** The claim a manager's token carries; minted by redeemManagerInvite. */
+const MGR_CLAIM = { mgr: true, sm: false, city: 'boston' };
 
 const JPEG = { contentType: 'image/jpeg' };
 const tiny = () => new Uint8Array([1, 2, 3, 4]);
@@ -109,6 +113,35 @@ describe('notice images — who may upload', () => {
 
     it('refuses a signed-out caller', async () => {
         const s = testEnv.unauthenticatedContext().storage();
+        await assertFails(uploadBytes(ref(s, NOTICE), tiny(), JPEG));
+    });
+
+    it('lets a manager through on the mgr CLAIM when the document cannot be read', async () => {
+        // THE REGRESSION TEST for storage/unauthorized on every notice image.
+        //
+        // isApprovedManager() reads the user document with a CROSS-SERVICE
+        // `firestore.get()`, and that needs an IAM grant on the Firebase Rules
+        // service agent which `firebase deploy --only storage` does not create.
+        // Without it the get fails, `.data` errors, and an errored condition
+        // denies — so posting a notice with an image was refused for every
+        // manager for the whole life of the feature.
+        //
+        // No user document here at all, which is the strongest available stand-in
+        // for "the document could not be read": if the claim arm were removed or
+        // moved after the get, this goes red.
+        const s = testEnv.authenticatedContext(CLAIM_ONLY_MANAGER, MGR_CLAIM).storage();
+        await assertSucceeds(uploadBytes(ref(s, NOTICE), tiny(), JPEG));
+    });
+
+    it('still checks the file even when the claim is what let them in', async () => {
+        // The claim proves WHO, never WHAT. A manager's client is still a client.
+        const s = testEnv.authenticatedContext(CLAIM_ONLY_MANAGER, MGR_CLAIM).storage();
+        await assertFails(uploadBytes(ref(s, NOTICE), tiny(), { contentType: 'application/pdf' }));
+    });
+
+    it('refuses a rider who somehow has no claim and no manager role', async () => {
+        // Guards against the claim arm being written as a bare `signedIn()`.
+        const s = testEnv.authenticatedContext(STUDENT, { mgr: false }).storage();
         await assertFails(uploadBytes(ref(s, NOTICE), tiny(), JPEG));
     });
 

@@ -156,11 +156,35 @@ describe('storage.rules agrees about who is a manager', () => {
         expect(storage).toMatch(/'manager' in callerData\(\)\.roles/);
     });
 
-    it('requires approval, and reads the document rather than a claim', () => {
-        // A claim survives on an ID token for up to an hour after a demotion.
+    it('keeps the document arm, which is the one that honours a demotion', () => {
+        // This assertion used to also require that storage.rules NEVER mentioned
+        // `request.auth.token`, on the reasoning that a claim survives on an ID
+        // token for up to an hour after a demotion. That reasoning still holds and
+        // is why the document arm must stay — but the ban was wrong, and it was
+        // guarding a rule that could not run.
+        //
+        // Reading the document from Storage rules is a CROSS-SERVICE `firestore.get()`,
+        // which needs an IAM grant on the Firebase Rules service agent that
+        // `firebase deploy --only storage` does not create. Without it the get
+        // fails, `.data` errors, and an errored condition denies — so notice-image
+        // uploads returned `storage/unauthorized` for every manager. A test that
+        // forbade the only arm which works, while pinning the arm that could not,
+        // is the shape of a guard that protects the wrong thing.
+        //
+        // So: BOTH arms are now required. That is stricter than the old assertion,
+        // not looser — it pins the claim arm as a fallback AND forbids the document
+        // arm being dropped once the fallback makes uploads work.
         expect(storage).toMatch(/accountStatus == 'approved'/);
         expect(storage).toMatch(/firestore\.get\(/);
-        expect(storage).not.toMatch(/request\.auth\.token/);
+        expect(storage).toMatch(/request\.auth\.token\.get\('mgr', false\)/);
+    });
+
+    it('checks the claim BEFORE the cross-service read', () => {
+        // Order is load-bearing twice over: `||` short-circuits, so the common case
+        // never attempts the get — no billed read, and no dependence on an IAM
+        // binding nothing in this repo can assert. Put the document arm first and
+        // the feature breaks again the moment that grant is missing.
+        expect(storage).toMatch(/isManagerToken\(\)\s*\|\|\s*isApprovedManager\(\)/);
     });
 });
 
