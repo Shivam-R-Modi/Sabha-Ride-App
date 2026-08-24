@@ -45,3 +45,22 @@ serviceAccountKey.json
 
 # Built output of the screen previews in preview/. Not shipped.
 preview-dist/
+
+# Compiled output of functions/. It was COMMITTED, all 102 files, until
+# 2026-08-24 — and `functions/package.json` still points `main` at `lib/index.js`,
+# so the instinct to keep it is understandable and wrong.
+#
+# Nothing needs it in git. `firebase.json` has a `predeploy` hook,
+# `npm --prefix "$RESOURCE_DIR" run build`, so every functions deploy regenerates
+# lib from source before packaging; a fresh clone with no lib/ deploys correctly.
+# The functions test suite runs vitest straight off the TypeScript in src/. And the
+# upload is NOT affected by this file: firebase-tools builds its archive from
+# `functions.ignore` in firebase.json (defaulting to node_modules and .git) and
+# never reads .gitignore — checked in
+# lib/deploy/functions/prepareFunctionsUpload.js, not assumed, because getting it
+# wrong would ship an empty function.
+#
+# What committing it cost: every run of the verification sweep regenerates 102
+# .js/.js.map files, so the sweep itself dirtied the tree, and two branches
+# touching one callable conflicted in generated output as well as in source.
+functions/lib/

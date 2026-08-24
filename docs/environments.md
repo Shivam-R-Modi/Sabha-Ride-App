@@ -124,7 +124,14 @@ npm run deploy:hosting
 ```
 
 `firebase.json` has a `predeploy` hook that builds `functions/` before shipping
-it, so stale compiled output in `functions/lib` is no longer a footgun.
+it, so stale compiled output in `functions/lib` is no longer a footgun. **`lib/` is
+gitignored** as of 2026-08-24 — it used to be committed, which meant the
+verification sweep dirtied the tree on every run, and it had accumulated compiled
+output for three functions long since deleted from source (`geocodeAddress`,
+`verifyManagerCode`, `clustering`), because `tsc` does not prune its own output
+directory. None were exported from `index.ts`, so none was ever a live endpoint;
+they were dead weight in the upload archive. Delete `functions/lib` and rebuild if
+you ever want to be sure of what is being shipped.
 
 After deploying, fast-forward `main` so it matches what is live.
 
