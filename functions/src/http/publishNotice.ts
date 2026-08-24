@@ -12,6 +12,12 @@ import { notifyEveryone } from '../utils/notifications';
 
 /** A long flyer, and nowhere near a payload. Mirrored in firestore.rules. */
 const MAX_BODY = 4000;
+/**
+ * The heading on a collapsed row. Mirrored in src/utils/notice.ts and in
+ * firestore.rules; the three are pinned together by
+ * tests/quality/notice-title-cap.test.ts.
+ */
+const MAX_TITLE = 80;
 /** How much of the body a push carries. A notification is a nudge, not the notice. */
 const PUSH_EXCERPT = 120;
 
@@ -32,6 +38,22 @@ export const publishNotice = functions.https.onCall(async (data, context) => {
     const body = String(data?.body ?? '').trim();
     if (!body) {
         throw new functions.https.HttpsError('invalid-argument', 'A message is required');
+    }
+
+    // REQUIRED here while optional on the client's `Notice` type, and that is not
+    // a contradiction: every notice written from now on has one, and the two that
+    // predate the field fall back to their body's first line when rendered.
+    //
+    // Bound to a real `string` by `String(...)`, deliberately. `data` is `any`, and
+    // narrowing `any` with a `!` or a `.length` check leaves it `any` — a functions
+    // deploy has already failed once on exactly that shape.
+    const title: string = String(data?.title ?? '').trim();
+    if (!title) {
+        throw new functions.https.HttpsError('invalid-argument', 'A title is required');
+    }
+    if (title.length > MAX_TITLE) {
+        throw new functions.https.HttpsError(
+            'invalid-argument', `Keep the title under ${MAX_TITLE} characters`);
     }
     if (body.length > MAX_BODY) {
         throw new functions.https.HttpsError(
@@ -76,6 +98,7 @@ export const publishNotice = functions.https.onCall(async (data, context) => {
     });
 
     const ref = await db.collection('notices').add({
+        title,
         body,
         imagePath,
         imageUrl,

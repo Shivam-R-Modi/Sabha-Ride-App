@@ -6,6 +6,7 @@ import '../index.css';
 import '../claymorphism.css';
 import '../tailwind.css';
 import { DriverShift, type DriverShiftProps } from '../components/driver/DriverShift';
+import { NoticeBoard } from '../components/shared/NoticeBoard';
 
 const vehicles = [
   { id: 'v1', name: 'Grey Odyssey', licensePlate: 'NJ-4821', capacity: 7, color: '#6B7280' },
@@ -22,6 +23,10 @@ const base: DriverShiftProps = {
   vehicles, vehiclesLoading: false, vehiclePickerOpen: false, selectingVehicle: false,
   onGoOnShift: () => {}, onEndShift: () => {}, onFindRiders: () => {},
   onOpenVehiclePicker: () => {}, onCloseVehiclePicker: () => {}, onSelectVehicle: () => {},
+  // The real dashboard passes this. Without it the harness showed no board at
+  // all, so the one thing worth looking at here — the shift controls ABOVE the
+  // notices, and one notice open at a time — could not be looked at.
+  afterShift: <NoticeBoard />,
 };
 
 const states: [string, Partial<DriverShiftProps>][] = [

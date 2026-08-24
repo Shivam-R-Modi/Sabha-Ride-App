@@ -788,9 +788,18 @@ service cloud.firestore {
       // The size cap is here and not only in the composer, the same reasoning as
       // clientErrors above: a client is a trust boundary even when it belongs to
       // a manager. 4000 characters is a long flyer and nowhere near a payload.
+      //
+      // The title is constrained by SHAPE, not required to be present. Requiring
+      // it here would make the two notices that predate the field — 2026-08-24 —
+      // impossible to update from any client, including to correct them. The
+      // callable is what requires one on the way in; this is what stops an
+      // over-long or non-string one being stored.
       allow create, update: if isManager()
                             && request.resource.data.body is string
-                            && request.resource.data.body.size() <= 4000;
+                            && request.resource.data.body.size() <= 4000
+                            && (!('title' in request.resource.data)
+                                || (request.resource.data.title is string
+                                    && request.resource.data.title.size() <= 80));
 
       // Deleting a notice must also delete its image from Storage, and a client
       // cannot be trusted to do both. `deleteNotice` does it in order, and the

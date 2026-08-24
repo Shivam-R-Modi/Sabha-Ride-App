@@ -459,8 +459,6 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
                 <p className="text-coffee-700 text-sm">{user.name}</p>
             </header>
 
-            <NoticeBoard />
-
             {card()}
 
             {/* Was a full card competing for attention with the real action. It is
@@ -470,6 +468,14 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
                     Please ask by Thursday evening so a driver can be arranged for your area.
                 </p>
             )}
+
+            {/* BELOW the action, at the owner's call on 2026-08-24, and it used to
+                be directly under the greeting. Two notices with flyers pushed
+                "Request a ride" off the first screen entirely — the board was
+                burying the one thing this page exists for. The board collapses each
+                notice to a row now, so it costs a few lines here and stays worth
+                scrolling to. */}
+            <NoticeBoard />
 
             <Sheet
                 open={requestOpen}

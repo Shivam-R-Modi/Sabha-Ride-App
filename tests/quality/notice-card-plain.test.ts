@@ -94,7 +94,12 @@ describe('a notice image is shown whole', () => {
     it('has an image to check', () => {
         // Guards the regex above: if the <img> moves or changes shape, the
         // assertions below would otherwise pass against an empty string.
-        expect(img).toContain('src={imageUrl}');
+        //
+        // It has already earned its keep once. When the notice card became a
+        // collapsed ROW on 2026-08-24 the image moved into the opened panel and
+        // its source became `notice.imageUrl`; this line failed, and the four
+        // below it would otherwise have gone quietly vacuous.
+        expect(img).toContain('src={notice.imageUrl}');
     });
 
     it('never uses object-cover, which crops', () => {

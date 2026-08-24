@@ -35,6 +35,18 @@ vi.mock('../../hooks/useFirestore', () => ({
     updateAttendanceResponse: (...a: unknown[]) => updateAttendanceResponse(...a),
 }));
 vi.mock('../../hooks/useCurrentEvent', () => ({ useCurrentEvent: () => useCurrentEvent() }));
+/**
+ * EMPTY BY DEFAULT, and that matters more than it looks.
+ *
+ * This was unmocked until 2026-08-24 and passed only because the real hook yields
+ * nothing under test. A collapsed notice is a `<button>` carrying its title, and
+ * `primaryActions()` below counts every button that is not Close or Dismiss — so
+ * the "exactly one action" assertions would have started failing the first time a
+ * notice existed, on a screen that had not changed. Mocked to empty, the counts
+ * mean what they say; the one test that wants a notice sets it explicitly.
+ */
+let notices: any[] = [];
+vi.mock('../../hooks/useNotices', () => ({ useNotices: () => ({ notices, loading: false }) }));
 vi.mock('../../hooks/useSettings', () => ({ useSettings: () => useSettings() }));
 vi.mock('../../src/utils/cloudFunctions', () => ({
     studentReadyToLeave: (...a: unknown[]) => studentReadyToLeave(...a),
@@ -94,6 +106,8 @@ const primaryActions = () =>
     });
 
 beforeEach(() => {
+    notices = [];
+    window.localStorage.clear();
     useCurrentEvent.mockReturnValue({
         eventId: '2026-08-14', hasEvent: true, canWithdraw: true, venue: VENUE,
     });
@@ -549,5 +563,60 @@ describe('RiderHome — taking a request back', () => {
         fireEvent.click(await screen.findByRole('button', { name: /yes, cancel it/i }));
 
         expect(await screen.findByText(/insufficient permissions/i)).toBeInTheDocument();
+    });
+});
+
+describe('the notice board sits below the action', () => {
+    /**
+     * It used to sit directly under the greeting, above the state card. Two
+     * notices carrying flyers pushed "Request a ride" off the first screen
+     * entirely, so the owner's call on 2026-08-24 moved the board below it.
+     *
+     * `useCurrentEvent` is mocked here without an `agenda`, so what these assert
+     * on is the notice half of the board specifically.
+     */
+    beforeEach(() => {
+        notices = [{ id: 'n1', title: 'Sabha moved to 7pm', body: 'Please arrive early.' }];
+    });
+
+    it('renders the board', () => {
+        show({ kind: 'can-request' });
+        expect(screen.getByText('Sabha moved to 7pm')).toBeInTheDocument();
+    });
+
+    it('renders it AFTER the request button', () => {
+        show({ kind: 'can-request' });
+
+        const action = screen.getByRole('button', { name: /request a ride/i });
+        const notice = screen.getByText('Sabha moved to 7pm');
+
+        // DOCUMENT_POSITION_FOLLOWING === 4
+        expect(
+            action.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING,
+            'the board must come after the action, or it buries what this page is for',
+        ).toBeTruthy();
+    });
+
+    it('renders it after the greeting, not above the page title', () => {
+        show({ kind: 'can-request' });
+
+        const greeting = screen.getByText('Jai Swaminarayan!');
+        const notice = screen.getByText('Sabha moved to 7pm');
+
+        expect(greeting.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy();
+    });
+
+    it('shows the title only, so a flyer cannot push the action off screen', () => {
+        show({ kind: 'can-request' });
+        expect(screen.queryByText('Please arrive early.')).toBeNull();
+    });
+
+    it('leaves the request button the only action on the card', () => {
+        // The board's rows ARE buttons, so this states the boundary the count
+        // assertions at the top of this file rely on: a notice row is not a
+        // primary action, and the state card still offers exactly one.
+        show({ kind: 'can-request' });
+        expect(screen.getAllByRole('button', { name: /request a ride/i })).toHaveLength(1);
     });
 });

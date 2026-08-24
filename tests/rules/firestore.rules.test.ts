@@ -1388,6 +1388,65 @@ describe('the notice board', () => {
         await assertFails(deleteDoc(doc(asStudent(), 'notices', 'n1')));
         await assertFails(deleteDoc(doc(asDriver(), 'notices', 'n1')));
     });
+
+    /**
+     * The title, added 2026-08-24 with the collapsed board.
+     *
+     * Constrained by SHAPE and not required, deliberately. `publishNotice` is what
+     * insists on one; requiring it here would make `n1` above — which stands for
+     * the two live notices that predate the field — impossible to update from any
+     * client, including to correct it.
+     */
+    it('a manager can post a title', async () => {
+        await assertSucceeds(setDoc(doc(asManager(), 'notices', 'n3'), {
+            title: 'Sabha moved to 7pm',
+            body: 'Please arrive early.',
+            createdAt: '2026-08-24T00:00:00.000Z',
+            createdByUid: MANAGER,
+            createdByName: 'Mira',
+        }));
+    });
+
+    it('refuses a title long enough to break the row it sits on', async () => {
+        await assertFails(setDoc(doc(asManager(), 'notices', 'long'), {
+            title: 'x'.repeat(81),
+            body: 'Please arrive early.',
+            createdAt: '2026-08-24T00:00:00.000Z',
+        }));
+    });
+
+    it('accepts one exactly at the cap', async () => {
+        // Off by one in this direction refuses a title the composer accepted.
+        await assertSucceeds(setDoc(doc(asManager(), 'notices', 'edge'), {
+            title: 'x'.repeat(80),
+            body: 'Please arrive early.',
+            createdAt: '2026-08-24T00:00:00.000Z',
+        }));
+    });
+
+    it('refuses a title that is not a string', async () => {
+        // `noticeHeading` calls .trim() on this on every dashboard.
+        await assertFails(setDoc(doc(asManager(), 'notices', 'weird2'), {
+            title: { nested: true },
+            body: 'Please arrive early.',
+            createdAt: '2026-08-24T00:00:00.000Z',
+        }));
+        await assertFails(setDoc(doc(asManager(), 'notices', 'weird3'), {
+            title: 7,
+            body: 'Please arrive early.',
+            createdAt: '2026-08-24T00:00:00.000Z',
+        }));
+    });
+
+    it('still lets a manager update a notice that has no title', async () => {
+        // The two live ones. If this ever fails they become uneditable, and the
+        // only way to fix a typo is the Admin SDK on the owner's Mac.
+        await assertSucceeds(updateDoc(doc(asManager(), 'notices', 'n1'), { body: 'Corrected time' }));
+    });
+
+    it('a rider cannot add a title to a notice either', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'notices', 'n1'), { title: 'Mine now' }));
+    });
 });
 
 describe('a Sarthi cannot read the whole congregation', () => {

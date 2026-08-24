@@ -493,6 +493,13 @@ export interface AuditLog {
  */
 export interface Notice {
   id: string;
+  /**
+   * The heading on the collapsed row. OPTIONAL here and REQUIRED by the composer:
+   * every notice written since 2026-08-24 has one, and the two already on the
+   * board when the field landed fall back to their body's first line. See
+   * `noticeHeading` in src/utils/notice.ts.
+   */
+  title?: string;
   body: string;
   /** Storage path, e.g. `notices/{id}/flyer.jpg`. Absent when there is no image. */
   imagePath?: string;

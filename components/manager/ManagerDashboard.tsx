@@ -9,7 +9,6 @@ import { useToast } from '../../contexts/ToastContext';
 import { seatsOnRide } from '../../src/constants/seats';
 import { managerReleaseVehicle } from '../../src/utils/cloudFunctions';
 import { DriverPicker } from './DriverPicker';
-import { NoticeBoard } from '../shared/NoticeBoard';
 
 // Grouped Ride Card Component
 const RideAssignmentCard: React.FC<{
@@ -490,19 +489,14 @@ export const ManagerDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* The notice board, INSIDE this scroll region.
-                  It cannot go at the outer level: `.app-panel` is a fixed-height
-                  flex column, so a sibling above `flex-1 overflow-hidden` steals
-                  height from the tab content permanently — and the request queue
-                  is the one thing a manager needs during a sabha.
-                  Nor can it go inside RequestTable's own scroller on the Waiting
-                  tab: that component returns <EmptyState /> before rendering it
-                  whenever there are no requests, so the board would vanish
-                  exactly when a manager has time to read it. Here it scrolls with
-                  the rides and costs the queue nothing. */}
-              <div className="mb-6">
-                <NoticeBoard />
-              </div>
+              {/* NO NOTICE BOARD HERE, removed 2026-08-24 at the owner's request.
+                  It spent a release being placed carefully inside this scroll
+                  region — the history is in git — and the placement was never the
+                  problem. A manager writes the notices, and Notices → "On the
+                  board now" already shows them exactly as everyone else sees them,
+                  so a second copy on the dispatch screen was pushing the request
+                  queue down to repeat what its author already knew.
+                  tests/quality/notice-placement.test.ts keeps it out. */}
 
               {/* A "Live Interactive Map" sat here. It was a schematic box that
                   placed pins by scaling latitude and longitude into percentages

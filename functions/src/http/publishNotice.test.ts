@@ -66,7 +66,14 @@ function makeDb() {
     };
 }
 
-const publish = (data: any) => (publishNotice as any)(data, { auth: { uid: 'mgr_1' } });
+/**
+ * A title is REQUIRED as of 2026-08-24, so one is supplied by default here and
+ * the cases that are about the title override it. Threading it through every
+ * existing call instead would have said nothing about the title and buried what
+ * each of those cases is actually for.
+ */
+const publish = (data: any) =>
+    (publishNotice as any)({ title: 'Sabha this Sunday', ...data }, { auth: { uid: 'mgr_1' } });
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -101,6 +108,58 @@ describe('publishNotice — content', () => {
     it('validates the date shape', async () => {
         await expect(publish({ body: 'hi', showUntil: '21 Aug' })).rejects.toThrow(/YYYY-MM-DD/);
         await expect(publish({ body: 'hi', showUntil: '2026-08-21' })).resolves.toBeDefined();
+    });
+});
+
+describe('publishNotice — the title', () => {
+    /**
+     * Every notice is a collapsed row showing its title now, so a notice without
+     * one has nothing to be a row of. Required HERE and optional on the client's
+     * `Notice` type, which is not a contradiction: two notices predate the field
+     * and fall back to their body's first line when rendered.
+     */
+    it('stores the title', async () => {
+        await publish({ title: 'Sabha moved to 7pm', body: 'Please arrive early.' });
+        expect(added[0].title).toBe('Sabha moved to 7pm');
+    });
+
+    it('refuses a notice with no title', async () => {
+        await expect(publish({ title: undefined, body: 'hi' })).rejects.toThrow(/title is required/i);
+        expect(added).toHaveLength(0);
+    });
+
+    it('refuses a whitespace-only title', async () => {
+        await expect(publish({ title: '   \n ', body: 'hi' })).rejects.toThrow(/title is required/i);
+    });
+
+    it('trims the title', async () => {
+        await publish({ title: '  Sabha moved  ', body: 'hi' });
+        expect(added[0].title).toBe('Sabha moved');
+    });
+
+    it('caps it at 80, the same number the rules and the composer use', async () => {
+        await expect(publish({ title: 'x'.repeat(81), body: 'hi' }))
+            .rejects.toThrow(/under 80/i);
+    });
+
+    it('accepts one exactly at the cap', async () => {
+        // Off-by-one in the wrong direction refuses a title the composer accepted.
+        await expect(publish({ title: 'x'.repeat(80), body: 'hi' })).resolves.toBeDefined();
+    });
+
+    it('writes no audit row when it refuses', async () => {
+        // The negative space this suite already checks elsewhere: a refusal must
+        // not leave a record claiming a notice was published.
+        await expect(publish({ title: '', body: 'hi' })).rejects.toThrow();
+        expect(auditRows).toHaveLength(0);
+        expect(notifyEveryone).not.toHaveBeenCalled();
+    });
+
+    it('refuses before spending the rate-limit allowance', async () => {
+        // Validation is cheap and the allowance is not. Same ordering the body
+        // check has always had.
+        await expect(publish({ title: '', body: 'hi' })).rejects.toThrow();
+        expect(rateLimit).not.toHaveBeenCalled();
     });
 });
 

@@ -123,6 +123,7 @@ export interface CompleteRideResult {
  */
 /** Publish a notice-board post. Optionally pushes, via the same broadcast floor. */
 export async function publishNotice(input: {
+    title: string;
     body: string;
     imagePath?: string | null;
     imageUrl?: string | null;

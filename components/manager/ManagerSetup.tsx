@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { CalendarDays, Clock, MapPin, ChevronDown } from 'lucide-react';
+import { CalendarDays, Clock, MapPin } from 'lucide-react';
 import { SabhaCalendar } from './SabhaCalendar';
 import { RideWindowControl } from './RideWindowControl';
 import { LocationSettings } from './LocationSettings';
+import { Disclosure, type DisclosureProps } from '../shared/Disclosure';
 
 /**
  * Everything a manager configures, as named sections rather than a pile.
@@ -26,52 +27,13 @@ import { LocationSettings } from './LocationSettings';
  * dangerous one in an accordion never made it safer, only harder to find. The
  * warning it carried moved with it, into components/manager/ManagerRecords.tsx.
  *
- * The `danger` treatment this Section supported went with Raw records — it was the
- * only caller. Restore it from git if a genuinely destructive setting lands here.
+ * The `danger` treatment the row supported went with Raw records — it was the only
+ * caller. Restore it from git if a genuinely destructive setting lands here.
+ *
+ * The row itself moved out on 2026-08-24, to components/shared/Disclosure.tsx, so
+ * the notice board could open one notice at a time using the same thing rather
+ * than a second accordion that would drift from this one.
  */
-
-interface SectionProps {
-    id: string;
-    icon: React.ReactNode;
-    title: string;
-    summary: string;
-    open: boolean;
-    onToggle: () => void;
-    children: React.ReactNode;
-}
-
-const Section: React.FC<SectionProps> = ({
-    icon, title, summary, open, onToggle, children,
-}) => (
-    <section className="clay-card p-0 overflow-hidden">
-        <button
-            onClick={onToggle}
-            aria-expanded={open}
-            className="w-full flex items-center gap-4 p-4 text-left min-h-11 hover:bg-cream-300/40
-                       transition-colors"
-        >
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0
-                            bg-cream-300 text-saffron">
-                {icon}
-            </div>
-            <div className="min-w-0 flex-1">
-                <h2 className="font-header font-bold text-coffee leading-tight">{title}</h2>
-                <p className="text-xs text-coffee-500 mt-0.5">{summary}</p>
-            </div>
-            <ChevronDown
-                size={20}
-                aria-hidden="true"
-                className={`text-coffee-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-            />
-        </button>
-
-        {open && (
-            <div className="border-t border-hairline/10 p-4 animate-in fade-in duration-150">
-                {children}
-            </div>
-        )}
-    </section>
-);
 
 export const ManagerSetup: React.FC = () => {
     // One at a time. These are long forms; two open at once means scrolling past
@@ -79,7 +41,7 @@ export const ManagerSetup: React.FC = () => {
     const [openId, setOpenId] = useState<string | null>(null);
     const toggle = (id: string) => setOpenId(current => (current === id ? null : id));
 
-    const sections: Omit<SectionProps, 'open' | 'onToggle'>[] = [
+    const sections: (Omit<DisclosureProps, 'open' | 'onToggle'> & { id: string })[] = [
         {
             id: 'calendar',
             icon: <CalendarDays size={20} />,
@@ -112,12 +74,12 @@ export const ManagerSetup: React.FC = () => {
                 </p>
             </header>
 
-            {sections.map(section => (
-                <Section
-                    key={section.id}
+            {sections.map(({ id, ...section }) => (
+                <Disclosure
+                    key={id}
                     {...section}
-                    open={openId === section.id}
-                    onToggle={() => toggle(section.id)}
+                    open={openId === id}
+                    onToggle={() => toggle(id)}
                 />
             ))}
         </div>

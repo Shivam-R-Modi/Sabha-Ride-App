@@ -212,25 +212,29 @@ describe('DriverShift — choosing a car', () => {
     });
 });
 
-describe('the afterHeader slot', () => {
+describe('the afterShift slot', () => {
     /**
      * This component owns the PAGE — its own `px-4 pt-6` wrapper and the header
      * with the Sarthi's name. So anything DriverDashboard places around it lands
      * either above that header, flush against the app chrome with no title above
-     * the fold, or below the whole card. The notice board sat in the first of
-     * those and looked dumped there, next to a rider dashboard that puts it after
-     * its header and looked composed.
+     * the fold, or outside the page's own spacing. That is why it is a slot.
      *
-     * The slot is what makes the two screens match, so its POSITION is the thing
-     * worth pinning, not merely that it renders.
+     * ITS POSITION IS THE THING WORTH PINNING, not merely that it renders — and
+     * the position INVERTED on 2026-08-24. This suite used to assert the slot came
+     * BEFORE the shift controls, with a docblock defending it. Two notices
+     * carrying flyers then pushed "Go on shift" off the first screen entirely, so
+     * the owner's call was core action first, board after. The old assertion is
+     * kept in the opposite direction rather than deleted, because "the board
+     * outranks the shift button" is a decision that could plausibly be made again
+     * by accident.
      */
     it('renders the slot content', () => {
-        show({ afterHeader: <p>A notice</p> });
+        show({ afterShift: <p>A notice</p> });
         expect(screen.getByText('A notice')).toBeInTheDocument();
     });
 
     it('renders it AFTER the name, not above it', () => {
-        show({ afterHeader: <p>A notice</p> });
+        show({ afterShift: <p>A notice</p> });
 
         const name = screen.getByRole('heading', { name: 'Ramesh Patel' });
         const slot = screen.getByText('A notice');
@@ -242,13 +246,28 @@ describe('the afterHeader slot', () => {
         ).toBeTruthy();
     });
 
-    it('renders it BEFORE the shift controls', () => {
-        show({ afterHeader: <p>A notice</p> });
+    it('renders it AFTER the shift controls', () => {
+        show({ afterShift: <p>A notice</p> });
 
         const slot = screen.getByText('A notice');
         const action = screen.getByRole('button', { name: /find my next riders/i });
 
-        expect(slot.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(
+            action.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING,
+            'the shift control must come first, or the board buries what this page is for',
+        ).toBeTruthy();
+    });
+
+    it('renders it after the end-shift control too', () => {
+        // The whole shift GROUP comes first, not just the primary button. On shift
+        // there are two controls, and squeezing the board between them would put a
+        // wall of notices in the middle of one decision.
+        show({ afterShift: <p>A notice</p> });
+
+        const end = screen.getByRole('button', { name: /end my shift/i });
+        const slot = screen.getByText('A notice');
+
+        expect(end.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it('changes nothing when omitted', () => {

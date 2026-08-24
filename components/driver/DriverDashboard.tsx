@@ -434,12 +434,12 @@ export const DriverDashboard: React.FC = () => {
      */
     const shiftCard = (
         <DriverShift
-            // Inside the shift card's own page flow, under the Sarthi's name.
+            // Inside the shift card's own page flow, BELOW the shift controls.
             // DriverShift owns the page padding and header, so a board placed
-            // around it either sits flush against the app chrome with no title
-            // above it, or below the whole card. This matches RiderHome:
-            // name, then the board, then the action.
-            afterHeader={<NoticeBoard />}
+            // around it either sits flush against the app chrome or outside the
+            // page's spacing. This matches RiderHome: name, then the action, then
+            // the board.
+            afterShift={<NoticeBoard />}
             driverName={userProfile?.name || 'Sarthi'}
             avatarUrl={userProfile?.avatarUrl}
             onShift={isAvailable}

@@ -90,7 +90,7 @@ function assertName(name: string, expected: string) {
 const WRAPPERS: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
     ['globalAssignDriver', () => cloudFunctions.globalAssignDriver('d1', 'c1')],
     ['startRide', () => cloudFunctions.startRide('r1')],
-    ['publishNotice', () => cloudFunctions.publishNotice({ body: 'Sabha moved to 7pm' })],
+    ['publishNotice', () => cloudFunctions.publishNotice({ title: 'Sabha moved', body: 'Sabha moved to 7pm' })],
     ['deleteNotice', () => cloudFunctions.deleteNotice('n1')],
     ['managerBroadcast', () => cloudFunctions.managerBroadcast('Sabha moved to 7pm')],
     ['sarthiArrived', () => cloudFunctions.sarthiArrived('r1')],

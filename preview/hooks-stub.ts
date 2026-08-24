@@ -63,6 +63,7 @@ export const useNotices = () => ({
   notices: [
     {
       id: 'n1',
+      title: 'What I couldn\u2019t do, and won\u2019t',
       body: 'What I couldn\u2019t do, and won\u2019t\n\nPressing the actual button needs an approved-manager session, and that means a Google sign-in. I won\u2019t type your password into a login form \u2014 that\u2019s a line I hold regardless of who asks.',
       imageUrl: portraitFlyer,
       imagePath: 'notices/n1/flyer.svg',

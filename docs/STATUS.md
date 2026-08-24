@@ -16,6 +16,12 @@ committed, and the sweep that ships it dirties the tree on every run. It is
 gitignored now, and functions were redeployed off a clean build. See
 *Housekeeping 2026-08-24* below.
 
+**The fourth is the notice board becoming a list** — titled rows, one open at a
+time, a New badge, and the board moved BELOW the core action on both dashboards.
+**Written and tested, NOT DEPLOYED.** It needs rules -> functions -> hosting, all
+three, because notices gained a `title` field. See *Written 2026-08-24 — the
+collapsed notice board* below.
+
 Before that, **2026-08-21** shipped, in order: live ride
 progress and the venue roster; the nudge; the sabha calendar as one card; the
 standing schedule set to **Friday 20:30–22:00** and rides reopened; reorderable
@@ -795,6 +801,110 @@ queries return 4 users, 5 rides, 3 vehicles, 5 audit rows. The audit trail shows
 `notice.delete` rows seconds apart, and that action is only ever written by the
 `deleteNotice` callable, which is the path that removes file and document together.
 A raw document delete would have stranded the image; it did not.
+
+## Written 2026-08-24 — the collapsed notice board
+
+**NOT DEPLOYED.** Branch only. Needs the full order — **`firestore:rules` ->
+`functions` -> `hosting`** — because notices gained a field the rules constrain
+and the callable requires.
+
+The board did not scale past one notice. Every notice rendered its whole body,
+always open, newest-first, ABOVE the thing each dashboard exists for. Two notices
+carrying flyers were enough to push "Request a ride" and "Go on shift" off the
+first screen. There was also no way to tell a notice you had read from one you
+had not.
+
+Checked against production before changing anything, read-only: `notices` held
+**2 documents**, the bucket held **2 objects**, `imagePath` paired 1:1 with them,
+and both `imageUrl`s answered **206 image/jpeg**. The upload fix from earlier that
+day is good. Neither document had a `title` — the fields were exactly `body`,
+`createdAt`, `createdByName`, `createdByUid`, `eventId`, `imagePath`, `imageUrl`,
+`showUntil`.
+
+What changed:
+
+- **`title` is a real field.** Required by `publishNotice` and by the composer,
+  capped at **80**, and OPTIONAL on the client's `Notice` type. That asymmetry is
+  deliberate: the two live notices cannot be given one retrospectively, so
+  `noticeHeading` falls back to the body's first line — capped as hard as the
+  field, because a body written as one paragraph has no first line to speak of.
+  The cap is now written in three places, pinned together by
+  `tests/quality/notice-title-cap.test.ts`.
+- **`firestore.rules` constrains the title by SHAPE, and does not require it.**
+  Requiring it would make those two documents impossible to update from any
+  client, including to correct them.
+- **One notice opens at a time.** `components/manager/ManagerSetup.tsx` already
+  had that accordion, so it was LIFTED to `components/shared/Disclosure.tsx` and
+  both callers use it. `icon` and `summary` became optional, a `trailing` slot was
+  added for the badge, and `aria-controls` was added — the original told a screen
+  reader a button expands something but never which region.
+- **The New badge is localStorage, device-scoped.** Nothing in Firestore records
+  "I have read this" for any feature, and the app's two other "already dealt
+  with" flags are localStorage for the same reason. No writes, no new field on a
+  user document holding a child's address, no rules change. `src/utils/seenNotices.ts`
+  follows the `readPushDismissals` contract exactly, including surviving a
+  localStorage that THROWS — Lockdown Mode and sandboxed iframes.
+- **The board moved below the core action** on the rider's and the Sarthi's
+  dashboards. The Sarthi's slot was renamed `afterHeader` -> `afterShift`, since
+  the old name described the old position.
+- **The manager's dashboard lost the board entirely**, at the owner's request. A
+  manager writes the notices, and Notices -> "On the board now" already shows them
+  as everyone else sees them.
+
+### The bug the tests missed and the browser caught
+
+Marking a notice seen read the current `seen`, appended, and wrote. Opening two
+rows in one tick handed the second handler the same stale array, so it wrote
+`['n2']` over `['n1']` and the first notice went back to being New. **Every unit
+test passed** — they click, assert, click, and React re-renders in between every
+time. It showed up driving the real build in the browser.
+
+`seen` is now the single source of truth with storage MIRRORING it, both updaters
+return `prev` unchanged when nothing moved, and the reference is the change
+signal. `tests/components/NoticeBoard.test.tsx` has the case, with both clicks
+inside ONE `act` — which is the only way to reproduce it.
+
+### Tests
+
+**2292**: 1352 client, 744 functions, 196 rules. Both builds clean, typecheck 0.
+
+New: `tests/utils/notice.test.ts`, `tests/utils/seenNotices.test.ts`,
+`tests/components/Disclosure.test.tsx`, `tests/components/NoticeComposer.test.tsx`
+(the composer had none), `tests/quality/notice-placement.test.ts`,
+`tests/quality/notice-title-cap.test.ts`.
+
+Two existing guards fired for the right reason and were changed rather than
+silenced:
+
+- `tests/quality/manager-notice-placement.test.ts` pinned the board carefully
+  INSIDE the manager dashboard's scroll region. All five cases were correct and all
+  five described a screen that no longer carries it. Replaced by
+  `notice-placement.test.ts`, which asserts the board is ABSENT there and below
+  the action on the other two.
+- `tests/components/DriverShift.test.tsx` asserted the slot came BEFORE the shift
+  controls, with a docblock defending it. Inverted, and the docblock now records
+  why — "the board outranks the shift button" is a decision that could plausibly
+  be made again by accident.
+- `notice-card-plain.test.ts`'s canary earned its keep: the image moved into the
+  opened panel and its source became `notice.imageUrl`, so the canary failed and
+  the four assertions below it would otherwise have gone quietly vacuous.
+
+Three deliberate breakages confirmed to fail: rendering the body in a collapsed
+row (9 tests), letting two rows be open at once (2), and publishing with an empty
+title (4).
+
+### Verified in the browser, not only in jsdom
+
+`preview/rider.html` and `preview/driver.html` at 1280x900 and at 375px, light and
+dark. The action above the `Notices` heading on both; rows collapsed on load; the
+second row opening closed the first; the badge cleared on open and stayed clear
+after a reload; the portrait flyer still shown whole, and rendering NO `<img>` at
+all while collapsed. Row height 70px at mobile width, title on one line. Badge
+contrast in dark is about **5.9:1**.
+
+`preview/driver.tsx` now passes `afterShift={<NoticeBoard />}` — it passed no slot
+before, so the harness showed no board at all and this order could not have been
+looked at.
 
 ## Housekeeping 2026-08-24 — functions/lib was committed, and had drifted
 
