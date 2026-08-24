@@ -41,6 +41,7 @@ exports.releaseAssignment = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const authz_1 = require("../utils/authz");
+const assignments_1 = require("../utils/assignments");
 // The fleet helpers were imported to release the car when an assignment was
 // declined. Nothing here touches the fleet now — see the driver update below.
 /**
@@ -49,7 +50,6 @@ const authz_1 = require("../utils/authz");
  * Output: Success confirmation
  */
 exports.releaseAssignment = functions.https.onCall(async (data, context) => {
-    var _a;
     // Verify authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -88,15 +88,12 @@ exports.releaseAssignment = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'Ride can only be released when in assigned status');
         }
         const batch = db.batch();
-        // Determine new student status based on ride type
-        const newStudentStatus = (ride === null || ride === void 0 ? void 0 : ride.rideType) === 'home-to-sabha' ? 'waiting_for_pickup' : 'waiting_for_dropoff';
-        // Return all assigned students to the unassigned pool
-        for (const student of (ride === null || ride === void 0 ? void 0 : ride.students) || []) {
-            batch.update(db.collection('users').doc(student.id), {
-                status: newStudentStatus,
-                currentRideId: null
-            });
-        }
+        // Returning the carload to the pool is now shared with
+        // managerSetUserRole, which does the same thing when it demotes a Sarthi
+        // who still has riders on their sheet. See utils/assignments.ts for why
+        // it is a helper rather than two copies — the field list has already
+        // drifted once in this repo.
+        const returned = (0, assignments_1.releaseRideToPool)(batch, db, rideId, ride);
         // THE DRIVER KEEPS THEIR CAR.
         //
         // Declining a proposed run is an ordinary thing to do — the preview
@@ -112,30 +109,21 @@ exports.releaseAssignment = functions.https.onCall(async (data, context) => {
         // reason: one run ending is not the evening ending.
         //
         // `activeRideId` still clears — that assignment really is over.
+        //
+        // This half stays HERE rather than in the helper: a demotion wants the
+        // opposite outcome for the driver document, and one function serving both
+        // is the mistake `releaseVehicle` made.
         batch.update(db.collection('users').doc(ride === null || ride === void 0 ? void 0 : ride.driverId), {
             status: 'available',
             activeRideId: null,
-        });
-        // Reset ride document status to 'requested' so it returns to the unassigned queue
-        batch.update(db.collection('rides').doc(rideId), {
-            status: 'requested',
-            driverId: null,
-            driverName: null,
-            carId: null,
-            carModel: null,
-            carColor: null,
-            carLicensePlate: null,
-            route: [],
-            peers: [],
-            assignedStudentIds: []
         });
         await batch.commit();
         return {
             success: true,
             rideId,
             message: 'Assignment released successfully. Bhulka returned to unassigned pool.',
-            studentsReturned: ((_a = ride === null || ride === void 0 ? void 0 : ride.students) === null || _a === void 0 ? void 0 : _a.length) || 0,
-            newStudentStatus
+            studentsReturned: returned.length,
+            newStudentStatus: (0, assignments_1.poolStatusFor)(ride === null || ride === void 0 ? void 0 : ride.rideType),
         };
     }
     catch (error) {

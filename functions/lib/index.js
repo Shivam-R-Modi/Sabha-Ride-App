@@ -36,7 +36,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.managerReleaseVehicle = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.expireNotices = exports.deleteNotice = exports.publishNotice = exports.managerBroadcast = exports.nudgeRider = exports.sarthiArrived = exports.startRide = exports.globalAssignDriver = exports.updateSabhaRecurrence = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
+exports.managerReleaseVehicle = exports.managerSetUserRole = exports.adminDeleteUser = exports.redeemManagerInvite = exports.createManagerInvite = exports.deleteSabhaEvent = exports.generateEventCSV = exports.manualAssignStudent = exports.studentReadyToLeave = exports.driverDoneForToday = exports.releaseAssignment = exports.completeRide = exports.expireNotices = exports.deleteNotice = exports.publishNotice = exports.managerBroadcast = exports.nudgeRider = exports.sarthiArrived = exports.startRide = exports.globalAssignDriver = exports.updateSabhaRecurrence = exports.expireStaleRequests = exports.releaseIdleVehicles = exports.manuallyUpdateRideContext = exports.updateRideTypeContext = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -114,6 +114,13 @@ Object.defineProperty(exports, "createManagerInvite", { enumerable: true, get: f
 Object.defineProperty(exports, "redeemManagerInvite", { enumerable: true, get: function () { return managerInvites_1.redeemManagerInvite; } });
 var adminDeleteUser_1 = require("./http/adminDeleteUser");
 Object.defineProperty(exports, "adminDeleteUser", { enumerable: true, get: function () { return adminDeleteUser_1.adminDeleteUser; } });
+// Bhulku <-> Sarthi, in place, on the one user document. The route adminDeleteUser
+// has always told managers to take ("remove the manager role first", "demotion is
+// the intended route") and which had never been built — the only way to change a
+// role was the raw field editor, one field at a time, which is what produced
+// documents that were a driver to the rules and a rider to the driver picker.
+var managerSetUserRole_1 = require("./http/managerSetUserRole");
+Object.defineProperty(exports, "managerSetUserRole", { enumerable: true, get: function () { return managerSetUserRole_1.managerSetUserRole; } });
 // The fleet's escape hatch. A car held by a driver who stopped without
 // finishing could previously be freed by nobody but that driver.
 var managerReleaseVehicle_1 = require("./http/managerReleaseVehicle");

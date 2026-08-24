@@ -145,11 +145,13 @@ Note for the next session in this worktree: its `node_modules` was stale
 failed to collect — until `npm install --legacy-peer-deps`. The lockfile did not
 change. Worth checking first in any worktree rather than trusting a green run.
 
-## 2026-08-24 — roles change in place, from the Records tab
+## Shipped 2026-08-24 — roles change in place, from the Records tab
 
-Branch `claude/manager-user-profile-management-c46c0c`, rebased onto the notice
-fix above. **Every gate below was run locally on the merged tree and is green.**
-Deploy state is recorded at the end of this section — read that before assuming.
+**Deployed**, rules -> functions -> hosting, `main` fast-forwarded. Live bundle
+`index-C2eDH5w9.js` matched `dist/`, `managerSetUserRole` reports
+**"Successful create operation"**, and the deployed ruleset was read back through
+the Rules API and is **byte-identical** to `firestore.rules` — a compile success
+only proves some ruleset shipped.
 
 ### What was actually wrong
 
@@ -314,17 +316,36 @@ columns, no email or address in any row, the `mixed` badge on the broken record
 only, the detail sheet, the confirm naming the car and the riders, and
 "Wants to drive · 1" above the two sign-up queues. No console errors.
 
+### The functions build is a gate the sweep in CLAUDE.md does not include
+
+`npm run deploy:functions` runs `tsc` against **`functions/tsconfig.json`**, which
+is stricter than the root one — `strict` plus `noUnusedLocals`. It refused the
+first functions deploy with two errors the documented sweep had passed clean:
+
+- `SettableRole` declared but never used, left behind when a local helper moved to
+  `utils/roles.ts`.
+- `LABEL[role]` an unchecked index. `data` is `any`, and **narrowing `any` with
+  `!==` leaves it `any`** — so the argument validation did not actually give
+  `role` a type. Fixed by binding the validated value to `SettableRole`, which is
+  also the honest shape: untrusted until the check, typed after it.
+
+Neither was reachable from `npx tsc --noEmit` at the root, which reported zero
+throughout. **`npm --prefix functions run build` belongs in the sweep**; it is the
+only gate that compiles what is actually uploaded. Rules were already live when it
+failed, which is exactly the safe intermediate state the deploy order is for — old
+client plus new rules is a clean permission error, not a half-write.
+
 ### Cannot be reported as working, and was not tested
 
-- **Nothing was deployed.** Rules, functions and hosting are unreleased. Order is
-  the standing `firestore:rules` → `functions` → `hosting`, and it is safe in that
-  order here: rules-first makes the old raw role editor return a clean permission
-  error rather than half-writing.
 - **No production document was read.** Whether any live record is currently
-  half-written — the `mixed` badge is the thing that would show it — is unknown
-  from here. Worth a look at the Users table straight after deploying.
-- **Not seen on a real phone**, and not run against a real Bhulku asking for an
-  upgrade end to end.
+  half-written — the `mixed` badge is the thing that would show it — is still
+  unknown. Worth opening Records → Users and looking for a `mixed` badge; that is
+  now a one-glance check and it did not exist before today.
+- **Not exercised against real data.** No role was actually changed in
+  production, no Bhulku has asked for an upgrade end to end, and the mid-run
+  refusal has never fired against a real Friday-night run. All of it is proved by
+  tests and by the preview harness only.
+- **Not seen on a real phone.**
 
 ### One thing to know about this worktree
 

@@ -68,9 +68,8 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const authz_1 = require("../utils/authz");
 const audit_1 = require("../utils/audit");
+const assignments_1 = require("../utils/assignments");
 const fleet_1 = require("../utils/fleet");
-/** A ride in any of these means the car is out on the road right now. */
-const ACTIVE_RIDE_STATUSES = ['assigned', 'driver_en_route', 'arriving', 'in_progress'];
 exports.managerReleaseVehicle = functions.https.onCall(async (data, context) => {
     var _a, _b, _c, _d, _e, _f;
     if (!context.auth) {
@@ -104,7 +103,7 @@ exports.managerReleaseVehicle = functions.https.onCall(async (data, context) => 
     if (holder) {
         const live = await db.collection('rides')
             .where('driverId', '==', holder)
-            .where('status', 'in', ACTIVE_RIDE_STATUSES)
+            .where('status', 'in', assignments_1.ACTIVE_RIDE_STATUSES)
             .get();
         if (!live.empty) {
             throw new functions.https.HttpsError('failed-precondition', `${vehicle.assignedDriverName || 'That Sarthi'} is on a run with `

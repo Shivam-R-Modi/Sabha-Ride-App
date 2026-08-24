@@ -1,8 +1,43 @@
+"use strict";
 // ============================================
 // HTTP FUNCTION: managerSetUserRole
 // A manager moves a person between Bhulku and Sarthi, in place.
 // ============================================
-
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.managerSetUserRole = void 0;
 /**
  * The control `adminDeleteUser` has been telling managers to use since it was
  * written, and which did not exist.
@@ -61,117 +96,84 @@
  * replacement, because creating an invite requires being one. That gap is already
  * written down at hooks/useUsers.ts:183. Refusing is better than half-doing it.
  */
-
-import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
-import { assertApprovedManager, isApprovedManagerData } from '../utils/authz';
-import { checkRateLimit } from '../utils/rateLimiter';
-import { writeAuditLog } from '../utils/audit';
-import {
-    recordedRoles, hasRecordedRole, roleFieldsFor, statesRoleConsistently,
-} from '../utils/roles';
-import { releaseVehiclesHeldBy, DRIVER_VEHICLE_CLEARED } from '../utils/fleet';
-import {
-    releaseRideToPool, ACTIVE_RIDE_STATUSES, UNDERWAY_RIDE_STATUSES,
-} from '../utils/assignments';
-import { UserRole } from '../types';
-
-/** The only two roles this function will set. Manager is refused; see the header. */
-type SettableRole = 'driver' | 'student';
-
+const functions = __importStar(require("firebase-functions"));
+const admin = __importStar(require("firebase-admin"));
+const authz_1 = require("../utils/authz");
+const rateLimiter_1 = require("../utils/rateLimiter");
+const audit_1 = require("../utils/audit");
+const roles_1 = require("../utils/roles");
+const fleet_1 = require("../utils/fleet");
+const assignments_1 = require("../utils/assignments");
 /** What each role reads as to a person. formatRole() is the client's copy. */
-const LABEL: Record<UserRole, string> = {
+const LABEL = {
     manager: 'Manager',
     driver: 'Sarthi',
     student: 'Bhulku',
 };
-
-export const managerSetUserRole = functions.https.onCall(async (data, context) => {
+exports.managerSetUserRole = functions.https.onCall(async (data, context) => {
+    var _a;
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
-
     const db = admin.firestore();
     const callerUid = context.auth.uid;
-
     // Authority BEFORE the rate limit, so a stranger cannot spend a real
     // manager's allowance. Same order as adminDeleteUser and the export.
-    const manager = await assertApprovedManager(db, callerUid, "change a person's role");
-
-    await checkRateLimit(callerUid, {
+    const manager = await (0, authz_1.assertApprovedManager)(db, callerUid, "change a person's role");
+    await (0, rateLimiter_1.checkRateLimit)(callerUid, {
         maxRequests: 30,
         windowMs: 60 * 60 * 1000,
         functionName: 'managerSetUserRole',
     });
-
-    const targetUserId = typeof data?.targetUserId === 'string' ? data.targetUserId.trim() : '';
+    const targetUserId = typeof (data === null || data === void 0 ? void 0 : data.targetUserId) === 'string' ? data.targetUserId.trim() : '';
     if (!targetUserId) {
         throw new functions.https.HttpsError('invalid-argument', 'targetUserId is required');
     }
-
     // Validated first, THEN given a type. `data` is `any`, and narrowing `any`
     // with `!==` leaves it `any` — so without the second binding, `LABEL[role]`
     // below is an unchecked index into a Record<UserRole, string>, which the
     // functions tsconfig rejects under `strict`. It is also the honest shape: the
     // value is untrusted until the check, and typed after it.
-    const requested = data?.role;
+    const requested = data === null || data === void 0 ? void 0 : data.role;
     if (requested !== 'driver' && requested !== 'student') {
-        throw new functions.https.HttpsError(
-            'invalid-argument',
-            "role must be 'driver' or 'student'.",
-        );
+        throw new functions.https.HttpsError('invalid-argument', "role must be 'driver' or 'student'.");
     }
-    const role: SettableRole = requested;
-
+    const role = requested;
     const targetRef = db.collection('users').doc(targetUserId);
     const targetSnap = await targetRef.get();
     const target = targetSnap.data();
-
     if (!targetSnap.exists || !target) {
         throw new functions.https.HttpsError('not-found', 'That account no longer exists.');
     }
-
     const name = String(target.name || 'That person');
-    const from = recordedRoles(target);
-
+    const from = (0, roles_1.recordedRoles)(target);
     // A manager is refused in BOTH directions — promoting one to Sarthi would
     // demote them, and demoting one needs the claim work this does not do.
     // `hasRecordedRole` as well as `isApprovedManagerData`, so an unapproved
     // self-declared manager document is caught too rather than being quietly
     // rewritten.
-    if (isApprovedManagerData(target) || hasRecordedRole(target, 'manager')) {
-        throw new functions.https.HttpsError(
-            'failed-precondition',
-            `${name} is a manager. Manager roles are granted and removed through `
-            + 'the invite path, not here.',
-        );
+    if ((0, authz_1.isApprovedManagerData)(target) || (0, roles_1.hasRecordedRole)(target, 'manager')) {
+        throw new functions.https.HttpsError('failed-precondition', `${name} is a manager. Manager roles are granted and removed through `
+            + 'the invite path, not here.');
     }
-
     // A pending or rejected account must not be handed driving duties, and
     // demoting one changes nothing they can reach. Approve or delete it instead.
     if (target.accountStatus !== 'approved') {
-        throw new functions.https.HttpsError(
-            'failed-precondition',
-            `${name}'s account is ${String(target.accountStatus || 'not approved')}. `
-            + 'Approve it first, in People.',
-        );
+        throw new functions.https.HttpsError('failed-precondition', `${name}'s account is ${String(target.accountStatus || 'not approved')}. `
+            + 'Approve it first, in People.');
     }
-
-    if (statesRoleConsistently(target, role)) {
+    if ((0, roles_1.statesRoleConsistently)(target, role)) {
         // Not an error. Two managers tapping the same button, or a double tap on a
         // slow phone, is an ordinary thing — and throwing here would report a
         // correct end state as a failure.
         return { success: true, changed: false, reason: 'already', role, name };
     }
-
     const batch = db.batch();
     const now = new Date();
-    const update: Record<string, unknown> = { ...roleFieldsFor(role) };
-
-    let releasedRideIds: string[] = [];
-    let releasedRiderIds: string[] = [];
-    let releasedVehicleIds: string[] = [];
-
+    const update = Object.assign({}, (0, roles_1.roleFieldsFor)(role));
+    let releasedRideIds = [];
+    let releasedRiderIds = [];
+    let releasedVehicleIds = [];
     if (role === 'driver') {
         // PROMOTION.
         //
@@ -186,20 +188,16 @@ export const managerSetUserRole = functions.https.onCall(async (data, context) =
         // survives the promotion, which is the whole point of doing this in place.
         const riding = await db.collection('rides')
             .where('studentId', '==', targetUserId)
-            .where('status', 'in', ACTIVE_RIDE_STATUSES)
+            .where('status', 'in', assignments_1.ACTIVE_RIDE_STATUSES)
             .get();
-
         if (!riding.empty) {
-            throw new functions.https.HttpsError(
-                'failed-precondition',
-                `${name} is on a ride right now. Try again once that run has finished.`,
-            );
+            throw new functions.https.HttpsError('failed-precondition', `${name} is on a ride right now. Try again once that run has finished.`);
         }
-
         // Off shift, not on it. Becoming a Sarthi does not put somebody on the
         // road; picking a car does, and they have not.
         update.status = 'offline';
-    } else {
+    }
+    else {
         // DEMOTION.
         //
         // Refuse once the run has STARTED. Children may be in the car, and the
@@ -208,45 +206,33 @@ export const managerSetUserRole = functions.https.onCall(async (data, context) =
         // what to do instead.
         const live = await db.collection('rides')
             .where('driverId', '==', targetUserId)
-            .where('status', 'in', ACTIVE_RIDE_STATUSES)
+            .where('status', 'in', assignments_1.ACTIVE_RIDE_STATUSES)
             .get();
-
-        const underway = live.docs.filter(
-            d => (UNDERWAY_RIDE_STATUSES as readonly string[]).includes(String(d.data()?.status)),
-        );
-
+        const underway = live.docs.filter(d => { var _a; return assignments_1.UNDERWAY_RIDE_STATUSES.includes(String((_a = d.data()) === null || _a === void 0 ? void 0 : _a.status)); });
         if (underway.length > 0) {
             const riders = underway
-                .map(d => d.data()?.studentName)
+                .map(d => { var _a; return (_a = d.data()) === null || _a === void 0 ? void 0 : _a.studentName; })
                 .filter(Boolean)
                 .join(', ');
-            throw new functions.https.HttpsError(
-                'failed-precondition',
-                `${name} is out on a run with ${underway.length} ride(s)`
+            throw new functions.https.HttpsError('failed-precondition', `${name} is out on a run with ${underway.length} ride(s)`
                 + `${riders ? ` — ${riders}` : ''}. Riders may be in the car. `
-                + 'Wait for the run to finish, or release it first.',
-            );
+                + 'Wait for the run to finish, or release it first.');
         }
-
         // Everything left is still `assigned`: a proposal on a screen that nobody
         // has acted on. Hand each carload back to the pool so the riders are
         // dispatchable again instead of stranded against a driver who has ceased
         // to be one.
         for (const rideDoc of live.docs) {
-            releasedRiderIds = releasedRiderIds.concat(
-                releaseRideToPool(batch, db, rideDoc.id, rideDoc.data(), now),
-            );
+            releasedRiderIds = releasedRiderIds.concat((0, assignments_1.releaseRideToPool)(batch, db, rideDoc.id, rideDoc.data(), now));
             releasedRideIds.push(rideDoc.id);
         }
-
         // The car goes back to the fleet. Skipping this is exactly how a
         // three-car fleet reached zero available cars on 2026-08-14: every
         // release path reads the DRIVER's record to find their car, so once the
         // record stops saying "driver" nothing in the app can free it again.
         // Queried from the vehicle side for that reason.
-        releasedVehicleIds = await releaseVehiclesHeldBy(db, batch, targetUserId);
-
-        Object.assign(update, DRIVER_VEHICLE_CLEARED, {
+        releasedVehicleIds = await (0, fleet_1.releaseVehiclesHeldBy)(db, batch, targetUserId);
+        Object.assign(update, fleet_1.DRIVER_VEHICLE_CLEARED, {
             status: 'offline',
             activeRideId: null,
             currentVehicleName: null,
@@ -256,13 +242,11 @@ export const managerSetUserRole = functions.https.onCall(async (data, context) =
             plateNumber: null,
             assignedStudentIds: [],
         });
-
         // NOT cleared: ridesCompletedToday, totalStudentsToday,
         // totalDistanceToday. Those are what this person actually did today, and
         // the manager's board reads them. Zeroing a volunteer's tally as a side
         // effect of an unrelated change is the bug the old releaseVehicle had.
     }
-
     // The request, if there was one, is answered by the change itself.
     //
     // `null` rather than a field delete: the rules have to validate what a rider
@@ -271,21 +255,19 @@ export const managerSetUserRole = functions.https.onCall(async (data, context) =
     if (target.roleUpgrade) {
         update.roleUpgrade = null;
     }
-
     batch.update(targetRef, update);
     await batch.commit();
-
     // After the commit, and never allowed to fail it. writeAuditLog swallows its
     // own errors: a role change that half-happened because its own audit row was
     // rejected would be worse than an unlogged one.
-    await writeAuditLog(db, {
+    await (0, audit_1.writeAuditLog)(db, {
         action: 'role.change',
         actorUid: callerUid,
-        actorName: String(manager?.name || 'Manager'),
+        actorName: String((manager === null || manager === void 0 ? void 0 : manager.name) || 'Manager'),
         targetCollection: 'users',
         targetDocumentId: targetUserId,
         summary: `${role === 'driver' ? 'Promoted' : 'Returned'} ${name} `
-            + `from ${LABEL[from[0] ?? 'student']} to ${LABEL[role]}`
+            + `from ${LABEL[(_a = from[0]) !== null && _a !== void 0 ? _a : 'student']} to ${LABEL[role]}`
             + (releasedRideIds.length > 0
                 ? `, releasing ${releasedRideIds.length} assigned ride(s)`
                 : '')
@@ -303,9 +285,7 @@ export const managerSetUserRole = functions.https.onCall(async (data, context) =
             viaRequest: !!target.roleUpgrade,
         },
     });
-
     console.log(`[managerSetUserRole] ${callerUid} set ${targetUserId} to ${role}`);
-
     return {
         success: true,
         changed: true,
@@ -316,3 +296,4 @@ export const managerSetUserRole = functions.https.onCall(async (data, context) =
         releasedVehicleIds,
     };
 });
+//# sourceMappingURL=managerSetUserRole.js.map

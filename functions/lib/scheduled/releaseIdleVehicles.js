@@ -70,6 +70,8 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const time_1 = require("../utils/time");
 const audit_1 = require("../utils/audit");
+// A ride in any of these is live: the car is out and must be left alone.
+const assignments_1 = require("../utils/assignments");
 const fleet_1 = require("../utils/fleet");
 /**
  * A car held this long with no live ride is assumed forgotten.
@@ -84,8 +86,6 @@ const fleet_1 = require("../utils/fleet");
  * alone until tomorrow.
  */
 const IDLE_HOURS = 6;
-/** A ride in any of these is live: the car is out and must be left alone. */
-const ACTIVE_RIDE_STATUSES = ['assigned', 'driver_en_route', 'arriving', 'in_progress'];
 /** Every status that means "this vehicle is claimed". */
 const HELD_STATUS = 'in_use';
 /**
@@ -126,7 +126,7 @@ async function decideRelease(db, vehicleId, vehicle, now, idleHours = IDLE_HOURS
     // answered by their rides — never by a timer alone.
     const live = await db.collection('rides')
         .where('driverId', '==', holder)
-        .where('status', 'in', ACTIVE_RIDE_STATUSES)
+        .where('status', 'in', assignments_1.ACTIVE_RIDE_STATUSES)
         .get();
     if (!live.empty) {
         return { release: false, reason: `holder has ${live.size} live ride(s)` };
