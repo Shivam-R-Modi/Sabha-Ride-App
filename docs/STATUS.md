@@ -282,7 +282,7 @@ what `tests/quality/role-table-parity.test.ts` asserts.
 
 ### Verification
 
-**2169 tests — 1250 client, 732 functions, 187 rules.** Build clean.
+**2175 tests — 1256 client, 732 functions, 187 rules.** Build clean.
 **Typecheck 0.** Up from 2003.
 
 Rebased onto `2fbaba5` and re-run there, not just on the branch point. That
@@ -350,6 +350,35 @@ render test for the reason `records-tab-stability.test.ts` gives — jsdom compu
 no Tailwind, and `tests/setup.ts` bans class-name assertions from component tests,
 which is exactly why this kind of check belongs in `tests/quality/`. Six cases,
 five of which were confirmed to fail when the old outlined button was pasted back.
+
+### Also fixed same day — the name was printed twice, and hiding it moved the X
+
+Reported from a screenshot with a box round the duplicate: `UserDetailSheet` showed
+the person's name as the Sheet's heading AND again beside the avatar, which is the
+first thing in the body.
+
+The obvious fix is the wrong one. That heading is what `aria-labelledby` points at,
+so deleting it leaves a `role="dialog"` with no accessible name — a screen reader
+announces "dialog" and nothing else, and nobody who does not use one can see that
+it broke. `Sheet` already had **`hideTitle`** for exactly this: the heading stays in
+the DOM as `sr-only`, announced and not drawn.
+
+Passing it exposed a **latent bug in `Sheet` itself**, and `UserDetailSheet` was the
+first caller in the app ever to use `hideTitle`, so nothing had exercised that path.
+`sr-only` is `position: absolute`, so the header row lost one of its two in-flow
+children — and `justify-between` puts a LONE child at the *start*, which slid the
+close button to the top **left**. Seen in the preview harness, not reasoned about
+after the fact. Fixed with `ml-auto` on the button, in `Sheet` rather than worked
+around in the caller, because it would have hit every future `hideTitle` user. With
+two in-flow children `ml-auto` changes nothing, so every other sheet is untouched —
+checked against the `useConfirm` prompt and `DriverPicker`.
+
+Verified in the browser: accessible name still `Priya Desai`, the heading is
+`position: absolute` at 1px, and the name renders **once**. Two guards, both
+confirmed red: `tests/quality/sheet-hidden-title.test.ts` (5 cases — CSS facts,
+which jsdom cannot see) and a case in `tests/components/UserDetailSheet.test.tsx`
+that follows `aria-labelledby` to its element, which is the one that fails if
+somebody removes the title instead of hiding it.
 
 ### The functions build is a gate the sweep in CLAUDE.md does not include
 

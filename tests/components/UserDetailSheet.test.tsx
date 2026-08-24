@@ -79,6 +79,21 @@ describe('UserDetailSheet — what it shows', () => {
         expect(screen.getByRole('dialog', { name: /Asha Mehta/ })).toBeInTheDocument();
     });
 
+    it('keeps that accessible name even though the heading is not drawn', () => {
+        // The heading is `sr-only`: the name was being shown TWICE, once as the
+        // Sheet's title and once beside the avatar. Hiding it visually is right;
+        // DELETING it would leave a role="dialog" with no accessible name, which a
+        // screen reader announces as bare "dialog" and which nobody else can see is
+        // broken. This is the test that fails if somebody removes the title instead
+        // of hiding it.
+        show(BHULKU);
+
+        const dialog = screen.getByRole('dialog');
+        const labelledBy = dialog.getAttribute('aria-labelledby');
+        expect(labelledBy).toBeTruthy();
+        expect(document.getElementById(labelledBy!)?.textContent).toBe('Asha Mehta');
+    });
+
     it('shows the contact details the table no longer displays', () => {
         // They moved OFF the table and in here on purpose. If they are not here,
         // the narrowing lost information rather than relocating it.

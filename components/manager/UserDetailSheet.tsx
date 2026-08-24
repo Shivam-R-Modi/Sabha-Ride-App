@@ -180,6 +180,13 @@ export const UserDetailSheet: React.FC<UserDetailSheetProps> = ({
                 open={!!user}
                 onClose={onClose}
                 title={name}
+                // Announced, not drawn. The name is already the first thing in the
+                // body, beside the avatar, so rendering it in the header too showed
+                // it twice — but it is also what `aria-labelledby` points at, so
+                // deleting it would leave the dialog with no accessible name at
+                // all. `hideTitle` keeps it for a screen reader and takes it off
+                // the screen.
+                hideTitle
                 variant="sheet"
                 // Not dismissible mid-write: closing the sheet while the role
                 // change is in flight leaves the manager with no idea whether it

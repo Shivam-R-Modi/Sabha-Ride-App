@@ -202,7 +202,16 @@ export const Sheet: React.FC<SheetProps> = ({
                         <button
                             onClick={onClose}
                             aria-label="Close"
-                            className="tap-target shrink-0 -mt-1 -mr-1 p-2 rounded-full text-coffee-500
+                            // `ml-auto` is not redundant with `justify-between` on
+                            // the row above, and the reason is `hideTitle`:
+                            // `sr-only` is `position: absolute`, so a hidden title
+                            // leaves the flex container with exactly ONE in-flow
+                            // child and `justify-between` puts a lone child at the
+                            // START — the close button slid to the top LEFT the
+                            // first time a caller hid its title. With two in-flow
+                            // children this changes nothing, so it is safe for
+                            // every other sheet in the app.
+                            className="tap-target shrink-0 ml-auto -mt-1 -mr-1 p-2 rounded-full text-coffee-500
                                        hover:text-coffee hover:bg-cream-300/60 transition-colors"
                         >
                             <X size={20} />
