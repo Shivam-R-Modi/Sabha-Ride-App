@@ -82,7 +82,22 @@ const BoardCard: React.FC<{ text: string; imageUrl?: string }> = ({ text, imageU
                     alt=""
                     loading="lazy"
                     onError={() => setImageFailed(true)}
-                    className="w-full rounded-2xl mb-3 object-cover max-h-72"
+                    // NEVER CROPPED. This was `object-cover max-h-72`, which
+                    // capped the image at 288px and then cut whatever did not fit
+                    // — so a flyer lost its edges and a portrait photo lost its
+                    // top and bottom. A notice image is the message, not
+                    // decoration: cropping it silently removes information the
+                    // manager chose to send, and neither they nor the reader can
+                    // see that anything is missing.
+                    //
+                    // `h-auto` with no cover means the common case — a flyer or a
+                    // landscape photo — renders at its natural aspect, full width,
+                    // whole. `max-h-[70vh]` with `object-contain` only engages for
+                    // something very tall, and even then it FITS rather than
+                    // crops: the whole image stays visible, just smaller, with
+                    // space either side. A notice that filled three screens would
+                    // bury the sabha attendance card underneath it.
+                    className="w-full h-auto max-h-[70vh] object-contain rounded-2xl mb-3"
                 />
             )}
             <LongText text={text} />

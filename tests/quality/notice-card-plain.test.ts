@@ -60,3 +60,63 @@ describe('the notice board looks like every other card', () => {
         expect(theme).not.toMatch(/--notice-/);
     });
 });
+
+/**
+ * A notice image is never cropped.
+ *
+ * It was `object-cover max-h-72`: capped at 288px and then cut to fill. A flyer
+ * lost its edges and a portrait photo lost its top and bottom. Reported by the
+ * owner the first time an image ever reached the board, which was the same day
+ * uploading one started working at all — see *Fixed 2026-08-24* in
+ * docs/STATUS.md.
+ *
+ * The reason this is a ratchet and not a preference: a notice image IS the
+ * message. Cropping it silently removes information the manager chose to send,
+ * and neither they nor the reader can tell anything is missing. `object-cover` is
+ * the right default for an avatar or a thumbnail, which is exactly why it is easy
+ * to reach for again here.
+ *
+ * Textual, because jsdom computes no Tailwind and so cannot see an object-fit.
+ */
+describe('a notice image is shown whole', () => {
+    // Comments stripped BEFORE matching, and both halves of that matter. The
+    // prose above this <img> says the words `<img>`, `object-cover` and
+    // `max-h-72` — the first made a naive /<img/ match start inside the comment,
+    // and the other two made the "must not contain" assertions read the
+    // explanation of the fix as if it were the fix being undone. A guard that
+    // passes or fails on its own documentation is worse than no guard.
+    const code = board
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+    const img = code.match(/<img[\s\S]*?\/>/)?.[0] ?? '';
+
+    it('has an image to check', () => {
+        // Guards the regex above: if the <img> moves or changes shape, the
+        // assertions below would otherwise pass against an empty string.
+        expect(img).toContain('src={imageUrl}');
+    });
+
+    it('never uses object-cover, which crops', () => {
+        expect(img).not.toContain('object-cover');
+    });
+
+    it('fits rather than fills, so a tall image stays whole', () => {
+        expect(img).toContain('object-contain');
+    });
+
+    it('lets the common case keep its natural height', () => {
+        // `h-auto` and no fixed height: a flyer or landscape photo renders at its
+        // own aspect ratio, full width, with no letterboxing at all.
+        expect(img).toContain('h-auto');
+        expect(img).not.toMatch(/\bh-\d+\b/);
+    });
+
+    it('still caps how much of the screen one notice may take', () => {
+        // Without a ceiling a very tall image buries the sabha attendance card
+        // under it. The cap FITS the image rather than cropping it, so nothing is
+        // lost — it is only smaller.
+        expect(img).toMatch(/max-h-\[70vh\]/);
+        expect(img).not.toContain('max-h-72');
+    });
+});

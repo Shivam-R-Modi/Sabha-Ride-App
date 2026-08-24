@@ -578,13 +578,40 @@ removed. Plus two cases that the claim proves WHO and never WHAT: a PDF from a
 claim-holding manager is still refused, and a rider with `mgr: false` is still
 refused.
 
-**190 rules tests, 1262 client, 732 functions.** Typecheck 0, both builds clean.
+**190 rules tests, 1267 client, 732 functions.** Typecheck 0, both builds clean.
 
-### Not verified from here
+### Confirmed working, and the two things that came straight after
 
-That a real manager on a real phone can now post a notice with an image. The rules
-allow it and the regression test covers the failing shape, but nothing uploaded a
-byte to the production bucket — that needs the owner's signed-in session.
+The owner posted a notice with an image successfully — the first time that has ever
+happened in this app. Two follow-ups the same evening.
+
+**The image was cropped.** `NoticeBoard`'s `<img>` was
+`object-cover max-h-72`: capped at 288px and then cut to fill. A flyer lost its
+edges; the portrait photo lost its top and bottom. A notice image IS the message,
+so cropping silently removes information the manager chose to send and neither they
+nor the reader can tell anything is missing. Now
+`w-full h-auto max-h-[70vh] object-contain`. Measured against the compiled
+stylesheet at 600px wide: a 1200x800 renders 566x377 and a 1000x1000 renders
+566x566, both at exact natural aspect with no letterboxing and the cap unused; an
+extreme 800x3200 is fitted inside the 568px cap — whole, smaller, space either side.
+`object-fit: contain` in every case, so nothing is ever cropped. The cap only stops
+one very tall notice burying the sabha attendance card beneath it.
+
+`tests/quality/notice-card-plain.test.ts` gains five cases, confirmed red against
+the old classes. Worth noting how they first failed: the assertions matched the
+COMMENT above the `<img>`, because it names `<img>`, `object-cover` and `max-h-72`
+while explaining the fix — a guard passing or failing on its own documentation. The
+file now strips comments before matching, like the other quality tests.
+
+**Deleting a notice does remove the Storage file.** Checked, because the upload path
+had just been proven broken and an orphaned bucket was the obvious next worry. The
+bucket holds **0 objects** (whole bucket, not just `notices/`), the `notices`
+collection holds **0 documents**, and there are no orphans or broken references in
+either direction. Verified against a control so the "0" could be trusted — the same
+queries return 4 users, 5 rides, 3 vehicles, 5 audit rows. The audit trail shows two
+`notice.delete` rows seconds apart, and that action is only ever written by the
+`deleteNotice` callable, which is the path that removes file and document together.
+A raw document delete would have stranded the image; it did not.
 
 ## Housekeeping 2026-08-24 — functions/lib was committed, and had drifted
 
