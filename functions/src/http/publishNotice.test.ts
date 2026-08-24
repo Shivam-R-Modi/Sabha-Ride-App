@@ -191,4 +191,34 @@ describe('deleteNotice', () => {
         await expect(remove()).rejects.toThrow(/managers/i);
         expect(order).toEqual([]);
     });
+
+    it('refuses a caller with no session', async () => {
+        // The last two branches of this callable that nothing asserted. Neither is
+        // covered centrally: sensitiveEndpointLimits.test.ts is about rate limits on
+        // two other endpoints, and revokedAccount.test.ts does not list this one.
+        await expect((deleteNotice as any)({ noticeId: 'n1' }, {})).rejects.toThrow(/authenticated/i);
+        expect(order).toEqual([]);
+    });
+
+    it('refuses a call with no noticeId, rather than deleting something else', async () => {
+        await expect((deleteNotice as any)({}, { auth: { uid: 'mgr_1' } }))
+            .rejects.toThrow(/noticeId/);
+        expect(order).toEqual([]);
+        expect(deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('still deletes the document when the image cannot be removed', async () => {
+        // The deliberate trade in noticeStorage: a Storage outage must not leave an
+        // expired flyer stuck on every dashboard. The audit row above records that
+        // the file survived; this pins that the notice still goes.
+        deleteImage.mockResolvedValue(false);
+        await expect(remove()).resolves.toMatchObject({ success: true, imageRemoved: false });
+        expect(order).toContain('doc-delete');
+    });
+
+    it('reports the image gone when the notice never had one', async () => {
+        existingNotice = { body: 'text only', imagePath: null };
+        deleteImage.mockResolvedValue(true);
+        await expect(remove()).resolves.toMatchObject({ success: true, imageRemoved: true });
+    });
 });

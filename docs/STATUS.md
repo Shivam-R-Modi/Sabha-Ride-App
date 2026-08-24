@@ -578,7 +578,7 @@ removed. Plus two cases that the claim proves WHO and never WHAT: a PDF from a
 claim-holding manager is still refused, and a rider with `mgr: false` is still
 refused.
 
-**190 rules tests, 1267 client, 732 functions.** Typecheck 0, both builds clean.
+**190 rules tests, 1267 client, 736 functions.** Typecheck 0, both builds clean.
 
 ### Confirmed working, and the two things that came straight after
 
@@ -650,8 +650,41 @@ COMMENT above the `<img>`, because it names `<img>`, `object-cover` and `max-h-7
 while explaining the fix — a guard passing or failing on its own documentation. The
 file now strips comments before matching, like the other quality tests.
 
-**Deleting a notice does remove the Storage file.** Checked, because the upload path
-had just been proven broken and an orphaned bucket was the obvious next worry. The
+**Deleting a notice does remove the Storage file — now proven over five deletes.**
+Checked because the upload path had just been proven broken and an orphaned bucket
+was the obvious next worry. By the end of the evening the owner had run **three
+publish-then-delete cycles with an image** on top of the first two deletes, and the
+end state is clean: bucket **0 objects**, `notices` **0 documents**, no orphans and
+no broken references either way.
+
+The discriminator that makes this conclusive rather than circumstantial:
+`deleteNotice` writes `Removed a notice (its image could not be deleted)` when
+`deleteNoticeImage` returns false, and the plain `Removed a notice` when it
+succeeds. **All five audit rows are the plain form.** So the server itself reports
+the file gone every time, and the empty bucket agrees with it.
+
+Both deletion paths were read rather than assumed, and both are sound: `deleteNotice`
+and `expireNotices` each call `deleteNoticeImage` and delete the **image before the
+document**, which is the ordering that stops an orphan, and `deleteNoticeImage`
+never throws — a Storage outage leaves the file but still takes the notice down,
+with the audit row recording which happened. `noticeBucketName` resolves
+`<id>.firebasestorage.app` explicitly rather than trusting the SDK default, because
+a delete against a bucket that does not exist answers 404 and `ignoreNotFound`
+would swallow it — reporting every deletion a success while orphaning the file.
+
+Coverage was already there, and a claim to the contrary in an earlier draft of this
+entry was wrong: `deleteNotice` has four cases inside
+`functions/src/http/publishNotice.test.ts` — named for its sibling, which is why a
+search for a `deleteNotice.test.ts` found nothing — including *deletes the image
+before the document*. `expireNotices.test.ts` has twelve, including the same
+ordering assertion and *still removes the document when the image cannot be
+deleted*. Five cases were added for the branches genuinely unasserted: no session,
+no `noticeId`, the document still going when the image survives, and a notice that
+never had an image. Neither guard was covered centrally —
+`sensitiveEndpointLimits.test.ts` is about rate limits on two other endpoints and
+`revokedAccount.test.ts` does not list this one. Both breakages confirmed red,
+including reversing the order so the document is deleted first, which is the
+orphaning bug the design exists to prevent. The
 bucket holds **0 objects** (whole bucket, not just `notices/`), the `notices`
 collection holds **0 documents**, and there are no orphans or broken references in
 either direction. Verified against a control so the "0" could be trusted — the same
