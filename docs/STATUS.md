@@ -14,6 +14,17 @@ functions        30 updated, 0 created, 0 deleted
 hosting          dist/assets/index-Dol8kJTL.js
 ```
 
+**Tonny Stark is the airport coordinator**, set 2026-08-25 by Admin SDK at the owner's
+request — `users/CVMkzaWd8nhfMxLtiZKn8Pinqgy2.airportCoordinator = true`, with the same
+`airport.coordinator` audit row the People tab writes, `actorUid:
+'admin-sdk:grant-airport-coordinator'` so the trail says a script did it rather than
+implying somebody used the UI.
+
+He is the ONLY one. Which matters: the unclaimed-arrival alerts go to coordinators and
+nobody else, and the Airport scope of the member export is refused without the flag. The
+in-app path also works now that a second manager exists — Vidhyut Prajapati could grant
+or revoke it from the People tab, which is the audited route and the one to prefer.
+
 Verified rather than assumed: the live `index.html` points at that bundle, it downloads
 with a **SHA-256 identical to the local build that passed the sweep**, it contains
 `Where are you right now`, `I am arriving soon`, `I am in the USA now` and `isArriving`,
@@ -4910,11 +4921,13 @@ component to confirm they fail (8 of 14 did).
   time: those stand in for a gathering with no times of its own, so any such date
   would have opened a ride window at four in the morning.
 
-- **Production is small.** Counted at the end of 2026-08-21: **4 users, 6 rides,
-  3 vehicles, 1 events document, 1 statistics document, 0 notices, 0 feedback,
-  109 audit rows.** The 11-rider evening from 2026-08-14 is no longer in the
-  database. Worth knowing before reading any claim in this file as "proven at
-  scale" — the scale is four people.
+- **Production is small, but no longer four people.** Recounted on **2026-08-25**:
+  **9 users** — 2 managers (Tonny Stark, Vidhyut Prajapati) and 7 riders, several of
+  them evidently test accounts on throwaway domains — and **0 `airportPickups`**.
+  The earlier line said four users, counted 2026-08-21; it was already stale.
+  Still worth knowing before reading any claim in this file as "proven at scale",
+  and **nothing has exercised Airport Seva at all** — the collection is empty, so the
+  board has never rendered real data and the graduation path has never run.
 
   Two of those numbers moved during the day and are worth reading as signals.
   `rides` went 2 → 6, so somebody has been exercising the app rather than only
