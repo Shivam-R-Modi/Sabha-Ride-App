@@ -3,7 +3,25 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — the Arrivals board moved into a manager's Airport Seva, 2026-08-25
+## DEPLOYED 2026-08-25 — the Arrivals board moved into a manager's Airport Seva
+
+**Live as `1e77dbc`, and `main` is at that commit.**
+
+```
+firestore:rules  released — unchanged, "already up to date, skipping upload"
+functions        every function "Skipped (No changes detected)"
+hosting          dist/assets/index-C1ZDfhQv.js
+```
+
+The functions step is worth reading rather than skimming: **Firebase itself reported every
+function skipped**, which is independent confirmation that this change is client-only. The
+order was run in full anyway, and this time **every step from the branch worktree** — see
+the near-miss recorded further down.
+
+Verified: the live `index.html` points at that bundle, it downloads with a **SHA-256
+identical to the local build that passed the sweep** (`6247e0de…d100fd28`), and both tab
+lists — `["arrivals","profile"]` and `["airport-request","profile"]` — are present in it.
+
 
 Owner's question: *"for a manager shouldn't the arrivals tab be in Airport Seva? why is
 it in Sabha Ride Seva?"* They were right, and checking it turned up a defect rather than
@@ -90,13 +108,12 @@ exactly one service per role"* — not "it is in sabha" or "it is in airport", b
 are true for different roles, but that it is in exactly one for each, so nobody has two
 doors to it and nobody has none.
 
-### To deploy
+### Worth checking by hand, next time somebody is signed in as a manager
 
-`firestore:rules` → `functions` → `hosting`. **Client-only in substance** — no function or
-rule changed — but keep the order. `main` is deliberately NOT fast-forwarded yet: the
-convention here is that `main` matches production, and this is not in production.
-
-**Run every step from the branch worktree.** See the near-miss recorded below.
+Switch to Airport Seva and confirm the dock reads **Arrivals · Profile** and opens on the
+board, then switch back and confirm Sabha Seva's swipe-up drawer no longer lists Arrivals.
+Both are covered by `serviceRouting.test.tsx` and the parity test, but neither has been
+seen on a real manager account.
 
 ## DEPLOYED 2026-08-25 (evening) — four changes to the pickup form
 
