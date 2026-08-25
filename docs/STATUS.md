@@ -114,25 +114,39 @@ And two that only LOOKING found, both of which every test had passed:
 
 ### Where the suite stands
 
+**FULL SWEEP RUN CLEAN ON THE OWNER'S MAC, 2026-08-25. All six steps.**
+
 ```
-client      1386 passing, 4 files erroring — see below   (was 1291)
-functions    924 passing                                (was 886)
-rules        231 passing                                (was 196)
-typecheck      0 errors
-functions build  clean
-npm run build  NOT RUN — needs .env.local, absent in this worktree
+npx vitest run                    100 files, 1470 passing
+npm test --prefix functions        43 files,  924 passing
+npm run test:rules                  2 files,  231 passing
+npm run build                     clean — dist/assets/index-CVnwlT4B.js
+npm --prefix functions run build  clean
+npm run typecheck                 0 errors
 ```
 
-**The 4 erroring client files are a worktree limitation, not a regression.**
-`RiderHome`, `DatabaseConsole`, `errorReport` and `noticeImage` all import
-`firebase/config`, which calls `getAuth()` at module load — and this worktree has no
-`.env.local`. Verified by stashing every change and re-running: they fail identically
-at `HEAD`. They will pass on the owner's Mac.
+Baseline before this branch: client 1291, functions 886, rules 196.
+
+**The four client files that error in a bare worktree are an ENVIRONMENT problem, not
+a regression, and they pass here.** `RiderHome`, `DatabaseConsole`, `errorReport` and
+`noticeImage` all import `firebase/config`, which calls `getAuth()` at module load, so
+they need `.env.local`. Confirmed twice: they fail identically at `HEAD` with every
+change stashed, and all four pass once the env file is present.
+
+If you work in this worktree again, that is what the symlink is for:
+
+    ln -sfn ../../../.env.local .env.local
+
+It points at the main checkout's file, so there is no second copy of it, and `.env.*`
+in `.gitignore` covers the symlink as well. Without it `npm run build` fails with
+"Missing Firebase environment variables" and those four suites cannot even import.
 
 ### Before deploying this
 
-- **`npm run build` has never run here** — it needs `.env.local`, which the worktree
-  does not have. Run the full sweep on the Mac first.
+- **The sweep is green, including the build** — see above. The bundle to match against
+  the live one after a hosting deploy is `dist/assets/index-CVnwlT4B.js`. Unregister
+  the service worker and clear caches before checking, or you will confirm the previous
+  build.
 - **It HAS been eyeballed, via the preview harness, and that is what found the last
   four defects.** `preview/airport.html` was added to the screenshot harness
   (`npx vite build --config preview/vite.config.ts` then the `screen-previews` launch
