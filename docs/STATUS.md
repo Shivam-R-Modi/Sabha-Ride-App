@@ -3,7 +3,21 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — the calendar calmed, and an indicator that was invisible, 2026-08-25 (late night)
+## DEPLOYED 2026-08-25 (late night) — the calendar calmed, and an indicator that was invisible
+
+**Live as `31e0b94`, and `main` is at that commit.**
+
+```
+firestore:rules  released — unchanged
+functions        29 of 29 "Skipped (No changes detected)"
+hosting          dist/assets/index-D97goqjY.js
+```
+
+Verified by hash (`8deba515…cdd3b89b`) and then by checking **each change separately** in
+the shipped JS, rather than letting one hash stand in for eight of them: no cream-400 fill
+beside the selection ring, selection ring-only, both semantic pairs present, the reserved
+indicator row present, no per-cell time, the badge at 11px/min-w-5, the new wording present
+and the old agreement-breaking wording gone.
 
 Owner, on the live board: too dense, drop the per-cell time, put the indicator **above** the
 date, colour-code assigned vs unassigned, and **do not let the indicator merge with the
@@ -84,10 +98,13 @@ through the label, the mixed-day rule, the count being shown, the reserved row s
 empty on an empty day, no time in any cell, and the reworded line at one and at two
 arrivals.
 
-### To deploy
+### Worth a look on a real account
 
-`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only, three
-files, one of them shipped.
+Everything below was checked in the preview harness and in the shipped bundle, but not on
+a live manager account: that the green indicator reads as "covered" at a glance, and that
+ring-only selection is strong enough sitting next to today's saffron circle. Both were
+judged by eye in `preview/airport.html` at 440px and at a narrow card width, in both
+themes.
 
 ## DEPLOYED 2026-08-25 (night) — the arrivals calendar, rebuilt for readability
 
