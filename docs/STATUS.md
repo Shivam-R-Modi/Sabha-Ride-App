@@ -3,6 +3,95 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## NOT DEPLOYED — secondary text now clears AA on every surface, 2026-08-25 (last)
+
+Owner: *"fix the coffee-500 card contrast too."* Done — and **the light-mode half was worse
+than I reported**. I said 4.28 in dark. Measuring `--text-soft` against every neutral
+surface found three failures, not one:
+
+| | surface | was |
+|---|---|---|
+| light | `--sunken` (cream-400: nav pills, active segments, the service switch) | **3.92** |
+| light | `--canvas-deep` (cream-300: every chip and hover) | **4.22** |
+| dark | `--surface-deep` (the far corner of every `.clay-card` gradient) | **4.28** |
+
+### The root cause is a category error, not a bad number
+
+`--text-soft` was chosen against `--canvas`, where it measured a comfortable **4.89**. But
+secondary text does not only sit on the canvas — it sits on chips, pills and cards, and
+those are *sunken* surfaces. Nothing in the token system declares "this text goes on that
+surface", so no pairwise check could have found it. It took a computed-style sweep of the
+rendered screens.
+
+The dark case is the least obvious and the most widespread: `.clay-card` runs
+`--surface → --surface-mid → --surface-deep`, and dark mode deliberately gets **lighter** as
+surfaces come forward — so a card's far corner is *lighter than `--surface` itself*, and a
+token that passed on `--surface` failed on the card. On every card in the app.
+
+### The fix: one token, both themes, tiny shifts
+
+```
+light  --text-soft  122 107 90  ->  111 96 79    (worst surface 3.92 -> 4.62)
+dark   --text-soft  163 154 143 ->  169 160 149  (worst surface 4.28 -> 4.60)
+```
+
+Slightly darker secondary text in light, slightly lighter in dark. Both clear 4.5 on **all
+seven** neutral surfaces. No layout change, no gradient change, nothing else touched.
+
+**Two documentation sites had to move with it**, and one of them is a test that would have
+caught the drift on its own: `theme-contrast.test.ts` asserts the ratio written in
+`theme.css` comments is true to one decimal, so the documented 4.89 had to become 5.76.
+The `tailwind.config.js` comment on `coffee-500` too. Documentation that drifts is worse
+than none.
+
+### One line beyond the ask, same class of defect
+
+Verifying the fix left exactly one failure on the page: `.clay-button-secondary` — the
+outline button, "Not this time" — coloured its **label** with `var(--cta-fill)`. `--cta` is
+a FILL token, and on the button's own gradient in dark it measured **4.76 / 4.31 / 3.88**
+across the three stops. Changed to `rgb(var(--accent-text))`: **6.57 / 5.94 / 5.35**, and
+**light mode is unchanged** because `--cta` and `--accent-text` are the same value there.
+The border keeps `--cta-fill` — a border needs 3:1, and 3.88 clears it.
+
+That is the third time the same shape has appeared: a fill-only token doing a text job,
+fixed by the text-variant token, dark-only because the ramps invert.
+
+### The ratchet
+
+`theme-contrast.test.ts` now asserts `--text-soft` clears AA on **all seven** neutral
+surfaces in **both** themes, rather than only `--canvas` and `--surface`. Mutation-checked
+by restoring the old light value: three assertions fail, including the documented-ratio one.
+
+**Scoped to `--text-soft` deliberately.** Widening it to every text token fails on three
+pre-existing light-mode pairings, and dragging those into this change would turn a fix into
+a refactor:
+
+| token | on `--sunken` | live pairing? |
+|---|---|---|
+| `--accent-text` | 4.15 | yes — FeedbackCard's active segment |
+| `--warning-text` | 4.18 | none found |
+| `--gold-text` | 3.84 | none found on sunken, but see below |
+
+### What is left, and it is one thing
+
+**`--gold-text` on `--canvas-mid` — 4.45:1, a 0.05 miss.** It is the role label under a
+name ("BHULKU"). The fix is darkening `--gold-text` slightly in light, plus its documented
+ratio — but gold is a **brand** colour, so that is a decision rather than a correction, and
+it was not asked for. Left deliberately.
+
+### Tests
+
+**Client 1620 (104 files), functions 953, rules 237. Both builds and typecheck clean.**
+`theme-contrast.test.ts` is 73 cases now, up from 59.
+
+Verified in the rendered page as well as by token maths: `rider.html` in **dark** has **zero
+failing colour pairs**; in light, only the `--gold-text` 4.45 above.
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only —
+`theme.css`, `claymorphism.css`, `tailwind.config.js` and two test files.
+
 ## DEPLOYED 2026-08-25 (later still) — the danger button contrast
 
 **Live as `be3358b`, and `main` is at that commit.**

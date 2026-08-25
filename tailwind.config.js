@@ -95,7 +95,9 @@ export default {
           DEFAULT: 'rgb(var(--text-strong) / <alpha-value>)',
           900: 'rgb(var(--text-strong) / <alpha-value>)', // 13.07:1 — primary text
           700: 'rgb(var(--text) / <alpha-value>)',        //  8.10:1 — secondary text
-          500: 'rgb(var(--text-soft) / <alpha-value>)',   //  4.89:1 — muted text, AA floor
+          500: 'rgb(var(--text-soft) / <alpha-value>)',   //  5.76:1 on canvas, 4.62 on the
+          //  worst neutral surface (--sunken). Raised from 4.89 on 2026-08-25: the old value
+          //  passed against the canvas and failed on every chip and card.
           400: 'rgb(var(--text-faint) / <alpha-value>)',  //  3.87:1 — non-text only
         },
         mocha: 'rgb(var(--mocha) / <alpha-value>)',

@@ -102,13 +102,66 @@ describe('tokens that must NOT be used for text are still unsafe', () => {
     });
 });
 
+/**
+ * SECONDARY TEXT DOES NOT ONLY SIT ON THE CANVAS.
+ *
+ * The rest of this file checks text tokens against `--canvas` and `--surface`, which is
+ * where the *page* is — and that is exactly the gap this block closes. `--text-soft` was
+ * chosen against `--canvas`, where it measured a comfortable 4.89, and it failed everywhere
+ * a chip or a card put it on a sunken surface:
+ *
+ *   light, on --sunken (cream-400: nav pills, active segments, the service switch)  3.92
+ *   light, on --canvas-deep (cream-300: every chip and hover)                       4.22
+ *   dark,  on --surface-deep (the far corner of every .clay-card gradient)          4.28
+ *
+ * The dark case is the least obvious and the most widespread: `.clay-card` runs
+ * `--surface` → `--surface-mid` → `--surface-deep`, and dark mode deliberately gets
+ * LIGHTER as surfaces come forward (asserted below), so a card's far corner is lighter
+ * than `--surface` and the token that passed on `--surface` failed on the card.
+ *
+ * None of it was reachable by comparing token pairs, because nothing declares "this text
+ * goes on that surface". It came out of a computed-style sweep of the rendered preview
+ * screens.
+ *
+ * SCOPED TO `--text-soft` ON PURPOSE. Widening it to every text token would fail on three
+ * pre-existing light-mode pairings, and dragging those into an unrelated change is how a
+ * fix becomes a refactor:
+ *
+ *   --accent-text on --sunken   4.15   (live: FeedbackCard's active segment)
+ *   --warning-text on --sunken  4.18   (no live pairing found)
+ *   --gold-text on --sunken     3.84   (no live pairing found)
+ *
+ * Those are recorded in docs/STATUS.md. When they are fixed, fold them in here.
+ */
+describe('secondary text clears AA on every surface it can land on', () => {
+    const NEUTRAL_SURFACES = [
+        '--canvas', '--canvas-mid', '--canvas-deep', '--sunken',
+        '--surface', '--surface-mid', '--surface-deep',
+    ];
+
+    for (const theme of ['light', 'dark'] as const) {
+        it.each(NEUTRAL_SURFACES)(`--text-soft is AA on %s in ${theme}`, (surface) => {
+            expect(contrast(THEMES[theme]['--text-soft'], THEMES[theme][surface]))
+                .toBeGreaterThanOrEqual(AA_NORMAL);
+        });
+    }
+
+    it('and the card gradient is the reason --surface-deep is in that list', () => {
+        // A guard on the reasoning rather than the number: if dark ever stops getting
+        // lighter as surfaces come forward, the worst case moves and this block should be
+        // re-derived rather than trusted.
+        expect(luminance(THEMES.dark['--surface-deep']))
+            .toBeGreaterThan(luminance(THEMES.dark['--surface']));
+    });
+});
+
 describe('the ratios written in theme.css comments are true', () => {
     // Documentation that drifts is worse than none — these are the numbers a
     // future reader will trust when choosing a token.
     const DOCUMENTED_LIGHT: Record<string, number> = {
         '--text-strong': 13.07,
         '--text': 8.10,
-        '--text-soft': 4.89,
+        '--text-soft': 5.76,
         '--accent-text': 5.18,
         '--gold-text': 4.79,
     };

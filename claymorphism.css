@@ -470,7 +470,13 @@
       rgb(var(--surface)) 0%,
       rgb(var(--surface-mid)) 50%,
       rgb(var(--surface-deep)) 100%);
-  color: var(--cta-fill);
+  /* --accent-text, NOT --cta-fill. This is the outline button's LABEL, and --cta is a
+     FILL token: on this button's own gradient in dark mode it measured 4.76 / 4.31 /
+     3.88 across the three stops, against the 4.5 a 14px semibold label needs. The border
+     below may keep --cta-fill — a border needs 3:1, and 3.88 clears that.
+     Light mode is UNCHANGED, because --cta and --accent-text are the same value there
+     (184 67 24); only dark moves, to 6.57 / 5.94 / 5.35. */
+  color: rgb(var(--accent-text));
   font-weight: var(--font-semibold);
   font-size: var(--text-sm);
   font-family: var(--font-body);

@@ -78,8 +78,16 @@
   /* #3D2914  13.07:1 on canvas */
   --text: 93 73 48;
   /* #5D4930   8.10:1 */
-  --text-soft: 122 107 90;
-  /* #7A6B5A   4.89:1 — the AA floor. Nothing softer may carry text. */
+  --text-soft: 111 96 79;
+  /* #6F604F   5.76:1 on canvas, and 4.62:1 on --sunken, WHICH IS THE ONE THAT MATTERS.
+     Was 122 107 90 until 2026-08-25. That value was chosen against --canvas, where it
+     measured 4.89 and looked like a comfortable AA pass — but secondary text does not
+     only sit on the canvas. On --sunken (cream-400: nav pills, the active segmented
+     control, the service switch) it was 3.92, and on --canvas-deep 4.22. Both fail.
+     Found by measuring the RENDERED page rather than the token pair: a computed-style
+     sweep across the preview screens reported it on every card and every chip.
+     This value clears 4.5 on all seven neutral surfaces; theme-contrast.test.ts now
+     asserts that rather than only checking canvas and surface. */
   --text-faint: 140 123 104;
   /* #8C7B68   3.87:1 — BELOW the floor. Borders, dividers, disabled
      glyphs. Never text. */
@@ -283,8 +291,12 @@
      "ratios in comments are true" test only covers the LIGHT block. */
   --text: 203 196 187;
   /*  8.42:1 on surface */
-  --text-soft: 163 154 143;
-  /*  5.25:1 on surface — still above the 4.5 AA floor */
+  --text-soft: 169 160 149;
+  /*  5.40:1 on surface, and 4.60:1 on --surface-deep, which is the one that matters.
+     Was 163 154 143. In DARK the trap is the opposite way round: .clay-card is a
+     gradient from --surface to --surface-deep, and dark mode gets LIGHTER as surfaces
+     come forward, so the card's far corner (62 54 46) is lighter than --surface itself.
+     Secondary text measured 4.28 there — on every card in the app. */
   --text-faint: 128 118 108;
   /*  non-text only, same as light */
   --text-on-accent: 28 24 21;
