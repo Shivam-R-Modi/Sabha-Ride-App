@@ -149,25 +149,47 @@ describe('a local student', () => {
 describe('a Sarthi', () => {
     beforeEach(() => { profile = { ...SARTHI }; });
 
-    it('gets the arrivals board as a TAB, not a service', () => {
+    it('opens in Sabha Seva, with NO arrivals board in it', () => {
+        // The board moved to Airport Seva for everybody. A Sarthi still starts here,
+        // because driving on a Friday is the job they do most.
         renderShell('driver');
-        expect(dockLabels()).toEqual(['Dashboard', 'Arrivals', 'History', 'Profile']);
         expect(screen.getByTestId('service')).toHaveTextContent('sabha');
+        expect(dockLabels()).toEqual(['Dashboard', 'History', 'Profile']);
     });
 
     it('stays inside the five-slot dock, so no swipe-only drawer appears', () => {
-        // Four destinations. A fifth would push one behind a swipe, which is reachable
-        // by neither keyboard nor VoiceOver.
+        // Three destinations now — it was four while the board lived here. A fifth would
+        // push one behind a swipe, which is reachable by neither keyboard nor VoiceOver.
         renderShell('driver');
-        expect(dockLabels()).toHaveLength(4);
+        expect(dockLabels()).toHaveLength(3);
         expect(document.querySelector('.clay-bottom-drawer')).toBeNull();
     });
 
-    it('gets NO switch — this is the whole fix', () => {
+    it('GETS a switch — reversed on 2026-08-25, and the board depends on it', () => {
+        // This test asserted the opposite an hour earlier, when only managers could
+        // switch. Once the board moved into Airport Seva for good, a Sarthi without a
+        // switch could not reach the one screen the service exists for.
         renderShell('driver');
-        expect(screen.getByTestId('can-switch')).toHaveTextContent('false');
-        expect(within(header()).queryByRole('button', { name: /switch to/i })).not.toBeInTheDocument();
-        expect(within(sidebar()).queryByRole('button', { name: /switch to/i })).not.toBeInTheDocument();
+        expect(screen.getByTestId('can-switch')).toHaveTextContent('true');
+        expect(within(header()).getByRole('button', { name: /switch to airport seva/i }))
+            .toBeInTheDocument();
+        expect(within(sidebar()).getByRole('button', { name: /switch to airport seva/i }))
+            .toBeInTheDocument();
+    });
+
+    it('reaches the board by switching, and lands straight on it', async () => {
+        renderShell('driver');
+        await userEvent.click(
+            within(header()).getByRole('button', { name: /switch to airport seva/i }));
+
+        expect(screen.getByTestId('service')).toHaveTextContent('airport');
+        expect(screen.getByTestId('tab')).toHaveTextContent('arrivals');
+        expect(dockLabels()).toEqual(['Arrivals', 'Profile']);
+    });
+
+    it('is never shown the traveller form there — they live here', () => {
+        renderShell('driver');
+        expect(dockLabels()).not.toContain('My pickup');
     });
 });
 
@@ -237,12 +259,20 @@ describe('a manager, the one exception', () => {
         expect(screen.getByTestId('can-switch')).toHaveTextContent('false');
     });
 
-    it('is not a manager by the granted set alone', () => {
-        // `hasRecordedRole`, not `hasGrantedRole`. Reading the granted set would hand the
-        // switch to every Sarthi, which is the same asymmetry isApprovedManagerData
-        // carries on the server.
+    it('is no longer the ONLY one with a switch — a Sarthi has one too', () => {
+        // This asserted `hasRecordedRole`, not `hasGrantedRole`, and that a Sarthi
+        // therefore got no switch. Reversed deliberately: the switch is now a CAPABILITY
+        // question ("could this person drive somebody home"), so the granted set is the
+        // right thing to read. The authority asymmetry still holds where it matters —
+        // `isApprovedManagerData` on the server is unchanged.
         profile = { name: 'Kiran', role: 'driver', roles: ['driver', 'student'], accountStatus: 'approved' };
         renderShell('driver');
+        expect(screen.getByTestId('can-switch')).toHaveTextContent('true');
+    });
+
+    it('but a Bhulku still has none, which was the point of removing the launcher', () => {
+        profile = { ...LOCAL_STUDENT };
+        renderShell('student');
         expect(screen.getByTestId('can-switch')).toHaveTextContent('false');
     });
 });

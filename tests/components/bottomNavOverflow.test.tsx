@@ -195,18 +195,19 @@ describe('the dock never reads as "nothing selected"', () => {
 describe('roles with nothing to overflow', () => {
     it('a driver gets no More control at all', () => {
         // FOUR destinations since Airport Seva — 'Arrivals' joined the sabha list on
-        // 2026-08-25, because claiming an airport trip is one more thing somebody who
-        // already lives here does rather than a service they switch to.
+        // 2026-08-25, and then straight back OUT of it later the same day: the board
+        // moved to Airport Seva, which a Sarthi can now switch to. So this list went
+        // 3 -> 4 -> 3 in one day and the middle state never reached production.
         //
-        // The assertion that carries this test is unchanged and is not the list: four
-        // still fits the five-slot dock, so there is nothing behind a swipe. A fifth
-        // would push one destination into the drawer, which opens on a swipe and nothing
-        // else — unreachable by keyboard, switch access or VoiceOver. That is the line
-        // this guards.
+        // The assertion that carries this test is unchanged and is not the list: it fits
+        // the five-slot dock, so there is nothing behind a swipe. A fifth entry would
+        // push one destination into the drawer, which opens on a swipe and nothing else
+        // — unreachable by keyboard, switch access or VoiceOver. That is the line this
+        // guards, and there is now more room under it than before.
         renderLayout('driver');
 
-        expect(dockLabels()).toEqual(['Dashboard', 'Arrivals', 'History', 'Profile']);
-        expect(within(dock()).getAllByRole('button')).toHaveLength(4);
+        expect(dockLabels()).toEqual(['Dashboard', 'History', 'Profile']);
+        expect(within(dock()).getAllByRole('button')).toHaveLength(3);
         // Not even the hint: there is nothing a swipe could reveal.
         expect(handleBar(dock())).toBeNull();
     });

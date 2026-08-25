@@ -13,23 +13,23 @@ import { ArrivalRequestForm } from './ArrivalRequestForm';
 import { ArrivalStatusCard } from './ArrivalStatusCard';
 
 /**
- * Airport Seva — TWO surfaces, chosen by the tab, which is chosen by role.
+ * Airport Seva — TWO surfaces, chosen by the tab.
  *
- * A TRAVELLER gets one screen plus their profile: their own pickup. A MANAGER gets the
- * ARRIVALS BOARD plus their profile, because a manager is the only role holding both
- * services and the airport work is what they switched here for.
+ * A TRAVELLER gets one screen plus their profile: their own pickup. Everybody ELSE who
+ * can be here — a Sarthi or a manager, both of whom arrived by switching — gets the
+ * ARRIVALS BOARD plus their profile. This is the only home the board has.
  *
- * The manager's version of this used to be `TravellerView` as well, which meant their
+ * The switching half of this used to be `TravellerView` as well, which meant a manager's
  * Airport Seva was a screen built for somebody else: a live form that would file a real
- * pickup request in the manager's own name, and an "I am in the USA now" button that
- * wrote `isArriving: false` where it was already false and therefore did nothing
- * visible. A control that fires and changes nothing is this codebase's signature defect.
+ * pickup request in their own name, and an "I am in the USA now" button that wrote
+ * `isArriving: false` where it was already false and therefore did nothing visible. A
+ * control that fires and changes nothing is this codebase's signature defect.
  *
  * NO ROLE CHECK HERE, deliberately. The tab is the only thing consulted, and
- * `tabBelongsTo` in src/constants/service.ts is what guarantees a traveller can never
- * be on 'arrivals' and a manager never on 'airport-request'. One place decides, so the
- * nav and the screen cannot disagree — and a Bhulku cannot land on a board whose every
- * query the rules would refuse.
+ * `tabBelongsTo` in src/constants/service.ts is what guarantees a traveller can never be
+ * on 'arrivals' and a Sarthi never on 'airport-request'. One place decides, so the nav
+ * and the screen cannot disagree — and a Bhulku, who has no switch at all, cannot land
+ * on a board whose every query the rules would refuse.
  */
 export const AirportShell: React.FC = () => {
     const { currentTab } = useNavigation();

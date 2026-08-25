@@ -103,8 +103,9 @@ export default function App() {
   // they wanted, is deleted: a student who has lived here two years has no use for an
   // Airport tab, and somebody in India has no use for a lift to sabha.
   //
-  // Only a manager can override, and `resolveService` drops the override for anybody
-  // else rather than trusting the caller. See src/constants/service.ts.
+  // Only somebody who can DRIVE can override, and `resolveService` drops the override
+  // for anybody else rather than trusting the caller. So a Bhulku has one service and no
+  // way to ask for the other. See src/constants/service.ts.
   //
   // The sabha branch below is untouched by all of this.
 
@@ -147,7 +148,6 @@ export default function App() {
       switch (currentTab) {
         case 'home': return <DriverDashboard />;
         case 'history': return <DriverHistory />;
-        case 'arrivals': return <ArrivalBoard />;
         case 'profile': return <ProfileEditor />;
         default: return <DriverDashboard />;
       }

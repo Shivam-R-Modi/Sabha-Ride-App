@@ -64,9 +64,9 @@ export function useService(): {
      * costs nothing.
      */
     useEffect(() => {
-        if (tabBelongsTo(currentTab, service, role, arriving)) return;
-        setCurrentTab(serviceHome(service, role, arriving));
-    }, [service, role, arriving, currentTab, setCurrentTab]);
+        if (tabBelongsTo(currentTab, service, arriving)) return;
+        setCurrentTab(serviceHome(service, arriving));
+    }, [service, arriving, currentTab, setCurrentTab]);
 
     return {
         service,

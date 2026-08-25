@@ -3,6 +3,93 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## NOT DEPLOYED — Sarthis get a service switch, and the board has ONE home, 2026-08-25 (latest)
+
+Owner: *"why is a Sarthi seeing arrivals in both Sabha Seva and Airport Seva? A Sarthi
+should only see arrivals in Airport Seva."*
+
+**First, a correction to the premise, because it matters:** a plain Sarthi was NOT seeing
+it in both. They had no service switch, so `resolveService` could never put them in
+Airport Seva and `ServiceSwitch` never rendered — Arrivals appeared only in their sabha
+nav. The account showing it in both was **Tonny, a manager wearing the Sarthi hat**, which
+is the case fixed an hour earlier the same day.
+
+### The decision, and the constraint that forced it
+
+Putting the board in Airport Seva only means a Sarthi needs a switch, or the board becomes
+unreachable for exactly the people who claim trips. That **reverses the earlier ruling**
+that only managers switch — taken deliberately, on the owner's call, with the note that
+it does not reintroduce what that ruling was protecting: the concern then was Bhulkus and
+travellers being offered a service they cannot use, and **a Bhulku still gets no switch.**
+
+`canSwitchService` now reads **`hasGrantedRole(profile, 'driver')`** instead of
+`hasRecordedRole(profile, 'manager')`.
+
+**The granted set is right here and would be wrong elsewhere.** This is a CAPABILITY
+question — "could this person drive somebody home from the airport" — not a question of
+authority, so the expanded hierarchy is what to read: a manager's grants include `driver`,
+so one predicate covers both roles. It is also **the same capability `firestore.rules`
+gates the board on**, which is the property worth keeping: reaching the board and being
+allowed to use it are now one question, so there is no role that can see it and none
+stranded without it. A switch is a route, not a permission. The authority asymmetry
+survives untouched where it belongs — `isApprovedManagerData` on the server is unchanged.
+
+### The result: the sabha navs are the pre-Airport-Seva ones again
+
+```
+Sarthi  sabha    Dashboard · History · Profile          (3 — was 4 with Arrivals)
+Sarthi  airport  Arrivals · Profile                    (new — via the switch)
+manager sabha    8 destinations, no Arrivals
+manager airport  Arrivals · Profile
+Bhulku           Home · My Rides · Profile, no switch, no board
+traveller        My pickup · Profile
+```
+
+The Sarthi dock going 3 → 4 → 3 in one day is the whole story in miniature. The middle
+state never reached production.
+
+### Two dead parameters deleted
+
+`tabBelongsTo` and `serviceHome` both took a `role` they no longer read. While the board
+lived in sabha for a Sarthi and airport for a manager, they had to know who was asking;
+with one home the answer is the same for everybody. Removed rather than left as `_role` —
+an unused parameter is one more thing for a caller to pass wrongly.
+
+### Comments that had become lies
+
+Four places still said "only a manager can switch" — `App.tsx`, `Layout.tsx`,
+`AirportShell.tsx` and the `TabView` note in `types.ts`. All rewritten. The `types.ts`
+note now carries the three-pass history in short form, because the two wrong answers both
+looked reasonable and the next person will be tempted by them.
+
+### Tests
+
+**Client 1565 (103 files), functions 953, rules 237. Both builds and typecheck clean.**
+
+Eight tests asserted the old arrangement and were **inverted, not deleted** — each keeps a
+line saying what it used to claim and why that changed. The two that matter most:
+
+- `serviceRouting.test.tsx` — *"gets NO switch — this is the whole fix"* became *"GETS a
+  switch — reversed on 2026-08-25, and the board depends on it"*.
+- The same file's *"is not a manager by the granted set alone"*, which specifically pinned
+  `hasRecordedRole` over `hasGrantedRole`, is now the opposite with the capability-vs-
+  authority reasoning written out.
+
+`nav-tab-parity.test.ts` still holds `getNavItems` and `tabBelongsTo` together across
+every role/service/arriving combination, and its Sarthi door test flipped from sabha to
+airport.
+
+Looked at in `preview/shell.html`: manager 8 items with no Arrivals, Sarthi 3, rider 3,
+and the "Airport Seva" switch under the role picker in all panels. (The preview stub
+shares one multi-role profile across the three panels, so it cannot show a Bhulku having
+no switch — `serviceRouting.test.tsx` covers that.)
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only again —
+no rule changes: the board's read rules already gated on the driver capability, which is
+exactly why that predicate was the right one to reuse.
+
 ## DEPLOYED 2026-08-25 (late) — the RoleSwitcher hat, found by an owner bug report
 
 **Live as `ee136ae`, and `main` is at that commit.**

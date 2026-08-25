@@ -10,24 +10,30 @@
  * So there is no launcher and no remembered choice. Who you are decides:
  *
  *   arriving       Airport Seva only — one screen, their own pickup.
- *   manager        Sabha Seva, plus a switch to Airport Seva, where they get the
- *                  ARRIVALS BOARD. Not the newcomer's request form: see below.
- *   everybody else Sabha Seva only. A Sarthi additionally gets the Arrivals TAB, which
- *                  is a destination in the app they already use rather than a service
- *                  they switch to.
+ *   can drive      Sabha Seva, plus a switch to Airport Seva, which is where the
+ *                  ARRIVALS BOARD lives. Sarthis and managers alike.
+ *   everybody else Sabha Seva only, with no switch and no board.
  *
- * WHY THE BOARD IS IN TWO DIFFERENT PLACES, which looks inconsistent and is not.
+ * THE BOARD IS IN AIRPORT SEVA AND NOWHERE ELSE. It took three passes to get here and
+ * the two wrong answers are worth keeping, because both looked reasonable.
  *
- * A Sarthi has no service switch — so if the board lived only in Airport Seva they
- * could never reach it. It has to be a sabha tab for them. A MANAGER is the one role
- * that holds both services, so "consistent with the Sarthi" is the wrong thing to
- * optimise for: for them Airport Seva should contain the airport work.
+ * FIRST it was a sabha tab for Sarthis and managers both, on the reasoning that
+ * claiming a trip is one more thing somebody who already lives here does. That gave a
+ * manager an Airport Seva containing the TRAVELLER's screen — a live form that would
+ * file the manager their own pickup, and an "I am in the USA now" button that wrote
+ * `isArriving: false` where it was already false and so did nothing at all.
  *
- * The first version gave a manager the same Airport Seva a traveller gets, and that
- * was wrong twice over — a live form that would file a real pickup request for the
- * manager themselves, and an "I am in the USA now" button that wrote `isArriving:
- * false` on a profile where it was already false and therefore did nothing at all.
- * A control that fires and visibly does nothing is this codebase's signature defect.
+ * SECOND it moved to Airport Seva for managers only, leaving it a sabha tab for
+ * Sarthis, because a Sarthi had no switch and would otherwise lose the board entirely.
+ * That put one screen in different services for different roles, which is what the
+ * owner then asked about — correctly.
+ *
+ * NOW: anybody who can claim a trip can switch service, so the board can live in one
+ * place. `hasGrantedRole('driver')` is exactly the right predicate — it is true for a
+ * Sarthi and for a manager, false for a Bhulku, and it is the same capability the
+ * board's own Firestore rules gate on. Reaching the board and being allowed to use it
+ * are now the same question, which is why there is no longer a role that can see it
+ * and no role that is stranded without it.
  *
  * NOT MIRRORED SERVER-SIDE, deliberately. Nothing on the server reads `isArriving` —
  * `updateAirportPickup` only ever clears it — so there is no second copy to drift and
@@ -36,7 +42,7 @@
  */
 
 import type { Service, TabView, UserRole } from '../../types';
-import { hasRecordedRole } from '../roles';
+import { hasGrantedRole } from '../roles';
 
 /** Anything with the shape this module needs. Keeps it testable without a full profile. */
 interface Arrivable {
@@ -60,15 +66,28 @@ export function arrivingMember(profile: Arrivable | null | undefined): boolean {
 }
 
 /**
- * Only a manager may hold two services, so only a manager may override.
+ * Anybody who can claim an airport trip may hold two services.
  *
- * `hasRecordedRole`, not `hasGrantedRole`: manager is the top of the hierarchy, and
- * reading the granted set here would hand the override to every Sarthi. Same asymmetry,
- * and same reason, as `isApprovedManagerData` in functions/src/utils/authz.ts.
+ * `hasGrantedRole('driver')`, and the GRANTED set is deliberate here where it would be
+ * wrong elsewhere. This is a CAPABILITY question — "could this person drive somebody
+ * home from the airport" — not a question of authority, so the expanded hierarchy is
+ * the right thing to read: a manager's grants include `driver`, so one predicate covers
+ * both. Contrast `isApprovedManagerData` on the server, which asks about authority and
+ * therefore must read the recorded role.
+ *
+ * It used to be `hasRecordedRole(profile, 'manager')`, when the board was a sabha tab
+ * for Sarthis and only managers switched. Once the board moved into Airport Seva for
+ * good, that predicate would have left every Sarthi unable to reach the one screen the
+ * service exists for.
+ *
+ * A Bhulku's grants are `['student']`, so they still get no switch — which was the
+ * whole point of removing the launcher. Nothing here gives anybody data they could not
+ * already reach: `firestore.rules` gates the board on the driver role independently, so
+ * a switch is a route, not a permission.
  */
 export function canSwitchService(profile: Arrivable | null | undefined): boolean {
     if (!profile) return false;
-    return profile.accountStatus === 'approved' && hasRecordedRole(profile, 'manager');
+    return profile.accountStatus === 'approved' && hasGrantedRole(profile, 'driver');
 }
 
 /**
@@ -100,8 +119,8 @@ export function resolveService(
  * CHOSEN BY `arriving`, NOT BY ROLE — and the first version got this wrong, so the
  * reasoning is written down.
  *
- * Role looked like the obvious discriminator: only a manager can switch here, so
- * manager meant oversight. But the role every nav reads is the ACTIVE one, and the
+ * Role looked like the obvious discriminator: at the time only a manager could switch
+ * here, so manager meant oversight. But the role every nav reads is the ACTIVE one, and the
  * RoleSwitcher lets a manager wear the Sarthi hat. `canSwitchService` reads the
  * RECORDED role, so the service switch stays available while they do — and with role
  * as the discriminator, a manager viewing as a Sarthi who switched to Airport Seva got
@@ -131,7 +150,7 @@ export function airportTabs(arriving: boolean): TabView[] {
  * The first tab of the list, not a separate constant, so the home screen cannot drift
  * away from being reachable in its own service.
  */
-export function serviceHome(service: Service, role: UserRole, arriving: boolean): TabView {
+export function serviceHome(service: Service, arriving: boolean): TabView {
     return service === 'airport' ? airportTabs(arriving)[0] : 'home';
 }
 
@@ -150,9 +169,14 @@ export function serviceHome(service: Service, role: UserRole, arriving: boolean)
  * whether the service changed because a manager tapped the switch or because the server
  * cleared `isArriving` when their pickup completed.
  */
-export function tabBelongsTo(
-    tab: TabView, service: Service, role: UserRole, arriving: boolean,
-): boolean {
+/**
+ * NO `role` PARAMETER, and it had one until the board became airport-only.
+ *
+ * While the board lived in sabha for a Sarthi and in airport for a manager, this had to
+ * know who was asking. Now that it has one home, the answer is the same for everybody
+ * and the parameter was dead weight — one more thing for a caller to pass wrongly.
+ */
+export function tabBelongsTo(tab: TabView, service: Service, arriving: boolean): boolean {
     if (service === 'airport') return airportTabs(arriving).includes(tab);
 
     // Sabha. Stated as "which tabs do NOT belong" because the sabha list is long and
@@ -160,15 +184,9 @@ export function tabBelongsTo(
     // `getNavItems`. `tests/quality/nav-tab-parity.test.ts` compares the two for every
     // role and service pair, so this cannot drift away from the nav it must match.
     if (tab === 'airport-request') return false;
-    // The board is a sabha destination for a Sarthi, who has no switch, and an AIRPORT
-    // destination for a manager, who does. So for a manager it does not belong here.
-    //
-    // ROLE, not `arriving`, and this asymmetry with the airport branch above is
-    // deliberate: this is about which app you are working in, and that is exactly what
-    // the RoleSwitcher's hat decides. A manager wearing the Sarthi hat IS working as a
-    // Sarthi, and a Sarthi claims trips from sabha. They keep the manager's route too,
-    // via the service switch, which is correct — the hat says which one they meant.
-    if (tab === 'arrivals') return role !== 'manager';
+    // The board is an AIRPORT destination for everybody now, so it never belongs in
+    // sabha — for any role, in any hat. That is what lets one screen have one home.
+    if (tab === 'arrivals') return false;
     return true;
 }
 

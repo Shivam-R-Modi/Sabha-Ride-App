@@ -64,7 +64,7 @@ describe('every nav item is a tab that belongs where it is shown', () => {
     it.each(REAL)('%s in %s, arriving=%s', (role, service, arriving) => {
         for (const item of getNavItems(role, service, arriving)) {
             expect(
-                tabBelongsTo(item.id, service, role, arriving),
+                tabBelongsTo(item.id, service, arriving),
                 `${role}/${service}/arriving=${arriving}: nav offers "${item.label}" `
                 + `(${item.id}) but tabBelongsTo refuses it`,
             ).toBe(true);
@@ -92,7 +92,7 @@ describe('a service-scoped tab that belongs is reachable from the nav', () => {
     it.each(REAL)('%s in %s, arriving=%s', (role, service, arriving) => {
         const navIds = getNavItems(role, service, arriving).map(item => item.id);
         for (const tab of SERVICE_SCOPED) {
-            if (!tabBelongsTo(tab, service, role, arriving)) continue;
+            if (!tabBelongsTo(tab, service, arriving)) continue;
             // A student is allowed 'arrivals' in sabha by the service test above and has
             // no nav item for it, which is correct: the board is gated on the driver
             // role in firestore.rules, so offering it would be a screen of refusals.
@@ -105,23 +105,27 @@ describe('a service-scoped tab that belongs is reachable from the nav', () => {
         }
     });
 
-    it('nothing outside those two moved service, so the sabha nav is untouched', () => {
-        // The guard on this whole change: a manager lost exactly one destination and a
-        // Sarthi lost none.
+    it('the sabha navs are exactly the pre-Airport-Seva ones again', () => {
+        // The tidiest outcome of the whole three-pass story: the board has one home in
+        // Airport Seva, so NEITHER sabha list carries it and both are back to what they
+        // were before any of this. A Sarthi is at three destinations, a manager at eight.
         expect(getNavItems('manager', 'sabha').map(i => i.id)).toEqual([
             'home', 'people', 'history', 'fleet', 'setup', 'profile', 'notices', 'records',
         ]);
         expect(getNavItems('driver', 'sabha').map(i => i.id)).toEqual([
-            'home', 'arrivals', 'history', 'profile',
+            'home', 'history', 'profile',
+        ]);
+        expect(getNavItems('student', 'sabha').map(i => i.id)).toEqual([
+            'home', 'rides', 'profile',
         ]);
     });
 });
 
 describe('the home of a service is in that service', () => {
     it.each(REAL)('%s in %s, arriving=%s', (role, service, arriving) => {
-        const home = serviceHome(service, role, arriving);
+        const home = serviceHome(service, arriving);
         expect(
-            tabBelongsTo(home, service, role, arriving),
+            tabBelongsTo(home, service, arriving),
             `${role}/${service}/arriving=${arriving}: home is ${home}`,
         ).toBe(true);
         expect(getNavItems(role, service, arriving).map(i => i.id)).toContain(home);
@@ -143,19 +147,22 @@ describe('everybody who should reach the board can, and nobody else is offered i
      * `firestore.rules` gates the board on the driver role and would refuse every query.
      */
     const doors = (role: UserRole, arriving: boolean) => ({
-        sabha: tabBelongsTo('arrivals', 'sabha', role, arriving)
+        sabha: tabBelongsTo('arrivals', 'sabha', arriving)
             && getNavItems(role, 'sabha', arriving).some(i => i.id === 'arrivals'),
-        airport: tabBelongsTo('arrivals', 'airport', role, arriving)
+        airport: tabBelongsTo('arrivals', 'airport', arriving)
             && getNavItems(role, 'airport', arriving).some(i => i.id === 'arrivals'),
     });
 
-    it('a Sarthi has a door, and it is the sabha one', () => {
-        // If this ever flips, a plain Sarthi loses the board entirely: nothing offers
-        // them a service switch, so an airport-only board would be unreachable.
-        expect(doors('driver', false).sabha).toBe(true);
+    it('a Sarthi has a door, and it is the AIRPORT one', () => {
+        // Reversed from "and it is the sabha one" when Sarthis gained a service switch.
+        // The switch is what makes an airport-only board reachable for them, so
+        // `canSwitchService` allowing the driver capability is load-bearing for this.
+        const d = doors('driver', false);
+        expect(d.airport).toBe(true);
+        expect(d.sabha).toBe(false);
     });
 
-    it('a manager has a door, and it is the airport one', () => {
+    it('a manager has a door, and it is the airport one too — the same one', () => {
         const d = doors('manager', false);
         expect(d.airport).toBe(true);
         expect(d.sabha).toBe(false);
@@ -207,11 +214,11 @@ describe("a manager's Airport Seva is not the traveller's", () => {
     });
 
     it('opens on the board', () => {
-        expect(serviceHome('airport', 'manager', false)).toBe('arrivals');
+        expect(serviceHome('airport', false)).toBe('arrivals');
     });
 
     it("and a traveller's still opens on their own pickup", () => {
-        expect(serviceHome('airport', 'student', true)).toBe('airport-request');
+        expect(serviceHome('airport', true)).toBe('airport-request');
         expect(getNavItems('student', 'airport', true).map(i => i.id))
             .toEqual(['airport-request', 'profile']);
     });
@@ -239,14 +246,15 @@ describe('a manager wearing the Sarthi hat', () => {
     });
 
     it('opens on the board there', () => {
-        expect(serviceHome('airport', 'driver', false)).toBe('arrivals');
+        expect(serviceHome('airport', false)).toBe('arrivals');
     });
 
-    it('still gets Arrivals in the sabha dock, because that hat IS a Sarthi', () => {
-        // Not a bug and not the same question: the hat says which app they meant to be
-        // working in, and a Sarthi claims trips from sabha.
+    it('gets NO Arrivals in the sabha dock, and neither does a real Sarthi', () => {
+        // The hat stopped mattering for this question once the board had one home. Which
+        // is the point: the answer no longer depends on who is asking, so there is
+        // nothing left here to get inconsistent.
         expect(getNavItems('driver', 'sabha', false).map(i => i.id))
-            .toEqual(['home', 'arrivals', 'history', 'profile']);
+            .toEqual(['home', 'history', 'profile']);
     });
 
     it('and an actually-arriving Bhulku still gets their own form', () => {

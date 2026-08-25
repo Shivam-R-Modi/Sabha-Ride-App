@@ -553,14 +553,15 @@ export const getNavItems = (
    * Airport Seva is TWO surfaces, and which one you get turns on `arriving`, NOT role.
    *
    * A TRAVELLER has not landed yet: one screen, their own pickup. Anybody ELSE in here
-   * arrived by switching, and only a manager can switch — so they came to oversee, and
-   * what they came for is the board.
+   * arrived by switching, and only somebody who can drive can switch — so they came to
+   * work, and the work is the board. Sarthis and managers get the same thing.
    *
    * NOT `role === 'manager'`, which is what this said first and was a hole: `role` is
    * the ACTIVE role, and the RoleSwitcher lets a manager wear the Sarthi hat while
-   * `canSwitchService` (recorded role) keeps their service switch. So a manager viewing
-   * as a Sarthi got the traveller's live request form here — the exact defect that
-   * moving the board into this service was meant to remove.
+   * `canSwitchService` keeps their service switch. So a manager viewing as a Sarthi got
+   * the traveller's live request form here — the exact defect that moving the board into
+   * this service was meant to remove. Reading `arriving` instead has no such gap, and it
+   * is also what let Sarthis be added here without another branch.
    *
    * Kept in step with `tabBelongsTo` by tests/quality/nav-tab-parity.test.ts, which
    * covers the hat case by name.
@@ -578,10 +579,11 @@ export const getNavItems = (
   }
 
   if (role === 'driver') {
-    // Four, so still inside the five-slot dock with no overflow drawer.
+    // Three. `arrivals` was here and moved to Airport Seva, which a Sarthi can now
+    // switch to — see canSwitchService. Back inside the five-slot dock with room to
+    // spare, and no swipe-only overflow drawer.
     return [
       { id: 'home', label: 'Dashboard', icon: Home },
-      { id: 'arrivals', label: 'Arrivals', icon: CalendarDays },
       { id: 'history', label: 'History', icon: History },
       { id: 'profile', label: 'Profile', icon: UserIcon },
     ];
