@@ -3,11 +3,33 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## BUILT 2026-08-25, NOT DEPLOYED — Airport Seva, a second service behind one login
+## DEPLOYED 2026-08-25 — Airport Seva, a second service behind one login
 
-**On branch `claude/airport-pickup-workflow-89afab`, in a worktree. Nothing is
-released. It has never run against production data and has never been seen
-rendered.** Read the caveats at the end of this section before deploying any of it.
+**Live in production as `20f40c8`. All three steps, in order, and `main` is
+fast-forwarded to the exact commit that is deployed.**
+
+```
+firestore:rules  released — firestore.rules + storage.rules + indexes
+functions        4 CREATED (requestAirportPickup, updateAirportPickup,
+                 alertUnclaimedArrivals, exportMembers), 26 updated, 0 deleted
+hosting          dist/assets/index-CVnwlT4B.js
+```
+
+Verified after the fact rather than assumed:
+
+- The live `index.html` references `index-CVnwlT4B.js`, and that file downloads with
+  a **SHA-256 identical to the local build** that passed the sweep. The bundle
+  actually serving contains `Airport Seva`, `airportPickups`, `requestAirportPickup`
+  and `wa.me`.
+- `firebase functions:list` shows all four new callables live.
+- The site boots with **no console errors** — splash renders, Firebase initialises.
+- `main` == the deployed commit, checked by comparing the two SHAs. PR #2 auto-merged.
+
+**What has NOT been exercised against production:** nobody has filed a real request,
+so no `airportPickups` document exists yet and the board has never been rendered with
+real data. The first real arrival is the first end-to-end test. Watch for it.
+
+Read the rest of this section before touching any of it.
 
 ### What it is
 
