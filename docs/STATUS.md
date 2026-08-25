@@ -3,11 +3,45 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — four changes to the pickup form, 2026-08-25 (evening)
+## DEPLOYED 2026-08-25 (evening) — four changes to the pickup form
 
-Owner's changes after filing the first real request. **Written and swept clean, not
-released** — rules are untouched, but `functions` and `hosting` both need a deploy for
-any of this to be live.
+Owner's changes after filing the first real request. **Live in production as `228aa32`,
+and `main` is at that exact commit.**
+
+```
+firestore:rules  released — unchanged, so "already up to date, skipping upload"
+functions        30 updated, 0 created, 0 deleted
+hosting          dist/assets/index-CbarzzAX.js
+```
+
+Verified rather than assumed. The live `index.html` points at that bundle, it downloads
+with a **SHA-256 identical to the local build that passed the sweep**
+(`9dcfe8eb…c2f1548b`), it contains `Leave it blank if you do not know yet` and
+`ask them where they are going`, and both removed labels — `Anything we should know`,
+`Somebody here who knows you` — are genuinely **absent**, which is the check that the old
+bundle is not still being served.
+
+**The functions deploy was verified separately, and this is the trick worth reusing.**
+The riskiest pairing here is a new client that omits `dropoffAddress` against an old
+server that still calls `required()` on it, and a hash check on the JS bundle says nothing
+about that. So the live callable was probed with a payload carrying **no address and a
+five-digit phone number**: `parseFlight` → `parseTrip` → `parsePerson` all run before the
+rate limit and before any write, so the message that comes back identifies the deployed
+version with nothing persisted.
+
+```
+old server would say:  "The destination address is required"
+it actually said:      "The phone number must have between 8 and 15 digits"
+```
+
+Both new rules confirmed live, and `airportPickups` is still 1 document with no new audit
+row — the probe wrote nothing, as intended.
+
+**One near-miss worth recording.** The rules step was run from the MAIN checkout by
+habit, which is on `main` and did not yet have these changes. Harmless here only because
+`firestore.rules` was untouched — but `functions` or `hosting` from that directory would
+have deployed the previous commit while reporting success. **This repo has seven
+worktrees. Check `git rev-parse --abbrev-ref HEAD` before every deploy step.**
 
 ### 1. The destination is optional
 
@@ -107,13 +141,17 @@ card in the preview harness.
 five-digit phone number, so it would again catch the audit-row-before-validation ordering
 regressing.
 
-### To deploy
+### Still not exercised in production
 
-`firestore:rules` → `functions` → `hosting`, in that order even though the rules are
-untouched. **The functions deploy is not optional**: the client will start omitting
-`dropoffAddress`, and the currently-live `parseTrip` still calls `required()` on it, so a
-new-client-old-server pair refuses every request with no address — exactly the silent-ish
-failure the deploy order exists to avoid.
+`release`, `no_show`, `reassign`, `editFlight`, `familyNotified` and `cancel` — all
+covered by the tests in `functions/src/http/updateAirportPickup.test.ts`, none yet run
+against real data. `familyNotified` remains the one worth doing by hand, because its real
+effect happens outside the app and no test can tell you whether the message reads well to
+a father in Ahmedabad.
+
+The board is **empty** (`status == 'open'` returns 0). A second request is needed to look
+at a populated calendar, and filing one with **no address** would now also exercise the
+loud "ask them where they are going" row on a real card rather than only in the preview.
 
 ## PROVEN IN PRODUCTION 2026-08-25 — a real arrival, claimed and delivered
 
