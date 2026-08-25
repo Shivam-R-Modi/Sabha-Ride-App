@@ -550,13 +550,13 @@ export interface AirportPickupRequest {
     partySize: number;
     largeBags: number;
     cabinBags: number;
-    dropoffAddress: string;
-    dropoffLat: number;
-    dropoffLng: number;
+    /** Optional together — see AirportPickup in types.ts for why. */
+    dropoffAddress?: string;
+    dropoffLat?: number;
+    dropoffLng?: number;
     hasUsWorkingPhone: boolean;
     meetingPointNote?: string;
     needsStopOnTheWay?: string;
-    specialNeeds?: string;
     notes?: string;
 
     fullName: string;
@@ -567,7 +567,6 @@ export interface AirportPickupRequest {
     altPhone?: string;
     whatsappOn: WhatsappOn;
     university?: string;
-    referredByName?: string;
     familyContact?: {
         name: string;
         relationship: string;

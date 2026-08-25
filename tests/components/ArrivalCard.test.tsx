@@ -378,3 +378,49 @@ describe('a coordinator moving a trip', () => {
         expect(screen.getByText('Kiran')).toBeInTheDocument();
     });
 });
+
+/**
+ * A DESTINATION THAT WAS NEVER GIVEN.
+ *
+ * The address became optional because somebody filing a month before they fly often
+ * does not have one. That moves the burden onto this card: the Sarthi has to be told
+ * it is a question to ask, not left looking at a blank row they will read as a
+ * loading failure. And `dropoffAddress?.split(',')` is now the only thing standing
+ * between an absent address and a crash that takes the whole board down.
+ */
+describe('when they did not give an address', () => {
+    const NO_ADDRESS: Partial<AirportPickup> = {
+        dropoffAddress: undefined, dropoffLat: undefined, dropoffLng: undefined,
+    };
+
+    it('says so out loud, rather than showing an empty row', () => {
+        showOpen(NO_ADDRESS);
+        expect(screen.getByText(/ask them where they are going/i)).toBeInTheDocument();
+    });
+
+    it('still renders the whole card — an absent address is not a crash', () => {
+        // `arrival.dropoffAddress.split(',')` used to build the family WhatsApp
+        // message. Unguarded, that throws on undefined and takes the board with it.
+        showOpen(NO_ADDRESS);
+        expect(screen.getByText('Ramesh Patel')).toBeInTheDocument();
+        expect(screen.getByText(/Boston Logan/)).toBeInTheDocument();
+    });
+
+    it('still offers the family message, without the "on our way to" line', () => {
+        // The destination only ever added one sentence to that message, so an absent
+        // one must not be the difference between telling the family and not.
+        showOpen({ ...NO_ADDRESS, status: 'claimed', claimedByUid: 'sarthi_1' });
+        expect(screen.getByRole('button', { name: /Tell the family/i })).toBeInTheDocument();
+    });
+
+    it('keeps the address off the collapsed row, present or absent', () => {
+        show(NO_ADDRESS);
+        expect(screen.queryByText(/ask them where they are going/i)).not.toBeInTheDocument();
+    });
+
+    it('shows the address when there is one, and no prompt', () => {
+        showOpen();
+        expect(screen.getByText('360 Huntington Ave, Boston, MA')).toBeInTheDocument();
+        expect(screen.queryByText(/ask them where they are going/i)).not.toBeInTheDocument();
+    });
+});

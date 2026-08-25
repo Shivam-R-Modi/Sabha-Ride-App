@@ -75,6 +75,11 @@ const cards: Array<[string, AirportPickup]> = [
     ['Met — family already told', pickup({ status: 'met', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark', metAt: soon(-1), familyNotifiedAt: soon(-1) })],
     ['No family contact — no WhatsApp button', pickup({ status: 'claimed', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark', passenger: { ...BASE.passenger, familyContact: null } })],
     ['Completed', pickup({ status: 'completed', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark', completedAt: soon(-1) })],
+    // The address became optional on 2026-08-25. This is the card that has to say so
+    // out loud rather than showing an empty "Going to" row.
+    ['No address given yet', pickup({
+        dropoffAddress: undefined, dropoffLat: undefined, dropoffLng: undefined,
+    } as Partial<AirportPickup>)],
 ];
 
 const statuses: Array<[string, AirportPickup]> = [

@@ -3,6 +3,118 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## NOT DEPLOYED — four changes to the pickup form, 2026-08-25 (evening)
+
+Owner's changes after filing the first real request. **Written and swept clean, not
+released** — rules are untouched, but `functions` and `hosting` both need a deploy for
+any of this to be live.
+
+### 1. The destination is optional
+
+It used to be required AND had to carry coordinates picked from the Google Places
+suggestions. Both halves were wrong for the person this service exists for: somebody
+filing from Ahmedabad a month before they fly frequently does not know where they will
+be living, and refusing the request over it meant **they could not ask at all**.
+
+Now: `dropoffAddress`, `dropoffLat` and `dropoffLng` are optional together, and free
+text is accepted **without** coordinates — somebody who knows the name of their dorm but
+cannot make the autocomplete offer it is no longer blocked. What the coordinates still
+buy is the profile seeding in `updateAirportPickup`'s completion, which was already
+guarded on a usable pair, so an ungeocoded address is simply not copied and the traveller
+is asked on the normal setup screen instead.
+
+**0,0 is still never stored as a location.** It is the "never geocoded" placeholder
+`resolveHomeCoords` rejects, and seeding it would put a Sarthi in the Atlantic every
+Friday afterwards. The address is kept in that case; the fake pair is dropped.
+
+The card carries the cost of this, and does it **loudly**: with no address the Sarthi's
+card reads *"Not given yet — ask them where they are going before you set off."* in the
+same row a real address would occupy. A blank row would have read as a load failure. The
+traveller's own screenshot card omits the row entirely instead — there is no way to add
+an address after filing (`editFlight` is the only edit path), so a prompt there would
+point at a control that does not exist.
+
+### 2 and 3. Two fields removed
+
+- **"Anything we should know"** (`specialNeeds`) — the second of two free-text catch-alls
+  on the same form. `notes` still carries an infant, a wheelchair or a medical note.
+- **"Somebody here who knows you"** (`referredByName`) — nothing read it but the Airport
+  CSV export, and that column went with it.
+
+Both were **empty in the only two production documents**, checked before deleting.
+
+### 4. Every phone number is digit-checked
+
+All three — theirs, their other number, their family's — now go through the app's own
+`PhoneNumberInput` rather than a bare `type="tel"` text field. That brings the country
+selector and the **per-country digit count** from `phoneUtils.ts` (10 for the US and
+India, 9 for Australia), and stores the **E.164** form, matching `ProfileSetup` and the
+numbers already in production.
+
+**The layering matters and is deliberate.** The client enforces the exact count, because
+it knows which country the person picked. The server enforces only the E.164 envelope —
+`MIN_PHONE_DIGITS = 8`, `MAX_PHONE_DIGITS = 15`, both in the mirrored `arrival.ts` and
+both pinned by `arrival-table-parity.test.ts`. Guessing a country server-side in order to
+be stricter would refuse real numbers from anywhere not yet in `SUPPORTED_COUNTRIES`.
+Punctuation is stripped before counting, so `+91 98765 43210`, `+919876543210` and
+`(987) 654-3210` are all the same number rather than two rejections.
+
+The server does **not** normalise. Rewriting a number typed without a country code means
+guessing one, which turns a reachable local number into an unreachable foreign one.
+
+`PhoneNumberInput` gained one prop, `showPrivacyNote`, defaulting to true so every
+existing call site is unchanged. The form asks for three numbers and the same privacy
+sentence three times read as a rendering fault.
+
+### What looking at it caught
+
+Two things the tests could not, both in `preview/airport.html` at 440px:
+
+- **`PhoneNumberInput` labels in sentence case with a red asterisk.** Right on the signup
+  screen it was built for; wrong here, where every other label is small, bold and
+  uppercase and nothing else marks a required field at all. It read as though a different
+  form had been pasted in. Fixed by suppressing its own label (`label=""`) and using this
+  form's `LABEL` above it.
+- **The input chrome still differs** — `border-2 border-mocha/20` with no fill, against
+  the form's `bg-cream-300`. **Left alone deliberately:** `AddressAutocomplete` in the
+  same form already looks like that, so this is the app's pre-existing two-field-style
+  split rather than something this change introduced. Worth resolving one day, in one
+  pass, not here.
+
+The screenshot trap in the preview harness is unchanged and cost three rebuilds: **frames
+only composite on a fresh load**, so a JS-driven accordion click then screenshot returns
+the previous frame. The way through is to change the section that opens by default,
+rebuild, reload, look, and put it back.
+
+### Tests
+
+**Client 1518 (102 files), functions 953, rules 237. Build, functions build and typecheck
+all clean — typecheck at zero.**
+
+New: **`tests/components/ArrivalRequestForm.test.tsx`, 18 cases — this screen had no test
+at all**, which is poor for the form the whole service runs through. Three of its
+assertions were **mutation-checked**: sending the display string instead of E.164, sending
+`''` instead of omitting the address, and dropping the primary-phone digit check each fail
+exactly one test and no others.
+
+Also added: 8 destination cases and 13 phone cases in `arrivalInput.test.ts`, 5 missing-
+address cases on `ArrivalCard`, 3 on `ArrivalStatusCard`, and a `No address given yet`
+card in the preview harness.
+
+**One existing test was passing for the wrong reason and is now fixed.**
+`requestAirportPickup.test.ts`'s "no audit row when validation refuses the payload" used
+`dropoffLat: 0` as its invalid payload — which stopped being a refusal here. It now uses a
+five-digit phone number, so it would again catch the audit-row-before-validation ordering
+regressing.
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`, in that order even though the rules are
+untouched. **The functions deploy is not optional**: the client will start omitting
+`dropoffAddress`, and the currently-live `parseTrip` still calls `required()` on it, so a
+new-client-old-server pair refuses every request with no address — exactly the silent-ish
+failure the deploy order exists to avoid.
+
 ## PROVEN IN PRODUCTION 2026-08-25 — a real arrival, claimed and delivered
 
 **The first end-to-end run of Airport Seva against live data, and the graduation path

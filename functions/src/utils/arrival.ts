@@ -231,10 +231,28 @@ export function airportLabel(code: string): string {
 // trust boundary even when it belongs to a manager.
 
 export const MAX_NAME = 120;
-export const MAX_SHORT_TEXT = 200;   // meetingPointNote, needsStopOnTheWay, specialNeeds
+export const MAX_SHORT_TEXT = 200;   // meetingPointNote, needsStopOnTheWay
 export const MAX_NOTES = 1000;
 export const MAX_ADDRESS = 300;
 export const MAX_PARTY_SIZE = 8;
 export const MAX_BAGS = 20;
 /** How far ahead somebody may file. Two years is generous; twenty is a typo. */
 export const MAX_DAYS_AHEAD = 730;
+
+/**
+ * How many DIGITS a phone number may have, ignoring spaces, brackets and the `+`.
+ *
+ * The outer envelope only. E.164 caps a full international number at 15 digits, and
+ * the shortest thing that can still be dialled from another country is around 8, so
+ * anything outside that is a typo rather than a number.
+ *
+ * THE EXACT LENGTH IS THE CLIENT'S JOB, and deliberately so: `phoneUtils.ts` knows
+ * the country the person picked and therefore knows a US number is exactly 10 digits
+ * and an Australian one 9. The server is handed a formatted string with no reliable
+ * country attached — guessing one in order to apply a stricter rule would refuse
+ * real numbers from countries nobody has added to `SUPPORTED_COUNTRIES` yet. So the
+ * layering is: the client enforces the precise count and shows the person which one
+ * is wrong, the server refuses what could not be a phone number at all.
+ */
+export const MIN_PHONE_DIGITS = 8;
+export const MAX_PHONE_DIGITS = 15;

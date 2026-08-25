@@ -172,7 +172,10 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
             sarthiName: userProfile?.name ?? 'a Sarthi',
             travellerName: arrival.passenger.name,
             airportLabel: airportLabel(arrival.airportCode),
-            destination: arrival.dropoffAddress.split(',')[1]?.trim(),
+            // Optional at the helper, which drops the "on our way to" sentence when
+            // it is absent. Guarded because `.split` on an undefined address throws
+            // and would take the whole card down with it.
+            destination: arrival.dropoffAddress?.split(',')[1]?.trim(),
         }))
         : null;
 
@@ -224,7 +227,20 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                             value={[arrival.airline, arrival.flightNumber].filter(Boolean).join(' ') || 'Not given'}
                         />
                         <Detail label="Date of birth" value={arrival.passenger.dateOfBirth} />
-                        <Detail label="Going to" value={arrival.dropoffAddress} span />
+                        {arrival.dropoffAddress
+                            ? <Detail label="Going to" value={arrival.dropoffAddress} span />
+                            : (
+                                // LOUD, not an empty row. The address is optional now
+                                // because a traveller a month out often does not have
+                                // one — but a Sarthi driving to the airport has to know
+                                // it is a question they must ask, not a field that
+                                // failed to load.
+                                <Detail
+                                    label="Going to"
+                                    value="Not given yet — ask them where they are going before you set off."
+                                    span
+                                />
+                            )}
                         {arrival.isInternational && (
                             <Detail
                                 label="Note"
@@ -241,9 +257,6 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                         )}
                         {arrival.needsStopOnTheWay && (
                             <Detail label="Stop on the way" value={arrival.needsStopOnTheWay} span />
-                        )}
-                        {arrival.specialNeeds && (
-                            <Detail label="Special needs" value={arrival.specialNeeds} span />
                         )}
                         {arrival.notes && <Detail label="Notes" value={arrival.notes} span />}
                     </dl>

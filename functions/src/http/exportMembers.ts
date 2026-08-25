@@ -91,7 +91,7 @@ export const exportMembers = functions.https.onCall(async (data, context) => {
         rows.push(row([
             'Name', 'Preferred name', 'Date of birth', 'Email', 'Phone', 'Other phone',
             'WhatsApp on', 'University', 'Family contact', 'Family relationship',
-            'Family phone', 'Referred by', 'First asked',
+            'Family phone', 'First asked',
         ]));
 
         const profiles = await db.collection(PROFILES_COLLECTION).limit(MAX_ROWS + 1).get();
@@ -103,7 +103,7 @@ export const exportMembers = functions.https.onCall(async (data, context) => {
                 p.fullName, p.preferredName, p.dateOfBirth, p.email, p.phone, p.altPhone,
                 p.whatsappOn, p.university,
                 p.familyContact?.name, p.familyContact?.relationship, p.familyContact?.phone,
-                p.referredByName, p.createdAt,
+                p.createdAt,
             ]));
         }
     } else {

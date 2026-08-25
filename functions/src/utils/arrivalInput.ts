@@ -32,7 +32,7 @@ import {
     airportZone,
     ArrivalDirection, WhatsappOn,
     MAX_ADDRESS, MAX_BAGS, MAX_DAYS_AHEAD, MAX_NAME, MAX_NOTES, MAX_PARTY_SIZE,
-    MAX_SHORT_TEXT,
+    MAX_PHONE_DIGITS, MAX_SHORT_TEXT, MIN_PHONE_DIGITS,
 } from './arrival';
 
 const bad = (message: string): never => {
@@ -60,6 +60,43 @@ function required(value: unknown, label: string, max: number): string {
 /** Empty becomes undefined, so an absent optional is absent rather than ''. */
 function optional(value: unknown, label: string, max: number): string | undefined {
     return text(value, label, max) || undefined;
+}
+
+/**
+ * A phone number, checked by DIGIT COUNT rather than by shape.
+ *
+ * Punctuation is stripped before counting, because `+91 98765 43210`,
+ * `+919876543210` and `(987) 654-3210` are the same number typed by three people and
+ * a regex over the whole string would refuse two of them. The bounds are the E.164
+ * envelope and the reasoning for leaving the exact per-country length to the client
+ * is on MIN_PHONE_DIGITS in ./arrival.
+ *
+ * NOT normalised to E.164 here. The stored string is what a Sarthi taps to call and
+ * what `waLink` strips again, and rewriting it server-side would mean guessing a
+ * country code for a number typed without one — turning a reachable local number
+ * into an unreachable foreign one.
+ */
+function phoneDigits(value: string): number {
+    return value.replace(/\D/g, '').length;
+}
+
+function checkPhone(value: string, label: string): string {
+    const digits = phoneDigits(value);
+    if (digits < MIN_PHONE_DIGITS || digits > MAX_PHONE_DIGITS) {
+        bad(`${label} must have between ${MIN_PHONE_DIGITS} and ${MAX_PHONE_DIGITS} digits`);
+    }
+    return value;
+}
+
+/** As `required`, plus the digit count. */
+function requiredPhone(value: unknown, label: string): string {
+    return checkPhone(required(value, label, MAX_NAME), label);
+}
+
+/** As `optional`, plus the digit count when one was actually given. */
+function optionalPhone(value: unknown, label: string): string | undefined {
+    const out = optional(value, label, MAX_NAME);
+    return out ? checkPhone(out, label) : undefined;
 }
 
 function count(value: unknown, label: string, min: number, max: number): number {
@@ -181,13 +218,17 @@ export interface ParsedTrip {
     partySize: number;
     largeBags: number;
     cabinBags: number;
-    dropoffAddress: string;
-    dropoffLat: number;
-    dropoffLng: number;
+    /**
+     * All three are OPTIONAL TOGETHER. Somebody filing from Ahmedabad a month before
+     * they fly often does not yet know where they are staying, and refusing the
+     * request over it left them with no way to ask at all.
+     */
+    dropoffAddress?: string;
+    dropoffLat?: number;
+    dropoffLng?: number;
     hasUsWorkingPhone: boolean;
     meetingPointNote?: string;
     needsStopOnTheWay?: string;
-    specialNeeds?: string;
     notes?: string;
 }
 
@@ -201,7 +242,6 @@ export interface ParsedPerson {
     whatsappOn: WhatsappOn;
     university?: string;
     familyContact: ParsedFamilyContact | null;
-    referredByName?: string;
 }
 
 export function parseTrip(data: any): ParsedTrip {
@@ -215,33 +255,47 @@ export function parseTrip(data: any): ParsedTrip {
     }
     const direction: ArrivalDirection = rawDirection === 'departure' ? 'departure' : 'arrival';
 
-    const dropoffLat = Number(data?.dropoffLat);
-    const dropoffLng = Number(data?.dropoffLng);
-    if (!Number.isFinite(dropoffLat) || !Number.isFinite(dropoffLng)) {
-        bad('Pick the destination from the address suggestions so it has a location');
-    }
-    // 0,0 is the "address was never geocoded" placeholder, not a point in the
-    // Atlantic — resolveHomeCoords rejects it for the same reason. Letting it
-    // through would put a card on the board that no Sarthi can navigate to.
-    if (dropoffLat === 0 && dropoffLng === 0) {
-        bad('That destination has no location yet — pick it from the suggestions');
-    }
-    if (Math.abs(dropoffLat) > 90 || Math.abs(dropoffLng) > 180) {
+    /**
+     * THE DESTINATION IS OPTIONAL, AND SO IS ITS LOCATION.
+     *
+     * It used to be required, and both halves of that were wrong for the person this
+     * service exists for: somebody filing a month before they fly frequently does not
+     * know their address yet, and somebody who knows the name of their dorm cannot
+     * always make the autocomplete offer it. Refusing them meant no request at all,
+     * which is a worse outcome than a card a Sarthi has to ask one question about.
+     *
+     * So free text is accepted WITHOUT coordinates. What the coordinates still buy is
+     * the address seeding in `updateAirportPickup`'s completion — that is guarded on
+     * a usable pair, so an ungeocoded address simply is not copied to the profile and
+     * the traveller is asked for it on the normal setup screen instead.
+     *
+     * 0,0 is not treated as a location. It is the "never geocoded" placeholder that
+     * `resolveHomeCoords` rejects, and seeding it would put a Sarthi in the Atlantic.
+     */
+    const dropoffAddress = optional(data?.dropoffAddress, 'the destination address', MAX_ADDRESS);
+    const rawLat: number = Number(data?.dropoffLat);
+    const rawLng: number = Number(data?.dropoffLng);
+    const geocoded = Number.isFinite(rawLat) && Number.isFinite(rawLng)
+        && !(rawLat === 0 && rawLng === 0);
+    // Checked only when there IS a pair. An out-of-range value is still a typo worth
+    // refusing rather than storing — but an absent one is now legitimate.
+    if (geocoded && (Math.abs(rawLat) > 90 || Math.abs(rawLng) > 180)) {
         bad('That destination location is not on Earth');
     }
+    // A location with no address is meaningless on the card, so it is dropped with it.
+    const hasDestination = Boolean(dropoffAddress);
 
     return {
         direction,
         partySize: count(data?.partySize, 'The number of people', 1, MAX_PARTY_SIZE),
         largeBags: count(data?.largeBags, 'The number of large bags', 0, MAX_BAGS),
         cabinBags: count(data?.cabinBags, 'The number of cabin bags', 0, MAX_BAGS),
-        dropoffAddress: required(data?.dropoffAddress, 'The destination address', MAX_ADDRESS),
-        dropoffLat,
-        dropoffLng,
+        dropoffAddress,
+        dropoffLat: hasDestination && geocoded ? rawLat : undefined,
+        dropoffLng: hasDestination && geocoded ? rawLng : undefined,
         hasUsWorkingPhone: data?.hasUsWorkingPhone === true,
         meetingPointNote: optional(data?.meetingPointNote, 'the meeting point note', MAX_SHORT_TEXT),
         needsStopOnTheWay: optional(data?.needsStopOnTheWay, 'the stop on the way', MAX_SHORT_TEXT),
-        specialNeeds: optional(data?.specialNeeds, 'the special needs note', MAX_SHORT_TEXT),
         notes: optional(data?.notes, 'the notes', MAX_NOTES),
     };
 }
@@ -254,7 +308,7 @@ export function parsePerson(data: any, now: Date = new Date()): ParsedPerson {
     const whatsappOn: WhatsappOn =
         rawWhatsapp === 'primary' ? 'primary' : rawWhatsapp === 'alt' ? 'alt' : 'none';
 
-    const altPhone = optional(data?.altPhone, 'the alternate phone', MAX_NAME);
+    const altPhone = optionalPhone(data?.altPhone, 'The other phone number');
     // A dead control otherwise: "WhatsApp is on my alternate number" with no
     // alternate number renders a button that opens WhatsApp with nobody in it.
     if (whatsappOn === 'alt' && !altPhone) {
@@ -277,6 +331,9 @@ export function parsePerson(data: any, now: Date = new Date()): ParsedPerson {
     if (Boolean(familyName) !== Boolean(familyPhone)) {
         bad('A family contact needs both a name and a phone number');
     }
+    // Digit-checked only once we know there is one, so "no family contact" stays a
+    // legitimate answer rather than failing as a zero-digit number.
+    if (familyPhone) checkPhone(familyPhone, "The family contact's phone number");
 
     const familyLanguage = optional(
         data?.familyContact?.preferredLanguage, 'the preferred language', MAX_NAME);
@@ -286,7 +343,7 @@ export function parsePerson(data: any, now: Date = new Date()): ParsedPerson {
         preferredName: optional(data?.preferredName, 'the preferred name', MAX_NAME),
         dateOfBirth,
         email: required(data?.email, 'The email address', MAX_NAME),
-        phone: required(data?.phone, 'The phone number', MAX_NAME),
+        phone: requiredPhone(data?.phone, 'The phone number'),
         altPhone,
         whatsappOn,
         university: optional(data?.university, 'the university', MAX_NAME),
@@ -304,7 +361,6 @@ export function parsePerson(data: any, now: Date = new Date()): ParsedPerson {
                 ...(familyLanguage ? { preferredLanguage: familyLanguage } : {}),
             }
             : null,
-        referredByName: optional(data?.referredByName, 'the referrer name', MAX_NAME),
     };
 }
 

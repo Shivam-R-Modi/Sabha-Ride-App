@@ -17,6 +17,13 @@ interface PhoneNumberInputProps {
     required?: boolean;
     error?: string;
     label?: string;
+    /**
+     * The privacy line under the field. On by default so every existing call site is
+     * unchanged, and turned OFF for the second and third of a stack — the airport
+     * request form asks for three numbers, and the same sentence three times reads as
+     * a rendering fault rather than as a promise.
+     */
+    showPrivacyNote?: boolean;
 }
 
 export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
@@ -26,6 +33,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
     required = true,
     error,
     label = 'Phone Number',
+    showPrivacyNote = true,
 }) => {
     // Initialize parsed state
     const parsed = parsePhoneNumber(value);
@@ -155,12 +163,14 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
             ) : null}
 
             {/* SMS & Privacy Legal Consent Notice */}
-            <div className="pt-1 flex items-start gap-1.5 text-[11px] text-coffee-500 leading-tight">
-                <ShieldCheck size={14} className="text-saffron shrink-0 mt-0.5" />
-                <span>
-                    Phone numbers are kept private and used exclusively for ride updates and volunteer driver/student pickup coordination.
-                </span>
-            </div>
+            {showPrivacyNote && (
+                <div className="pt-1 flex items-start gap-1.5 text-[11px] text-coffee-500 leading-tight">
+                    <ShieldCheck size={14} className="text-saffron shrink-0 mt-0.5" />
+                    <span>
+                        Phone numbers are kept private and used exclusively for ride updates and volunteer driver/student pickup coordination.
+                    </span>
+                </div>
+            )}
         </div>
     );
 };

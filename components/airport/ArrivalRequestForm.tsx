@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Briefcase, Home, Plane, Users } from 'lucide-react';
 import { Disclosure } from '../shared/Disclosure';
 import { AddressAutocomplete } from '../auth/AddressAutocomplete';
+import { PhoneNumberInput } from '../auth/PhoneNumberInput';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { requestAirportPickup } from '../../src/utils/cloudFunctions';
@@ -66,6 +67,7 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
         largeBags: 2,
         cabinBags: 1,
 
+        // Optional, all three. Somebody filing a month out often has no address yet.
         dropoffAddress: '',
         dropoffLat: 0,
         dropoffLng: 0,
@@ -80,9 +82,7 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
         hasUsWorkingPhone: false,
         meetingPointNote: '',
         university: '',
-        referredByName: '',
         needsStopOnTheWay: '',
-        specialNeeds: '',
         notes: '',
 
         familyName: '',
@@ -91,6 +91,34 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
         familyHasWhatsapp: true,
         familyLanguage: '',
     });
+
+    /**
+     * The three phone numbers, kept apart from `form`.
+     *
+     * `PhoneNumberInput` hands back three things per keystroke — a formatted display
+     * string, an E.164 normalisation and a validity flag — and it is the E.164 value
+     * that gets STORED, matching `ProfileSetup` and the numbers already in production.
+     * Keeping them here rather than in `form` is what stops the display string being
+     * the thing that gets sent.
+     *
+     * Validity comes from `phoneUtils`, which knows the country the person picked and
+     * therefore the exact digit count: 10 for the US and India, 9 for Australia. The
+     * server re-checks the digit count within the E.164 envelope, because a client is
+     * a trust boundary even when it belongs to the person whose number it is.
+     */
+    const [phones, setPhones] = useState({
+        phone: { e164: '', valid: false },
+        altPhone: { e164: '', valid: false },
+        familyPhone: { e164: '', valid: false },
+    });
+
+    type PhoneKey = keyof typeof phones;
+
+    const setPhone = (key: PhoneKey) =>
+        (display: string, e164: string, valid: boolean) => {
+            setForm(prev => ({ ...prev, [key]: display }));
+            setPhones(prev => ({ ...prev, [key]: { e164, valid } }));
+        };
 
     const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
         setForm(prev => ({ ...prev, [key]: value }));
@@ -111,14 +139,24 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
         if (!form.dateOfBirth) return 'Add your date of birth.';
         if (!form.email.trim()) return 'Add your email address.';
         if (!form.phone.trim()) return 'Add a phone number.';
+        // Digit count, from the country selected on the field itself.
+        if (!phones.phone.valid) {
+            return 'Check your phone number — it does not have the right number of digits.';
+        }
         if (form.whatsappOn === 'alt' && !form.altPhone.trim()) {
             return 'You chose your other number for WhatsApp — add it, or change the choice.';
         }
-        if (!form.dropoffAddress.trim() || (form.dropoffLat === 0 && form.dropoffLng === 0)) {
-            return 'Pick where you are going from the address suggestions, so it has a location.';
+        if (form.altPhone.trim() && !phones.altPhone.valid) {
+            return 'Check your other phone number — it does not have the right number of digits.';
         }
+        // THE ADDRESS IS NOT CHECKED HERE ANY MORE, on purpose. It used to be required
+        // and picked from the suggestions, which is impossible for somebody who does not
+        // yet know where they are staying. See the destination section below.
         if (Boolean(form.familyName.trim()) !== Boolean(form.familyPhone.trim())) {
             return 'A family contact needs both a name and a phone number.';
+        }
+        if (form.familyPhone.trim() && !phones.familyPhone.valid) {
+            return 'Check your family contact’s number — it does not have the right number of digits.';
         }
         return null;
     };
@@ -144,29 +182,33 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                 partySize: form.partySize,
                 largeBags: form.largeBags,
                 cabinBags: form.cabinBags,
-                dropoffAddress: form.dropoffAddress,
-                dropoffLat: form.dropoffLat,
-                dropoffLng: form.dropoffLng,
+                // Omitted entirely when blank, rather than sent as ''. The server
+                // treats an absent address as "not known yet"; an empty string would
+                // be a destination whose text happens to be nothing.
+                dropoffAddress: form.dropoffAddress.trim() || undefined,
+                dropoffLat: form.dropoffLat || undefined,
+                dropoffLng: form.dropoffLng || undefined,
                 hasUsWorkingPhone: form.hasUsWorkingPhone,
                 meetingPointNote: form.meetingPointNote || undefined,
                 needsStopOnTheWay: form.needsStopOnTheWay || undefined,
-                specialNeeds: form.specialNeeds || undefined,
                 notes: form.notes || undefined,
 
                 fullName: form.fullName,
                 preferredName: form.preferredName || undefined,
                 dateOfBirth: form.dateOfBirth,
                 email: form.email,
-                phone: form.phone,
-                altPhone: form.altPhone || undefined,
+                // The E.164 form, so what is stored is dialable from anywhere — the
+                // same choice ProfileSetup makes. Falls back to what they typed only
+                // if normalisation somehow produced nothing.
+                phone: phones.phone.e164 || form.phone,
+                altPhone: phones.altPhone.e164 || form.altPhone || undefined,
                 whatsappOn: form.whatsappOn,
                 university: form.university || undefined,
-                referredByName: form.referredByName || undefined,
                 familyContact: form.familyName.trim()
                     ? {
                         name: form.familyName,
                         relationship: form.familyRelationship,
-                        phone: form.familyPhone,
+                        phone: phones.familyPhone.e164 || form.familyPhone,
                         hasWhatsapp: form.familyHasWhatsapp,
                         preferredLanguage: form.familyLanguage || undefined,
                     }
@@ -307,13 +349,13 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
             <Disclosure
                 icon={<Home size={20} aria-hidden="true" />}
                 title="Where you are going"
-                summary={form.dropoffAddress || 'Your address in the USA'}
+                summary={form.dropoffAddress || 'Optional — if you know it yet'}
                 open={open === 'destination'}
                 onToggle={() => toggle('destination')}
             >
                 <div className="space-y-3">
                     <div>
-                        <label className={LABEL}>Address</label>
+                        <label className={LABEL}>Address (optional)</label>
                         <AddressAutocomplete
                             value={form.dropoffAddress}
                             onChange={v => setForm(prev => ({
@@ -330,8 +372,15 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                             }))}
                             placeholder="Dorm, apartment or host's address"
                         />
+                        {/* Says what each choice buys instead of demanding one. Picking
+                            from the suggestions is better, so it is asked for — but
+                            leaving this blank no longer blocks the request, because
+                            plenty of people file before they know where they will
+                            live. */}
                         <p className="text-xs text-coffee-500 mt-1">
-                            Pick it from the suggestions so your Sarthi can navigate to it.
+                            Leave it blank if you do not know yet — your Sarthi will ask
+                            you when you land. If you do know, pick it from the
+                            suggestions so they can navigate straight to it.
                         </p>
                     </div>
 
@@ -340,12 +389,6 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                         value={form.needsStopOnTheWay} max={MAX_SHORT_TEXT}
                         onChange={v => set('needsStopOnTheWay', v)}
                         placeholder="A shop for a SIM card, groceries"
-                    />
-                    <Field
-                        id="needs" label="Anything we should know (optional)"
-                        value={form.specialNeeds} max={MAX_SHORT_TEXT}
-                        onChange={v => set('specialNeeds', v)}
-                        placeholder="Travelling with an infant, wheelchair, medical"
                     />
                 </div>
             </Disclosure>
@@ -380,15 +423,41 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                         id="email" label="Email" value={form.email}
                         onChange={v => set('email', v)} type="email"
                     />
-                    <Field
-                        id="phone" label="Phone number" value={form.phone}
-                        onChange={v => set('phone', v)} type="tel"
-                        placeholder="+91 98765 43210"
-                    />
-                    <Field
-                        id="alt-phone" label="Another number (optional)" value={form.altPhone}
-                        onChange={v => set('altPhone', v)} type="tel"
-                    />
+                    {/*
+                      * The app's phone control, not a bare text field: it carries the
+                      * country selector and the per-country digit count from
+                      * phoneUtils, and normalises to E.164 the way ProfileSetup does.
+                      *
+                      * ITS OWN LABEL IS SUPPRESSED and this form's `LABEL` used instead.
+                      * PhoneNumberInput labels in sentence case with a red asterisk,
+                      * which is right on the signup screen it was built for and wrong
+                      * here — every other label on this form is small, bold and
+                      * uppercase, and nothing else on it marks a required field with an
+                      * asterisk. Seen in preview/airport.html; it read as though a
+                      * different form had been pasted in.
+                      *
+                      * The privacy line shows once for the group rather than on each of
+                      * the three numbers this form asks for.
+                      */}
+                    <div>
+                        <label className={LABEL}>Phone number</label>
+                        <PhoneNumberInput
+                            label=""
+                            value={form.phone}
+                            onChange={setPhone('phone')}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className={LABEL}>Another number (optional)</label>
+                        <PhoneNumberInput
+                            label=""
+                            value={form.altPhone}
+                            onChange={setPhone('altPhone')}
+                            required={false}
+                            showPrivacyNote={false}
+                        />
+                    </div>
 
                     <div>
                         <label className={LABEL} htmlFor="whatsapp-on">Which number has WhatsApp?</label>
@@ -422,10 +491,6 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                         id="university" label="University or employer (optional)"
                         value={form.university} onChange={v => set('university', v)}
                     />
-                    <Field
-                        id="referred-by" label="Somebody here who knows you (optional)"
-                        value={form.referredByName} onChange={v => set('referredByName', v)}
-                    />
 
                     <hr className="border-0 border-t border-hairline/10" />
 
@@ -441,11 +506,16 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                         id="family-relationship" label="Relationship" value={form.familyRelationship}
                         onChange={v => set('familyRelationship', v)} placeholder="Mother"
                     />
-                    <Field
-                        id="family-phone" label="Their phone number, with country code"
-                        value={form.familyPhone} onChange={v => set('familyPhone', v)}
-                        type="tel" placeholder="+91 98765 43210"
-                    />
+                    <div>
+                        <label className={LABEL}>Their phone number</label>
+                        <PhoneNumberInput
+                            label=""
+                            value={form.familyPhone}
+                            onChange={setPhone('familyPhone')}
+                            required={false}
+                            showPrivacyNote={false}
+                        />
+                    </div>
                     <Check
                         id="family-whatsapp" checked={form.familyHasWhatsapp}
                         onChange={v => set('familyHasWhatsapp', v)}

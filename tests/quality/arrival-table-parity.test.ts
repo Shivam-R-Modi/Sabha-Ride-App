@@ -61,6 +61,12 @@ describe('the two copies are the same table', () => {
             MAX_PARTY_SIZE: m.MAX_PARTY_SIZE,
             MAX_BAGS: m.MAX_BAGS,
             MAX_DAYS_AHEAD: m.MAX_DAYS_AHEAD,
+            // The digit envelope the server refuses a phone number outside. The
+            // `Object.keys` check below catches one side GROWING a constant; this
+            // catches the two disagreeing about its value, which is the drift that
+            // would let a number pass the form and be refused by the callable.
+            MIN_PHONE_DIGITS: m.MIN_PHONE_DIGITS,
+            MAX_PHONE_DIGITS: m.MAX_PHONE_DIGITS,
         });
         expect(caps(client)).toEqual(caps(server as unknown as typeof client));
     });

@@ -297,7 +297,11 @@ describe('the audit row', () => {
     });
 
     it('is not written at all when validation refuses the payload', async () => {
-        await expect(request({ dropoffLat: 0, dropoffLng: 0 })).rejects.toThrow();
+        // A five-digit phone number. This case used to use `dropoffLat: 0`, which
+        // stopped being a refusal when the destination became optional — so the test
+        // was passing for the wrong reason and would have gone on passing even if the
+        // audit-row-before-validation ordering had regressed.
+        await expect(request({ phone: '12345' })).rejects.toThrow(/digits/i);
         expect(auditRows).toHaveLength(0);
     });
 });

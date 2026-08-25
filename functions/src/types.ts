@@ -301,8 +301,6 @@ export interface AirportProfile {
     whatsappOn: WhatsappOn;
     university?: string;
     familyContact: ArrivalFamilyContact | null;
-    /** Somebody in the congregation who knows them. Advisory; nothing is blocked on it. */
-    referredByName?: string;
     createdAt: string;
     updatedAt: string;
     /**
@@ -352,9 +350,21 @@ export interface AirportPickup {
     partySize: number;
     largeBags: number;
     cabinBags: number;
-    dropoffAddress: string;
-    dropoffLat: number;
-    dropoffLng: number;
+    /**
+     * WHERE THEY ARE GOING, AND IT MAY NOT BE KNOWN YET.
+     *
+     * All three are optional together. Somebody filing a month before they fly often
+     * has no address to give, and requiring one meant they could not ask for a pickup
+     * at all. The card says so out loud rather than rendering a blank line.
+     *
+     * The coordinates are present only when the address came from the autocomplete.
+     * Free text with no pair is legitimate — a Sarthi can read it — but it is not
+     * copied onto the traveller's profile when the trip completes, because
+     * `resolveHomeCoords` needs a real location and 0,0 is its rejection value.
+     */
+    dropoffAddress?: string;
+    dropoffLat?: number;
+    dropoffLng?: number;
     /**
      * Whether they will have a working phone when they land. Most people arrive on a
      * dead SIM, which is exactly when a meeting point agreed in advance matters.
@@ -363,7 +373,6 @@ export interface AirportPickup {
     meetingPointNote?: string;
     /** A stop on the way — a SIM card, groceries. What new arrivals actually ask for. */
     needsStopOnTheWay?: string;
-    specialNeeds?: string;
     notes?: string;
 
     passenger: ArrivalPassenger;

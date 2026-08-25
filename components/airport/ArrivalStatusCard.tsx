@@ -151,7 +151,9 @@ export const ArrivalStatusCard: React.FC<ArrivalStatusCardProps> = ({ arrival, o
                     {(arrival.airline || arrival.flightNumber) && (
                         <Row label="Flight" value={[arrival.airline, arrival.flightNumber].filter(Boolean).join(' ')} />
                     )}
-                    <Row label="Going to" value={arrival.dropoffAddress} />
+                    {arrival.dropoffAddress && (
+                        <Row label="Going to" value={arrival.dropoffAddress} />
+                    )}
                     <Row
                         label="Party"
                         value={`${arrival.partySize} ${arrival.partySize === 1 ? 'person' : 'people'}, `

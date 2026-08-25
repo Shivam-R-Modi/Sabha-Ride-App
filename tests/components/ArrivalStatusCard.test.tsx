@@ -177,3 +177,26 @@ describe('cancelling', () => {
         expect(update).toHaveBeenCalledWith({ pickupId: 'p1', action: 'cancel' });
     });
 });
+
+describe('the screenshot block when no address was given', () => {
+    /**
+     * Omitted, not shown empty. There is no way to add the address after filing — the
+     * only edit path is `editFlight` — so a "add your address" prompt here would point
+     * at a control that does not exist. The Sarthi's card carries the ask instead.
+     */
+    it('leaves the "Going to" row out entirely', () => {
+        show('open', { dropoffAddress: undefined, dropoffLat: undefined, dropoffLng: undefined });
+        expect(screen.queryByText(/going to/i)).not.toBeInTheDocument();
+    });
+
+    it('still shows everything a barrier photo needs', () => {
+        show('open', { dropoffAddress: undefined });
+        expect(screen.getByText(/show this at arrivals/i)).toBeInTheDocument();
+        expect(screen.getByText(/BOS/)).toBeInTheDocument();
+    });
+
+    it('shows the row when there is an address', () => {
+        show('open');
+        expect(screen.getByText(/going to/i)).toBeInTheDocument();
+    });
+});

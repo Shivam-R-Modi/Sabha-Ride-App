@@ -143,19 +143,79 @@ describe('the airport code', () => {
     });
 });
 
-describe('the trip details', () => {
-    it('refuses the 0,0 placeholder that means "never geocoded"', () => {
-        // Letting it through puts a card on the board that no Sarthi can navigate to.
-        expect(() => trip({ dropoffLat: 0, dropoffLng: 0 })).toThrow(/no location yet/i);
+/**
+ * THE DESTINATION IS OPTIONAL, AND USED NOT TO BE.
+ *
+ * Three tests here replace three that asserted the opposite — that an address was
+ * required and had to carry coordinates. That was wrong for the person Airport Seva
+ * exists for: somebody filing from Ahmedabad a month before they fly frequently has
+ * no US address yet, and refusing the request meant they could not ask at all.
+ *
+ * What survives is the rule that a COORDINATE PAIR is only ever stored when it is
+ * real, because `updateAirportPickup` copies it onto the traveller's profile on
+ * completion and `resolveHomeCoords` would hand 0,0 to a Sarthi as a pickup point.
+ */
+describe('the destination, which may not be known yet', () => {
+    it('accepts a request with no address at all', () => {
+        const parsed = trip({
+            dropoffAddress: undefined, dropoffLat: undefined, dropoffLng: undefined,
+        });
+        // Absent, not '' and not 0 — so `compact` drops all three and the document has
+        // no blank destination for a card to render as an empty row.
+        expect(parsed.dropoffAddress).toBeUndefined();
+        expect(parsed.dropoffLat).toBeUndefined();
+        expect(parsed.dropoffLng).toBeUndefined();
     });
 
-    it('refuses a missing coordinate rather than defaulting one', () => {
-        expect(() => trip({ dropoffLat: undefined })).toThrow(/address suggestions/i);
+    it('treats whitespace as no address', () => {
+        expect(trip({ dropoffAddress: '   ' }).dropoffAddress).toBeUndefined();
     });
 
-    it('refuses a coordinate that is not on Earth', () => {
+    it('accepts free text with NO coordinates, and stores no coordinates', () => {
+        // Somebody who knows the name of their dorm but could not make the
+        // autocomplete offer it. A Sarthi can read it; nothing navigates from it.
+        const parsed = trip({
+            dropoffAddress: 'Northeastern, International Village',
+            dropoffLat: undefined,
+            dropoffLng: undefined,
+        });
+        expect(parsed.dropoffAddress).toBe('Northeastern, International Village');
+        expect(parsed.dropoffLat).toBeUndefined();
+    });
+
+    it('still refuses to store the 0,0 placeholder as a location', () => {
+        // The address is kept, the fake location is not. Seeding 0,0 onto a profile
+        // would put a Sarthi in the Atlantic every Friday afterwards.
+        const parsed = trip({ dropoffLat: 0, dropoffLng: 0 });
+        expect(parsed.dropoffAddress).toBe('360 Huntington Ave, Boston');
+        expect(parsed.dropoffLat).toBeUndefined();
+        expect(parsed.dropoffLng).toBeUndefined();
+    });
+
+    it('drops a location whose address was left blank', () => {
+        // A pair with nothing to label it is unreadable on a card, so it goes with it.
+        const parsed = trip({ dropoffAddress: '', dropoffLat: 42.34, dropoffLng: -71.09 });
+        expect(parsed.dropoffLat).toBeUndefined();
+    });
+
+    it('keeps a real pair when the address came from the suggestions', () => {
+        const parsed = trip();
+        expect(parsed.dropoffLat).toBe(42.3399);
+        expect(parsed.dropoffLng).toBe(-71.0881);
+    });
+
+    it('still refuses a coordinate that is not on Earth', () => {
+        // An out-of-range value is a typo worth reporting, not something to ignore —
+        // the difference between "no location given" and "a wrong one given".
         expect(() => trip({ dropoffLat: 91 })).toThrow(/not on Earth/i);
     });
+
+    it('caps the address length', () => {
+        expect(() => trip({ dropoffAddress: 'x'.repeat(301) })).toThrow(/under 300/i);
+    });
+});
+
+describe('the trip details', () => {
 
     it('refuses a party of zero and a party of thirty', () => {
         expect(() => trip({ partySize: 0 })).toThrow(/between 1 and 8/i);
@@ -241,6 +301,100 @@ describe('the traveller', () => {
         expect(() => person({ fullName: ' ' })).toThrow(/full name is required/i);
         expect(() => person({ email: '' })).toThrow(/email address is required/i);
         expect(() => person({ phone: null })).toThrow(/phone number is required/i);
+    });
+});
+
+/**
+ * PHONE NUMBERS ARE CHECKED BY DIGIT COUNT.
+ *
+ * The client checks the exact count for the country the person picked — 10 for the US
+ * and India, 9 for Australia — because `phoneUtils.ts` knows which one they chose.
+ * The server is handed a formatted string with no reliable country attached, so it
+ * enforces the E.164 envelope instead: at least 8 digits, at most 15. Guessing a
+ * country here in order to be stricter would refuse real numbers from anywhere nobody
+ * has added to SUPPORTED_COUNTRIES yet.
+ *
+ * The numbers already in production are E.164 India numbers of 12 digits, and the
+ * first case below is the one that keeps them valid.
+ */
+describe('the phone numbers', () => {
+    it('accepts the E.164 shape already stored in production', () => {
+        expect(person({ phone: '+919902040804' }).phone).toBe('+919902040804');
+    });
+
+    it('counts digits rather than matching a shape, so punctuation is free', () => {
+        // The same number typed by three people. A regex over the whole string would
+        // refuse two of them.
+        for (const typed of ['+91 98765 43210', '(617) 555-0123', '+1-617-555-0123']) {
+            expect(person({ phone: typed }).phone).toBe(typed);
+        }
+    });
+
+    it('does NOT rewrite what was given', () => {
+        // Normalising server-side would mean guessing a country code for a number
+        // typed without one, turning a reachable local number into an unreachable
+        // foreign one. The stored string is what a Sarthi taps to call.
+        expect(person({ phone: '(617) 555-0123' }).phone).toBe('(617) 555-0123');
+    });
+
+    it('refuses a number too short to dial', () => {
+        expect(() => person({ phone: '12345' })).toThrow(/between 8 and 15 digits/i);
+    });
+
+    it('refuses a number longer than E.164 allows', () => {
+        expect(() => person({ phone: '+1234567890123456' })).toThrow(/between 8 and 15 digits/i);
+    });
+
+    it('refuses a number that is all punctuation', () => {
+        // Zero digits. Reported as a digit problem, not silently accepted as text.
+        expect(() => person({ phone: '+++ --- ()' })).toThrow(/between 8 and 15 digits/i);
+    });
+
+    it('still refuses a missing primary number, before counting anything', () => {
+        expect(() => person({ phone: '' })).toThrow(/required/i);
+    });
+
+    it('checks the other number too, when one is given', () => {
+        expect(() => person({ altPhone: '123' })).toThrow(/between 8 and 15 digits/i);
+    });
+
+    it('leaves a blank other number alone rather than failing it as zero digits', () => {
+        expect(person({ altPhone: '  ' }).altPhone).toBeUndefined();
+    });
+
+    it('checks the family contact number', () => {
+        expect(() => person({
+            familyContact: { name: 'Rajesh', phone: '99', hasWhatsapp: true },
+        })).toThrow(/between 8 and 15 digits/i);
+    });
+
+    it('names the family number in its own message, so it is clear which field', () => {
+        expect(() => person({
+            familyContact: { name: 'Rajesh', phone: '99', hasWhatsapp: true },
+        })).toThrow(/family contact/i);
+    });
+
+    it('accepts no family contact at all without a phone complaint', () => {
+        expect(person().familyContact).toBeNull();
+    });
+});
+
+describe('the fields that were removed', () => {
+    it('does not store a referrer, even when one is sent', () => {
+        // "Somebody here who knows you" was dropped at the owner's request. Nothing
+        // read it but the CSV export, and that column went with it.
+        expect(person({ referredByName: 'Vidhyut' })).not.toHaveProperty('referredByName');
+    });
+
+    it('does not store a special-needs note, even when one is sent', () => {
+        // "Anything we should know" was the second of two free-text catch-alls on the
+        // same form; `notes` still covers an infant or a wheelchair.
+        expect(trip({ specialNeeds: 'wheelchair' })).not.toHaveProperty('specialNeeds');
+    });
+
+    it('still keeps the notes field, which is what now carries that', () => {
+        expect(trip({ notes: 'travelling with an infant' }).notes)
+            .toBe('travelling with an infant');
     });
 });
 
