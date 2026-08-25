@@ -7,7 +7,12 @@
   // a cached frame from before the change — which made a correct dark screen
   // photograph as light, and made a getComputedStyle audit report phantom
   // contrast failures. Setting it before render removes the ambiguity.
-  document.documentElement.setAttribute('data-theme',
-    new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light');
+  var wanted = new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', wanted);
+  // AND the stored preference, or ThemeProvider overwrites the line above on mount.
+  // `DEFAULT_PREFERENCE` in src/utils/theme.ts is 'light', not 'system', so with
+  // nothing stored the app pins itself light and ignores both the attribute and the
+  // OS — which meant ?theme=dark silently did nothing for as long as it has existed.
+  try { localStorage.setItem('sabha-theme', wanted); } catch (e) { /* sandboxed */ }
 </script>
 </head><body><div id="root"></div><script type="module" src="/preview/airport.tsx"></script></body></html>

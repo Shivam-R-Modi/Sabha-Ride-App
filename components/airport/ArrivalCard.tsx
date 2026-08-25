@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Briefcase, MessageCircle, Phone, Plane, Users } from 'lucide-react';
+import { AlertTriangle, MessageCircle, Phone, Plane } from 'lucide-react';
 import { Disclosure } from '../shared/Disclosure';
 import { useConfirm } from '../shared/useConfirm';
 import { DriverPicker } from '../manager/DriverPicker';
@@ -385,15 +385,3 @@ const CallButton: React.FC<{ label: string; phone?: string }> = ({ label, phone 
         </a>
     );
 };
-
-/** Exported for the board's summary strip, which counts the same things. */
-export const ArrivalGlance: React.FC<{ arrival: AirportPickup }> = ({ arrival }) => (
-    <span className="inline-flex items-center gap-3 text-xs text-coffee-500">
-        <span className="inline-flex items-center gap-1">
-            <Users size={12} aria-hidden="true" />{arrival.partySize}
-        </span>
-        <span className="inline-flex items-center gap-1">
-            <Briefcase size={12} aria-hidden="true" />{arrival.largeBags + arrival.cabinBags}
-        </span>
-    </span>
-);

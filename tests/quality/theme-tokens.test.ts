@@ -587,3 +587,69 @@ describe('the bottom banners stay one pair', () => {
         }
     });
 });
+
+/**
+ * SAFFRON THAT CARRIES TEXT MUST BE `--cta`, NOT `--accent`.
+ *
+ * `--accent` is a FILL-ONLY token. `theme-contrast.test.ts` asserts it *stays* below AA
+ * on purpose, and the numbers are why: white on `--accent` measures **2.84:1** in light
+ * and **2.68:1** in dark, against the 4.5:1 that 14px text needs.
+ *
+ * The arrivals board shipped with `bg-saffron text-white font-bold` on its selected day —
+ * a live AA failure on the most prominent element of the screen, on a screen nobody had a
+ * test for. It was found only by measuring the tokens while redesigning the calendar.
+ *
+ * The pair that IS verified is `--cta` / `--text-on-accent`: **5.45:1** light, **5.77:1**
+ * dark. `components/manager/RequestTable.tsx` has used it all along.
+ *
+ * Scoped to the airport screens rather than the whole repo, deliberately. A repo-wide
+ * version of this rule would need an allowlist for every legitimate `bg-saffron` fill
+ * that carries no text, and an allowlist is how a rule stops meaning anything. These are
+ * the files where the defect happened and where the redesign put the replacements.
+ */
+describe('no text sits on a fill-only saffron token', () => {
+    const AIRPORT_FILES = [
+        'components/airport/ArrivalBoard.tsx',
+        'components/airport/ArrivalCard.tsx',
+        'components/airport/ArrivalStatusCard.tsx',
+        'components/airport/ArrivalRequestForm.tsx',
+        'components/airport/AirportShell.tsx',
+    ];
+    const read = (file: string) => readFileSync(path.join(ROOT, file), 'utf8');
+
+    it.each(AIRPORT_FILES)('%s never pairs bg-saffron with text-white', (file) => {
+        // COMMENTS ARE STRIPPED AS BLOCKS, not by line prefix, and both halves of that
+        // were learned the hard way in the same sitting:
+        //
+        //   1. The board's own header comment quotes `bg-saffron text-white font-bold`
+        //      while explaining why it was removed. A rule that fails on the prose
+        //      describing the fix is a rule nobody keeps.
+        //   2. Filtering by line prefix does NOT remove `{/* … */}` JSX comments, whose
+        //      lines start with `{/*`. One of those contains the word "coordinator's",
+        //      and that lone apostrophe opens a `'…'` span that swallows the rest of the
+        //      file — so the scan found ZERO spans containing bg-saffron and passed while
+        //      the defect was sitting in the file. Verified by reintroducing it.
+        //
+        // Stripping `/* … */` first handles JSDoc and JSX comments in one pass.
+        const code = read(file)
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n')
+            .filter(line => !line.trim().startsWith('//'))
+            .join('\n');
+        const spans = code.match(/'[^']*'|"[^"]*"|`[^`]*`/g) ?? [];
+        const offenders = spans.filter(s => /\bbg-saffron\b/.test(s) && /\btext-white\b/.test(s));
+
+        expect(
+            offenders,
+            `${file}: white on --accent is 2.84:1 (light) / 2.68:1 (dark). `
+            + 'Use bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] instead.',
+        ).toEqual([]);
+    });
+
+    it('the board still uses the verified pair, so this is not passing by absence', () => {
+        // The other half of the ratchet. Without it, deleting every saffron fill from the
+        // board would make the rule above pass while the design regressed.
+        expect(read('components/airport/ArrivalBoard.tsx'))
+            .toMatch(/bg-\[rgb\(var\(--cta\)\)\][\s\S]{0,120}text-\[rgb\(var\(--text-on-accent\)\)\]/);
+    });
+});

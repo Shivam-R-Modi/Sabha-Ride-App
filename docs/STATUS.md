@@ -3,6 +3,159 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## NOT DEPLOYED — the arrivals calendar, rebuilt for readability, 2026-08-25 (night)
+
+Owner: *"can you make this calendar view more fancy and easy to read, keep the same colour
+theme."* The grid was ~518px of near-empty space on a laptop that said almost nothing.
+
+**Planning it found a defect nobody had noticed, and it is the most important thing here.**
+
+### A live AA failure on the most prominent element
+
+The selected day was `bg-saffron text-white font-bold` at `text-sm`. Measured off
+`theme.css`:
+
+| | white on `--accent` | needs |
+|---|---|---|
+| light | **2.84:1** | 4.5:1 |
+| dark | **2.68:1** | 4.5:1 |
+
+`--accent` is a **fill-only** token — `theme-contrast.test.ts` asserts it *stays* below AA
+on purpose — and the calendar was putting bold text on it. Fixed by using
+`--cta` / `--text-on-accent` (**5.45:1** light, **5.77:1** dark), the pair
+`RequestTable.tsx:143` has used all along, and **ratcheted** by a new block in
+`theme-tokens.test.ts` so it cannot come back.
+
+That ratchet took three attempts and the story is worth keeping:
+
+1. It flagged the board's own header comment, which quotes the bad classes while
+   explaining why they went. A rule that fails on the prose describing the fix is a rule
+   nobody keeps.
+2. Filtering comments **by line prefix** does not remove `{/* … */}` JSX comments, whose
+   lines start with `{/*`. One of those contains "coordinator's", and that lone apostrophe
+   opens a `'…'` span that swallows the rest of the file — so the scan found **zero** spans
+   and passed while the defect sat in the file. Caught only because I reintroduced the
+   defect to check the rule bit. It didn't.
+3. Stripping `/* … */` as blocks first fixes both. **Verified by reintroducing the defect
+   and watching it fail.**
+
+### What changed in the grid
+
+| | before | after |
+|---|---|---|
+| cell | `aspect-square` → 83px desktop / 33px phone | `h-12 sm:h-14` → 48px both |
+| 6-row grid | **518px** desktop | **356px** |
+| has-arrivals fill | `bg-cream-300` | `bg-saffron/10` |
+| count | up to three 6px dots | a numeral in a tinted badge |
+| today | ring, *deleted when selected* | a pill on the numeral, always |
+
+`aspect-square` was wrong in **both directions at once** — too big on a laptop, and below
+the tap target on a phone. And `bg-cream-300`'s channel-sum distance from `--surface` is
+72 in light but **18 in dark**, which is *exactly* the floor the ratchet allows; that is why
+a busy day was invisible in the owner's dark-mode screenshot. `bg-saffron/10` is ~35 and
+~33 — near enough symmetric that the grid reads the same in both themes.
+
+**ONE FACT, ONE CARRIER** is the rule the rebuild is organised around. The old code put
+every state in a single `className` ternary and the chain ate itself: today was applied as
+`key === today && !isSelected`, so selecting today **erased its marker**, on the one day it
+matters. Now today lives on the numeral's own `<span>`, selection on an inset ring, count
+and claim-state on a badge — different DOM nodes, so none can cancel another.
+
+**Urgency is deliberately NOT on the cell.** In a month grid the cell's position already
+encodes time-to-landing: `critical` (≤10h) can only ever be today or tomorrow. Colouring
+three adjacent cells to say "these are soon" restates their coordinates. It stays on
+`ArrivalCard`, where a card has been lifted out of calendar context.
+
+### New
+
+- **A month summary line**, tappable, that jumps to the next day needing somebody:
+  *"4 arrivals this month still need a Sarthi. Next on Mon 24."* It replaced a "Pick a day
+  to see who is landing" subtitle — instructions nobody reads, standing where something
+  true could go.
+- **A Today button**, rendered only when the cursor is off the current month, so it is
+  never a control that cannot do anything.
+- **The bottom strip's rows are buttons now** and jump to their day. They were inert `<li>`s
+  printing a raw ISO date and a raw 24-hour time — a list that told a Sarthi what needed
+  doing and gave them no way to act.
+- **Paging no longer goes blank.** `step()` used to clear the selection; the active day is
+  derived now, so paging lands on the first day that needs somebody.
+- **Roving tabindex + arrow keys**, ←→ by a day, ↑↓ by a week, Home/End, PageUp/PageDown.
+  Arrow keys **clamp** at the month edge rather than spilling. No `role="grid"`: a
+  half-built ARIA grid overrides the native button semantics that already work, and the
+  real complaint was a 31-stop tab sequence.
+- `aria-current="date"` on today and `aria-pressed` on the selection — two facts, two
+  attributes, the same orthogonality applied to ARIA.
+- Two `Intl.DateTimeFormat` constructions **hoisted to module scope**. `dayLabel` runs 31×
+  a render for the aria-labels alone, and building the formatter is the expensive part.
+
+### Deleted
+
+`ArrivalGlance`, exported from `ArrivalCard.tsx` "for the board's summary strip" and
+**never imported once**. It showed party size and bag count — "will they fit in my car",
+which is the card's question, not the calendar's. Its `Users`/`Briefcase` imports went too.
+
+### Writing the tests found two more things
+
+**Accessible names were unreadable.** A badge `<span>` beside text fragments concatenates
+with no separators, so the summary button announced itself as
+`"2still need a Sarthi· next Wed 26"` and a strip row as `"2Wed 2610:00 PM · BOS · Ramesh"`.
+Both now carry explicit `aria-label`s that read as sentences. **A real screen reader would
+have said those strings** — this is not a test artefact.
+
+**`Intl` has no option order that gives "Mon 24".** `{ weekday: 'short', day: 'numeric' }`
+in en-US produces **"24 Mon"**, which reads as a quantity of Mondays. The two parts are
+formatted separately and joined.
+
+### And two things about the harness itself
+
+**`?theme=dark` never worked.** `preview/*.html` sets `data-theme` before render, but
+`ThemeProvider` overwrites it on mount from the stored preference — and
+`DEFAULT_PREFERENCE` in `src/utils/theme.ts` is `'light'`, not `'system'`, so the app pins
+itself light and ignores both the attribute and the OS. The four preview pages now write
+the storage key too. **Dark mode had never been looked at in the harness**, which is
+unfortunate given it is where this change's main defect lived.
+
+**The board rendered empty in the harness.** `preview/firestore-stub.ts` returned
+`{ docs: [], empty: true }` for every query, so a POPULATED board had never been seen
+anywhere but production. It now has a `COLLECTIONS` map with `airportPickups` fixtures —
+a day needing somebody, a day fully covered, a mixed day, a past-unclaimed day, and an
+11-arrival day so the two-digit badge gets looked at. Dates are relative to build time, so
+they never rot into the past.
+
+### Tests
+
+**Client 1599 (104 files), functions 953, rules 237. Both builds and typecheck clean.**
+
+New: `tests/components/ArrivalBoard.test.tsx`, **28 cases for a screen that had none** —
+poor for the screen the whole service is browsed through. `tests/setup.ts` forbids
+class-name assertions here, which shaped the file for the better: almost everything is
+asserted through each day's **accessible name**, which is what a screen reader says and
+what a colour-blind user relies on, so it pins the meaning rather than the paint.
+
+The case the file exists for: **today keeps `aria-current="date"` while it is the selected
+day.** Also covered: the ±36h adjacent-month leak (the summary must not count a September
+arrival while showing August), the blank-area regression after paging, singular/plural in
+every label, a cancelled arrival creating no badge, all six keyboard bindings including the
+clamp, and the error branch keeping the grid.
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only.
+`main` held at the live commit until it ships.
+
+### Deferred, deliberately
+
+The real answer to empty space on a coordinator's laptop is a **two-pane desktop layout** —
+calendar left, day list right, so the space is used rather than merely reduced. At `lg`
+that is `lg:grid lg:grid-cols-[minmax(0,1fr)_22rem]`, giving a ~448px calendar (a 60px
+cell, the ideal size) beside a 22rem list. It needs the four siblings wrapped into two
+panes, so it should not ride along with this.
+
+Also still true: **the owner's original sentence is not satisfied.** "I select them and
+they're assigned to me" is a multi-select bulk claim, and `updateAirportPickup` takes one
+`pickupId` — a server change. The cheap approximation is hoisting the claim button onto
+`ArrivalCard`'s collapsed row, which is a card change, not a board one.
+
 ## DEPLOYED 2026-08-25 (latest) — Sarthis get a service switch, and the board has ONE home
 
 **Live as `a5573c3`, and `main` is at that commit.**
