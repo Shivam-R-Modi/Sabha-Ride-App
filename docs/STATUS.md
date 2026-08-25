@@ -3,10 +3,23 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## BUILT 2026-08-25 (later), NOT DEPLOYED — who sees which service
+## DEPLOYED 2026-08-25 (later) — who sees which service
 
-**On branch `claude/airport-pickup-workflow-89afab`. Airport Seva itself IS deployed (see
-the section below); this correction on top of it is not.**
+**Live in production as `8a6637f`. All three steps, in order, and `main` is
+fast-forwarded to the exact commit that is running.**
+
+```
+firestore:rules  released (comment-only change, but the order was kept)
+functions        30 updated, 0 created, 0 deleted
+hosting          dist/assets/index-Dol8kJTL.js
+```
+
+Verified rather than assumed: the live `index.html` points at that bundle, it downloads
+with a **SHA-256 identical to the local build that passed the sweep**, it contains
+`Where are you right now`, `I am arriving soon`, `I am in the USA now` and `isArriving`,
+and the deleted launcher's copy (`Which seva today`) is genuinely **absent** — which is
+the check that the old bundle is not still being served. The site boots with no console
+errors.
 
 ### What was wrong with what shipped
 
