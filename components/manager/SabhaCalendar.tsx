@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-react';
+import { CalendarDays, CalendarPlus, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUpcomingEvents, editOccurrence, createOneOff, SabhaEvent } from '../../hooks/useEvents';
 import { describeRule, labelForSource } from '../../src/utils/recurrence';
@@ -24,18 +24,25 @@ import {
  * that was that. Each gathering now has its own date and times, and a manager can
  * move one, cancel one, or add a one-off.
  *
- * ONE CARD, NOT A LIST
- * --------------------
- * This used to render up to twelve stacked rows, each carrying the same times, the
- * same derived ride window, its own Edit and its own delete button. Under a
- * repeating rule those rows are near-identical by construction, so the screen grew
- * in proportion to how far ahead you could see while telling you nothing more.
- * Twelve one-tap deletes beside twelve identical rows is also how you cancel the
- * wrong Friday.
+ * TWO CARDS: THE WEEKLY SABHA, AND THE EXTRA ONES
+ * -----------------------------------------------
+ * This once rendered up to twelve stacked rows, each carrying the same times, the
+ * same derived ride window and its own delete button — near-identical by
+ * construction under a repeating rule, and twelve one-tap deletes is how you
+ * cancel the wrong week. That became one card plus a row of date chips.
  *
- * So: the next sabha in full, then the following weeks as date chips. Tap a chip
- * to work on that week. The information that varies gets the space; the
- * information that repeats gets a chip.
+ * The chips are gone too. They listed the pattern back to a manager who had just
+ * set it, and — worse — an added Saturday appeared between two Mondays as though
+ * it were part of the schedule. It is not: it is a separate event.
+ *
+ * So: the next weekly sabha in full, and each extra sabha as its own card below.
+ * An OVERRIDE stays on the weekly side (that is this week, edited), only a
+ * one-off moves out, and whichever gathering is genuinely soonest is the one
+ * labelled "Next sabha".
+ *
+ * The cost, deliberately accepted: only the NEXT weekly sabha can be edited or
+ * cancelled. Cancelling a week that is a month out now needs a date field here
+ * rather than a chip to tap.
  *
  * WHAT THESE DATES ARE
  * --------------------
@@ -45,10 +52,10 @@ import {
  * "Edited" or "One-off" — because the old version listed up to 26 stored,
  * near-identical dates and labelling all of them would be the same noise again.
  *
- * There is deliberately no "cancelled" chip. `useUpcomingEvents` filters cancelled
- * dates out before they arrive here, so a chip for one could never appear — and a
- * state the UI can render but the data can never reach is the dead-control bug
- * this codebase keeps removing.
+ * A cancelled date is never rendered at all. `useUpcomingEvents` filters
+ * cancellations out before they arrive here, so there is no "cancelled" state to
+ * draw — and a state the UI can render but the data can never reach is the
+ * dead-control bug this codebase keeps removing.
  *
  * Editing one week writes an exception for that week alone: it keeps its own time
  * and venue and will not follow a later change to the rule. Cancelling goes
@@ -60,14 +67,6 @@ import {
  * model a missing document means "follows the schedule", so deleting would let the
  * rule place the gathering again and the cancellation would evaporate.
  */
-
-/** "2026-08-29" -> "29 Aug". The chips carry the date and nothing else. */
-function shortDate(dateKey: string): string {
-    const [year, month, day] = dateKey.split('-').map(Number);
-    return new Intl.DateTimeFormat('en-US', {
-        day: 'numeric', month: 'short',
-    }).format(new Date(Date.UTC(year, month - 1, day, 12)));
-}
 
 /** Same date arithmetic as the server: pure calendar maths, no DST involvement. */
 function shiftDate(dateKey: string, days: number): string {
@@ -99,17 +98,29 @@ function windowSummary(event: SabhaEvent): string {
 }
 
 /**
- * One week, in full. Exactly one of these is on screen at a time — the week the
- * manager has selected, which starts as the next one.
+ * One gathering, in full, with its own Edit and Cancel.
  *
- * Keyed on the date by its caller, so selecting a different week remounts it and
- * the edit fields re-seed from that week rather than keeping the last one's.
+ * Used for both kinds: the next weekly sabha at the top, and each extra sabha in
+ * the card below. Keyed on the date by its caller, so when the weekly one rolls
+ * over to the following week the edit fields re-seed from that week rather than
+ * keeping the last one's.
  */
 const EventDetail: React.FC<{
     event: SabhaEvent;
+    /**
+     * What this gathering is, in the caller's words — "Next sabha", "Next weekly
+     * sabha", "Extra sabha".
+     *
+     * Passed in rather than derived. It used to be `isNext ? 'Next sabha' :
+     * 'Selected week'`, which stopped being true the moment there was no
+     * selection to speak of, and only the parent knows whether a one-off happens
+     * to be the very next gathering.
+     */
+    label: string;
+    /** Genuinely the next gathering of any kind — governs the "Rides open" pill. */
     isNext: boolean;
     ridesOpen: boolean;
-}> = ({ event, isNext, ridesOpen }) => {
+}> = ({ event, label, isNext, ridesOpen }) => {
     const { currentUser } = useAuth();
     const [editing, setEditing] = useState(false);
     const [start, setStart] = useState(event.startTime);
@@ -214,7 +225,7 @@ const EventDetail: React.FC<{
                 <>
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-coffee-500">
-                            {isNext ? 'Next sabha' : 'Selected week'}
+                            {label}
                         </span>
                         {/* Only shown on the next one, and only from the app's own
                             answer — `calendarStatus`. A pill that says rides are
@@ -382,20 +393,18 @@ export const SabhaCalendar: React.FC = () => {
     const nextScheduled = events[0];
 
     /**
-     * Which week the card is showing. Null means "the next one", which is what a
-     * manager wants nine times in ten — and it stays correct on its own as weeks
-     * pass, where storing the date would leave the card pinned to a sabha that has
-     * already happened.
+     * The weekly sabha and the extra ones are different things, and used to share
+     * one row of chips — so an added Saturday sat between two Mondays looking like
+     * part of the pattern.
+     *
+     * An OVERRIDE stays on the weekly side: it is this week's sabha with its time
+     * or venue changed, not an additional event. Only a one-off is an addition,
+     * and `createOneOff` is the only thing "Add a sabha" ever calls, so the two
+     * sides line up with how they were made.
      */
-    const [selectedDate, setSelectedDate] = useState<string | null>(null);
-    const selected = events.find(e => e.date === selectedDate) ?? nextScheduled;
-
-    // A selection can outlive what it pointed at — cancel the week you are looking
-    // at and it leaves the list. Falling back above keeps the card populated; this
-    // clears the stale pointer so the chips do not show a selection that is gone.
-    useEffect(() => {
-        if (selectedDate && !events.some(e => e.date === selectedDate)) setSelectedDate(null);
-    }, [events, selectedDate]);
+    const weekly = events.filter(e => e.source !== 'one-off');
+    const oneOffs = events.filter(e => e.source === 'one-off');
+    const nextWeekly = weekly[0];
 
     const add = async () => {
         if (!currentUser) return;
@@ -433,7 +442,13 @@ export const SabhaCalendar: React.FC = () => {
             running dry, so it should be read first. */}
         <RecurringSabha />
 
-        <div className="bg-surface rounded-xl border border-hairline/20 shadow-sm overflow-hidden mb-4">
+        {/* Labelled regions, not bare divs: with a gathering in each card the
+            Edit and Cancel buttons repeat, and "which card is this one in" has
+            to be answerable by a screen reader as much as by a test. */}
+        <section
+            aria-label="Sabha calendar"
+            className="bg-surface rounded-xl border border-hairline/20 shadow-sm overflow-hidden mb-4"
+        >
             <div className="px-4 py-3 border-b border-hairline/10 bg-cream-200">
                 <div className="flex items-center gap-2">
                     <CalendarDays size={18} className="text-saffron" />
@@ -480,48 +495,72 @@ export const SabhaCalendar: React.FC = () => {
                 </p>
             )}
 
-            {!loading && selected && (
+            {!loading && !error && events.length > 0 && !nextWeekly && (
+                <p className="px-4 py-6 text-center text-xs text-coffee-500">
+                    No weekly sabha coming up. Set the schedule above — the extra
+                    sabhas below do not repeat.
+                </p>
+            )}
+
+            {!loading && nextWeekly && (
                 <>
-                    {/* Keyed on the date so switching weeks re-seeds the edit
-                        fields instead of carrying the previous week's values. */}
+                    {/* Keyed on the date so the next week re-seeds the edit fields
+                        instead of carrying the previous one's values. */}
                     <EventDetail
-                        key={selected.id}
-                        event={selected}
-                        isNext={selected.id === nextScheduled?.id}
+                        key={nextWeekly.id}
+                        event={nextWeekly}
+                        // Only the truly soonest gathering claims "Next sabha". An
+                        // extra sabha can fall before the next Monday, and a weekly
+                        // card headlining "Next sabha" over a date that is not next
+                        // is the kind of quietly-wrong screen this app keeps fixing.
+                        label={nextWeekly.id === nextScheduled?.id ? 'Next sabha' : 'Next weekly sabha'}
+                        isNext={nextWeekly.id === nextScheduled?.id}
                         ridesOpen={calendarStatus === 'ok'}
                     />
-
-                    {events.length > 1 && (
-                        <div className="px-4 pb-4 pt-1">
-                            <p className="text-[11px] text-coffee-500 mb-2">
-                                Then, from the schedule — tap a date to change just that week
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                                {events.map(event => {
-                                    const isSelected = event.id === selected.id;
-                                    const diverges = labelForSource(event.source);
-                                    return (
-                                        <button
-                                            key={event.id}
-                                            onClick={() => setSelectedDate(event.date)}
-                                            aria-pressed={isSelected}
-                                            className={`min-h-11 px-2.5 rounded-lg text-xs transition-colors ${isSelected
-                                                ? 'bg-saffron text-[rgb(var(--text-on-accent))] font-bold'
-                                                : diverges
-                                                    ? 'bg-[rgb(var(--accent-tint-badge-1))] text-saffron-800 font-semibold hover:bg-[rgb(var(--accent-tint-badge-2))]'
-                                                    : 'bg-cream-300 text-coffee-700 hover:bg-cream-400'
-                                                }`}
-                                        >
-                                            {shortDate(event.date)}
-                                            {diverges && <span className="ml-1 font-normal">· {diverges.toLowerCase()}</span>}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
                 </>
             )}
+        </section>
+
+        {/* ── Extra sabhas ────────────────────────────────────────────────
+            Its own card, because an added sabha is an additional event rather
+            than a week of the pattern. Rendered even when there are none, so
+            "Add a sabha" is always in the same place — and so the difference
+            between the two kinds is stated before a manager has made one. */}
+        <section
+            aria-label="Extra sabhas"
+            className="bg-surface rounded-xl border border-hairline/20 shadow-sm overflow-hidden mb-4"
+        >
+            <div className="px-4 py-3 border-b border-hairline/10 bg-cream-200">
+                <div className="flex items-center gap-2">
+                    <CalendarPlus size={18} className="text-saffron" />
+                    <h3 className="text-sm font-bold text-coffee">Extra sabhas</h3>
+                </div>
+                <p className="text-xs text-coffee-500 mt-1">
+                    One-off gatherings alongside the weekly sabha. These do not repeat,
+                    and changing the schedule above leaves them alone.
+                </p>
+            </div>
+
+            {!loading && oneOffs.length === 0 && (
+                <p className="px-4 py-6 text-center text-xs text-coffee-500">
+                    None coming up. Add one below for an event that is not part of the
+                    weekly schedule.
+                </p>
+            )}
+
+            {!loading && oneOffs.map((event, index) => (
+                <div
+                    key={event.id}
+                    className={index > 0 ? 'border-t border-hairline/10' : undefined}
+                >
+                    <EventDetail
+                        event={event}
+                        label={event.id === nextScheduled?.id ? 'Next sabha' : 'Extra sabha'}
+                        isNext={event.id === nextScheduled?.id}
+                        ridesOpen={calendarStatus === 'ok'}
+                    />
+                </div>
+            ))}
 
             <div className="px-4 py-3 border-t border-hairline/10 bg-cream-200/60">
                 {!adding ? (
@@ -601,7 +640,7 @@ export const SabhaCalendar: React.FC = () => {
                     </div>
                 )}
             </div>
-        </div>
+        </section>
         </>
     );
 };

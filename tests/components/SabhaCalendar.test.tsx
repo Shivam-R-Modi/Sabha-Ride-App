@@ -1,26 +1,29 @@
 /**
- * One card, not a list of near-identical rows.
+ * Two cards: the weekly sabha, and the extra ones.
  *
- * The calendar used to render up to twelve dated rows, each with the same times,
- * the same derived ride window, its own Edit and its own delete button. Under a
- * repeating rule those rows are identical by construction — the screen grew with
- * how far ahead you could see while telling you nothing more, and twelve one-tap
- * deletes beside twelve identical rows is how you cancel the wrong Friday.
+ * The calendar once rendered up to twelve dated rows, each with the same times,
+ * the same derived ride window and its own delete button; that became one card
+ * plus a row of date chips. The chips are gone too, because a sabha ADDED
+ * alongside the weekly one appeared among them as though it were part of the
+ * pattern — an added Saturday sitting between two Mondays.
  *
- * Now: the next sabha in full, the rest as date chips. What these tests hold onto
- * is that condensing did not cost anything that mattered —
+ * What these tests hold onto:
  *
- *   - every upcoming date is still REACHABLE, not just the first;
- *   - the weeks that diverge from the schedule are still called out;
- *   - editing and cancelling still act on the week actually on screen, which is
- *     the way a card can be wrong that a list cannot;
+ *   - an added sabha renders in its own card, and an EDITED week does not — an
+ *     override is this week with its time or venue changed, not an extra event;
+ *   - whichever gathering is genuinely soonest is the one called "Next sabha",
+ *     since an extra one can fall before the next weekly one;
+ *   - Edit and Cancel now repeat across cards, so each must act on the gathering
+ *     in ITS card — the way two cards can be wrong that one could not;
+ *   - a one-off stays a one-off through an edit. Writing `override` instead makes
+ *     it inert off the weekly pattern, which silently removed the gathering;
  *   - the closed-calendar warning still fires, because that is the one message on
- *     this screen that a congregation notices the absence of.
+ *     this screen whose absence a congregation notices.
  */
 
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const editOccurrence = vi.fn(
@@ -136,95 +139,145 @@ describe('the next sabha gets the space', () => {
     });
 });
 
-describe('every other week is still reachable', () => {
-    it('offers a chip for each upcoming date', async () => {
+describe('the weekly sabha and the extra ones are kept apart', () => {
+    /**
+     * The reported bug: an added Saturday appeared in the chip row between two
+     * Mondays, reading as part of the weekly pattern. It is a separate event, and
+     * now it is a separate card.
+     */
+    const oneOff = (date: string) => week(date, { source: 'one-off' });
+
+    it('puts an added sabha in the extra card, not the weekly one', async () => {
+        // The one-off is SOONEST here on purpose. With it second, dropping the
+        // filter altogether still leaves the weekly card showing the right date by
+        // luck, and this case would pass over the bug it is named for.
+        upcoming = [oneOff('2026-08-26'), week('2026-08-28')];
         render(<SabhaCalendar />);
 
-        for (const label of ['Aug 28', 'Sep 4', 'Sep 11', 'Sep 18', 'Sep 25', 'Oct 2']) {
-            expect(screen.getByRole('button', { name: new RegExp(label) })).toBeTruthy();
+        const weekly = within(screen.getByRole('region', { name: 'Sabha calendar' }));
+        const extra = within(screen.getByRole('region', { name: 'Extra sabhas' }));
+
+        expect(weekly.getByText('Friday, Aug 28')).toBeTruthy();
+        expect(weekly.queryByText('Wednesday, Aug 26')).toBeNull();
+        expect(extra.getByText('Wednesday, Aug 26')).toBeTruthy();
+        expect(extra.queryByText('Friday, Aug 28')).toBeNull();
+    });
+
+    it('keeps an EDITED week on the weekly side — it is this week, not an extra one', async () => {
+        // An override is the weekly sabha with its time or venue changed. Moving it
+        // out would tell a manager their schedule had grown an event it has not.
+        upcoming = [week('2026-08-28', { source: 'override', startTime: '19:00' })];
+        render(<SabhaCalendar />);
+
+        const weekly = within(screen.getByRole('region', { name: 'Sabha calendar' }));
+        expect(weekly.getByText('Friday, Aug 28')).toBeTruthy();
+        expect(weekly.getByText('Edited')).toBeTruthy();
+        expect(within(screen.getByRole('region', { name: 'Extra sabhas' }))
+            .queryByText('Friday, Aug 28')).toBeNull();
+    });
+
+    it('shows one weekly sabha, not the whole pattern back', async () => {
+        render(<SabhaCalendar />);
+
+        // Six weeks are upcoming; only the first is drawn, and there are no chips.
+        expect(screen.getByText('Friday, Aug 28')).toBeTruthy();
+        for (const later of ['Friday, Sep 4', 'Friday, Sep 11', 'Friday, Oct 2']) {
+            expect(screen.queryByText(later)).toBeNull();
         }
+        expect(screen.queryByText(/tap a date/i)).toBeNull();
     });
 
-    it('brings a later week into the card when its chip is tapped', async () => {
-        render(<SabhaCalendar />);
-
-        await userEvent.click(screen.getByRole('button', { name: /Sep 25/ }));
-
-        expect(screen.getByText('Friday, Sep 25')).toBeTruthy();
-        expect(screen.getByText('Selected week')).toBeTruthy();
-        expect(screen.queryByText('Next sabha')).toBeNull();
-    });
-
-    it('marks the week the card is showing', async () => {
-        render(<SabhaCalendar />);
-
-        await userEvent.click(screen.getByRole('button', { name: /Sep 25/ }));
-
-        expect(screen.getByRole('button', { name: /Sep 25/ }).getAttribute('aria-pressed')).toBe('true');
-        expect(screen.getByRole('button', { name: /Sep 4/ }).getAttribute('aria-pressed')).toBe('false');
-    });
-
-    it('calls out the weeks that diverge from the schedule', async () => {
-        // The only ones worth a manager's attention — the rest are the rule.
-        render(<SabhaCalendar />);
-
-        expect(screen.getByRole('button', { name: /Sep 11.*edited/i })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: /Sep 4.*edited/i })).toBeNull();
-    });
-
-    it('shows no chips at all when there is only the one date', async () => {
+    it('offers the add form even when there are no extra sabhas', async () => {
         upcoming = [week('2026-08-28')];
         render(<SabhaCalendar />);
 
-        expect(screen.getByText('Friday, Aug 28')).toBeTruthy();
-        expect(screen.queryByText(/tap a date/i)).toBeNull();
+        const extra = within(screen.getByRole('region', { name: 'Extra sabhas' }));
+        expect(extra.getByRole('button', { name: /add a sabha/i })).toBeTruthy();
+        expect(extra.getByText(/none coming up/i)).toBeTruthy();
+    });
+
+    it('gives "Next sabha" to whichever is genuinely soonest', async () => {
+        // An extra sabha can fall before the next weekly one. The weekly card
+        // headlining "Next sabha" over a later date would be quietly wrong.
+        upcoming = [oneOff('2026-08-26'), week('2026-08-28')];
+        render(<SabhaCalendar />);
+
+        const weekly = within(screen.getByRole('region', { name: 'Sabha calendar' }));
+        const extra = within(screen.getByRole('region', { name: 'Extra sabhas' }));
+
+        expect(extra.getByText('Next sabha')).toBeTruthy();
+        expect(weekly.getByText('Next weekly sabha')).toBeTruthy();
+        expect(weekly.queryByText('Next sabha')).toBeNull();
     });
 });
 
-describe('editing and cancelling act on the week on screen', () => {
-    it('edits the selected week, not the next one', async () => {
-        // The way a card can be wrong that a list cannot: the buttons are shared,
-        // so they have to follow the selection.
+describe('editing and cancelling act on the card they sit in', () => {
+    it('edits the weekly sabha from the weekly card', async () => {
+        upcoming = [week('2026-08-28'), week('2026-08-29', { source: 'one-off' })];
         render(<SabhaCalendar />);
 
-        await userEvent.click(screen.getByRole('button', { name: /Sep 25/ }));
-        await userEvent.click(screen.getByRole('button', { name: /edit this week/i }));
-        await userEvent.click(screen.getByRole('button', { name: /save/i }));
+        const weekly = within(screen.getByRole('region', { name: 'Sabha calendar' }));
+        await userEvent.click(weekly.getByRole('button', { name: /edit this week/i }));
+        await userEvent.click(weekly.getByRole('button', { name: /save/i }));
 
         await waitFor(() => expect(editOccurrence).toHaveBeenCalled());
-        expect(editOccurrence.mock.calls[0][0]).toBe('2026-09-25');
+        expect(editOccurrence.mock.calls[0][0]).toBe('2026-08-28');
     });
 
-    it('cancels the selected week, not the next one', async () => {
+    it('edits an extra sabha from its own card, without touching the weekly one', async () => {
+        upcoming = [week('2026-08-28'), week('2026-08-29', { source: 'one-off' })];
         render(<SabhaCalendar />);
 
-        await userEvent.click(screen.getByRole('button', { name: /Oct 2/ }));
-        await userEvent.click(screen.getByRole('button', { name: /cancel this week/i }));
+        const extra = within(screen.getByRole('region', { name: 'Extra sabhas' }));
+        await userEvent.click(extra.getByRole('button', { name: /edit this week/i }));
+        await userEvent.click(extra.getByRole('button', { name: /save/i }));
 
-        await waitFor(() => expect(previewDeleteSabhaEvent).toHaveBeenCalledWith('2026-10-02'));
-    });
-
-    it('re-seeds the edit fields when the week changes', async () => {
-        // 11 Sep was moved to 19:00. Carrying 20:30 over from the previous
-        // selection would silently rewrite that week back to the rule time.
-        render(<SabhaCalendar />);
-
-        await userEvent.click(screen.getByRole('button', { name: /Sep 11/ }));
-        await userEvent.click(screen.getByRole('button', { name: /edit this week/i }));
-
-        const times = screen.getAllByDisplayValue('19:00');
-        expect(times.length).toBeGreaterThan(0);
+        await waitFor(() => expect(editOccurrence).toHaveBeenCalled());
+        expect(editOccurrence).toHaveBeenCalledTimes(1);
+        expect(editOccurrence.mock.calls[0][0]).toBe('2026-08-29');
     });
 
     it('carries the source through, so a one-off stays a one-off', async () => {
+        // Writing `override` for a one-off makes it inert off the weekly pattern,
+        // which silently removed the gathering. The regression this names.
         upcoming = [week('2026-08-25', { source: 'one-off' }), week('2026-08-28')];
         render(<SabhaCalendar />);
 
-        await userEvent.click(screen.getByRole('button', { name: /edit this week/i }));
-        await userEvent.click(screen.getByRole('button', { name: /save/i }));
+        const extra = within(screen.getByRole('region', { name: 'Extra sabhas' }));
+        await userEvent.click(extra.getByRole('button', { name: /edit this week/i }));
+        await userEvent.click(extra.getByRole('button', { name: /save/i }));
 
         await waitFor(() => expect(editOccurrence).toHaveBeenCalled());
         expect(editOccurrence.mock.calls[0][3]).toBe('one-off');
+    });
+
+    it('seeds the edit fields from the week actually on screen', async () => {
+        // 28 Aug was moved to 19:00. Seeding from the rule instead would silently
+        // rewrite that week back to the schedule time on the next save.
+        upcoming = [week('2026-08-28', { source: 'override', startTime: '19:00' })];
+        render(<SabhaCalendar />);
+
+        await userEvent.click(screen.getByRole('button', { name: /edit this week/i }));
+
+        expect(screen.getAllByDisplayValue('19:00').length).toBeGreaterThan(0);
+    });
+
+    it('cancels the weekly sabha on screen', async () => {
+        render(<SabhaCalendar />);
+
+        await userEvent.click(screen.getByRole('button', { name: /cancel this week/i }));
+
+        await waitFor(() => expect(previewDeleteSabhaEvent).toHaveBeenCalledWith('2026-08-28'));
+    });
+
+    it('cancels an extra sabha from its own card', async () => {
+        upcoming = [week('2026-08-28'), week('2026-08-29', { source: 'one-off' })];
+        render(<SabhaCalendar />);
+
+        const extra = within(screen.getByRole('region', { name: 'Extra sabhas' }));
+        await userEvent.click(extra.getByRole('button', { name: /cancel this week/i }));
+
+        await waitFor(() => expect(previewDeleteSabhaEvent).toHaveBeenCalledWith('2026-08-29'));
     });
 });
 
