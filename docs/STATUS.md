@@ -3,6 +3,92 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## NOT DEPLOYED — the calendar calmed, and an indicator that was invisible, 2026-08-25 (late night)
+
+Owner, on the live board: too dense, drop the per-cell time, put the indicator **above** the
+date, colour-code assigned vs unassigned, and **do not let the indicator merge with the
+background**. Chasing that last one found a bug rather than a preference.
+
+### The assigned indicator was painted in the colour of the cell behind it
+
+| | token | distance |
+|---|---|---|
+| selected cell fill | `bg-cream-400` = `--sunken` | — |
+| assigned badge fill | `bg-cream-400` = `--sunken` | **0** |
+
+The *same token*. On a day that was both selected and fully assigned — which is exactly the
+26th in the owner's screenshot — the indicator was invisible. Not muddy: gone.
+
+**Why 28 behavioural tests could not see it.** The day's `aria-label` stayed correct
+throughout, and `tests/setup.ts` rightly forbids asserting class names in
+`tests/components`. So the only thing that could have caught it is a `tests/quality` rule,
+and there wasn't one. There is now: **`ArrivalBoard.tsx` must not contain `bg-cream-400` at
+all** — stated as an absence because that is one grep and cannot rot, where "these two must
+differ" would need the test to know which span is the badge. **Verified by reintroducing
+the collision and watching it fail.**
+
+### The cell now
+
+```
+┌──────────┐
+│   [2]    │  ← indicator, reserved row, empty when nothing arrives
+│    26    │  ← the date
+└──────────┘
+```
+
+- **No fill on any day cell**, and selection is a **ring with no fill**. Confirmed in the
+  browser: every cell's computed `background-color` is `rgba(0, 0, 0, 0)`. That is what
+  makes the collision structurally impossible rather than retuned — there is no cell colour
+  left for a badge to match.
+- **The indicator row is reserved on every cell** (`h-4`). Rendering it only on busy days
+  would drop their numerals below their neighbours', and a calendar whose dates do not share
+  a baseline reads as broken.
+- **The per-cell time is gone.** It was a third stacked row that earned nothing and vanished
+  the moment a day had two arrivals — so the grid carried a row of inconsistent information.
+  A test now asserts no cell renders a time, because that is the kind of thing that creeps
+  back.
+- Badge up from `text-[10px]`/`min-w-4` to `text-[11px]`/`min-w-5`, since it is now the only
+  carrier and a row was freed.
+
+### The colour coding
+
+```
+at least one unassigned   --warning-bg / --warning-text   (amber)
+everyone has a Sarthi     --success-bg / --success-text   (green)
+```
+
+Measured, so "does not merge" is a number: text on its own fill is 4.96 light / 7.10 dark
+for warning and 6.99 / 6.72 for success; distance from the card surface is 62 / 56 and
+98 / 51. In the shipped dark build the two pills read `rgb(69, 51, 12)` and
+`rgb(20, 61, 38)` — **85 apart**, and a hue difference rather than a lightness one, so it
+survives greyscale and most colour blindness.
+
+Not invented here: `SabhaCalendar`'s "Rides open" pill is the same success pair, so
+green-means-covered is already this app's vocabulary.
+
+**A mixed day is amber**, because one unassigned arrival among three assigned ones still
+needs a Sarthi. Pinned by a test.
+
+### Wording
+
+`All 1 arrival has a Sarthi` → **`1 arriving · everyone has a Sarthi`**. The old line broke
+at every number ("All 1 arrival has", "All 6 arrivals have"); the new shape has no agreement
+to get wrong and mirrors the other state, `4 still need a Sarthi · next Mon 24`. The day
+subline was aligned to the same phrase so one fact has one wording.
+
+### Tests
+
+**Client 1606 (104 files), functions 953, rules 237. Both builds and typecheck clean.**
+`ArrivalBoard.test.tsx` is 34 cases now, up from 28. New: the amber/green rule asserted
+through the label, the mixed-day rule, the count being shown, the reserved row staying
+empty on an empty day, no time in any cell, and the reworded line at one and at two
+arrivals.
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only, three
+files, one of them shipped.
+
 ## DEPLOYED 2026-08-25 (night) — the arrivals calendar, rebuilt for readability
 
 **Live as `5e9deac`, and `main` is at that commit.**

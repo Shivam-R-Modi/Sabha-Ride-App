@@ -108,10 +108,33 @@ interface MonthDay {
     unclaimed: number;
 }
 
-const BADGE = 'inline-flex items-center justify-center min-w-4 px-1.5 py-0.5 rounded-full '
-    + 'text-[10px] font-bold leading-none';
+const BADGE = 'inline-flex items-center justify-center min-w-5 px-1.5 py-0.5 rounded-full '
+    + 'text-[11px] font-bold leading-none';
 
-const WARNING_CHIP = 'bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]';
+/**
+ * THE TWO STATES A DAY CAN BE IN, and the whole point of the indicator.
+ *
+ * Amber whenever ANYTHING that day is unassigned — a mixed day is amber, because a mixed
+ * day still needs somebody. Green only when every arrival has a Sarthi.
+ *
+ * Semantic `-bg`/`-text` pairs, measured rather than eyeballed. Text on its own fill:
+ * warning 4.96 light / 7.10 dark, success 6.99 / 6.72. Channel-sum distance from the card
+ * surface: warning 62 / 56, success 98 / 51 — so neither can sink into the card. And amber
+ * against green is a HUE difference, not just a lightness one, so it survives greyscale
+ * and most colour blindness.
+ *
+ * `--success-bg`/`--success-text` is not invented here: SabhaCalendar's "Rides open" pill
+ * is the same pair, so green-means-covered is already this app's vocabulary.
+ *
+ * NEITHER IS `bg-cream-400`, and that is load-bearing. The assigned badge used to be
+ * `bg-cream-400 text-coffee-700` while the SELECTED CELL was also `bg-cream-400` — the
+ * same token, channel distance ZERO — so on a day that was both selected and fully
+ * assigned the indicator was drawn in exactly the colour behind it and vanished. The
+ * day's aria-label stayed correct and tests/components may not assert class names, so
+ * nothing caught it. tests/quality/theme-tokens.test.ts now bans cream-400 in this file.
+ */
+const NEEDS_SOMEBODY = 'bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]';
+const ALL_ASSIGNED = 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]';
 
 export const ArrivalBoard: React.FC = () => {
     const { userProfile } = useAuth();
@@ -330,7 +353,7 @@ export const ArrivalBoard: React.FC = () => {
                             className="flex-1 min-h-11 flex items-center gap-2 text-left text-xs font-bold
                                        text-coffee-700 rounded-xl px-1 hover:bg-cream-300 transition-colors"
                         >
-                            <span className={`${BADGE} ${WARNING_CHIP}`}>{monthUnclaimed}</span>
+                            <span className={`${BADGE} ${NEEDS_SOMEBODY}`}>{monthUnclaimed}</span>
                             still {monthUnclaimed === 1 ? 'needs' : 'need'} a Sarthi
                             <span className="text-coffee-500 font-normal">
                                 · next {shortDayLabel(nextUnclaimed.key)}
@@ -343,7 +366,10 @@ export const ArrivalBoard: React.FC = () => {
                                 className="text-[rgb(var(--success-text))]"
                                 aria-hidden="true"
                             />
-                            All {monthTotal} {monthTotal === 1 ? 'arrival has' : 'arrivals have'} a Sarthi
+                            {/* "All 1 arrival has a Sarthi" breaks at every number. This
+                                shape has no agreement to get wrong and mirrors the other
+                                state, "4 still need a Sarthi · next Mon 24". */}
+                            {monthTotal} arriving · everyone has a Sarthi
                         </p>
                     ) : (
                         <p className="text-xs text-coffee-500 min-h-11 flex items-center">
@@ -412,21 +438,36 @@ export const ArrivalBoard: React.FC = () => {
                                             ? `${list.length} arriving, ${unclaimed} still `
                                               + `${unclaimed === 1 ? 'needs' : 'need'} a Sarthi`
                                             : `${list.length} arriving, all with a Sarthi`}`}
+                                // NO FILL ON A DAY CELL AT ALL, and selection is a ring
+                                // with no fill either. Both tints are gone on purpose: the
+                                // indicator is a saturated pill and needs no wash behind
+                                // it, the grid is calmer for losing two layers, and — the
+                                // real reason — a badge can no longer sit on a cell of its
+                                // own colour.
                                 className={`h-12 sm:h-14 rounded-xl flex flex-col items-center justify-center
                                     gap-0.5 text-sm leading-none transition-colors
                                     focus-visible:outline focus-visible:outline-2
                                     focus-visible:outline-offset-1 focus-visible:outline-[rgb(var(--cta))]
-                                    ${isActive ? 'bg-cream-400 ring-2 ring-inset ring-[rgb(var(--cta))]'
-                                        // A saffron tint, NOT bg-cream-300. Channel-sum
-                                        // distance from --surface: cream-300 is 72 in light
-                                        // but 18 in dark — the exact floor theme-tokens
-                                        // asserts, which is why a busy day was invisible in
-                                        // dark mode. saffron/10 is ~35 and ~33: near enough
-                                        // symmetric that the grid reads the same in both.
-                                        : list.length > 0 ? 'bg-saffron/10 hover:bg-saffron/20'
-                                            : 'hover:bg-cream-300/50'}
+                                    ${isActive ? 'ring-2 ring-inset ring-[rgb(var(--cta))]'
+                                        : 'hover:bg-cream-300/50'}
                                     ${isPast && list.length === 0 ? 'text-coffee-500' : 'text-coffee'}`}
                             >
+                                {/* INDICATOR ABOVE, DATE BELOW, and the row is reserved on
+                                    EVERY cell even when empty. Rendering it only on busy
+                                    days would drop their numerals lower than their
+                                    neighbours', and a calendar whose dates do not share a
+                                    baseline reads as broken rather than as informative.
+                                    No time here: it was a third row that earned nothing and
+                                    disappeared the moment a day had two arrivals. */}
+                                <span className="h-4 flex items-center" aria-hidden="true">
+                                    {list.length > 0 && (
+                                        <span className={`${BADGE} ${
+                                            unclaimed > 0 ? NEEDS_SOMEBODY : ALL_ASSIGNED}`}>
+                                            {list.length}
+                                        </span>
+                                    )}
+                                </span>
+
                                 {/* The today pill lives on the NUMERAL, not the cell, which
                                     is what makes today-and-selected impossible to collapse:
                                     both true gives a ring at the edge and a pill inside it. */}
@@ -439,31 +480,6 @@ export const ArrivalBoard: React.FC = () => {
                                 >
                                     {day}
                                 </span>
-
-                                {/* One number and one colour. The count is the owner's own
-                                    sentence — "2 people arriving on Saturday" — which three
-                                    6px dots never said. Colour carries claim state, and the
-                                    aria-label above carries both numbers in words, so colour
-                                    is never the only route to the meaning. */}
-                                {list.length > 0 && (
-                                    <span
-                                        aria-hidden="true"
-                                        className={`${BADGE} ${unclaimed > 0
-                                            ? WARNING_CHIP
-                                            : 'bg-cream-400 text-coffee-700'}`}
-                                    >
-                                        {list.length}
-                                    </span>
-                                )}
-
-                                {/* Earns the 83px desktop cell. Only for a single-arrival
-                                    day: a three-arrival cell must not name one time as
-                                    though it were the whole day's. */}
-                                {list.length === 1 && (
-                                    <span className="hidden sm:block text-[10px] leading-none text-coffee-500">
-                                        {formatTime(list[0]!.arrivalTime)}
-                                    </span>
-                                )}
                             </button>
                         );
                     })}
@@ -482,7 +498,7 @@ export const ArrivalBoard: React.FC = () => {
                             {selected.length} arriving
                             {selectedUnclaimed > 0
                                 ? ` · ${selectedUnclaimed} ${selectedUnclaimed === 1 ? 'needs' : 'need'} a Sarthi`
-                                : ' · all with a Sarthi'}
+                                : ' · everyone has a Sarthi'}
                         </p>
                     )}
                 </div>
@@ -572,7 +588,7 @@ const PressingStrip: React.FC<{
                                 className="w-full min-h-11 flex items-center gap-2 text-left text-sm
                                            text-coffee-700 rounded-xl px-2 hover:bg-cream-300 transition-colors"
                             >
-                                <span className={`${BADGE} ${WARNING_CHIP}`}>{unclaimed}</span>
+                                <span className={`${BADGE} ${NEEDS_SOMEBODY}`}>{unclaimed}</span>
                                 <span className="font-bold shrink-0">{shortDayLabel(key)}</span>
                                 <span className="text-coffee-500 truncate">
                                     {formatTime(first.arrivalTime)} · {first.airportCode} · {first.requesterName}

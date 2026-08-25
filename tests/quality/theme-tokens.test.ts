@@ -646,6 +646,38 @@ describe('no text sits on a fill-only saffron token', () => {
         ).toEqual([]);
     });
 
+    /**
+     * THE COLLISION THAT SHIPPED INVISIBLY, and why this is a `tests/quality` rule.
+     *
+     * The arrivals board painted its "everyone has a Sarthi" badge `bg-cream-400` while
+     * the SELECTED CELL was also `bg-cream-400` — the same token, channel-sum distance
+     * ZERO. So on a day that was both selected and fully assigned, the indicator was
+     * drawn in exactly the colour behind it and vanished. The day's `aria-label` stayed
+     * correct throughout, and `tests/setup.ts` rightly forbids asserting class names in
+     * a component test, so nothing in 28 behavioural cases could see it. The owner
+     * spotted it in a screenshot.
+     *
+     * Stated as "never in this file" rather than "these two must differ", because the
+     * absence is one grep and cannot rot, while comparing two spans needs the test to
+     * know which is the badge and which is the cell. The board now carries no fill on a
+     * day cell at all — selection is a ring — so there is nothing legitimate left here
+     * for cream-400 to be.
+     */
+    it('the board never uses bg-cream-400, the colour its indicator vanished into', () => {
+        const code = read('components/airport/ArrivalBoard.tsx')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n')
+            .filter(line => !line.trim().startsWith('//'))
+            .join('\n');
+
+        expect(
+            code.includes('bg-cream-400'),
+            'bg-cream-400 is the selected cell\'s old fill AND the assigned badge\'s old '
+            + 'fill. Distance between them is zero, so the indicator disappears. Use a '
+            + 'semantic --*-bg / --*-text pair for the badge and a ring for selection.',
+        ).toBe(false);
+    });
+
     it('the board still uses the verified pair, so this is not passing by absence', () => {
         // The other half of the ratchet. Without it, deleting every saffron fill from the
         // board would make the rule above pass while the design regressed.

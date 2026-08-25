@@ -196,9 +196,20 @@ describe('the month summary', () => {
     });
 
     it('says everything is covered rather than going quiet', () => {
+        // Reworded 2026-08-25: "All 1 arrival has a Sarthi" breaks at every number, and
+        // "All 6 arrivals have" needs the verb to agree too. This shape has no agreement.
         feed = { arrivals: [arrival('a', '2026-08-26', CLAIMED)], loading: false, error: null };
         show();
-        expect(screen.getByText(/All 1 arrival has a Sarthi/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 arriving · everyone has a Sarthi/i)).toBeInTheDocument();
+    });
+
+    it('and reads the same way at any number', () => {
+        feed = {
+            arrivals: [arrival('a', '2026-08-26', CLAIMED), arrival('b', '2026-08-30', CLAIMED)],
+            loading: false, error: null,
+        };
+        show();
+        expect(screen.getByText(/2 arriving · everyone has a Sarthi/i)).toBeInTheDocument();
     });
 
     it('says the month is empty rather than showing a blank card', () => {
@@ -222,6 +233,72 @@ describe('the month summary', () => {
         expect(screen.getByRole('button', { name: /1 arrival this month still needs a Sarthi/i }))
             .toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /2 arrivals this month/i })).not.toBeInTheDocument();
+    });
+});
+
+describe('the indicator above the date', () => {
+    /**
+     * The colour coding is asserted through the LABEL, not the class, because
+     * tests/setup.ts forbids class assertions here — and because the label is what a
+     * screen reader says and what somebody colour-blind relies on, so it is the better
+     * thing to pin anyway. The class-level half (never `bg-cream-400`, the colour the
+     * indicator used to vanish into) lives in tests/quality/theme-tokens.test.ts.
+     */
+    it('distinguishes a day that needs somebody from one that is covered', () => {
+        feed = {
+            arrivals: [arrival('a', '2026-08-26'), arrival('b', '2026-08-28', CLAIMED)],
+            loading: false, error: null,
+        };
+        show();
+        expect(nameOf(26)).toMatch(/still needs a Sarthi/i);
+        expect(nameOf(28)).toMatch(/all with a Sarthi/i);
+    });
+
+    it('treats a MIXED day as still needing somebody', () => {
+        // The rule worth pinning: one unassigned arrival among three assigned ones still
+        // means a Sarthi is needed, so a mixed day must not read as covered.
+        feed = {
+            arrivals: [
+                arrival('a', '2026-08-26', CLAIMED),
+                arrival('b', '2026-08-26', CLAIMED),
+                arrival('c', '2026-08-26'),
+            ],
+            loading: false, error: null,
+        };
+        show();
+        expect(nameOf(26)).toMatch(/3 arriving, 1 still needs a Sarthi/i);
+        expect(nameOf(26)).not.toMatch(/all with a Sarthi/i);
+    });
+
+    it('shows the count, so a busy day is not just "something here"', () => {
+        feed = {
+            arrivals: [arrival('a', '2026-08-26'), arrival('b', '2026-08-26'), arrival('c', '2026-08-26')],
+            loading: false, error: null,
+        };
+        show();
+        expect(within(day(26)).getByText('3')).toBeInTheDocument();
+    });
+
+    it('renders no indicator on an empty day', () => {
+        feed = { arrivals: [arrival('a', '2026-08-26')], loading: false, error: null };
+        show();
+        // The row is reserved on every cell so the dates share a baseline, but it must
+        // stay EMPTY — a reserved slot that quietly renders something is worse than none.
+        expect(within(day(20)).queryByText(/\d/)).toHaveTextContent('20');
+        expect(day(20).textContent?.trim()).toBe('20');
+    });
+
+    /**
+     * THE THING JUST REMOVED. A per-cell time was a third stacked row that earned nothing
+     * and vanished the moment a day had two arrivals, so the grid carried a row of
+     * inconsistent information. Without this test it creeps back the next time somebody
+     * wants "just a bit more" in the cell.
+     */
+    it('never puts a time in a day cell, not even on a single-arrival day', () => {
+        feed = { arrivals: [arrival('a', '2026-08-26')], loading: false, error: null };
+        show();
+        expect(day(26).textContent).not.toMatch(/AM|PM/);
+        expect(day(26).textContent?.trim()).toBe('126');
     });
 });
 
