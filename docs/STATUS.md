@@ -3,7 +3,33 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — the RoleSwitcher hat, found by an owner bug report, 2026-08-25 (late)
+## DEPLOYED 2026-08-25 (late) — the RoleSwitcher hat, found by an owner bug report
+
+**Live as `ee136ae`, and `main` is at that commit.**
+
+```
+firestore:rules  released — unchanged
+functions        every function "Skipped (No changes detected)"
+hosting          dist/assets/index-CobSMom8.js
+```
+
+Verified by hash (`bdf52d2b…e17fcaf5`, identical to the local build that passed the sweep)
+and then by **reading the three shipped functions**, because a hash proves the bundle
+matches the build and says nothing about whether the argument wiring is right — and
+wiring is exactly what this fix changed:
+
+```
+function Pb(n){return n?Ck:Ek}                    // airportTabs(arriving)
+function Dk(n,r,i){...Pb(i)[0]...}                // serviceHome(service, role, arriving)
+function zk(n,r,i,c){...Pb(c).includes(n)         // tabBelongsTo(tab, service, role, arriving)
+                     ...n==="arrivals"?i!=="manager"...}
+(n,r="sabha",i=!1)=>r==="airport"?i?[My pickup]:[Arrivals]:...   // getNavItems
+```
+
+So the airport branch reads the `arriving` parameter in both, and the sabha branch still
+reads role. A first pass at this check used a crude substring heuristic that reported a
+false negative; the lesson is to read the minified function and map its parameters, not
+to grep for a shape.
 
 Owner reported *"it still shows Arrivals in sabha seva docks"* after the nav move went
 live. **The deployed code was correct** — the live bundle's manager sabha nav is
@@ -75,10 +101,15 @@ carries a named block for the hat case.
 **Client 1562 (103 files), functions 953, rules 237. Both builds and typecheck clean.**
 `nav-tab-parity.test.ts` is 43 cases now, up from 28.
 
-### To deploy
+### Still open with the owner
 
-`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only again.
-`main` held at `a69aa0e` until it ships.
+Whether the original report was the Sarthi hat or a stale service worker is **not yet
+confirmed** — they were asked to check what the RoleSwitcher says. The fix above stands
+either way, because the hole it closes is real and separate from what they saw.
+
+If it turns out to have been a stale service worker, the thing to reach for is the note
+under **Deploy** in CLAUDE.md: unregister the worker and clear caches before concluding
+anything about what is live on a device.
 
 ## DEPLOYED 2026-08-25 — the Arrivals board moved into a manager's Airport Seva
 
