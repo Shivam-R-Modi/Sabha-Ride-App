@@ -1,7 +1,14 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-24**. Two separate pieces of work that day.
+at the end. Last updated **2026-08-24**. Several separate pieces of work that day,
+from two sessions.
+
+**The evening's work is at the top**: the sabha day moving silently stranded two
+riders who had already said yes (production repaired, then the cause fixed), and
+the Setup calendar became two cards so an added sabha no longer reads as part of
+the weekly pattern. Read *Near-miss 2026-08-24* before deploying anything — the
+pre-deploy check had been run the wrong way all day and nearly cost 21 commits.
 
 **One IS deployed** — the notice board's Publish and Take-down buttons, which had
 never worked in production. Hosting only; `main` is fast-forwarded and pushed. See
@@ -43,6 +50,161 @@ delivered anything in this app.
 
 The UI/UX redesign and the sabha-times fix are also deployed. The incident note
 below is history, kept because its lesson is a standing deploy rule.
+
+## Shipped 2026-08-24 (evening) — moving the sabha day stranded whoever had booked
+
+Reported as *"I changed sabha day to Monday and it is still showing Friday on the
+other dashboard."* It was not a display bug.
+
+**The rule, `system/rideContext` and the calendar were all correctly Monday.** The
+Friday was people. Read live with the Admin SDK:
+
+- `weeklyAttendance/2026-08-28` — a **Friday** — held two "yes" responses: Tarak
+  Bakhda and Vidhyut Prajapati, both answered the evening BEFORE the day moved.
+- `weeklyAttendance/2026-08-24`, the gathering that actually ran, held **zero**.
+- Tarak also had a `requested` ride on the 28th. The manager's queue filters on
+  status and never on whether the date is still a sabha, so it showed — and
+  `globalAssignDriver` could never have served it.
+
+`expireStaleRequests` does not catch this **and should not**: it only touches
+gatherings strictly in the PAST, which is exactly what makes it safe to run
+unattended. A booking stranded on a FUTURE date that stopped being a sabha fell
+between the two, and nothing else was looking.
+
+### The repair, before the code
+
+Sabha was hours away, so production was fixed first: both responses and the ride
+moved onto `2026-08-24`, an audit row each, **verified by re-reading rather than
+by the script's own output**. A sweep of every future date afterwards came back
+clean.
+
+The app could not tell them. Notifications are out of scope and have never
+delivered anything, so **Tarak and Vidhyut needed a message from the owner** —
+recorded here because nothing in the system will do it.
+
+### The fix
+
+`updateSabhaRecurrence` reconciles now. `dryRun` reports what a rule would strand;
+the real call must carry `acknowledge`, **enforced server-side** because a guard
+whose failure mode is "silently do nothing" is how the cancel button died. The
+handshake is `deleteSabhaEvent`'s, deliberately — same problem, same shape, and
+reading the neighbour first saved inventing a second one.
+
+Bookings move to the next occurrence on or after their own date. Where the rule
+schedules nothing, ride requests are cancelled and responses are LEFT: keyed by
+date they mislead nobody, and deleting them would destroy the only record that
+these people said they were coming.
+
+`datesLosingTheirSabha` is driven by **where bookings are**, not by a window of
+rule dates, so it needs neither a horizon nor the previous rule. It asks
+`effectiveEvent`, not `coversDate` — a one-off sits on a date the rule does not
+cover and must not be flagged.
+
+### Swept for the same class, and found three more
+
+- **`src/utils/weekUtils.ts` was entirely dead** — no importer for either export —
+  and still computed "next Friday" from the device clock. Deleted, as its own
+  comment had asked.
+- The **Notices placeholder** read "No sabha this Friday" to a congregation that
+  meets on Monday.
+- **DatabaseConsole invented "6:00 PM"** for a ride with no `timeSlot`, in the
+  viewer whose entire purpose is showing what is actually stored.
+
+Also shipped: **RequestTable's Assign and Dismiss**, invisible until hover in
+production since 2026-08-08. The fix existed on `claude/project-status-review-6nsvaf`
+and had never been merged; it was found while auditing branches to DELETE. A
+tablet cannot hover and gets the `md:` table, so the buttons were unreachable, and
+`opacity-0` keeps a button in the tab order.
+
+### The guard earned itself within the hour
+
+`schedule-not-hardcoded` gained a case: no weekday name in any user-visible
+string, comments stripped first (this codebase explains its history in prose and
+says "Friday" constantly). After rebasing onto the day's other work it immediately
+failed on code merged minutes earlier — the **new Notice composer** suggests
+*"Sabha this Sunday"*. Same defect, written hours apart by a different session.
+That is the argument for the guard rather than for the two fixes.
+
+Deployed functions then hosting as `5fe0d6b`.
+
+---
+
+## Shipped 2026-08-24 (evening) — an added sabha is its own card
+
+Reported from the Setup screen: `Aug 29 · one-off` sat between `Aug 24` and
+`Aug 31` in the chip row, reading as part of the weekly pattern. It is a separate
+event that happens to fall nearby.
+
+The chips are **removed**, not regrouped — the owner's call: the next sabha in
+full is enough, and when it is over the next one takes its place. So Setup is two
+cards. The weekly one shows the next occurrence of the rule with Edit and Cancel;
+each extra sabha gets its own card below with its own Edit and Cancel, and the Add
+form lives there permanently, rendered even when there are none.
+
+An **override stays on the weekly side**. It is this week with its time or venue
+changed, not an additional event, and moving it out would tell a manager their
+schedule had grown an event it has not. Only `one-off` moves, which matches how
+they are made: "Add a sabha" calls `createOneOff` and nothing else does.
+
+Whichever gathering is **genuinely soonest** is the one labelled "Next sabha" — an
+extra sabha can fall before the next weekly one. `EventDetail` takes its label
+from the caller now; `isNext ? 'Next sabha' : 'Selected week'` stopped being true
+the moment there was no selection.
+
+**What this gives up, deliberately: only the NEXT weekly sabha can be edited or
+cancelled.** Cancelling a Monday a month out for a holiday is no longer possible.
+If it bites, the fix is a "change a different week" date field on the weekly card,
+**not** the chip row coming back.
+
+Deployed hosting as `d791977`.
+
+---
+
+## Near-miss 2026-08-24 — the pre-deploy check had been worthless all day
+
+`git log --oneline HEAD..main` exists to answer "would deploying this drop
+anything". **Run from the repo root it compares `main` with itself and can never
+fail.** Every time it was run that way earlier in the day it reported "clean" and
+proved nothing.
+
+Run properly from the branch, minutes before a deploy, it printed **21 commits**:
+the notices, storage and roles work from another session at 18:01 that day, already
+live. The branch was cut on 2026-08-21. **Deploying it would have rolled all of
+that out of production.** Rebasing first was the whole difference.
+
+Two habits worth keeping:
+
+- **Run the check from the branch you are about to deploy**, never from the root.
+- **Re-run the full sweep after a rebase.** The new weekday guard had never seen
+  those 21 commits, and found a real defect in them on the first run.
+
+### Two flakes, attributed rather than waved off
+
+Two untouched component tests failed intermittently mid-session. `origin/main` was
+5/5 clean and the branch is 5/5 clean; both failures coincided with the Java rules
+emulator running alongside. Load-sensitive `userEvent` timing, not a regression —
+but a real sensitivity, so **do not read a single red run as a real failure until
+it repeats without the emulator running**.
+
+### Where the suite stands
+
+**client 1361, functions 761, rules 196, typecheck 0.**
+
+### Verified, and NOT verified
+
+The live bundle filename was matched against `dist/assets/index-*.js` after both
+deploys, and the deployed JS was fetched and grepped to confirm the new strings
+are in it and the chip text is gone.
+
+**The two-card calendar has never been looked at.** Screenshots from the preview
+harness came back blank while the DOM reported the content correctly positioned —
+the capture was out of sync with the page. Structure and contrast were verified
+through computed styles instead (both themes, transitions off, lowest ratio 4.54,
+passes AA). So it is checked but not eyeballed.
+
+Left open at the end of the evening: **three ride requests for that night were
+never assigned to a driver** — Tarak, shree Namritbhai and Pih is. The pickup
+window had closed by then. That is an operational gap, not a code one.
 
 ## Fixed 2026-08-24 — the notice board's two dead buttons
 
@@ -1331,6 +1493,14 @@ time the remote is this far behind** — a gitignore only protects files it was
 already covering when they were created.
 
 ## A warning to the next session: measure with transitions off
+
+**2026-08-24 adds a sixth way to be wrong, and a new rule: when the picture and
+the DOM disagree, believe the DOM.** Screenshots of the preview harness came back
+blank while `getBoundingClientRect` reported the card fully inside a 900x1000
+viewport, and the returned image was 800x450 whatever scale was asked for — the
+capture was simply not of the page being measured. Nothing was concluded from the
+blank image; structure and contrast were read through `getComputedStyle` instead.
+An empty screenshot is not evidence a screen is empty.
 
 Colour and geometry were measured wrongly **five times** on 2026-08-21, and every
 one produced a confident, plausible, wrong number:
