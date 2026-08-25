@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useArrivalsBetween } from '../../hooks/useArrivals';
 import { isApprovedManager } from '../../src/roles';
 import { formatTime } from '../../src/constants/schedule';
+import { TERMINAL } from '../../src/utils/arrival';
 import { ArrivalCard } from './ArrivalCard';
 import type { AirportPickup } from '../../types';
 
@@ -104,7 +105,10 @@ const shortDayLabel = (key: string) => {
 interface MonthDay {
     key: string;
     day: number;
+    /** Everything on the day that is not cancelled, INCLUDING the finished ones. */
     list: AirportPickup[];
+    /** How many of `list` are still work: not completed, not cancelled. */
+    arriving: number;
     unclaimed: number;
 }
 
@@ -187,10 +191,17 @@ export const ArrivalBoard: React.FC = () => {
     const monthDays = useMemo<MonthDay[]>(() => Array.from({ length: daysInMonth }, (_, i) => {
         const key = keyOf(cursor.year, cursor.month, i + 1);
         const list = byDay.get(key) ?? [];
-        return { key, day: i + 1, list, unclaimed: list.filter(a => a.status === 'open').length };
+        return {
+            key, day: i + 1, list,
+            // TERMINAL is ['completed', 'cancelled'] from the shared table — the same
+            // list the server refuses every transition out of. Cancelled never reaches
+            // here (byDay drops it), so in practice this subtracts the dropped-off.
+            arriving: list.filter(a => !TERMINAL.includes(a.status)).length,
+            unclaimed: list.filter(a => a.status === 'open').length,
+        };
     }), [byDay, cursor, daysInMonth]);
 
-    const monthTotal = monthDays.reduce((n, d) => n + d.list.length, 0);
+    const monthTotal = monthDays.reduce((n, d) => n + d.arriving, 0);
     const monthUnclaimed = monthDays.reduce((n, d) => n + d.unclaimed, 0);
     const nextUnclaimed = monthDays.find(d => d.unclaimed > 0);
 
@@ -207,6 +218,7 @@ export const ArrivalBoard: React.FC = () => {
         : (nextUnclaimed ?? monthDays[0])?.key ?? today;
     const selected = byDay.get(activeDay) ?? [];
     const selectedUnclaimed = selected.filter(a => a.status === 'open').length;
+    const selectedArriving = selected.filter(a => !TERMINAL.includes(a.status)).length;
 
     const pick = (key: string) => { setSelectedDay(key); setOpenCard(null); };
 
@@ -415,7 +427,7 @@ export const ArrivalBoard: React.FC = () => {
                     className="grid grid-cols-7 gap-1"
                 >
                     {Array.from({ length: firstWeekday }, (_, i) => <div key={`pad-${i}`} />)}
-                    {monthDays.map(({ key, day, list, unclaimed }) => {
+                    {monthDays.map(({ key, day, list, unclaimed, arriving }) => {
                         const isActive = key === activeDay;
                         const isToday = key === today;
                         // Date keys sort lexicographically, so "before today" is a string
@@ -433,11 +445,12 @@ export const ArrivalBoard: React.FC = () => {
                                 aria-current={isToday ? 'date' : undefined}
                                 // Spelled out because "3" beside a date is not a label.
                                 aria-label={`${dayLabel(key)} — ${
-                                    list.length === 0 ? 'nobody arriving'
+                                    arriving === 0
+                                        ? (list.length === 0 ? 'nobody arriving' : 'all dropped off')
                                         : unclaimed > 0
-                                            ? `${list.length} arriving, ${unclaimed} still `
+                                            ? `${arriving} arriving, ${unclaimed} still `
                                               + `${unclaimed === 1 ? 'needs' : 'need'} a Sarthi`
-                                            : `${list.length} arriving, all with a Sarthi`}`}
+                                            : `${arriving} arriving, all with a Sarthi`}`}
                                 // NO FILL ON A DAY CELL AT ALL, and selection is a ring
                                 // with no fill either. Both tints are gone on purpose: the
                                 // indicator is a saturated pill and needs no wash behind
@@ -450,7 +463,7 @@ export const ArrivalBoard: React.FC = () => {
                                     focus-visible:outline-offset-1 focus-visible:outline-[rgb(var(--cta))]
                                     ${isActive ? 'ring-2 ring-inset ring-[rgb(var(--cta))]'
                                         : 'hover:bg-cream-300/50'}
-                                    ${isPast && list.length === 0 ? 'text-coffee-500' : 'text-coffee'}`}
+                                    ${isPast && arriving === 0 ? 'text-coffee-500' : 'text-coffee'}`}
                             >
                                 {/* INDICATOR ABOVE, DATE BELOW, and the row is reserved on
                                     EVERY cell even when empty. Rendering it only on busy
@@ -460,10 +473,10 @@ export const ArrivalBoard: React.FC = () => {
                                     No time here: it was a third row that earned nothing and
                                     disappeared the moment a day had two arrivals. */}
                                 <span className="h-4 flex items-center" aria-hidden="true">
-                                    {list.length > 0 && (
+                                    {arriving > 0 && (
                                         <span className={`${BADGE} ${
                                             unclaimed > 0 ? NEEDS_SOMEBODY : ALL_ASSIGNED}`}>
-                                            {list.length}
+                                            {arriving}
                                         </span>
                                     )}
                                 </span>
@@ -476,7 +489,7 @@ export const ArrivalBoard: React.FC = () => {
                                         ? 'inline-flex h-6 w-6 items-center justify-center rounded-full '
                                           + 'bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] '
                                           + 'text-xs font-bold'
-                                        : list.length > 0 ? 'font-bold' : ''}
+                                        : arriving > 0 ? 'font-bold' : ''}
                                 >
                                     {day}
                                 </span>
@@ -495,10 +508,18 @@ export const ArrivalBoard: React.FC = () => {
                     <h2 className="font-header font-bold text-coffee">{dayLabel(activeDay)}</h2>
                     {selected.length > 0 && (
                         <p className="text-sm text-coffee-500">
-                            {selected.length} arriving
-                            {selectedUnclaimed > 0
-                                ? ` · ${selectedUnclaimed} ${selectedUnclaimed === 1 ? 'needs' : 'need'} a Sarthi`
-                                : ' · everyone has a Sarthi'}
+                            {/* A day whose only trips are finished said "1 arriving ·
+                                everyone has a Sarthi", which read as work still to come.
+                                The cards stay listed — a Sarthi who has just tapped
+                                "dropped off" needs to see that it took — but the count
+                                above them is about what is left to do. */}
+                            {selectedArriving === 0
+                                ? `${selected.length} ${selected.length === 1 ? 'arrival' : 'arrivals'}`
+                                  + ' · all dropped off'
+                                : `${selectedArriving} arriving`
+                                  + (selectedUnclaimed > 0
+                                      ? ` · ${selectedUnclaimed} ${selectedUnclaimed === 1 ? 'needs' : 'need'} a Sarthi`
+                                      : ' · everyone has a Sarthi')}
                         </p>
                     )}
                 </div>
@@ -519,6 +540,10 @@ export const ArrivalBoard: React.FC = () => {
                     // time, because only one of them is a job.
                     [...selected]
                         .sort((a, b) => {
+                            // Finished first out, then unclaimed to the top: only one of
+                            // those is a job, and a dropped-off trip is a receipt.
+                            const done = Number(TERMINAL.includes(a.status)) - Number(TERMINAL.includes(b.status));
+                            if (done !== 0) return done;
                             const open = Number(b.status === 'open') - Number(a.status === 'open');
                             return open !== 0 ? open : a.arrivalAt.localeCompare(b.arrivalAt);
                         })

@@ -85,6 +85,10 @@ const arrival = (id: string, date: string, over: Record<string, unknown> = {}) =
 });
 
 const CLAIMED = { status: 'claimed', claimedByUid: 'other', claimedByName: 'Nilesh' };
+const DONE = {
+    status: 'completed', claimedByUid: 'other', claimedByName: 'Nilesh',
+    completedAt: '2026-08-26T23:10:00.000Z',
+};
 
 const show = () => render(<ArrivalBoard />);
 
@@ -168,6 +172,38 @@ describe('what a day announces', () => {
         };
         show();
         expect(nameOf(26)).toMatch(/nobody arriving/i);
+    });
+
+    /**
+     * A COMPLETED TRIP IS NOT AN UPCOMING ONE — reported from production on
+     * 2026-08-25, where the only pickup in the database had been dropped off hours
+     * earlier and the calendar still announced "1 arriving, all with a Sarthi".
+     *
+     * Only `cancelled` was filtered. `completed` is the other half of the shared
+     * TERMINAL list and was being counted as work, so a coordinator scanning the month
+     * saw a green day that had, in fact, nothing left on it at all.
+     */
+    it('does not count a completed arrival as arriving', () => {
+        feed = {
+            arrivals: [arrival('a', '2026-08-26', { ...DONE })],
+            loading: false, error: null,
+        };
+        show();
+        expect(nameOf(26)).toMatch(/all dropped off/i);
+        expect(nameOf(26)).not.toMatch(/arriving,/i);
+    });
+
+    it('counts only what is left on a day that is half done', () => {
+        feed = {
+            arrivals: [
+                arrival('a', '2026-08-26', { ...DONE }),
+                arrival('b', '2026-08-26'),
+            ],
+            loading: false, error: null,
+        };
+        show();
+        // One arriving, not two — the finished one is a receipt, not a job.
+        expect(nameOf(26)).toMatch(/1 arriving, 1 still needs a Sarthi/i);
     });
 });
 
@@ -294,6 +330,15 @@ describe('the indicator above the date', () => {
      * inconsistent information. Without this test it creeps back the next time somebody
      * wants "just a bit more" in the cell.
      */
+    it('raises no indicator for a day whose only trip is finished', () => {
+        // The badge is a workload indicator. A dropped-off passenger is not workload,
+        // and a green "1" on that day sent a coordinator looking for a job that had
+        // already been done.
+        feed = { arrivals: [arrival('a', '2026-08-26', { ...DONE })], loading: false, error: null };
+        show();
+        expect(day(26).textContent?.trim()).toBe('26');
+    });
+
     it('never puts a time in a day cell, not even on a single-arrival day', () => {
         feed = { arrivals: [arrival('a', '2026-08-26')], loading: false, error: null };
         show();
@@ -317,6 +362,40 @@ describe('the day list below the grid', () => {
         const section = screen.getByRole('region', { name: /Arrivals on Wednesday, August 26/i });
         const headings = within(section).getAllByRole('heading', { level: 2 });
         // The unclaimed 22:00 outranks the claimed 10:00: only one of them is a job.
+        expect(headings[1]!.textContent).toMatch(/10:00 PM/);
+    });
+
+    /**
+     * STILL LISTED, deliberately. Filtering finished trips out of the list as well as
+     * out of the counts would make a card vanish under the Sarthi's finger the instant
+     * they tapped "Dropped off safely" — no confirmation, just a gap. So the count above
+     * the list is about work remaining and the list itself is the receipt.
+     */
+    it('still lists a finished trip, under a heading that says it is done', async () => {
+        feed = { arrivals: [arrival('a', '2026-08-26', { ...DONE })], loading: false, error: null };
+        show();
+        await userEvent.click(day(26));
+
+        const section = screen.getByRole('region', { name: /Arrivals on Wednesday, August 26/i });
+        expect(within(section).getByText(/1 arrival · all dropped off/i)).toBeInTheDocument();
+        expect(within(section).getAllByRole('heading', { level: 2 })).toHaveLength(2);
+    });
+
+    it('sinks a finished trip below one that still needs driving', async () => {
+        feed = {
+            arrivals: [
+                arrival('done', '2026-08-26', { ...DONE, arrivalAt: '2026-08-26T02:00:00.000Z', arrivalTime: '02:00' }),
+                arrival('live', '2026-08-26', { ...CLAIMED, arrivalAt: '2026-08-26T22:00:00.000Z', arrivalTime: '22:00' }),
+            ],
+            loading: false, error: null,
+        };
+        show();
+        await userEvent.click(day(26));
+
+        const section = screen.getByRole('region', { name: /Arrivals on Wednesday, August 26/i });
+        const headings = within(section).getAllByRole('heading', { level: 2 });
+        // The 22:00 that still needs driving beats the 02:00 that is already delivered,
+        // even though it is later in the day.
         expect(headings[1]!.textContent).toMatch(/10:00 PM/);
     });
 

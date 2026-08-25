@@ -238,6 +238,57 @@ describe('the buttons follow the transition table', () => {
         expect(names).not.toContain('Dropped off safely');
         expect(names).not.toContain('Hand this back');
     });
+});
+
+/**
+ * WHY A FINISHED CARD LOOKS FINISHED.
+ *
+ * Reported from production on 2026-08-25: the only pickup in the database had been
+ * dropped off, and its card rendered as a live one with the buttons simply absent —
+ * wearing a red "Landing soon" chip, because `urgencyOf` is a pure function of the
+ * clock and never saw the status. The owner read it, reasonably, as a broken button.
+ *
+ * Nothing transitions out of 'completed', so the missing buttons were correct. The
+ * defect was that the card never said so.
+ */
+describe('a trip that is already done', () => {
+    it('says dropped off instead of shouting about the landing time', () => {
+        // Same fixture, three hours before its own landing — so the clock alone would
+        // still call this critical.
+        showOpen({ status: 'completed', claimedByUid: 'sarthi_1', completedAt: '2026-09-20T23:40:00.000Z' });
+        expect(screen.getByText('Dropped off')).toBeInTheDocument();
+        expect(screen.queryByText('Landing soon')).not.toBeInTheDocument();
+    });
+
+    it('says when, so the absent buttons have a visible reason', () => {
+        showOpen({ status: 'completed', claimedByUid: 'sarthi_1', completedAt: '2026-09-20T23:40:00.000Z' });
+        expect(screen.getByText(/Dropped off safely on \w+ \d+\./)).toBeInTheDocument();
+    });
+
+    it('still reads as finished when nobody stamped a time', () => {
+        // Older records predate completedAt. A card that renders "Dropped off safely on
+        // Invalid Date" is worse than one that renders no date at all.
+        showOpen({ status: 'completed', claimedByUid: 'sarthi_1', completedAt: null });
+        expect(screen.getByText('Dropped off safely.')).toBeInTheDocument();
+    });
+
+    it('names who took them rather than who is with them', () => {
+        showOpen({ status: 'completed', claimedByUid: 'sarthi_1', claimedByName: 'Kiran' });
+        expect(screen.getByText(/Dropped off by Kiran/)).toBeInTheDocument();
+    });
+
+    it('drops the flight-changed warning, which is only news to somebody still driving', () => {
+        showOpen({
+            status: 'completed', claimedByUid: 'sarthi_1',
+            arrivalTimeChangedAt: '2026-09-19T00:00:00.000Z',
+        });
+        expect(screen.queryByText(/flight time has changed/i)).not.toBeInTheDocument();
+    });
+
+    it('leaves a live trip measured by the clock, exactly as before', () => {
+        showOpen({ status: 'claimed', claimedByUid: 'sarthi_1' });
+        expect(screen.queryByText('Dropped off')).not.toBeInTheDocument();
+    });
 
     it('sends the action to the server with the pickup id', async () => {
         showOpen();

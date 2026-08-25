@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, MessageCircle, Phone, Plane } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, MessageCircle, Phone, Plane } from 'lucide-react';
 import { Disclosure } from '../shared/Disclosure';
 import { useConfirm } from '../shared/useConfirm';
 import { DriverPicker } from '../manager/DriverPicker';
@@ -51,6 +51,23 @@ import type { AirportPickup } from '../../types';
  * rather than a stronger fill. A solid `--danger` with white text measures 3.76:1 —
  * the more alarming option was the less readable one.
  */
+/**
+ * 'done' is NOT an urgency and deliberately does not come from `urgencyOf`, which is a
+ * pure function of the clock and is mirrored to the server. A completed trip was still
+ * being measured against its landing time, so a pickup that had already been delivered
+ * wore a red "Landing soon" chip — the card shouting about a job that was finished.
+ * Status decides first; the clock only speaks when the trip is still live.
+ *
+ * The success pair, same as the calendar's "everyone has a Sarthi" badge: 6.99:1 light
+ * and 6.72:1 dark on its own fill, so it clears AA at this 10px size.
+ */
+const DONE_FMT = new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'long' });
+
+const DONE_STYLE = {
+    chip: 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]',
+    label: 'Dropped off',
+};
+
 const URGENCY_STYLE: Record<UrgencyLevel, { chip: string; label: string }> = {
     calm: { chip: 'bg-cream-400 text-coffee-700', label: 'Plenty of time' },
     soon: { chip: 'bg-[rgb(var(--info-bg))] text-[rgb(var(--info-text))]', label: 'Within 2 days' },
@@ -109,8 +126,8 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
 
     const uid = currentUser?.uid ?? '';
     const isMine = arrival.claimedByUid === uid;
-    const urgency = urgencyOf(arrival.arrivalAt);
-    const style = URGENCY_STYLE[urgency];
+    const isDone = arrival.status === 'completed';
+    const style = isDone ? DONE_STYLE : URGENCY_STYLE[urgencyOf(arrival.arrivalAt)];
     const bags = arrival.largeBags + arrival.cabinBags;
 
     const run = async (action: ArrivalAction) => {
@@ -200,7 +217,9 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                     arrival.terminal ? `Terminal ${arrival.terminal}` : null,
                     `${arrival.partySize} ${arrival.partySize === 1 ? 'person' : 'people'}`,
                     `${bags} ${bags === 1 ? 'bag' : 'bags'}`,
-                    arrival.claimedByName ? `With ${arrival.claimedByName}` : 'Nobody yet',
+                    arrival.claimedByName
+                        ? `${isDone ? 'Dropped off by' : 'With'} ${arrival.claimedByName}`
+                        : 'Nobody yet',
                 ].filter(Boolean).join(' · ')}
                 trailing={
                     <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full shrink-0 ${style.chip}`}>
@@ -209,12 +228,26 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                 }
             >
                 <div className="space-y-4">
-                    {arrival.arrivalTimeChangedAt && (
+                    {arrival.arrivalTimeChangedAt && !isDone && (
                         // The flight moved after somebody claimed it. Loud, because a
                         // Sarthi who does not see this drives to an empty barrier.
                         <p className="flex items-start gap-2 text-sm font-bold text-[rgb(var(--danger))]">
                             <AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
                             The flight time has changed since this was claimed.
+                        </p>
+                    )}
+
+                    {/* WHY THERE ARE NO BUTTONS. Without it a finished trip renders
+                        as a live one with its actions missing, which reads as a broken
+                        card rather than a delivered passenger — and that is exactly how
+                        it was read. Nothing transitions out of 'completed', so the
+                        absence is correct and only the explanation was missing. */}
+                    {isDone && (
+                        <p className="flex items-center gap-2 text-sm font-bold text-[rgb(var(--success-text))]">
+                            <CheckCircle2 size={16} className="shrink-0" aria-hidden="true" />
+                            {arrival.completedAt
+                                ? `Dropped off safely on ${DONE_FMT.format(new Date(arrival.completedAt))}.`
+                                : 'Dropped off safely.'}
                         </p>
                     )}
 

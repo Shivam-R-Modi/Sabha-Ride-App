@@ -81,11 +81,18 @@ const pickup = (id: string, at: Date, over: Record<string, unknown> = {}) => ({
 });
 
 const CLAIMED = { status: 'claimed', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark' };
+const DONE = {
+    status: 'completed', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark',
+    completedAt: soon(-6).toISOString(),
+};
 
 const COLLECTIONS: Record<string, Array<{ id: string; data: () => unknown }>> = {
     // Deliberately one of each thing the grid has to draw differently: a day needing
     // somebody, a day fully covered, a day with a mix, a busy day whose count is
-    // two digits, and a landed-but-unclaimed day in the past.
+    // two digits, a landed-but-unclaimed day in the past, and — added 2026-08-25 —
+    // a day whose only trip is FINISHED, which must draw no badge at all. That last
+    // state existed in production and in no fixture, which is why it shipped counting
+    // itself as an upcoming arrival.
     airportPickups: [
         pickup('a1', soon(20)),
         pickup('a2', soon(21)),
@@ -93,6 +100,7 @@ const COLLECTIONS: Record<string, Array<{ id: string; data: () => unknown }>> = 
         pickup('c1', soon(122)),
         pickup('c2', soon(123), CLAIMED),
         pickup('d1', soon(-30)),
+        pickup('f1', soon(48), DONE),
         ...Array.from({ length: 11 }, (_, i) => pickup(`e${i}`, soon(170 + i))),
     ],
 };

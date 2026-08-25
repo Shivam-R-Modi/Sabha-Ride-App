@@ -3,7 +3,79 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — secondary text now clears AA on every surface, 2026-08-25 (last)
+## NOT DEPLOYED — a finished trip now looks finished, 2026-08-25 (last)
+
+Owner, from a screenshot of the live app: *"I cannot see where sarthi is able to click on
+hand this back? and even on the managers dashboard where is hand this back?"*
+
+**The buttons were not broken.** Production holds exactly one airport pickup and it is
+`status: 'completed'` — the test trip we took through to drop-off earlier the same day.
+Nothing transitions out of `completed`, so the server offers no actions and the card
+correctly renders none. Tonny Stark *does* carry `airportCoordinator: true`, so reassign
+would show on a live trip; it was hidden only because a finished trip cannot be reassigned.
+
+**What was broken is that no screen said the trip was finished**, in three separate places
+that reinforced each other:
+
+1. **The calendar counted it as upcoming.** `byDay` filtered `cancelled` only, so a
+   dropped-off trip still raised a green badge and announced *"1 arriving, all with a
+   Sarthi"*. `TERMINAL = ['completed', 'cancelled']` had been sitting in the shared table
+   with **zero consumers** — the vocabulary existed, nothing used it.
+2. **The chip read "Landing soon".** `urgencyOf` is a pure function of the clock and never
+   sees status, so a delivered passenger wore the red critical chip.
+3. **The card carried no completed state at all** — identical to a live one minus its
+   buttons, which is precisely why it read as a dead control rather than a finished job.
+
+Any one is survivable. Together they produce a card a coordinator would act on.
+
+### The fix
+
+`TERMINAL` is now what the board counts against, so the arithmetic and the paint follow the
+same list the server refuses transitions out of. Status beats the clock on the card: a
+completed trip gets a `Dropped off` chip and a line saying when.
+
+**Finished trips stay in the day list on purpose.** Filtering them out entirely would be a
+smaller diff, but the card would then vanish under the Sarthi's finger the instant they tap
+"Dropped off safely" — no confirmation, just a gap. So the *count* above the list is work
+remaining ("1 arrival · all dropped off") and the *list* is the receipt, sorted below
+anything still needing a driver.
+
+Measured in the rendered preview, both themes: the done line is **7.65** light / **6.54**
+dark on the card, the chip label **6.99** / **6.72** on its own fill.
+
+### Verification
+
+Ten new tests across `ArrivalBoard.test.tsx` and `ArrivalCard.test.tsx`, and **all ten were
+confirmed to fail with the source reverted** — the suites passed 72/72 before this change,
+which is exactly why the defect shipped. An eleventh guards against over-reach: a live trip
+must still be measured by the clock.
+
+`preview/firestore-stub.ts` gained a completed fixture. That state existed in production
+and in no fixture, which is the reason nobody ever looked at it.
+
+Full sweep clean: **client 1631, functions 953, rules 237**, both builds, typecheck zero.
+
+### Still open, from the same conversation
+
+The owner asked about a Sarthi releasing a claim close to the arrival. **"Hand this back"
+already ships and works** — server, card button, confirm dialog, live board update, all
+tested. Two things were noticed while tracing it and are NOT fixed:
+
+- **`releaseReason` is written and never read.** `updateAirportPickup` stores it, `types.ts`
+  declares it, no UI displays it. A Sarthi's "car trouble" goes into the database and no
+  human ever sees it.
+- **`alertUnclaimedArrivals` can stay silent on a re-opened trip.** `alertsSent` is never
+  cleared on release, so a band that fired while the trip was open earlier will not fire
+  again after it comes back. Narrow, but it is the one path where a late hand-back goes
+  unnoticed.
+
+The larger question — whether a hand-back inside 24h should behave differently — was left
+open. The blocking constraint on peer-to-peer handover is that `firestore.rules` line 393
+allows a plain Sarthi to read only their own user document, so they cannot list other
+Sarthis to pick one; and with no working notification channel, a transfer would commit
+somebody who never agreed.
+
+## NOT DEPLOYED — secondary text now clears AA on every surface, 2026-08-25
 
 Owner: *"fix the coffee-500 card contrast too."* Done — and **the light-mode half was worse
 than I reported**. I said 4.28 in dark. Measuring `--text-soft` against every neutral
