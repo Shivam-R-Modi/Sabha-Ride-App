@@ -3,6 +3,87 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## PROVEN IN PRODUCTION 2026-08-25 — a real arrival, claimed and delivered
+
+**The first end-to-end run of Airport Seva against live data, and the graduation path
+is no longer theoretical.** Pickup `EWtTQ566g4G1itiSW3du`, traveller "Cab Exa"
+(`n23dxIyqJePhtJN7cENfaYhXYRJ2`), BOS on 2026-08-26 at 01:00.
+
+Driven through the **deployed callable**, not through Admin SDK writes — a custom token
+for Tonny, exchanged for an ID token, then two POSTs to
+`us-central1-sabha-ride-app.cloudfunctions.net/updateAirportPickup`. That distinction is
+the whole value of the exercise: raw writes would have mutated the documents and tested
+nothing, least of all the transaction whose read-before-write ordering was a real bug
+during development.
+
+```
+claim      HTTP 200  {"success":true,"status":"claimed"}    open    -> claimed
+completed  HTTP 200  {"success":true,"status":"completed"}   claimed -> completed
+```
+
+**`open -> claimed -> completed`, skipping `met` on purpose.** `ALLOWED_FROM` permits
+`completed` from `claimed` for the Sarthi who drops somebody home without having tapped
+"I've got them", and this run is the proof that branch works rather than a comment
+claiming it does. `metAt` stayed `null` and nothing objected.
+
+### The graduation actually happened
+
+```
+isArriving  true      -> false
+address     (absent)  -> "5 Woodbine St, Roxbury, MA 02119, USA"
+location    null      -> { latitude: 42.3193804, longitude: -71.0808924,
+                           formattedAddress: "5 Woodbine St, ...",
+                           seededFromPickupId: "EWtTQ566g4G1itiSW3du" }
+```
+
+So the traveller is now a local member who lands in Sabha Seva on their next load, and
+**will not be stopped by the `ProfileSetup` address gate**, because the trip destination
+was already geocoded by the same `AddressAutocomplete` and is already the shape
+`resolveHomeCoords` reads. `seededFromPickupId` is there so anybody auditing that
+address later can see it was not typed on the profile screen.
+
+`airportProfiles/{uid}` **survived the completion**, which is the point of holding it
+separately — the trip is finished, the durable record of who arrived is not.
+
+### The unclaimed alert fired for real, 26 seconds before the claim
+
+```
+15:53:02.887  alertsSent = { "24h": ... }   recipients: 1   -> Tonny Stark
+15:53:29.290  claimedAt
+```
+
+First time the scheduled job has delivered anything to a real device. The band was
+stamped, one recipient was reached, and the row reads *"Cab lands at BOS — Boston Logan
+in about a day and no Sarthi has taken it."* Nothing needed to be nudged by hand.
+
+### Audit trail, all five rows
+
+```
+15:28:20  airport.coordinator  Admin SDK (owner request)  granted Tonny
+15:39:55  airport.request      Cab Exa                    BOS 2026-08-26 01:00, party 2
+15:53:03  airport.update       Scheduled alert            band 24h, recipients 1
+15:53:29  airport.claim        Tonny Stark                open -> claimed
+15:53:30  airport.update       Tonny Stark                claimed -> completed
+```
+
+### Still not exercised
+
+`release`, `no_show`, `reassign`, `editFlight`, `familyNotified`, and `cancel` — all
+covered by the 50 tests in `functions/src/http/updateAirportPickup.test.ts`, none yet run
+against production. `familyNotified` is the one worth trying by hand, because it is the
+only action whose real effect happens outside the app (a WhatsApp deep link), so a test
+cannot tell you the message reads well to a father in Ahmedabad.
+
+The board is now **empty** (`status == 'open'` returns 0 documents). A second test
+request is needed to look at a populated calendar again.
+
+### One ad-hoc query needed an index, and app code does not
+
+Reading the audit rows by `targetDocumentId` + `orderBy('timestamp')` was refused for
+want of a composite index. **That was my throwaway query, not the app's** — the client
+reads audit rows the way `alertUnclaimedArrivals` queries pickups, one indexed field
+plus an in-memory filter. No index needs creating.
+
 ## DEPLOYED 2026-08-25 (later) — who sees which service
 
 **Live in production as `8a6637f`. All three steps, in order, and `main` is
