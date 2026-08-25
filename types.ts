@@ -430,14 +430,25 @@ export interface AssignmentResult {
  */
 export type TabView =
     | 'home' | 'rides' | 'profile' | 'history' | 'people' | 'setup' | 'fleet' | 'notices' | 'records'
-    // The arrivals board. A SABHA tab, for a Sarthi or a manager — not a separate
-    // service. Claiming an airport trip is one more thing somebody who already lives
-    // here does, alongside driving on a Friday, so it is one more destination in the
-    // app they already use rather than a place they switch to.
+    // The arrivals board, and WHICH SERVICE IT LIVES IN DEPENDS ON THE ROLE.
+    //
+    // For a SARTHI it is a sabha tab: claiming an airport trip is one more thing
+    // somebody who already lives here does, alongside driving on a Friday — and a
+    // Sarthi has no service switch, so a board outside sabha would be unreachable
+    // for them.
+    //
+    // For a MANAGER it is an AIRPORT tab. They are the only role holding both
+    // services, so "the same as the Sarthi" is the wrong thing to match: the airport
+    // service is where their airport work belongs. Their Airport Seva used to be the
+    // traveller's screen, which was a form that would file the manager their own
+    // pickup and a button that did nothing.
+    //
+    // Two services for one tab is exactly the shape that drifts, so
+    // tests/quality/nav-tab-parity.test.ts pins it against `getNavItems`.
     | 'arrivals'
-    // The traveller's own pickup, and the ONLY tab in Airport Seva. That service is
-    // the whole app for somebody who has not arrived yet and is not a destination for
-    // anybody else, so it has one screen.
+    // The traveller's own pickup, and the only tab a TRAVELLER has in Airport Seva
+    // besides their profile. That service is the whole app for somebody who has not
+    // arrived yet, and a manager never sees this screen — see 'arrivals' above.
     //
     // In the same union as the sabha tabs rather than a parallel one, because the nav
     // bar, `currentTab` and `setCurrentTab` are all shared. What keeps that safe is

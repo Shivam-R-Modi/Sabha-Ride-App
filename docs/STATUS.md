@@ -3,6 +3,101 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## NOT DEPLOYED — the Arrivals board moved into a manager's Airport Seva, 2026-08-25
+
+Owner's question: *"for a manager shouldn't the arrivals tab be in Airport Seva? why is
+it in Sabha Ride Seva?"* They were right, and checking it turned up a defect rather than
+just a debatable arrangement.
+
+### Why it was in sabha, and why that was only half right
+
+The load-bearing reason is **Sarthis**. A Sarthi has no service switch, so a board living
+only in Airport Seva would be unreachable for them. It had to be a sabha tab. **That
+reason does not extend to a manager** — they are the one role holding both services, so
+"consistent with the Sarthi" was the wrong thing to match. Managers got the same tab out
+of symmetry, which was never thought through.
+
+### The defect behind the question
+
+A manager switching to Airport Seva got `TravellerView`, which is a screen built for
+somebody else:
+
+- **A live request form that would file the manager their own airport pickup.** They are
+  an approved student, so `requestAirportPickup` would have accepted it.
+- **An "I am in the USA now" button that did nothing.** It writes `isArriving: false`; a
+  manager's is already false, so the service does not change and they get a
+  "Welcome. Jai Swaminarayan" toast. **A control that fires and visibly changes nothing**
+  — this codebase's signature defect, shipped in the one place nobody would look.
+
+### What it is now
+
+```
+traveller in airport   My pickup + Profile      opens on airport-request
+manager   in airport   Arrivals  + Profile      opens on arrivals
+manager   in sabha     8 destinations           arrivals REMOVED (was the 9th)
+Sarthi    in sabha     4 destinations           arrivals UNCHANGED — they have no switch
+```
+
+So **the board is in a different service depending on role**, which reads as an
+inconsistency and is not: the Sarthi case is forced by having no switch, the manager case
+by having one.
+
+`SERVICE_HOME` (a `Record`) became `serviceHome(service, role)`, and `tabBelongsTo` gained
+a `role`. The home tab is now *the first entry of the allowed list* rather than a separate
+constant, so a service cannot open on a tab that does not belong to it.
+
+**Role is a safe discriminator here, and it is worth knowing why.** It would not be if an
+"arriving manager" could exist — they would get the oversight board while actually flying
+in. `isArriving: true` is written in exactly ONE place, the arriving branch of
+`RoleSelection`, and that branch always writes `role: 'student'`. So the case is
+unreachable, and `RoleSelection.test.tsx` pins the pairing.
+
+### Two pre-existing weaknesses this exposed
+
+**1. `getNavItems` was duplicated knowledge with nothing holding it.** `getNavItems(role,
+service)` says what you can tap; `tabBelongsTo` says what is legal. Two statements of one
+fact in two files. Drift either way is a defect this repo has already shipped: a nav item
+that bounces back to the service home, or a reachable tab with nothing lit in the dock.
+So `getNavItems` is now **exported**, and `tests/quality/nav-tab-parity.test.ts` (28 cases)
+compares the two for **every role and service pair**.
+
+Writing it caught a misconception worth recording: **`tabBelongsTo` is not an
+authorisation check.** It answers "which SERVICE does this tab live in", so it returns
+true for `people` and `records` whatever the role. Role gating for sabha tabs is App.tsx's
+per-role `switch (currentTab)` with a `default:`. The first version of the parity test
+asserted the wide version and failed correctly.
+
+**2. `managerNavigation.test.tsx` parsed the nav table out of Layout.tsx as text**, and
+its own comment already recorded one time that went wrong. It went wrong again here: an
+`if (role === 'manager')` inside the new airport branch meant the slice found that one
+first and parsed a two-item list. The guard caught it — but the file now **imports
+`getNavItems`** instead, so reformatting the table is free and a changed meaning cannot
+slip past a regex.
+
+### Also removed
+
+`App.tsx` no longer destructures `activeRole` or computes `displayRole` itself. `useService`
+returns the role it derived, because that value is now load-bearing in a second place —
+which Airport Seva you get depends on it — and two copies of the expression could
+disagree about whether to render the board or the newcomer's form.
+
+### Tests
+
+**Client 1547 (103 files), functions 953, rules 237. Both builds and typecheck clean.**
+
+New: `tests/quality/nav-tab-parity.test.ts`, 28 cases. Its centrepiece is *"the board is in
+exactly one service per role"* — not "it is in sabha" or "it is in airport", both of which
+are true for different roles, but that it is in exactly one for each, so nobody has two
+doors to it and nobody has none.
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`. **Client-only in substance** — no function or
+rule changed — but keep the order. `main` is deliberately NOT fast-forwarded yet: the
+convention here is that `main` matches production, and this is not in production.
+
+**Run every step from the branch worktree.** See the near-miss recorded below.
+
 ## DEPLOYED 2026-08-25 (evening) — four changes to the pickup form
 
 Owner's changes after filing the first real request. **Live in production as `228aa32`,

@@ -2,9 +2,9 @@ import { useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import {
-    SERVICE_HOME, canSwitchService, resolveService, tabBelongsTo,
+    canSwitchService, resolveService, serviceHome, tabBelongsTo,
 } from '../src/constants/service';
-import type { Service } from '../types';
+import type { Service, UserRole } from '../types';
 
 /**
  * Which service this person is in, and how a manager leaves it.
@@ -22,14 +22,25 @@ import type { Service } from '../types';
  */
 export function useService(): {
     service: Service;
+    /**
+     * The role everything renders from — `activeRole` if the RoleSwitcher has been
+     * used, otherwise the recorded one.
+     *
+     * RETURNED rather than left for the caller to re-derive. App.tsx had its own copy
+     * of this expression, and it is now load-bearing in a second place: which Airport
+     * Seva you get depends on it, so two copies could disagree about whether to render
+     * the board or the newcomer's form.
+     */
+    role: UserRole;
     canSwitch: boolean;
     switchService: (to: Service) => void;
 } {
-    const { userProfile } = useAuth();
+    const { userProfile, activeRole } = useAuth();
     const { currentTab, setCurrentTab, serviceOverride, setServiceOverride } = useNavigation();
 
     const service = resolveService(userProfile, serviceOverride);
     const canSwitch = canSwitchService(userProfile);
+    const role: UserRole = (activeRole || userProfile?.role || 'student') as UserRole;
 
     /**
      * Keep `currentTab` inside the current service. AN INVARIANT, NOT A TRANSITION.
@@ -47,12 +58,13 @@ export function useService(): {
      * costs nothing.
      */
     useEffect(() => {
-        if (tabBelongsTo(currentTab, service)) return;
-        setCurrentTab(SERVICE_HOME[service]);
-    }, [service, currentTab, setCurrentTab]);
+        if (tabBelongsTo(currentTab, service, role)) return;
+        setCurrentTab(serviceHome(service, role));
+    }, [service, role, currentTab, setCurrentTab]);
 
     return {
         service,
+        role,
         canSwitch,
         // Ignored for anybody who cannot switch, so the control not rendering and the
         // override not applying are the same decision rather than two that can drift.

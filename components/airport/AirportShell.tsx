@@ -8,25 +8,34 @@ import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../shared/useConfirm';
 import { useMyLiveArrival } from '../../hooks/useArrivals';
 import { ProfileEditor } from '../shared/ProfileEditor';
+import { ArrivalBoard } from './ArrivalBoard';
 import { ArrivalRequestForm } from './ArrivalRequestForm';
 import { ArrivalStatusCard } from './ArrivalStatusCard';
 
 /**
- * Airport Seva: the whole app for somebody who has not arrived yet.
+ * Airport Seva — TWO surfaces, chosen by the tab, which is chosen by role.
  *
- * ONE SCREEN, plus their profile. There is no arrivals board here — claiming a trip is
- * something a Sarthi who already lives here does, so that board is a TAB in the sabha
- * app rather than a thing anybody switches service to see. This shell used to branch on
- * `canSeeBoard` and render the board for a Sarthi; that branch is gone, and with it the
- * possibility of a Bhulku landing on a board whose every query the rules refuse.
+ * A TRAVELLER gets one screen plus their profile: their own pickup. A MANAGER gets the
+ * ARRIVALS BOARD plus their profile, because a manager is the only role holding both
+ * services and the airport work is what they switched here for.
  *
- * Reached only when `arrivingMember(profile)` is true, or when a manager has switched
- * here deliberately to see what a newcomer sees.
+ * The manager's version of this used to be `TravellerView` as well, which meant their
+ * Airport Seva was a screen built for somebody else: a live form that would file a real
+ * pickup request in the manager's own name, and an "I am in the USA now" button that
+ * wrote `isArriving: false` where it was already false and therefore did nothing
+ * visible. A control that fires and changes nothing is this codebase's signature defect.
+ *
+ * NO ROLE CHECK HERE, deliberately. The tab is the only thing consulted, and
+ * `tabBelongsTo` in src/constants/service.ts is what guarantees a traveller can never
+ * be on 'arrivals' and a manager never on 'airport-request'. One place decides, so the
+ * nav and the screen cannot disagree — and a Bhulku cannot land on a board whose every
+ * query the rules would refuse.
  */
 export const AirportShell: React.FC = () => {
     const { currentTab } = useNavigation();
 
     if (currentTab === 'profile') return <ProfileEditor />;
+    if (currentTab === 'arrivals') return <ArrivalBoard />;
     return <TravellerView />;
 };
 

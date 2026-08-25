@@ -19,28 +19,38 @@ const layoutSrc = readFileSync(path.join(ROOT, 'components/Layout.tsx'), 'utf8')
 const appSrc = readFileSync(path.join(ROOT, 'App.tsx'), 'utf8');
 const typesSrc = readFileSync(path.join(ROOT, 'types.ts'), 'utf8');
 
+// Layout reaches contexts that import firebase/config, which calls getAuth() at import
+// time. Stubbed so this file does not need an .env.local, the same reason the
+// DatabaseConsole and MemberExportCard mocks further down exist.
+vi.mock('../../firebase/config', () => ({ db: {}, auth: {}, app: {} }));
+vi.mock('../../contexts/AuthContext', () => ({
+    useAuth: () => ({ userProfile: null, logout: vi.fn(), currentUser: null,
+        getAvailableRoles: () => [], activeRole: 'manager', setActiveRole: vi.fn() }),
+}));
+
+import { getNavItems } from '../../components/Layout';
+
 /**
- * The nav list for one role, read out of getNavItems.
+ * The nav list for one role. IMPORTED, not parsed out of the source any more.
  *
- * Sliced to the CLOSING bracket of each array, not a fixed offset — an earlier
- * version took `indexOf('return [') + 2000` and swallowed the rider array into the
- * manager one, which made "Records is last" fail against `profile` and invented a
- * `rides` destination for managers. A parser that reads the wrong block is worse
- * than no test, because both its passes and its failures are meaningless.
+ * This used to slice `getNavItems` out of Layout.tsx as text, and its own comment
+ * recorded the last time that went wrong: a fixed offset swallowed the rider array into
+ * the manager one, inventing a `rides` destination for managers. It went wrong again on
+ * 2026-08-25 for a new reason — an `if (role === 'manager')` was added INSIDE the airport
+ * branch, so the slice found that one first and parsed a two-item list. The guard below
+ * caught it, which is the guard doing its job, but the fragility was the point.
+ *
+ * `getNavItems` is exported now (it needed to be, for
+ * tests/quality/nav-tab-parity.test.ts), so this reads the real values. Reformatting the
+ * nav table is free from here on, and a changed meaning cannot slip past a regex.
  */
 function navFor(role: 'driver' | 'manager' | 'student'): Array<{ id: string; label: string }> {
-    const body = layoutSrc.slice(layoutSrc.indexOf('const getNavItems'));
-    const start = role === 'student'
-        ? body.lastIndexOf('return [')
-        : body.indexOf('return [', body.indexOf(`if (role === '${role}')`));
-    const block = body.slice(start, body.indexOf('];', start));
+    const items = getNavItems(role).map(({ id, label }) => ({ id, label }));
 
-    const items = [...block.matchAll(/\{ id: '([^']+)', label: '([^']+)'/g)]
-        .map(m => ({ id: m[1]!, label: m[2]! }));
-
-    // Guards against the slice silently matching nothing and every assertion below
-    // passing vacuously — the recurring failure in this repo's quality tests.
-    if (items.length < 3) throw new Error(`navFor('${role}') parsed ${items.length} items`);
+    // Kept from the parsing version: it is now nearly impossible for this to be empty,
+    // but a vacuously-passing quality test is this repo's recurring failure and the
+    // check costs one line.
+    if (items.length < 3) throw new Error(`navFor('${role}') returned ${items.length} items`);
     return items;
 }
 
@@ -99,6 +109,11 @@ describe('every manager destination is routed', () => {
     it('App.tsx has a case for each nav id — no tab silently falling to default', () => {
         // The silent failure this whole file exists for: a nav item with no `case`
         // renders ManagerDashboard, so the button "works" and shows the wrong page.
+        //
+        // `arrivals` is deliberately NOT in this list any more. It left the manager's
+        // sabha nav for their Airport Seva on 2026-08-25, so the manager block below
+        // should have no case for it — and `navFor('manager')` no longer offers it, so
+        // this loop asserts that by omission. AirportShell routes it instead.
         const managerBlock = appSrc.slice(
             appSrc.indexOf("if (displayRole === 'manager')"),
             appSrc.indexOf("if (displayRole === 'driver')"),

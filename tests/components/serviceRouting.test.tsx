@@ -180,11 +180,16 @@ describe('a manager, the one exception', () => {
         expect(dockLabels()).toEqual(['Dispatch', 'People', 'Fleet', 'Setup']);
     });
 
-    it('has the Arrivals tab in the overflow drawer', () => {
-        // Ninth destination, unmarked, so the four a manager touches on the night stay
-        // docked.
+    it('has NO Arrivals tab in Sabha Seva — it lives in their Airport Seva now', () => {
+        // It used to be the ninth sabha destination, in the swipe-up drawer. It moved
+        // because a manager is the one role holding both services, so the airport
+        // service is where their airport work belongs — and because what their Airport
+        // Seva held before was the traveller's own request form, which for a manager is
+        // a screen built for somebody else.
         renderShell('manager');
         expect(dockLabels()).not.toContain('Arrivals');
+        expect(within(sidebar()).queryByRole('button', { name: /arrivals/i }))
+            .not.toBeInTheDocument();
     });
 
     it('keeps a switch, in the header AND the sidebar', () => {
@@ -195,16 +200,26 @@ describe('a manager, the one exception', () => {
         expect(within(sidebar()).getByRole('button', { name: /switch to airport seva/i })).toBeInTheDocument();
     });
 
-    it('actually moves, and the tab follows', async () => {
+    it('actually moves, and lands on the BOARD rather than a traveller form', async () => {
         renderShell('manager');
         await userEvent.click(
             within(header()).getByRole('button', { name: /switch to airport seva/i }));
 
         expect(screen.getByTestId('service')).toHaveTextContent('airport');
         // The reset is what stops a sabha `switch (currentTab)` being handed an airport
-        // value, and what keeps an item lit in the dock.
-        expect(screen.getByTestId('tab')).toHaveTextContent('airport-request');
-        expect(dockLabels()).toEqual(['My pickup', 'Profile']);
+        // value, and what keeps an item lit in the dock. It sends a MANAGER to
+        // 'arrivals', not 'airport-request' — the whole point of the 2026-08-25 change.
+        expect(screen.getByTestId('tab')).toHaveTextContent('arrivals');
+        expect(dockLabels()).toEqual(['Arrivals', 'Profile']);
+    });
+
+    it('is never offered the newcomer form, which would file their own pickup', () => {
+        // The two defects this replaced. A manager's Airport Seva used to be
+        // `TravellerView`: a live form that would file a real request in their name, and
+        // an "I am in the USA now" button that wrote `isArriving: false` where it was
+        // already false, so it did nothing at all.
+        renderShell('manager');
+        expect(dockLabels()).not.toContain('My pickup');
     });
 
     it('and comes back', async () => {

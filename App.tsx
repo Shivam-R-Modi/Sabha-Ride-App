@@ -31,10 +31,10 @@ import { useAuth } from './contexts/AuthContext';
 import { useNavigation } from './contexts/NavigationContext';
 
 export default function App() {
-  const { currentUser, userProfile, loading, logout, activeRole, refreshProfile } = useAuth();
+  const { currentUser, userProfile, loading, logout, refreshProfile } = useAuth();
   const { currentTab } = useNavigation();
   const [showSplash, setShowSplash] = useState(true);
-  const { service } = useService();
+  const { service, role: displayRole } = useService();
 
   // Note: Automatic splash timer removed to favor user-initiated transition
 
@@ -90,8 +90,10 @@ export default function App() {
     );
   }
 
-  // Use activeRole for rendering dashboards (allows role switching)
-  const displayRole = activeRole || userProfile.role;
+  // `displayRole` comes from useService now, which derives it the same way this line
+  // used to (activeRole, falling back to the recorded role) and ALSO uses it to pick
+  // which Airport Seva to render. One derivation, so the nav and the screen cannot
+  // disagree about whether a manager sees the board or a newcomer's request form.
 
   // WHICH SERVICE, before which role.
   //
@@ -121,10 +123,6 @@ export default function App() {
           return <ManagerDashboard />;
         case 'people':
           return <ManagerPeople />;
-        case 'arrivals':
-          // A sabha destination, not a service. Claiming an airport trip is one more
-          // thing somebody who already lives here does, alongside driving on a Friday.
-          return <ArrivalBoard />;
         case 'history':
           return <ManagerReports />;
         case 'setup':

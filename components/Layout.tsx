@@ -546,10 +546,29 @@ interface NavItem {
  * nav items pointing at screens that do not exist, which is the dead control this
  * codebase keeps removing.
  */
-const getNavItems = (role: UserRole, service: Service = 'sabha'): NavItem[] => {
-  // Airport Seva is one screen plus a profile. No board here: claiming a trip is
-  // something somebody who already LIVES here does, so that is a sabha tab below.
+export const getNavItems = (role: UserRole, service: Service = 'sabha'): NavItem[] => {
+  /**
+   * Airport Seva is TWO surfaces, and which one you get depends on why you are here.
+   *
+   * A TRAVELLER is here because they have not landed yet: one screen, their own
+   * pickup. A MANAGER is here because they switched, and what they came for is the
+   * board — they are the only role holding both services, so for them the airport
+   * service is where the airport work lives.
+   *
+   * The manager's first version of this got the traveller's screen, which was wrong
+   * twice: a live form that would file a real pickup request in their own name, and
+   * an "I am in the USA now" button that did nothing because their `isArriving` was
+   * already false. See src/constants/service.ts for the whole note.
+   *
+   * Kept in step with `tabBelongsTo` by tests/quality/nav-tab-parity.test.ts.
+   */
   if (service === 'airport') {
+    if (role === 'manager') {
+      return [
+        { id: 'arrivals', label: 'Arrivals', icon: CalendarDays },
+        { id: 'profile', label: 'Profile', icon: UserIcon },
+      ];
+    }
     return [
       { id: 'airport-request', label: 'My pickup', icon: Ticket },
       { id: 'profile', label: 'Profile', icon: UserIcon },
@@ -587,10 +606,10 @@ const getNavItems = (role: UserRole, service: Service = 'sabha'): NavItem[] => {
       { id: 'setup', label: 'Setup', icon: Settings, primary: true },
       { id: 'profile', label: 'Profile', icon: UserIcon },
       { id: 'notices', label: 'Notices', icon: Megaphone },
-      // Ninth destination, unmarked, so it joins the swipe-up drawer rather than
-      // squeezing the four docked ones. Airport runs are weeks out; Dispatch, People,
-      // Fleet and Setup are what a manager touches on the night.
-      { id: 'arrivals', label: 'Arrivals', icon: CalendarDays },
+      // NO `arrivals` here. It used to be the ninth destination, in the swipe-up
+      // drawer. It moved to Airport Seva, which is the service a manager switches to
+      // and the only one that held nothing useful for them before. A Sarthi still
+      // reaches the board from sabha, because a Sarthi has no switch.
       { id: 'records', label: 'Records', icon: Database, separated: true },
     ];
   }
