@@ -106,7 +106,7 @@ export const NoticeComposer: React.FC = () => {
                     type="text"
                     value={title}
                     onChange={e => setTitle(e.target.value)}
-                    placeholder="Sabha this Sunday"
+                    placeholder="Sabha this week"
                     className="mt-1 w-full min-w-0 px-3 py-2 rounded-xl border-2 border-hairline/30 bg-surface text-sm text-coffee"
                 />
                 {/* Says what it is FOR, not just what it is. A manager cannot see
