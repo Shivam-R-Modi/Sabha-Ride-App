@@ -141,9 +141,9 @@ const MobileHeader: React.FC = () => {
 const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const { logout, userProfile } = useAuth();
   const { currentTab, setCurrentTab, isSidebarCollapsed, toggleSidebar } = useNavigation();
-  const { service } = useService();
+  const { service, arriving } = useService();
 
-  const navItems = getNavItems(role, service);
+  const navItems = getNavItems(role, service, arriving);
 
   return (
     // Same rung as the mobile header: it is chrome, and it holds a RoleSwitcher too.
@@ -370,8 +370,8 @@ const GrabHandle: React.FC<{
  */
 const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
   const { currentTab, setCurrentTab } = useNavigation();
-  const { service } = useService();
-  const navItems = getNavItems(role, service);
+  const { service, arriving } = useService();
+  const navItems = getNavItems(role, service, arriving);
   const [expanded, setExpanded] = useState(false);
 
   const primary = navItems.filter(item => item.primary);
@@ -546,33 +546,35 @@ interface NavItem {
  * nav items pointing at screens that do not exist, which is the dead control this
  * codebase keeps removing.
  */
-export const getNavItems = (role: UserRole, service: Service = 'sabha'): NavItem[] => {
+export const getNavItems = (
+  role: UserRole, service: Service = 'sabha', arriving = false,
+): NavItem[] => {
   /**
-   * Airport Seva is TWO surfaces, and which one you get depends on why you are here.
+   * Airport Seva is TWO surfaces, and which one you get turns on `arriving`, NOT role.
    *
-   * A TRAVELLER is here because they have not landed yet: one screen, their own
-   * pickup. A MANAGER is here because they switched, and what they came for is the
-   * board — they are the only role holding both services, so for them the airport
-   * service is where the airport work lives.
+   * A TRAVELLER has not landed yet: one screen, their own pickup. Anybody ELSE in here
+   * arrived by switching, and only a manager can switch — so they came to oversee, and
+   * what they came for is the board.
    *
-   * The manager's first version of this got the traveller's screen, which was wrong
-   * twice: a live form that would file a real pickup request in their own name, and
-   * an "I am in the USA now" button that did nothing because their `isArriving` was
-   * already false. See src/constants/service.ts for the whole note.
+   * NOT `role === 'manager'`, which is what this said first and was a hole: `role` is
+   * the ACTIVE role, and the RoleSwitcher lets a manager wear the Sarthi hat while
+   * `canSwitchService` (recorded role) keeps their service switch. So a manager viewing
+   * as a Sarthi got the traveller's live request form here — the exact defect that
+   * moving the board into this service was meant to remove.
    *
-   * Kept in step with `tabBelongsTo` by tests/quality/nav-tab-parity.test.ts.
+   * Kept in step with `tabBelongsTo` by tests/quality/nav-tab-parity.test.ts, which
+   * covers the hat case by name.
    */
   if (service === 'airport') {
-    if (role === 'manager') {
-      return [
+    return arriving
+      ? [
+        { id: 'airport-request', label: 'My pickup', icon: Ticket },
+        { id: 'profile', label: 'Profile', icon: UserIcon },
+      ]
+      : [
         { id: 'arrivals', label: 'Arrivals', icon: CalendarDays },
         { id: 'profile', label: 'Profile', icon: UserIcon },
       ];
-    }
-    return [
-      { id: 'airport-request', label: 'My pickup', icon: Ticket },
-      { id: 'profile', label: 'Profile', icon: UserIcon },
-    ];
   }
 
   if (role === 'driver') {

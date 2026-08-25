@@ -97,18 +97,27 @@ export function resolveService(
  * both, because it is the same screen either way and neither of them should be thrown
  * out of the service to change their own name.
  *
- * ROLE IS A SAFE DISCRIMINATOR HERE, and that is worth stating because it would not
- * be if an "arriving manager" could exist. `isArriving: true` is written in exactly
- * ONE place — the arriving branch of RoleSelection — and that branch always writes
- * `role: 'student'`. So there is no path by which a manager is also arriving, and no
- * case where this picks the oversight surface for somebody who is actually flying in.
- * `tests/components/RoleSelection.test.tsx` pins that pairing.
+ * CHOSEN BY `arriving`, NOT BY ROLE — and the first version got this wrong, so the
+ * reasoning is written down.
+ *
+ * Role looked like the obvious discriminator: only a manager can switch here, so
+ * manager meant oversight. But the role every nav reads is the ACTIVE one, and the
+ * RoleSwitcher lets a manager wear the Sarthi hat. `canSwitchService` reads the
+ * RECORDED role, so the service switch stays available while they do — and with role
+ * as the discriminator, a manager viewing as a Sarthi who switched to Airport Seva got
+ * `['airport-request', 'profile']`: the traveller's live request form, which is the
+ * exact defect moving the board here was meant to remove.
+ *
+ * `arriving` has no such gap. There are only two ways to be in Airport Seva — you have
+ * not landed yet, or you switched — and `resolveService` will only honour a switch for
+ * somebody `canSwitchService` allows. So "not arriving" is precisely "here on purpose,
+ * to oversee", whatever hat they have on.
  */
 const AIRPORT_TRAVELLER_TABS: TabView[] = ['airport-request', 'profile'];
 const AIRPORT_OVERSIGHT_TABS: TabView[] = ['arrivals', 'profile'];
 
-function airportTabs(role: UserRole): TabView[] {
-    return role === 'manager' ? AIRPORT_OVERSIGHT_TABS : AIRPORT_TRAVELLER_TABS;
+export function airportTabs(arriving: boolean): TabView[] {
+    return arriving ? AIRPORT_TRAVELLER_TABS : AIRPORT_OVERSIGHT_TABS;
 }
 
 /**
@@ -122,8 +131,8 @@ function airportTabs(role: UserRole): TabView[] {
  * The first tab of the list, not a separate constant, so the home screen cannot drift
  * away from being reachable in its own service.
  */
-export function serviceHome(service: Service, role: UserRole): TabView {
-    return service === 'airport' ? airportTabs(role)[0] : 'home';
+export function serviceHome(service: Service, role: UserRole, arriving: boolean): TabView {
+    return service === 'airport' ? airportTabs(arriving)[0] : 'home';
 }
 
 /**
@@ -141,8 +150,10 @@ export function serviceHome(service: Service, role: UserRole): TabView {
  * whether the service changed because a manager tapped the switch or because the server
  * cleared `isArriving` when their pickup completed.
  */
-export function tabBelongsTo(tab: TabView, service: Service, role: UserRole): boolean {
-    if (service === 'airport') return airportTabs(role).includes(tab);
+export function tabBelongsTo(
+    tab: TabView, service: Service, role: UserRole, arriving: boolean,
+): boolean {
+    if (service === 'airport') return airportTabs(arriving).includes(tab);
 
     // Sabha. Stated as "which tabs do NOT belong" because the sabha list is long and
     // role-dependent, and duplicating it here would be a second copy of
@@ -151,6 +162,12 @@ export function tabBelongsTo(tab: TabView, service: Service, role: UserRole): bo
     if (tab === 'airport-request') return false;
     // The board is a sabha destination for a Sarthi, who has no switch, and an AIRPORT
     // destination for a manager, who does. So for a manager it does not belong here.
+    //
+    // ROLE, not `arriving`, and this asymmetry with the airport branch above is
+    // deliberate: this is about which app you are working in, and that is exactly what
+    // the RoleSwitcher's hat decides. A manager wearing the Sarthi hat IS working as a
+    // Sarthi, and a Sarthi claims trips from sabha. They keep the manager's route too,
+    // via the service switch, which is correct — the hat says which one they meant.
     if (tab === 'arrivals') return role !== 'manager';
     return true;
 }

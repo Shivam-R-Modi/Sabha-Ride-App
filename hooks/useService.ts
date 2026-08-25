@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import {
-    canSwitchService, resolveService, serviceHome, tabBelongsTo,
+    arrivingMember, canSwitchService, resolveService, serviceHome, tabBelongsTo,
 } from '../src/constants/service';
 import type { Service, UserRole } from '../types';
 
@@ -32,6 +32,11 @@ export function useService(): {
      * the board or the newcomer's form.
      */
     role: UserRole;
+    /**
+     * They have not landed yet. Returned because it, not the role, decides WHICH
+     * Airport Seva gets rendered — see the note on `airportTabs`.
+     */
+    arriving: boolean;
     canSwitch: boolean;
     switchService: (to: Service) => void;
 } {
@@ -41,6 +46,7 @@ export function useService(): {
     const service = resolveService(userProfile, serviceOverride);
     const canSwitch = canSwitchService(userProfile);
     const role: UserRole = (activeRole || userProfile?.role || 'student') as UserRole;
+    const arriving = arrivingMember(userProfile);
 
     /**
      * Keep `currentTab` inside the current service. AN INVARIANT, NOT A TRANSITION.
@@ -58,13 +64,14 @@ export function useService(): {
      * costs nothing.
      */
     useEffect(() => {
-        if (tabBelongsTo(currentTab, service, role)) return;
-        setCurrentTab(serviceHome(service, role));
-    }, [service, role, currentTab, setCurrentTab]);
+        if (tabBelongsTo(currentTab, service, role, arriving)) return;
+        setCurrentTab(serviceHome(service, role, arriving));
+    }, [service, role, arriving, currentTab, setCurrentTab]);
 
     return {
         service,
         role,
+        arriving,
         canSwitch,
         // Ignored for anybody who cannot switch, so the control not rendering and the
         // override not applying are the same decision rather than two that can drift.

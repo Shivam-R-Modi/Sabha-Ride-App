@@ -3,6 +3,83 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## NOT DEPLOYED — the RoleSwitcher hat, found by an owner bug report, 2026-08-25 (late)
+
+Owner reported *"it still shows Arrivals in sabha seva docks"* after the nav move went
+live. **The deployed code was correct** — the live bundle's manager sabha nav is
+`home, people, history, fleet, setup, profile, notices, records` with no `arrivals`,
+confirmed by reading the minified array out of `index-C1ZDfhQv.js`. But chasing it found
+a real hole, and a likely explanation for what they saw.
+
+### The likely cause of the report: the Sarthi hat
+
+`getNavItems(role, …)` reads the **ACTIVE** role, and `RoleSwitcher` lets anybody switch
+to any role their profile grants. Tonny is granted `['manager', 'driver', 'student']`.
+
+```
+manager hat   dock: Dispatch · People · Fleet · Setup      Arrivals nowhere
+Sarthi  hat   dock: Dashboard · Arrivals · History · Profile   <- Arrivals IN the dock
+```
+
+The report says Arrivals is in the **dock**, and for a manager it never was — even before
+this change it was the ninth item, in the swipe-up drawer. A four-item dock containing
+Arrivals is the Sarthi nav. **That behaviour is correct**: the hat says which app you meant
+to be working in, and a Sarthi claims trips from sabha. Awaiting the owner's confirmation
+of which hat was on.
+
+### The real hole it exposed
+
+`canSwitchService` reads the **RECORDED** role, so a manager keeps their service switch
+while wearing the Sarthi hat. The airport surface was chosen by `role === 'manager'`. So:
+
+> a manager viewing as a Sarthi, who switches to Airport Seva, got
+> `['airport-request', 'profile']` — **the traveller's live request form**.
+
+That is the exact defect moving the board into Airport Seva was meant to remove,
+reintroduced through a door nobody looked at. It would have filed the manager their own
+airport pickup.
+
+**Fixed by discriminating on `arriving`, not on role.** There are only two ways to be in
+Airport Seva — you have not landed yet, or you switched — and `resolveService` honours a
+switch only for somebody `canSwitchService` allows. So "not arriving" is precisely "here
+on purpose, to oversee", whatever hat is on. `serviceHome`, `tabBelongsTo` and
+`getNavItems` all take `arriving` now, and `useService` returns it.
+
+The sabha branch still reads **role**, and that asymmetry is deliberate: sabha is about
+which app you are working in, which is exactly what the hat decides.
+
+### Two of my own assertions were wrong, and both are worth recording
+
+**1. "The board is in exactly one service per role" was tidiness, not a property.** The fix
+broke it, correctly: a manager in the Sarthi hat now reaches the board from *both*
+services — sabha because the hat says Sarthi, airport because the switch is granted by
+the recorded role. Two doors to one screen, both meant. Replaced with the narrower thing
+that is actually true: everybody who should have the board has at least one route, and a
+plain Bhulku is offered none.
+
+**2. Some (role, service, arriving) triples are not reachable, and two I asserted about
+are only reachable for a manager in disguise.**
+
+```
+(student, airport, arriving=false)   a MANAGER in the Bhulku hat — gets the board, correctly
+(driver,  sabha,   arriving=true)    NOT reachable: arriving forces airport
+```
+
+Asserting "a student gets no board in Airport Seva" would have been asserting that a
+manager loses oversight by changing hats. `nav-tab-parity.test.ts` now enumerates the
+TRIPLE rather than the pair, filters the impossible combination (an arriving manager), and
+carries a named block for the hat case.
+
+### Tests
+
+**Client 1562 (103 files), functions 953, rules 237. Both builds and typecheck clean.**
+`nav-tab-parity.test.ts` is 43 cases now, up from 28.
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only again.
+`main` held at `a69aa0e` until it ships.
+
 ## DEPLOYED 2026-08-25 — the Arrivals board moved into a manager's Airport Seva
 
 **Live as `1e77dbc`, and `main` is at that commit.**
