@@ -58,7 +58,7 @@ export const BroadcastComposer: React.FC = () => {
                     value={body}
                     onChange={e => { setBody(e.target.value); setSent(false); }}
                     rows={3}
-                    placeholder="No sabha this Friday — the hall is unavailable."
+                    placeholder="No sabha this week — the hall is unavailable."
                     className="mt-1 w-full min-w-0 px-3 py-2 rounded-xl border-2 border-hairline/30 bg-surface text-sm text-coffee"
                 />
             </label>

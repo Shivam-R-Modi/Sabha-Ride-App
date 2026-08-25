@@ -56,6 +56,20 @@ export function formatTime(value: string): string {
     return `${hours12}:${minutes} ${suffix}`;
 }
 
+/**
+ * "2026-08-14" -> "Friday, Aug 14". Built from the date parts, so no timezone shift.
+ *
+ * Lives here rather than in a component for the same reason `formatTime` does: a
+ * third copy had started to appear the moment a second screen needed to name a
+ * date, and two formatters drift into disagreeing about the same day.
+ */
+export function formatDateLong(dateKey: string): string {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    return new Intl.DateTimeFormat('en-US', {
+        weekday: 'long', day: 'numeric', month: 'short',
+    }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
 /** Fallback sabha start and end, "HH:MM" in Sabha local time. */
 export const DEFAULT_SABHA_START = '19:00';
 export const DEFAULT_SABHA_END = '22:00';

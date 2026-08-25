@@ -93,4 +93,44 @@ describe('the rule is the only schedule', () => {
         expect(src).toMatch(/onSnapshot\(\s*\n?\s*doc\(db, RECURRENCE_DOC\)/);
         expect(src).toMatch(/normaliseRecurrence\(snap\.data\(\)\)/);
     });
+
+    /**
+     * A weekday named in something the user READS is the same defect one layer up.
+     *
+     * The Notices composer shipped a placeholder reading "No sabha this Friday —
+     * the hall is unavailable." after the congregation had moved to Monday. It
+     * schedules nothing, so no test about behaviour could catch it, and it is
+     * precisely what a manager would take as the app's own statement of the day.
+     *
+     * Comments are stripped first, deliberately: this codebase explains its history
+     * in prose and mentions Friday constantly. Only quoted strings count.
+     */
+    it('no weekday name appears in a string the user can read', () => {
+        // The three places a day-name list is the actual subject: the picker, and
+        // the two `describeRule` mirrors that turn a rule into a sentence.
+        const allowed = [
+            'src/utils/recurrence.ts',
+            'functions/src/http/sabhaRecurrence.ts',
+            'components/manager/RecurringSabha.tsx',
+        ];
+        const DAYS = /Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday/;
+
+        const offenders: string[] = [];
+
+        for (const file of sourceFiles()) {
+            const rel = file.replace(ROOT + '/', '');
+            if (allowed.includes(rel)) continue;
+
+            const code = readFileSync(file, 'utf8')
+                .replace(/\/\*[\s\S]*?\*\//g, ' ')   // block comments
+                .replace(/^\s*\/\/.*$/gm, ' ');       // line comments
+
+            for (const match of code.matchAll(/(['"`])((?:(?!\1)[\s\S])*?)\1/g)) {
+                if (DAYS.test(match[2])) offenders.push(`${rel}: "${match[2].slice(0, 60)}"`);
+            }
+        }
+
+        expect(offenders).toEqual([]);
+    });
+
 });

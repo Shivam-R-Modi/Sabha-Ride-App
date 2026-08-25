@@ -612,7 +612,7 @@ export const DatabaseConsole: React.FC = () => {
                       <>
                         <td className="py-3 px-4">
                           <p className="font-bold">{docItem.rideType || 'home-to-sabha'}</p>
-                          <p className="text-[10px] text-coffee-500">{docItem.timeSlot || '6:00 PM'}</p>
+                          <p className="text-[10px] text-coffee-500">{docItem.timeSlot || '—'}</p>
                         </td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${

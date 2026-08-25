@@ -274,6 +274,31 @@ export function effectiveEvent(
 }
 
 /**
+ * Of the dates that already hold bookings, the ones where nothing happens now.
+ *
+ * Moving the sabha day strands whoever booked the old one. Production, 2026-08-24:
+ * the day moved Friday -> Monday and two riders who had already answered "yes"
+ * for Friday the 28th stayed attached to it, so the gathering that actually ran
+ * counted nobody, and a ride request sat on a date dispatch could never serve.
+ *
+ * Driven by where the bookings ARE rather than by a window of rule dates, which
+ * is why it needs neither a horizon nor the previous rule. A cancellation strands
+ * people just as a day change does, and this answers both.
+ *
+ * Note it asks `effectiveEvent`, not `coversDate`: a one-off deliberately sits on
+ * a date the rule does not cover, and flagging it would tell the manager to move
+ * people off a sabha that is going ahead.
+ */
+export function datesLosingTheirSabha(
+    rule: RecurrenceRule | null,
+    booked: readonly { dateKey: string; exception: EventException | null }[],
+): string[] {
+    return booked
+        .filter(({ dateKey, exception }) => !effectiveEvent(dateKey, rule, exception))
+        .map(({ dateKey }) => dateKey);
+}
+
+/**
  * The next occurrences from `fromKey` onward, exceptions applied, cancellations
  * removed.
  *

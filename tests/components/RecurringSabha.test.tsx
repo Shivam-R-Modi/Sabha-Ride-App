@@ -37,7 +37,7 @@ import { RecurringSabha } from '../../components/manager/RecurringSabha';
 beforeEach(() => {
     vi.clearAllMocks();
     storedDoc = { enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00' };
-    updateSabhaRecurrence.mockResolvedValue({ rule: storedDoc });
+    updateSabhaRecurrence.mockResolvedValue({ rule: storedDoc, stranded: [] });
 });
 
 const save = () => screen.getByRole('button', { name: /save schedule/i });
@@ -81,13 +81,19 @@ describe('RecurringSabha', () => {
         await user.click(screen.getByRole('button', { name: 'Sunday' }));
         await user.click(save());
 
-        await waitFor(() => expect(updateSabhaRecurrence).toHaveBeenCalledTimes(1));
-        expect(updateSabhaRecurrence.mock.calls[0]![0]).toMatchObject({
-            enabled: true,
-            daysOfWeek: [0, 5],
-            startTime: '19:00',
-            endTime: '22:00',
-        });
+        // Twice: the dry run that asks what would be stranded, then the save. Both
+        // must carry the pattern the manager edited, or the preview would answer
+        // for a different rule than the one about to be stored.
+        await waitFor(() => expect(updateSabhaRecurrence).toHaveBeenCalledTimes(2));
+        for (const [sent] of updateSabhaRecurrence.mock.calls) {
+            expect(sent).toMatchObject({
+                enabled: true,
+                daysOfWeek: [0, 5],
+                startTime: '19:00',
+                endTime: '22:00',
+            });
+        }
+        expect(updateSabhaRecurrence.mock.calls[1]![0]).toMatchObject({ acknowledge: true });
     });
 
     it('sends NO horizon and NO watermark', async () => {
@@ -100,10 +106,15 @@ describe('RecurringSabha', () => {
         await user.click(save());
 
         await waitFor(() => expect(updateSabhaRecurrence).toHaveBeenCalled());
-        const sent = updateSabhaRecurrence.mock.calls[0]![0];
-        expect(sent).not.toHaveProperty('generatedThrough');
-        expect(sent).not.toHaveProperty('weeksAhead');
-        expect(Object.keys(sent).sort()).toEqual(['daysOfWeek', 'enabled', 'endTime', 'startTime']);
+        // Two calls now: a dry run that asks what would be stranded, then the save.
+        // Neither may carry a generator field.
+        for (const [sent] of updateSabhaRecurrence.mock.calls) {
+            expect(sent).not.toHaveProperty('generatedThrough');
+            expect(sent).not.toHaveProperty('weeksAhead');
+            expect(Object.keys(sent).filter(k => k !== 'dryRun' && k !== 'acknowledge').sort())
+                .toEqual(['daysOfWeek', 'enabled', 'endTime', 'startTime']);
+        }
+        expect(updateSabhaRecurrence.mock.calls[0]![0]).toMatchObject({ dryRun: true });
     });
 
     it('refuses to save an enabled pattern with no days, and says why', async () => {
@@ -138,6 +149,7 @@ describe('RecurringSabha', () => {
         const user = userEvent.setup();
         updateSabhaRecurrence.mockResolvedValue({
             rule: { enabled: true, daysOfWeek: [0], startTime: '10:00', endTime: '12:00' },
+            stranded: [],
         });
         render(<RecurringSabha />);
         await waitFor(() => expect(save()).toBeInTheDocument());
@@ -169,4 +181,69 @@ describe('RecurringSabha', () => {
             expect(screen.getByRole('button', { name })).toBeInTheDocument();
         }
     });
+
+    /**
+     * Moving the day used to strand whoever had already booked the old one — their
+     * "yes" stayed on a date that was no longer a sabha, so the gathering that ran
+     * counted nobody. The manager is now asked first, by name.
+     */
+    describe('when the change would strand people', () => {
+        const STRANDED = [{
+            date: '2027-01-08',
+            target: '2027-01-11',
+            responseCount: 2,
+            requestedRideCount: 1,
+            names: ['Tarak', 'Vidhyut'],
+        }];
+
+        const previewThenSave = () => {
+            updateSabhaRecurrence.mockReset();
+            updateSabhaRecurrence
+                .mockResolvedValueOnce({ rule: storedDoc, stranded: STRANDED })
+                .mockResolvedValueOnce({ rule: storedDoc, stranded: STRANDED });
+        };
+
+        it('names them, and says where they would go', async () => {
+            const user = userEvent.setup();
+            previewThenSave();
+            render(<RecurringSabha />);
+            await waitFor(() => expect(save()).toBeInTheDocument());
+
+            await user.click(save());
+
+            expect(await screen.findByText(/Tarak, Vidhyut/)).toBeInTheDocument();
+            expect(screen.getByText(/Monday, Jan 11/)).toBeInTheDocument();
+        });
+
+        it('saves nothing if the manager backs out', async () => {
+            const user = userEvent.setup();
+            previewThenSave();
+            render(<RecurringSabha />);
+            await waitFor(() => expect(save()).toBeInTheDocument());
+
+            await user.click(save());
+            await user.click(await screen.findByRole('button', { name: 'Go back' }));
+
+            // The dry run and nothing else. A second call here would be the save
+            // going through on a dialog the manager dismissed.
+            expect(updateSabhaRecurrence).toHaveBeenCalledTimes(1);
+            expect(updateSabhaRecurrence.mock.calls[0]![0]).toMatchObject({ dryRun: true });
+        });
+
+        it('acknowledges explicitly when the manager agrees', async () => {
+            const user = userEvent.setup();
+            previewThenSave();
+            render(<RecurringSabha />);
+            await waitFor(() => expect(save()).toBeInTheDocument());
+
+            await user.click(save());
+            await user.click(await screen.findByRole('button', { name: 'Move them' }));
+
+            await waitFor(() => expect(updateSabhaRecurrence).toHaveBeenCalledTimes(2));
+            expect(updateSabhaRecurrence.mock.calls[1]![0]).toMatchObject({ acknowledge: true });
+            await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith(
+                expect.stringMatching(/3 bookings moved/)));
+        });
+    });
+
 });

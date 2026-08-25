@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { Repeat, Loader2, AlertCircle, Check } from 'lucide-react';
 import { db } from '../../firebase/config';
-import { updateSabhaRecurrence } from '../../src/utils/cloudFunctions';
+import { updateSabhaRecurrence, StrandedDate } from '../../src/utils/cloudFunctions';
+import { useConfirm } from '../shared/useConfirm';
 import { normaliseRecurrence, describeRule } from '../../src/utils/recurrence';
 import { useToast } from '../../contexts/ToastContext';
-import { isUsableDuration, RECURRENCE_DOC } from '../../src/constants/schedule';
+import { isUsableDuration, RECURRENCE_DOC, formatDateLong } from '../../src/constants/schedule';
 
 /**
  * The recurring sabha pattern — ONE record, no horizon.
@@ -38,11 +39,34 @@ const DAYS = [
 
 
 
+/**
+ * The sentence the manager reads before anything moves.
+ *
+ * Names people rather than counting them: "2 responses" is a statistic, "Tarak
+ * and Vidhyut" is who you have to ring if this is wrong.
+ */
+export function describeStranded(stranded: StrandedDate[]): string {
+    return stranded.map(item => {
+        const who = item.names.length > 0 ? item.names.join(', ') : 'Someone';
+        const what = [
+            item.responseCount > 0 && `${item.responseCount} said they are coming`,
+            item.requestedRideCount > 0
+                && `${item.requestedRideCount} ride request${item.requestedRideCount === 1 ? '' : 's'}`,
+        ].filter(Boolean).join(' and ');
+
+        return item.target
+            ? `${formatDateLong(item.date)} — ${what} (${who}). These move to ${formatDateLong(item.target)}.`
+            : `${formatDateLong(item.date)} — ${what} (${who}). There is no later sabha to move them to, `
+              + 'so the ride requests will be cancelled.';
+    }).join('\n\n');
+}
+
 export const RecurringSabha: React.FC = () => {
     const toast = useToast();
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const { ask, confirmDialog } = useConfirm();
     const [error, setError] = useState<string | null>(null);
 
     const [enabled, setEnabled] = useState(false);
@@ -100,18 +124,45 @@ export const RecurringSabha: React.FC = () => {
         setSaving(true);
         setError(null);
         try {
-            const result = await updateSabhaRecurrence({
-                enabled,
-                daysOfWeek: days,
-                startTime: start,
-                endTime: end,
-            });
+            const pattern = { enabled, daysOfWeek: days, startTime: start, endTime: end };
+
+            // ── Who would this leave behind? ────────────────────────────
+            //
+            // Moving the day used to strand whoever had already booked the old
+            // one, silently: their "yes" stayed on a date that was no longer a
+            // sabha, so the gathering that ran counted nobody, and a ride request
+            // sat in the queue that dispatch could never serve.
+            //
+            // The server refuses without `acknowledge` and would do so even if
+            // this dialog were removed — this asks first only so the refusal is a
+            // question rather than an error.
+            // `?? []` is for the deploy gap, not for tidiness: functions and
+            // hosting ship separately, so a new page can briefly be talking to a
+            // server that has never heard of `stranded`. Degrading to the old
+            // behaviour beats throwing at the manager.
+            const preview = await updateSabhaRecurrence({ ...pattern, dryRun: true });
+            const stranded = preview.stranded ?? [];
+
+            if (stranded.length > 0 && !await ask({
+                title: 'People have already booked these dates',
+                message: describeStranded(stranded),
+                confirmLabel: 'Move them',
+            })) {
+                setSaving(false);
+                return;
+            }
+
+            const result = await updateSabhaRecurrence({ ...pattern, acknowledge: true });
 
             // Reports the rule the SERVER stored, not what was on screen. If the
             // two ever disagree the manager should see the server's version.
+            const moved = (result.stranded ?? []).reduce(
+                (n, d) => n + d.responseCount + d.requestedRideCount, 0);
+
             toast.success(!enabled
                 ? 'Repeating turned off. Dates you edited individually are kept.'
-                : `Saved. ${describeRule(result.rule)}, repeating until you change it.`);
+                : `Saved. ${describeRule(result.rule)}, repeating until you change it.`
+                  + (moved > 0 ? ` ${moved} booking${moved === 1 ? '' : 's'} moved.` : ''));
         } catch (err: unknown) {
             console.error('[RecurringSabha] Save failed:', err);
             const message = err instanceof Error ? err.message : 'Could not save the schedule.';
@@ -255,6 +306,7 @@ export const RecurringSabha: React.FC = () => {
                         : <><Check size={16} aria-hidden="true" /> Save schedule</>}
                 </button>
             </div>
+            {confirmDialog}
         </section>
     );
 };

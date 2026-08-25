@@ -216,9 +216,26 @@ export async function driverDoneForToday(
     return callFunction<DriverDoneResult>('driverDoneForToday', { driverId, acknowledgeWaiting });
 }
 
+/** One date holding bookings that the new rule would remove. */
+export interface StrandedDate {
+    date: string;
+    /** Where these bookings move to, or null when the rule schedules nothing. */
+    target: string | null;
+    responseCount: number;
+    requestedRideCount: number;
+    names: string[];
+}
+
 export interface UpdateRecurrenceResult {
     /** The stored rule, as the server understood it. */
     rule: RecurrenceRule;
+    /**
+     * Dates that hold bookings the new rule removes.
+     *
+     * On a `dryRun` this is the question; on a real save it is what was moved.
+     * Empty is the ordinary case.
+     */
+    stranded: StrandedDate[];
 }
 
 /**
@@ -233,7 +250,13 @@ export interface UpdateRecurrenceResult {
  * re-generating a window. See src/utils/recurrence.ts.
  */
 export async function updateSabhaRecurrence(
-    input: Pick<RecurrenceRule, 'enabled' | 'daysOfWeek' | 'startTime' | 'endTime'>,
+    input: Pick<RecurrenceRule, 'enabled' | 'daysOfWeek' | 'startTime' | 'endTime'>
+        & {
+            /** Ask what this would strand, without saving anything. */
+            dryRun?: boolean;
+            /** Required by the server once anything would be stranded. */
+            acknowledge?: boolean;
+        },
 ): Promise<UpdateRecurrenceResult> {
     return callFunction<UpdateRecurrenceResult>('updateSabhaRecurrence', input);
 }

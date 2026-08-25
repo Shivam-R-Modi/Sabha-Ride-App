@@ -3,6 +3,7 @@ import { CalendarDays, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-
 import { useAuth } from '../../contexts/AuthContext';
 import { useUpcomingEvents, editOccurrence, createOneOff, SabhaEvent } from '../../hooks/useEvents';
 import { describeRule, labelForSource } from '../../src/utils/recurrence';
+import { formatDateLong as formatDate } from '../../src/constants/schedule';
 import { AGENDA_MAX_CHARS, agendaSummary, describeAgendaProblem } from '../../src/utils/agenda';
 import { RecurringSabha } from './RecurringSabha';
 import { previewDeleteSabhaEvent, deleteSabhaEvent } from '../../src/utils/cloudFunctions';
@@ -59,14 +60,6 @@ import {
  * model a missing document means "follows the schedule", so deleting would let the
  * rule place the gathering again and the cancellation would evaporate.
  */
-
-/** "2026-08-14" -> "Friday 14 Aug". Uses the date parts directly, so no timezone shift. */
-function formatDate(dateKey: string): string {
-    const [year, month, day] = dateKey.split('-').map(Number);
-    return new Intl.DateTimeFormat('en-US', {
-        weekday: 'long', day: 'numeric', month: 'short',
-    }).format(new Date(Date.UTC(year, month - 1, day, 12)));
-}
 
 /** "2026-08-29" -> "29 Aug". The chips carry the date and nothing else. */
 function shortDate(dateKey: string): string {

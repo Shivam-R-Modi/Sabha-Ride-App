@@ -16,7 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     normaliseRecurrence, normaliseException, coversDate, occurrencesBetween,
-    effectiveEvent, upcomingOccurrences, dayOfWeekForKey, toVenue,
+    effectiveEvent, upcomingOccurrences, dayOfWeekForKey, toVenue, datesLosingTheirSabha,
     RecurrenceRule, EventException,
 } from './recurrence';
 
@@ -24,6 +24,15 @@ const FRIDAYS: RecurrenceRule = {
     enabled: true,
     daysOfWeek: [5],
     startTime: '19:30',
+    endTime: '22:00',
+    venue: null,
+    agenda: '',
+};
+
+const MONDAYS: RecurrenceRule = {
+    enabled: true,
+    daysOfWeek: [1],
+    startTime: '20:30',
     endTime: '22:00',
     venue: null,
     agenda: '',
@@ -309,5 +318,72 @@ describe('coversDate and toVenue', () => {
         expect(toVenue({ lat: NaN, lng: -71.1 })).toBeNull();
         expect(toVenue(null)).toBeNull();
         expect(toVenue({ lat: 42.3, lng: -71.1 })).toEqual({ lat: 42.3, lng: -71.1, address: '' });
+    });
+});
+
+/**
+ * Moving the sabha day strands whoever already booked the old one.
+ *
+ * Found in production on 2026-08-24: the day moved Friday -> Monday, and two
+ * riders who had already answered "yes" for Friday the 28th stayed attached to
+ * it. Tonight's gathering read zero people coming, and one of the two also had a
+ * ride request on a date that could never be dispatched — the manager's queue
+ * filters on status, never on whether the date is still a sabha.
+ *
+ * `datesLosingTheirSabha` is the question that was never asked. It takes the
+ * dates that actually hold bookings rather than a horizon of rule dates, so it
+ * needs no window and no memory of the previous rule: a date is stranded if
+ * nothing happens on it any more, whatever the reason.
+ */
+describe('datesLosingTheirSabha', () => {
+    const dated = (...keys: string[]) => keys.map(dateKey => ({ dateKey, exception: null }));
+
+    it('strands the dates the new rule stopped covering', () => {
+        // 08-28 is a Friday, 08-24 and 08-31 are Mondays.
+        expect(datesLosingTheirSabha(MONDAYS, dated('2026-08-24', '2026-08-28', '2026-08-31')))
+            .toEqual(['2026-08-28']);
+    });
+
+    it('strands nothing when the rule is unchanged', () => {
+        expect(datesLosingTheirSabha(FRIDAYS, dated('2026-08-21', '2026-08-28'))).toEqual([]);
+    });
+
+    it('strands every booked date when repeating is turned off', () => {
+        const off: RecurrenceRule = { ...FRIDAYS, enabled: false };
+        expect(datesLosingTheirSabha(off, dated('2026-08-21', '2026-08-28')))
+            .toEqual(['2026-08-21', '2026-08-28']);
+    });
+
+    it('strands the days dropped when several become one', () => {
+        const both: RecurrenceRule = { ...FRIDAYS, daysOfWeek: [1, 5] };
+        expect(datesLosingTheirSabha(both, dated('2026-08-24', '2026-08-28'))).toEqual([]);
+        expect(datesLosingTheirSabha(MONDAYS, dated('2026-08-24', '2026-08-28')))
+            .toEqual(['2026-08-28']);
+    });
+
+    it('does not strand a one-off that stands on its own date', () => {
+        // The whole point of a one-off is that the rule does not cover it. Flagging
+        // it would tell the manager to move people off a sabha that is happening.
+        const oneOff: EventException = {
+            kind: 'one-off', status: 'scheduled',
+            startTime: '19:00', endTime: '21:00', venue: null, agenda: '',
+        };
+        expect(datesLosingTheirSabha(MONDAYS, [
+            { dateKey: '2026-08-28', exception: oneOff },
+        ])).toEqual([]);
+    });
+
+    it('strands a date the manager cancelled, even though the rule still covers it', () => {
+        const cancelled: EventException = {
+            kind: 'override', status: 'cancelled',
+            startTime: '20:30', endTime: '22:00', venue: null, agenda: '',
+        };
+        expect(datesLosingTheirSabha(MONDAYS, [
+            { dateKey: '2026-08-24', exception: cancelled },
+        ])).toEqual(['2026-08-24']);
+    });
+
+    it('strands nothing when nobody has booked anything', () => {
+        expect(datesLosingTheirSabha(MONDAYS, [])).toEqual([]);
     });
 });
