@@ -259,7 +259,7 @@ export const ProfileEditor: React.FC = () => {
                     </button>
                     <button
                         onClick={logout}
-                        className="clay-button w-full py-3 text-white bg-gradient-to-r from-[rgb(var(--danger))] to-[rgb(var(--danger))] rounded-xl font-bold shadow-lg"
+                        className="clay-button w-full py-3 text-[rgb(var(--text-on-accent))] bg-[rgb(var(--danger-fill))] rounded-xl font-bold shadow-lg"
                     >
                         Sign Out
                     </button>

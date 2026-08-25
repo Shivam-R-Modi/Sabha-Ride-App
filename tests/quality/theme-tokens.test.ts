@@ -696,6 +696,44 @@ describe('no text sits on a fill-only saffron token', () => {
         ).toEqual([]);
     });
 
+    /**
+     * THE SAME MISTAKE, IN RED. `--danger` is a fill-only token for exactly the reason
+     * `--accent` is: `theme-contrast.test.ts` asserts it stays below AA. White on it
+     * measures **3.76 light / 2.89 dark**, and the Sign Out button carried that at 16px
+     * bold on every screen with a profile.
+     *
+     * Found by the DOM contrast scan that verified the saffron fix — which is the argument
+     * for measuring the rendered page rather than only grepping classes: the saffron sweep
+     * was clean, and the same sweep handed over a second family for free.
+     *
+     * The answer needed NO new token. `--danger-fill` already existed as the solid-danger
+     * fill (a deep 185 28 28 in light), and paired with `--text-on-accent` it measures
+     * **6.47 light / 6.10 dark** — the exact shape of the `--cta` fix, because
+     * `--text-on-accent` is the "text on a saturated fill" token and flips with the theme.
+     */
+    it('never pairs a danger fill with text-white either', () => {
+        const offenders: string[] = [];
+        for (const file of componentFiles) {
+            const code = read(file)
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .split('\n')
+                .filter(line => !line.trim().startsWith('//'))
+                .join('\n');
+
+            for (const span of code.match(/'[^']*'|"[^"]*"|`[^`]*`/g) ?? []) {
+                const hasFill = /(?:bg|from|via|to)-\[rgb\(var\(--danger[a-z-]*\)\)\]/.test(span);
+                if (hasFill && /\btext-white\b/.test(span)) offenders.push(file);
+            }
+        }
+
+        expect(
+            [...new Set(offenders)],
+            'White on --danger is 3.76 light / 2.89 dark. Use '
+            + 'bg-[rgb(var(--danger-fill))] with text-[rgb(var(--text-on-accent))] — '
+            + '6.47 and 6.10.',
+        ).toEqual([]);
+    });
+
     it('the verified pair is actually in use, so this is not passing by absence', () => {
         // Without this, deleting every saffron fill in the app would make the rule above
         // pass while the design regressed.

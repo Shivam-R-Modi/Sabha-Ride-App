@@ -307,7 +307,7 @@ export const FleetManagement: React.FC = () => {
                             </button>
                             <button
                                 onClick={handleDeleteVehicle}
-                                className="flex-1 px-4 py-2 bg-[rgb(var(--danger-fill))] text-white rounded-xl font-semibold hover:bg-[rgb(var(--danger-fill))] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="flex-1 px-4 py-2 bg-[rgb(var(--danger-fill))] text-[rgb(var(--text-on-accent))] rounded-xl font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                 disabled={isDeleting || deleteConfirm.status === 'in_use'}
                             >
                                 {isDeleting ? (

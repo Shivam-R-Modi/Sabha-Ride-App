@@ -3,6 +3,70 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## NOT DEPLOYED — the danger button contrast, 2026-08-25 (later still)
+
+Owner: *"fix the danger button contrast too."* Three sites, and **no new token was needed.**
+
+### The same mistake, in red
+
+`--danger` is a fill-only token for exactly the reason `--accent` is —
+`theme-contrast.test.ts` asserts it stays below AA. White on it measures **3.76 light /
+2.89 dark**, and the **Sign Out** button carried that at 16px bold on every screen with a
+profile.
+
+**`--danger-fill` already existed** as the solid-danger fill — a deep `185 28 28` in light —
+and paired with `--text-on-accent` it measures **6.47 light / 6.10 dark**. That is the exact
+shape of the `--cta` fix, because `--text-on-accent` is the "text on a saturated fill" token
+and flips with the theme. So the answer was a token that was already there, not a new one.
+
+```
+bg-[rgb(var(--danger-fill))]  text-[rgb(var(--text-on-accent))]
+```
+
+### The three sites, and two things tidied on the way
+
+| file | was | note |
+|---|---|---|
+| `App.tsx` | `from-[--danger] to-[--danger]` | a "gradient" whose two stops are the same colour — a solid written the long way. Collapsed. |
+| `components/shared/ProfileEditor.tsx` | same | same |
+| `components/manager/FleetManagement.tsx` | already `--danger-fill`, wrong text | also carried `hover:bg-[rgb(var(--danger-fill))]` — a hover repeating the background it already had. Removed. |
+
+### How this was found, which is the reusable part
+
+Not by grep. It came out of the **DOM contrast scan** written to verify the saffron fix: that
+sweep came back clean for saffron *and handed over a second family for free*. Measuring the
+rendered page finds what class-grepping cannot, because it does not care how the classes
+were spelled or which element they sat on.
+
+Verified the same way. Across `rider.html` in both themes: **zero failures on any saturated
+fill**, where "saturated" is a channel spread over 60 — which is what separates a real
+button from a beige chip.
+
+The ratchet in `tests/quality/theme-tokens.test.ts` now covers danger alongside saffron,
+over every `.tsx` in `components/`. **Mutation-checked** by reintroducing
+`text-white bg-[rgb(var(--danger))]` in `App.tsx` and confirming it fails by name.
+
+### Tests
+
+**Client 1605 (104 files), functions 953, rules 237. Both builds and typecheck clean.**
+
+### Still open, and now the only one left
+
+**`coffee-500` on the `.clay-card` gradient's lightest stop — 4.28:1 in dark mode.** One
+colour pair, repeated on every card, which is why a naive count reported 215 "failures".
+`theme-contrast.test.ts` checks text tokens against `--canvas` and `--surface` but not
+against the card gradient's stops, and the lightest stop is lighter than `--surface`.
+
+It is a different KIND of problem from the two now fixed: those were saturated fills where
+the fix is a token swap. This one is body text on a near-miss surface, and the honest fixes
+are either darkening `--text-soft` (which touches every screen) or flattening the card
+gradient. Worth its own change and its own decision.
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only, three
+shipped files.
+
 ## DEPLOYED 2026-08-25 (later) — the AA failure fixed app-wide
 
 **Live as `6a8e3ec`, and `main` is at that commit.**
