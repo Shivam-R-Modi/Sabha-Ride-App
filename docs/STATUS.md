@@ -3,7 +3,21 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — the danger button contrast, 2026-08-25 (later still)
+## DEPLOYED 2026-08-25 (later still) — the danger button contrast
+
+**Live as `be3358b`, and `main` is at that commit.**
+
+```
+firestore:rules  released — unchanged
+functions        29 of 29 "Skipped (No changes detected)"
+hosting          dist/assets/index-gO4kTSRu.js
+```
+
+Verified by hash (`1b5a990a…5d00e434`) and then in the shipped bundle, using the
+double-quote instrument: across 10,869 strings, **zero** classNames pair a saffron fill with
+`text-white` and **zero** pair a danger fill with it. `--danger-fill` is in use, the no-op
+hover is gone, the same-stop gradient is gone, and `text-[rgb(var(--text-on-accent))]`
+appears 47 times.
 
 Owner: *"fix the danger button contrast too."* Three sites, and **no new token was needed.**
 
@@ -62,10 +76,10 @@ the fix is a token swap. This one is body text on a near-miss surface, and the h
 are either darkening `--text-soft` (which touches every screen) or flattening the card
 gradient. Worth its own change and its own decision.
 
-### To deploy
+### Worth a look on a real account
 
-`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only, three
-shipped files.
+The Sign Out button is now a deeper red in light mode, and its label is near-black rather
+than white in dark. Checked in the harness in both themes; not yet seen on a live account.
 
 ## DEPLOYED 2026-08-25 (later) — the AA failure fixed app-wide
 
