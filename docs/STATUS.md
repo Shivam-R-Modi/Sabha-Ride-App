@@ -3,7 +3,29 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — the AA failure fixed app-wide, 2026-08-25 (later)
+## DEPLOYED 2026-08-25 (later) — the AA failure fixed app-wide
+
+**Live as `6a8e3ec`, and `main` is at that commit.**
+
+```
+firestore:rules  released — unchanged
+functions        29 of 29 "Skipped (No changes detected)"
+hosting          dist/assets/index-Do_Y5o6K.js
+```
+
+Verified by hash (`d1fcc61b…72d1d45e`) and then in the shipped bundle: **zero** classNames
+pair a saffron fill with `text-white`, across 10,869 double-quoted strings, with 44 uses of
+`text-[rgb(var(--text-on-accent))]`, 24 of `bg-[rgb(var(--cta))]`, and the brand gradient
+intact in all 10 places.
+
+**A trap worth recording for the next bundle check.** The first pass reported **1 remaining
+offender**. It was a false positive: the bundle contains an **odd number of single quotes**
+(153, in user-facing copy), so a naive `'[^']*'` scan pairs across unrelated regions and had
+joined a `text-white` from one component to a gradient in another. Minified `className`
+values are DOUBLE-quoted and JS escapes any literal double quote inside a string, so
+**`"(?:[^"\\]|\\.)*"` is the only reliable instrument on a minified bundle.** Same class
+of mistake as the two DOM-scanner errors above, for the third time in one day: a
+quote-pairing regex over machine-generated text will lie to you.
 
 Owner: *"yes fix the AA issue app wide."* Done, and the scope was **larger than I reported
 the first time** — 33 sites across 23 files, not the 18/15 in the earlier note. That first
@@ -90,10 +112,13 @@ have seen — and confirming it fails by name.
 The client count dropped by 2 because the widened ratchet replaced four narrow per-file
 cases with two whole-tree ones.
 
-### To deploy
+### Worth looking at on a real account
 
-`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only, 23
-shipped files.
+The one visible change is that **every primary button is a deeper burnt orange in light
+mode**, and its label is near-black rather than white in dark mode. Checked in the preview
+harness on four pages in both themes; not yet seen on a live account. The auth banners and
+their buttons are byte-identical in light mode by construction, so there is nothing to
+check there.
 
 ## DEPLOYED 2026-08-25 (late night) — the calendar calmed, and an indicator that was invisible
 
