@@ -3,7 +3,25 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — Sarthis get a service switch, and the board has ONE home, 2026-08-25 (latest)
+## DEPLOYED 2026-08-25 (latest) — Sarthis get a service switch, and the board has ONE home
+
+**Live as `a5573c3`, and `main` is at that commit.**
+
+```
+firestore:rules  released — unchanged
+functions        29 of 29 "Skipped (No changes detected)"
+hosting          dist/assets/index-CxIL6Fua.js
+```
+
+Verified by hash (`2d61e04c…c9f52b35`) and then by reading the three shipped functions,
+because the hash proves the bundle matches the build and says nothing about whether the
+right predicate got wired in:
+
+```
+function Wb(n){return n?n.accountStatus==="approved"&&Pp(n,"driver"):!1}   // canSwitchService
+==="driver"?[{id:"home",...},{id:"history",...},{id:"profile",...}]        // Sarthi sabha nav, no arrivals
+function zk(n,r,i){return r==="airport"?Jb(i).includes(n)
+                   :!(n==="airport-request"||n==="arrivals")}              // arrivals never in sabha
 
 Owner: *"why is a Sarthi seeing arrivals in both Sabha Seva and Airport Seva? A Sarthi
 should only see arrivals in Airport Seva."*
@@ -84,11 +102,25 @@ and the "Airport Seva" switch under the role picker in all panels. (The preview 
 shares one multi-role profile across the three panels, so it cannot show a Bhulku having
 no switch — `serviceRouting.test.tsx` covers that.)
 
-### To deploy
+### One dead import caught on the way out
 
-`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only again —
-no rule changes: the board's read rules already gated on the driver capability, which is
-exactly why that predicate was the right one to reuse.
+`App.tsx` still imported `ArrivalBoard` after both its `case` arms were gone — the
+manager's with the nav move, the Sarthi's with this change. It typechecked, because the
+root tsconfig has no `noUnusedLocals`.
+
+**The check worth reusing:** `npx tsc --noEmit --noUnusedLocals --noUnusedParameters`,
+grepped down to the files the change touched. Run over the whole repo it is noise; scoped
+to a diff it found this in one pass. It also reported `React` unused in App.tsx and
+`userProfile` unused in Layout.tsx — both confirmed **byte-identical to the deployed
+commit** before being left alone, which is the discipline that keeps a scoped check from
+turning into a repo-wide cleanup nobody asked for.
+
+### Worth checking by hand as a Sarthi
+
+No Sarthi account has been signed into since this shipped. Expect: sabha dock
+`Dashboard · History · Profile`, an "Airport Seva" switch in the header and sidebar, and
+switching lands straight on the board with `Arrivals · Profile`. A Bhulku should see no
+switch at all.
 
 ## DEPLOYED 2026-08-25 (late) — the RoleSwitcher hat, found by an owner bug report
 
