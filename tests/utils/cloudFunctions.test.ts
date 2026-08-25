@@ -108,6 +108,17 @@ const WRAPPERS: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
     ['generateEventCSV', () => cloudFunctions.generateEventCSV('2026-08-24')],
     ['createManagerInvite', () => cloudFunctions.createManagerInvite('Mira')],
     ['redeemManagerInvite', () => cloudFunctions.redeemManagerInvite('CODE1234')],
+    ['requestAirportPickup', () => cloudFunctions.requestAirportPickup({
+        arrivalDate: '2099-09-20', arrivalTime: '22:00', airportCode: 'BOS',
+        isInternational: true, partySize: 1, largeBags: 2, cabinBags: 1,
+        dropoffAddress: '360 Huntington Ave', dropoffLat: 42.34, dropoffLng: -71.09,
+        hasUsWorkingPhone: false, fullName: 'Ramesh Patel', dateOfBirth: '2007-04-11',
+        email: 'r@example.com', phone: '+16175550123', whatsappOn: 'primary',
+    })],
+    ['updateAirportPickup', () => cloudFunctions.updateAirportPickup({
+        pickupId: 'p1', action: 'claim',
+    })],
+    ['exportMembers', () => cloudFunctions.exportMembers('all')],
     ['manuallyUpdateRideContext', () => cloudFunctions.manuallyUpdateRideContext({ reset: true })],
 ];
 

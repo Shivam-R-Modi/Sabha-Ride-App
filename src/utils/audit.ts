@@ -42,7 +42,28 @@ export type AuditAction =
     // normaliseAuditRow needs no case for it: the tone is derived from the action
     // string, and 'role.change' contains neither 'delete' nor 'create', so it
     // renders neutral, which is right.
-    | 'role.change';
+    | 'role.change'
+    // ---- Airport Seva ----
+    //
+    // Their own actions rather than bare 'doc.*' rows for the reason given above:
+    // 'airport.claim' and 'airport.cancel' both write one document, and only one of
+    // them leaves somebody standing in an arrivals hall. These rows are also the
+    // only record that a Sarthi ever held a traveller's date of birth and home
+    // address, which is more than a ride roster carries.
+    | 'airport.request'
+    | 'airport.claim'
+    | 'airport.release'
+    | 'airport.update'
+    | 'airport.cancel'
+    // A manager was made, or unmade, an airport coordinator. The direction is in
+    // `details.granted`. One action rather than two because the row is read as
+    // prose and "granted: false" is not ambiguous.
+    | 'airport.coordinator'
+    // Somebody downloaded the member directory. Every scope of it returns names,
+    // phone numbers and home addresses, so the export is audited even though it
+    // writes nothing — a revoked manager quietly exporting every family is a defect
+    // this repo has already had once.
+    | 'members.export';
 
 export interface AuditEntry {
     action: AuditAction;

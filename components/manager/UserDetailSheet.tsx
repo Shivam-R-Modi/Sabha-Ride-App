@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { Loader2, Car, GraduationCap, ArrowUpCircle, ShieldAlert } from 'lucide-react';
+import { Loader2, Car, GraduationCap, ArrowUpCircle, ShieldAlert, Plane } from 'lucide-react';
 import { Sheet } from '../shared/Sheet';
 import { useConfirm } from '../shared/useConfirm';
 import { useToast } from '../../contexts/ToastContext';
 import { managerSetUserRole } from '../../src/utils/cloudFunctions';
 import { recordedRoles, statesRoleConsistently } from '../../src/roles';
 import { formatRole } from '../../src/utils/formatters';
+import { doc as fsDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebase/config';
+import { writeAuditLog } from '../../src/utils/audit';
+import { useAuth } from '../../contexts/AuthContext';
 
 /**
  * One person, everything about them, and the two buttons that change what they are.
@@ -98,7 +102,9 @@ export const UserDetailSheet: React.FC<UserDetailSheetProps> = ({
 }) => {
     const toast = useToast();
     const { ask, confirmDialog } = useConfirm();
+    const { currentUser, userProfile } = useAuth();
     const [busy, setBusy] = useState(false);
+    const [coordBusy, setCoordBusy] = useState(false);
 
     // Hooks must run unconditionally, so the null check comes after them.
     if (!user) return null;
@@ -119,6 +125,63 @@ export const UserDetailSheet: React.FC<UserDetailSheetProps> = ({
     const inconsistent = roles.length > 0 && !statesRoleConsistently(user as any, roles[0]!);
 
     const holdsCar = !!(user.currentVehicleId || user.currentCarId);
+
+    // Airport Seva's oversight flag. Only meaningful on a manager — the check that
+    // reads it is built on isApprovedManagerData — so it is not offered on anybody
+    // else, and offering it would be a switch that changes nothing.
+    const isCoordinator = user.airportCoordinator === true;
+    const isSelf = user.id === currentUser?.uid;
+
+    /**
+     * Grant or revoke it.
+     *
+     * A DIRECT WRITE, not a callable, and that is the same judgement `accountStatus`
+     * gets in hooks/useUsers.ts: one field, one meaning, writable atomically by a
+     * browser. Identity is the opposite — it lives in four fields that have to move
+     * together, which is why managerSetUserRole exists and why touchesRoleFields()
+     * refuses those four from any client.
+     *
+     * firestore.rules refuses turning it ON for yourself (selfGrantsAirportCoordinator)
+     * and allows turning it off, so the UI mirrors that rather than offering a button
+     * the rules would reject.
+     */
+    const setCoordinator = async (grant: boolean) => {
+        const ok = await ask({
+            title: grant ? 'Make them an airport coordinator?' : 'Remove airport coordinator?',
+            message: grant
+                ? `${name} will receive the unclaimed-arrival alerts, be able to move a trip `
+                  + 'between Sarthis, and be able to export the airport records — which carry '
+                  + 'dates of birth and family contacts.'
+                : `${name} will stop receiving the alerts and lose the airport records export.`,
+            confirmLabel: grant ? 'Make them a coordinator' : 'Remove it',
+            destructive: !grant,
+        });
+        if (!ok) return;
+
+        setCoordBusy(true);
+        try {
+            await updateDoc(fsDoc(db, 'users', String(user.id)), { airportCoordinator: grant });
+            // The only record that somebody's access to those records changed. Written
+            // from the client, so advisory — the file says why — but the alternative
+            // here is no record at all.
+            await writeAuditLog({
+                action: 'airport.coordinator',
+                actorUid: currentUser?.uid ?? 'unknown',
+                actorName: String(userProfile?.name ?? 'A manager'),
+                targetCollection: 'users',
+                targetDocumentId: String(user.id),
+                summary: grant
+                    ? `Made ${name} an airport coordinator`
+                    : `Removed ${name} as an airport coordinator`,
+                details: { granted: grant },
+            });
+            toast.success(grant ? `${name} is now a coordinator` : `${name} is no longer a coordinator`);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'That could not be saved');
+        } finally {
+            setCoordBusy(false);
+        }
+    };
 
     const change = async (role: 'driver' | 'student') => {
         const promoting = role === 'driver';
@@ -257,6 +320,41 @@ export const UserDetailSheet: React.FC<UserDetailSheetProps> = ({
                             />
                             {activeRideCount > 0 && (
                                 <Fact label="Rides now" value={`${activeRideCount} in flight`} />
+                            )}
+                        </section>
+                    )}
+
+                    {isManager && (
+                        <section className="clay-card p-4 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Plane size={16} className="text-coffee-500" aria-hidden="true" />
+                                <p className="text-sm font-bold text-coffee">
+                                    Airport Seva {isCoordinator ? '— coordinator' : ''}
+                                </p>
+                            </div>
+
+                            {isSelf && !isCoordinator ? (
+                                // No button, because the rules refuse this write. Saying
+                                // so beats rendering a control that returns a permission
+                                // error — and the separation of duties is deliberate:
+                                // the flag unlocks dates of birth, so two managers have
+                                // to agree.
+                                <p className="text-xs text-coffee-500">
+                                    Another manager has to give you this. It unlocks the
+                                    airport records, so nobody grants it to themselves.
+                                </p>
+                            ) : (
+                                <button
+                                    type="button"
+                                    disabled={coordBusy}
+                                    onClick={() => setCoordinator(!isCoordinator)}
+                                    className="clay-button w-full py-3 rounded-xl font-bold text-coffee bg-cream-300 disabled:opacity-60"
+                                >
+                                    {coordBusy ? 'Saving…'
+                                        : isCoordinator
+                                            ? (isSelf ? 'Step down as coordinator' : 'Remove as coordinator')
+                                            : 'Make them an airport coordinator'}
+                                </button>
                             )}
                         </section>
                     )}

@@ -17,6 +17,8 @@ import { FleetManagement } from './components/manager/FleetManagement';
 import { ManagerRecords } from './components/manager/ManagerRecords';
 import { ManagerNotices } from './components/manager/ManagerNotices';
 // import { CleanupUtility } from './components/admin/CleanupUtility'; // removed — component does not exist
+import { ServiceLauncher } from './components/airport/ServiceLauncher';
+import { AirportShell } from './components/airport/AirportShell';
 import { ResponsiveLayout } from './components/Layout';
 import { ProfileEditor } from './components/shared/ProfileEditor';
 import { PWAPrompt } from './components/PWAPrompt';
@@ -28,7 +30,7 @@ import { useNavigation } from './contexts/NavigationContext';
 
 export default function App() {
   const { currentUser, userProfile, loading, logout, activeRole, refreshProfile } = useAuth();
-  const { currentTab } = useNavigation();
+  const { currentTab, service } = useNavigation();
   const [showSplash, setShowSplash] = useState(true);
 
   // Note: Automatic splash timer removed to favor user-initiated transition
@@ -76,7 +78,26 @@ export default function App() {
   // Use activeRole for rendering dashboards (allows role switching)
   const displayRole = activeRole || userProfile.role;
 
+  // WHICH SERVICE, before which role.
+  //
+  // Airport Seva is a second service behind the same login, not a feature inside the
+  // ride app — a different journey, a different lifecycle, and the Sarthi chooses the
+  // trip rather than the server choosing the Sarthi. So the choice sits ABOVE
+  // everything below, and the sabha branch is left exactly as it was rather than
+  // edited to make room. Every existing nav test still exercises the same code.
+  //
+  // The launcher renders outside ResponsiveLayout on purpose: neither the sidebar nor
+  // the bottom nav means anything until a service is chosen. It lands here after the
+  // whole auth cascade above, so everybody reaching it is verified and approved.
+  if (service === null) {
+    return <ServiceLauncher />;
+  }
+
   const renderContent = () => {
+    if (service === 'airport') {
+      return <AirportShell />;
+    }
+
     if (displayRole === 'student') {
       return <StudentDashboard user={userProfile} onLogout={logout} />;
     }

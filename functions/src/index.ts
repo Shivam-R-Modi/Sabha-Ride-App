@@ -87,3 +87,20 @@ export { managerReleaseVehicle } from './http/managerReleaseVehicle';
 //
 // GOOGLE_MAPS_API_KEY is no longer read by any function and can be dropped from
 // functions/.env.
+
+// ============================================
+// AIRPORT SEVA
+// ============================================
+//
+// The second service. Both are callables rather than client writes: the first
+// touches two documents and has to resolve a wall-clock arrival time in the
+// AIRPORT'S timezone, and the second is the claim, which needs a transaction so two
+// Sarthis cannot both be told they got it.
+export { requestAirportPickup } from './http/requestAirportPickup';
+export { updateAirportPickup } from './http/updateAirportPickup';
+// Every 30 minutes rather than hourly: the tightest band is two hours out, and an
+// hourly job could make "in under two hours" a lie by 59 minutes.
+export { alertUnclaimedArrivals } from './scheduled/alertUnclaimedArrivals';
+// Spans BOTH services, which is why it lives with the manager's other exports rather
+// than inside Airport Seva. The airport scope is gated on the coordinator flag.
+export { exportMembers } from './http/exportMembers';

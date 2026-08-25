@@ -60,6 +60,6 @@ export default defineConfig({
   build: {
     outDir: path.resolve(REPO, 'preview-dist'),
     emptyOutDir: true,
-    rollupOptions: { input: [path.resolve(__dirname, 'rider.html'), path.resolve(__dirname, 'driver.html'), path.resolve(__dirname, 'manager.html'), path.resolve(__dirname, 'shell.html'), path.resolve(__dirname, 'records.html'), path.resolve(__dirname, 'splash.html')] },
+    rollupOptions: { input: [path.resolve(__dirname, 'rider.html'), path.resolve(__dirname, 'driver.html'), path.resolve(__dirname, 'manager.html'), path.resolve(__dirname, 'shell.html'), path.resolve(__dirname, 'records.html'), path.resolve(__dirname, 'splash.html'), path.resolve(__dirname, 'airport.html')] },
   },
 });

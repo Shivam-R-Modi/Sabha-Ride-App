@@ -35,11 +35,32 @@ const code = source
     .replace(/^\s*\/\/.*$/gm, '');
 
 describe('the role-change button is one control, not two', () => {
-    it('declares exactly one <button> in the whole file', () => {
-        // The load-bearing assertion. Two button elements is how the last
-        // divergence happened; the Sheet supplies its own close control, and every
-        // other row in this dialog is read-only text.
-        expect((code.match(/<button/g) ?? []).length).toBe(1);
+    it('declares exactly two <button>s in the whole file, and only one is about a role', () => {
+        // A RATCHET, and the number went 1 → 2 on 2026-08-25 when the airport
+        // coordinator toggle landed in this dialog. The load-bearing part was never
+        // the count on its own — two button elements is how promote and demote
+        // diverged last time — so the count is kept AND the second assertion below
+        // pins that the extra one is not a role control.
+        //
+        // Everything else in here is still read-only text, and the Sheet supplies its
+        // own close control.
+        expect((code.match(/<button/g) ?? []).length).toBe(2);
+    });
+
+    it('exactly ONE of those two buttons names a role', () => {
+        // This is the assertion that actually guards the original defect, and it is
+        // the one to keep if the count above ever needs raising again.
+        //
+        // A second hand-written promote or demote control would have to name the role
+        // somebody is becoming — that is the whole content of such a button — so
+        // counting the buttons that mention one catches the divergence directly. The
+        // one that legitimately does is RoleChangeButton's own; the coordinator toggle
+        // beside it is about Airport Seva and names nobody's role.
+        const raw = code.split('<button').slice(1).map(part => part.split('</button>')[0] ?? '');
+        const roleControls = raw.filter(body => /Sarthi|Bhulku|Bhulka/i.test(body));
+
+        expect(roleControls, 'more than one raw <button> names a role — route it through RoleChangeButton')
+            .toHaveLength(1);
     });
 
     it('routes every direction through RoleChangeButton', () => {

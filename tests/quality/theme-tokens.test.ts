@@ -243,14 +243,20 @@ describe('tokens that stack must not collide within a theme', () => {
         const layout = readFileSync(path.join(ROOT, 'components/Layout.tsx'), 'utf8');
 
         expect(layout).toMatch(/<aside className=\{`fixed[^`]*bg-surface/);
-        // Three fills: the sidebar's active pill, its Sign Out button, and the
-        // dock's active chip (DockButton, shared by the visible row and the
-        // overflow drawer).
+        // Four fills: the sidebar's active pill, its Sign Out button, the dock's
+        // active chip (DockButton, shared by the visible row and the overflow
+        // drawer), and the service switch.
         //
-        // Was four while the dock carried a `More` tab. That tab is gone — the
-        // pull handle replaced it — and the handle marks the same state with a
-        // saffron BAR rather than a chip, so it needs no fill of its own.
-        expect(layout.match(/bg-cream-400/g) ?? []).toHaveLength(3);
+        // Was three before Airport Seva. It was FOUR before that, while the dock
+        // carried a `More` tab; that tab is gone — the pull handle replaced it — and
+        // the handle marks the same state with a saffron BAR rather than a chip, so it
+        // needs no fill of its own.
+        //
+        // The service switch earned its place here the hard way: it was written with
+        // `bg-cream-300` and a `hover:bg-cream-400`, and this count is what caught it.
+        // A cream-300 fill on the sidebar's `bg-surface` panel has no visible edge in
+        // dark mode at all — the same collision this whole block exists for.
+        expect(layout.match(/bg-cream-400/g) ?? []).toHaveLength(4);
         // And none of them back on the colliding token.
         expect(layout).not.toMatch(/isActive\s*\?\s*'bg-cream-300/);
     });

@@ -20,6 +20,23 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const managerSetUserRole = vi.fn();
+// Added 2026-08-25 with the airport-coordinator toggle. That control writes the flag
+// directly — one field, one meaning, the same judgement accountStatus gets — so this
+// file now reaches `firebase/config`, which calls getAuth() at import time and needs
+// real credentials. Stubbed rather than supplied: this file is about the dialog.
+vi.mock('../../firebase/config', () => ({ db: {}, auth: {}, app: {} }));
+vi.mock('../../contexts/AuthContext', () => ({
+    useAuth: () => ({
+        currentUser: { uid: 'manager_mira' },
+        userProfile: { name: 'Mira' },
+    }),
+}));
+vi.mock('firebase/firestore', () => ({
+    doc: (...a: unknown[]) => ({ path: a.slice(1).join('/') }),
+    updateDoc: vi.fn(async () => undefined),
+}));
+vi.mock('../../src/utils/audit', () => ({ writeAuditLog: vi.fn(async () => undefined) }));
+
 vi.mock('../../src/utils/cloudFunctions', () => ({
     managerSetUserRole: (...a: unknown[]) => managerSetUserRole(...a),
 }));

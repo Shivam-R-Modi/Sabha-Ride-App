@@ -132,6 +132,16 @@ describe('the Raw records warning survived the move', () => {
         DatabaseConsole: () => <div>console</div>,
     }));
 
+    // Added when the member export moved onto this page. It reaches
+    // `src/utils/cloudFunctions`, which calls `getFunctions(app)` at module scope and
+    // drags in `firebase/config` — and that calls `getAuth()` at import time, so
+    // importing ManagerRecords now needs real Firebase credentials unless this is
+    // mocked. Stubbed rather than given credentials: this file is about the WARNINGS
+    // on the page, and a test of those should not depend on an .env.
+    vi.mock('../../components/manager/MemberExportCard', () => ({
+        MemberExportCard: () => <div>export</div>,
+    }));
+
     it('names the data at risk and says there is no undo', async () => {
         const { ManagerRecords } = await import('../../components/manager/ManagerRecords');
         render(<ManagerRecords />);

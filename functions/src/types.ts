@@ -2,6 +2,10 @@
 // SABHA RIDE SEVA - CLOUD FUNCTIONS TYPES
 // ============================================
 
+import type {
+    ArrivalDirection, ArrivalStatus, WhatsappOn, AlertBand,
+} from './utils/arrival';
+
 export type UserRole = 'student' | 'driver' | 'manager';
 export type AccountStatus = 'pending' | 'approved' | 'rejected';
 export type RideType = 'home-to-sabha' | 'sabha-to-home';
@@ -217,4 +221,181 @@ export interface EventStatistics {
         pickupOnly: number;
         dropoffOnly: number;
     };
+}
+
+// ============================================
+// AIRPORT SEVA
+// ============================================
+//
+// A second service behind the same login: someone landing in the USA asks to be
+// collected, and a Sarthi picks the trip off a calendar. Deliberately NOT part of
+// the `rides` collection — that model is built around a sabha event, a ride window
+// published in `system/rideContext`, and a clustering solver that packs several
+// riders into one car. An airport run has none of those: it is scheduled weeks out,
+// it is one party, and the Sarthi chooses it rather than the server choosing them.
+//
+// The transition table, urgency thresholds, airport zones and field caps live in
+// src/utils/arrival.ts and functions/src/utils/arrival.ts, mirrored and pinned.
+
+export interface ArrivalFamilyContact {
+    name: string;
+    relationship: string;
+    /** E.164, produced by validatePhoneNumber in src/utils/phoneUtils.ts. */
+    phone: string;
+    hasWhatsapp: boolean;
+    preferredLanguage?: string;
+}
+
+/**
+ * The traveller's details AS THEY WERE when the request was filed, copied onto the
+ * trip.
+ *
+ * Denormalised for the same reason `Ride.studentPhone` is: the Sarthi's card needs
+ * a name and a number, and a second read to get them is a read that can fail. It
+ * also means a Sarthi never needs permission on `airportProfiles`, which is where
+ * the date of birth and the family contact live for everybody, past trips included.
+ *
+ * A later correction to a phone number does not rewrite past trips. That is correct
+ * for a historical record; the callable re-snapshots on every new request.
+ */
+export interface ArrivalPassenger {
+    name: string;
+    /** 'YYYY-MM-DD'. See the D2 note on AirportProfile. */
+    dateOfBirth: string;
+    phone: string;
+    altPhone?: string;
+    whatsappOn: WhatsappOn;
+    email: string;
+    /** Null when the traveller gave no family contact — the WhatsApp button then renders nothing. */
+    familyContact: ArrivalFamilyContact | null;
+}
+
+/**
+ * The durable person record, keyed by uid so there is one per traveller.
+ *
+ * This is the "database that gets used for other purposes": it outlives the trip
+ * and is the source for the Airport scope of the member export. Written only by
+ * Cloud Functions.
+ *
+ * READ BY THE OWNER AND BY MANAGERS ONLY — never by a Sarthi. Everything a Sarthi
+ * needs is on `ArrivalPassenger` above.
+ *
+ * `dateOfBirth` REVERSES compliance decision D2 ("age bands only; no DOB field
+ * exists anywhere", docs/compliance/technical-enforcement.md). That was an owner
+ * decision on 2026-08-25, taken so a Sarthi can confirm identity at an arrivals
+ * gate, and it is recorded in the register rather than left to contradict it. The
+ * field is the reason this collection is closed to Sarthis.
+ */
+export interface AirportProfile {
+    cityId?: string;
+    locationId?: string;
+    /** Same as the document id. */
+    uid: string;
+    fullName: string;
+    /** What they would rather be called, when it differs from the passport name. */
+    preferredName?: string;
+    dateOfBirth: string;
+    email: string;
+    phone: string;
+    altPhone?: string;
+    whatsappOn: WhatsappOn;
+    university?: string;
+    familyContact: ArrivalFamilyContact | null;
+    /** Somebody in the congregation who knows them. Advisory; nothing is blocked on it. */
+    referredByName?: string;
+    createdAt: string;
+    updatedAt: string;
+    /**
+     * D7. Computed at write time so a purge job can honour it without re-deriving
+     * the rule. NOTHING PURGES YET — no scheduled job reads this field. It is
+     * written ahead of the job for the same reason cityId is: stamping first and
+     * filtering later fails loudly, while backfilling later fails silently.
+     */
+    retainUntil: string;
+}
+
+/**
+ * One airport trip. Written only by Cloud Functions; every client is denied.
+ *
+ * THE ARRIVAL TIME IS LOCAL TO THE AIRPORT. `arrivalDate` and `arrivalTime` are
+ * what the traveller read off their ticket and are the only thing ever displayed;
+ * `arrivalAt` is the absolute instant the server derived from them, and is the only
+ * thing anything sorts, filters or compares on. No client computes it — that is the
+ * rule which stopped drop-off rides breaking every Friday, see functions/src/utils/time.ts.
+ */
+export interface AirportPickup {
+    cityId?: string;
+    locationId?: string;
+    id: string;
+    requesterUid: string;
+    requesterName: string;
+    direction: ArrivalDirection;
+
+    /** 'YYYY-MM-DD', as read on a clock at the airport. */
+    arrivalDate: string;
+    /** 'HH:MM' 24-hour, as read on a clock at the airport. */
+    arrivalTime: string;
+    /** ISO instant, computed server-side from the two above plus the airport's zone. */
+    arrivalAt: string;
+    /** Three letters, uppercase. See AIRPORTS in the arrival table. */
+    airportCode: string;
+    airline?: string;
+    flightNumber?: string;
+    terminal?: string;
+    /**
+     * An international arrival means immigration and baggage before they appear.
+     * Drives the "allow 60-90 minutes" line on the card, so a Sarthi is not stood
+     * at the barrier for an hour wondering.
+     */
+    isInternational: boolean;
+
+    partySize: number;
+    largeBags: number;
+    cabinBags: number;
+    dropoffAddress: string;
+    dropoffLat: number;
+    dropoffLng: number;
+    /**
+     * Whether they will have a working phone when they land. Most people arrive on a
+     * dead SIM, which is exactly when a meeting point agreed in advance matters.
+     */
+    hasUsWorkingPhone: boolean;
+    meetingPointNote?: string;
+    /** A stop on the way — a SIM card, groceries. What new arrivals actually ask for. */
+    needsStopOnTheWay?: string;
+    specialNeeds?: string;
+    notes?: string;
+
+    passenger: ArrivalPassenger;
+
+    status: ArrivalStatus;
+    claimedByUid?: string | null;
+    claimedByName?: string | null;
+    claimedAt?: string | null;
+    metAt?: string | null;
+    completedAt?: string | null;
+    /**
+     * When the Sarthi opened the WhatsApp message to the family. Stamped on tap, so
+     * the board can tell "told them" from "meant to". Without it there is no way to
+     * see that the one reassurance the family was promised never went.
+     */
+    familyNotifiedAt?: string | null;
+    noShowAt?: string | null;
+    /** Why a Sarthi handed a trip back. Optional; a release with no reason is allowed. */
+    releaseReason?: string | null;
+    cancelledAt?: string | null;
+    cancelledBy?: string | null;
+    cancellationReason?: string | null;
+    /** Set when the flight time moved AFTER a Sarthi had already claimed it. */
+    arrivalTimeChangedAt?: string | null;
+    /**
+     * Which unclaimed-alert bands have already fired. Idempotency, the same shape as
+     * `arrivedAt` on a ride: time only decreases, so a band once passed can never
+     * come round again and this is a sufficient record.
+     */
+    alertsSent?: Partial<Record<AlertBand, string>>;
+    /** D7, as on AirportProfile. Nothing purges yet. */
+    retainUntil: string;
+    createdAt: string;
+    updatedAt: string;
 }

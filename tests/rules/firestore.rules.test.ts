@@ -1810,3 +1810,224 @@ describe('signup writes the GRANTED set, and the rules still allow it', () => {
         }));
     });
 });
+
+// =====================================
+// AIRPORT SEVA
+// =====================================
+//
+// Two collections with deliberately DIFFERENT audiences, and the difference is the
+// whole design. The board is readable by every approved Sarthi, which is an owner
+// decision. The durable traveller record — exact date of birth, family contact, for
+// everybody who has ever asked including minors — is not, and is gated on the
+// coordinator flag rather than on isManagerForRead().
+//
+// Both are `if false` for every client write. The two callables run on the Admin SDK
+// and bypass these rules; there is nothing a browser can do here atomically.
+
+describe('Airport Seva — the arrivals board', () => {
+    const COORDINATOR = 'manager_coord';
+    const PENDING = 'student_pending';
+
+    beforeEach(async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            const db = ctx.firestore();
+            await setDoc(doc(db, 'users', COORDINATOR), {
+                name: 'Coord', role: 'manager', registeredRole: 'manager', roles: ['manager'],
+                accountStatus: 'approved', airportCoordinator: true,
+            });
+            await setDoc(doc(db, 'users', PENDING), {
+                name: 'Newcomer', role: 'student', roles: ['student'], accountStatus: 'pending',
+            });
+            await setDoc(doc(db, 'airportPickups', 'pickup_alice'), {
+                requesterUid: STUDENT, requesterName: 'Alice', status: 'open',
+                direction: 'arrival', airportCode: 'BOS',
+                arrivalAt: '2099-09-21T02:00:00.000Z',
+                passenger: { name: 'Alice', dateOfBirth: '2007-04-11', phone: '555' },
+            });
+            await setDoc(doc(db, 'airportProfiles', STUDENT), {
+                uid: STUDENT, fullName: 'Alice', dateOfBirth: '2007-04-11', phone: '555',
+                familyContact: { name: 'Ba', phone: '+91987', hasWhatsapp: true },
+            });
+        });
+    });
+
+    const asUid = (uid: string) => testEnv.authenticatedContext(uid).firestore();
+    const pickup = (db: any) => doc(db, 'airportPickups', 'pickup_alice');
+    const profile = (db: any) => doc(db, 'airportProfiles', STUDENT);
+
+    describe('reading a trip', () => {
+        it('the traveller reads their own', async () => {
+            await assertSucceeds(getDoc(pickup(asStudent())));
+        });
+
+        it('an approved Sarthi reads it — the owner decision this design turns on', async () => {
+            await assertSucceeds(getDoc(pickup(asDriver())));
+        });
+
+        it('a manager reads it, because the hierarchy grants them driver', async () => {
+            await assertSucceeds(getDoc(pickup(asManager())));
+        });
+
+        it('another Bhulku canNOT read somebody else\'s arrival', async () => {
+            // The card carries a name, a date of birth, two phone numbers and a home
+            // address. A rider has no reason to hold another family's.
+            await assertFails(getDoc(pickup(asUid(OTHER_STUDENT))));
+        });
+
+        it('a PENDING account reads nothing, however its role reads', async () => {
+            // isApprovedAs('driver'), never isAuthenticated() — the distinction that
+            // made the 2026-08-20 rides leak a leak.
+            await assertFails(getDoc(pickup(asUid(PENDING))));
+        });
+
+        it('an unauthenticated caller reads nothing', async () => {
+            await assertFails(getDoc(pickup(asAnon())));
+        });
+    });
+
+    describe('listing the board', () => {
+        it('a Sarthi may list it — that is what the board query is', async () => {
+            await assertSucceeds(getDocs(collection(asDriver(), 'airportPickups')));
+        });
+
+        it('the traveller may list their OWN, filtered on requesterUid', async () => {
+            await assertSucceeds(getDocs(query(
+                collection(asStudent(), 'airportPickups'),
+                where('requesterUid', '==', STUDENT),
+            )));
+        });
+
+        it('a Bhulku canNOT list the whole collection', async () => {
+            // `read` is `get` + `list` and allow rules are OR'd, so these are written
+            // as separate rules. A single unconditional arm here is exactly how a bare
+            // isDriver() once let every Sarthi list every child's address off /rides.
+            await assertFails(getDocs(collection(asUid(OTHER_STUDENT), 'airportPickups')));
+        });
+
+        it('a Bhulku canNOT list somebody else\'s by filtering for them', async () => {
+            await assertFails(getDocs(query(
+                collection(asUid(OTHER_STUDENT), 'airportPickups'),
+                where('requesterUid', '==', STUDENT),
+            )));
+        });
+    });
+
+    describe('nothing writes it from a browser', () => {
+        const cases: Array<[string, () => any]> = [
+            ['a Bhulku', () => asStudent()],
+            ['a Sarthi', () => asDriver()],
+            ['a manager', () => asManager()],
+            ['a coordinator', () => asUid(COORDINATOR)],
+        ];
+
+        for (const [who, db] of cases) {
+            it(`${who} cannot create one`, async () => {
+                await assertFails(addDoc(collection(db(), 'airportPickups'), {
+                    requesterUid: STUDENT, status: 'open',
+                }));
+            });
+
+            it(`${who} cannot claim one by writing the field directly`, async () => {
+                // The whole point of the callable is that a claim is a transaction. A
+                // direct write would let two Sarthis both believe they got it.
+                await assertFails(updateDoc(pickup(db()), { status: 'claimed' }));
+            });
+
+            it(`${who} cannot delete one`, async () => {
+                await assertFails(deleteDoc(pickup(db())));
+            });
+        }
+    });
+
+    describe('the durable traveller record is NOT the board', () => {
+        it('the traveller reads their own', async () => {
+            await assertSucceeds(getDoc(profile(asStudent())));
+        });
+
+        it('a Sarthi canNOT read it — this is the tightening past the owner decision', async () => {
+            // A Sarthi needs the passenger details for the trip in front of them, and
+            // those are snapshotted onto the trip. This collection holds an exact date
+            // of birth and a family contact for EVERY traveller who has ever asked,
+            // including people whose trip finished months ago.
+            await assertFails(getDoc(profile(asDriver())));
+        });
+
+        it('a plain manager canNOT read it', async () => {
+            // isAirportCoordinator(), not isManagerForRead(). The latter would also
+            // accept a token claim that survives a demotion for up to an hour — fine
+            // for a rider list, not for this.
+            await assertFails(getDoc(profile(asManager())));
+        });
+
+        it('an airport coordinator CAN read it', async () => {
+            await assertSucceeds(getDoc(profile(asUid(COORDINATOR))));
+        });
+
+        it('a Sarthi canNOT list it either', async () => {
+            await assertFails(getDocs(collection(asDriver(), 'airportProfiles')));
+        });
+
+        it('a coordinator can list it, which is what the export needs', async () => {
+            await assertSucceeds(getDocs(collection(asUid(COORDINATOR), 'airportProfiles')));
+        });
+
+        it('nobody writes it from a browser, coordinator included', async () => {
+            await assertFails(setDoc(profile(asUid(COORDINATOR)), { fullName: 'Changed' }));
+            await assertFails(updateDoc(profile(asStudent()), { dateOfBirth: '2010-01-01' }));
+            await assertFails(deleteDoc(profile(asUid(COORDINATOR))));
+        });
+    });
+
+    describe('the coordinator flag itself', () => {
+        it('cannot be granted to yourself', async () => {
+            // It carries the alerts, the reassign control and the Airport export —
+            // which returns every traveller's date of birth, phone and home address.
+            await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+                airportCoordinator: true,
+            }));
+        });
+
+        it('cannot be granted to yourself by a MANAGER either', async () => {
+            // This one failed when it was first written, and the rule was wrong
+            // rather than the test. `airportCoordinator` is in
+            // touchesPrivilegeFields(), which refuses the owner arm — but a manager
+            // is the owner of their own document, and allow rules are OR'd, so the
+            // manager arm beside it let them self-appoint in one write. The gate on
+            // /airportProfiles was one tap deep.
+            await assertFails(updateDoc(doc(asManager(), 'users', MANAGER), {
+                airportCoordinator: true,
+            }));
+        });
+
+        it('CAN be given up by the coordinator who holds it', async () => {
+            // Asymmetric on purpose: you may always drop a privilege, never hand
+            // yourself one. A coordinator who cannot stop being woken at 5am without
+            // finding another manager is looking at a control that does not work.
+            await assertSucceeds(updateDoc(doc(asUid(COORDINATOR), 'users', COORDINATOR), {
+                airportCoordinator: false,
+            }));
+        });
+
+        it('a manager may still edit their own other fields', async () => {
+            // The new guard must not have made a manager's own profile unwritable.
+            await assertSucceeds(updateDoc(doc(asManager(), 'users', MANAGER), {
+                phone: '617-555-0100',
+            }));
+        });
+
+        it('a manager may grant it to somebody else', async () => {
+            // Deliberately NOT in touchesRoleFields(), so this stays possible from the
+            // People tab with an audit row. Same reasoning as accountStatus: one field,
+            // one meaning, writable atomically by a browser.
+            await assertSucceeds(updateDoc(doc(asManager(), 'users', DRIVER), {
+                airportCoordinator: true,
+            }));
+        });
+
+        it('a Sarthi may not grant it to anyone', async () => {
+            await assertFails(updateDoc(doc(asDriver(), 'users', STUDENT), {
+                airportCoordinator: true,
+            }));
+        });
+    });
+});

@@ -25,3 +25,34 @@ export const managerSetUserRole = async (
 export const updateSabhaRecurrence = async (rule: unknown) => ({ rule });
 export const previewDeleteSabhaEvent = async () => ({ responseCount: 3, requestedRideCount: 1 });
 export const deleteSabhaEvent = async () => ({ success: true });
+
+// ---- Airport Seva ----------------------------------------------------------
+//
+// Added 2026-08-25. The records preview renders MemberExportCard and the airport
+// preview renders the card and the request form, so every callable those reach has
+// to exist here or the whole page fails to build — which is how this stub earns its
+// keep: it is a second consumer of `src/utils/cloudFunctions`, and it caught the
+// missing exports immediately.
+//
+// All three resolve as if they worked. The REFUSALS — a second Sarthi losing the
+// claim race, a plain manager refused the airport export — are proved by
+// functions/src/http/*.test.ts, not by looking at a screen.
+
+export const requestAirportPickup = async () => ({
+    success: true, pickupId: 'preview_pickup', arrivalAt: new Date().toISOString(),
+});
+
+export const updateAirportPickup = async () => ({ success: true, status: 'claimed' as const });
+
+export const exportMembers = async (scope: 'airport' | 'sabha' | 'all') => ({
+    success: true,
+    scope,
+    csv: 'Name,Email\r\nPreview Person,preview@example.com',
+    rowCount: 1,
+    truncated: false,
+});
+
+/** A real download in the harness would drop a file in Downloads on every click. */
+export const downloadCSV = (_csv: string, filename: string) => {
+    console.log(`[preview] would download ${filename}`);
+};

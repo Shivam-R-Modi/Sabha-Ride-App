@@ -174,3 +174,51 @@ export async function assertApprovedStudent(
 
     return data as Record<string, unknown>;
 }
+
+/**
+ * An airport coordinator: an approved manager who has been asked to run Airport Seva.
+ *
+ * WHAT THIS FLAG DOES AND DOES NOT DO, because the difference matters and a guard
+ * that looks like a permission but is not is the defect this repo keeps removing.
+ *
+ * It DOES gate the alerts, the oversight panel, and the coordinator-only actions:
+ * reassigning another Sarthi's trip, cancelling somebody else's request, and the
+ * Airport scope of the member export.
+ *
+ * It DOES NOT hide the arrival board from a manager, and it cannot. The role
+ * hierarchy in ./roles expands downward — `manager: ['manager','driver','student']` —
+ * so every approved manager already satisfies `isApprovedDriverData`, and the board
+ * is readable by every approved Sarthi by design. A rule written to hide it would be
+ * defeated by the driver arm sitting next to it. The point of the flag is that a
+ * manager who only runs Friday nights is not WOKEN by 5am arrivals, which it does
+ * achieve.
+ *
+ * Built on `isApprovedManagerData`, so it inherits the recorded-role check and the
+ * `accountStatus === 'approved'` check. A revoked manager loses it immediately.
+ */
+export function isAirportCoordinatorData(data: unknown): boolean {
+    if (!isApprovedManagerData(data)) return false;
+    return (data as { airportCoordinator?: unknown } | null)?.airportCoordinator === true;
+}
+
+/**
+ * Throw unless `uid` is an airport coordinator. Returns their document so the
+ * caller does not read it twice.
+ */
+export async function assertAirportCoordinator(
+    db: admin.firestore.Firestore,
+    uid: string,
+    action = 'do this',
+): Promise<Record<string, unknown>> {
+    const snap = await db.collection('users').doc(uid).get();
+    const data = snap.data();
+
+    if (!isAirportCoordinatorData(data)) {
+        throw new functions.https.HttpsError(
+            'permission-denied',
+            `Only airport coordinators can ${action}.`,
+        );
+    }
+
+    return data as Record<string, unknown>;
+}

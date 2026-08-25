@@ -108,6 +108,22 @@ service cloud.firestore {
     // isStudent() was reaching for when it listed registeredRole == 'manager' and
     // 'driver' by hand. isDriver() gains the same treatment it always should have
     // had: a manager who drives is a driver.
+    // An approved manager who has been asked to run Airport Seva.
+    //
+    // WHAT THIS GATES, and what it cannot. It gates the coordinator-only writes and
+    // the oversight surface. It does NOT hide the arrival board from a manager, and
+    // no rule here could: grantsRole() expands manager downward to driver, so every
+    // approved manager satisfies isApprovedAs('driver'), and the board is readable by
+    // every approved Sarthi by design. A clause written to hide it would be defeated
+    // by the driver arm OR'd beside it — which is exactly the shape of hole that let
+    // a bare isDriver() list the whole rides collection.
+    //
+    // Built on isManager(), so it reads the document rather than the token: there is
+    // no free fast path here, and a revoked manager loses it immediately.
+    function isAirportCoordinator() {
+      return isManager() && getUserData().get('airportCoordinator', false) == true;
+    }
+
     function isDriver() {
       return isApprovedAs('driver');
     }
@@ -212,7 +228,17 @@ service cloud.firestore {
     function touchesPrivilegeFields() {
       return changedKeys().hasAny([
         'role', 'registeredRole', 'roles', 'activeRole',
-        'accountStatus', 'platformRole'
+        'accountStatus', 'platformRole',
+        // Airport Seva's oversight flag. Self-appointment would hand somebody the
+        // unclaimed-arrival alerts, the reassign control and the Airport scope of the
+        // member export — which returns every traveller's date of birth, phone and
+        // home address.
+        //
+        // Deliberately NOT in touchesRoleFields() below, so a manager may still set
+        // it from the People tab with an audit row. Same reasoning as accountStatus:
+        // it is one field, it means one thing, and a browser can write it atomically.
+        // Identity lives in four fields at once and is a different problem.
+        'airportCoordinator'
       ]);
     }
 
@@ -242,6 +268,30 @@ service cloud.firestore {
     // tab with an audit row. Approval is not the same problem as identity.
     function touchesRoleFields() {
       return changedKeys().hasAny(['role', 'registeredRole', 'roles', 'activeRole']);
+    }
+
+    // Turning ON your own airport-coordinator flag.
+    //
+    // Found by tests/rules/firestore.rules.test.ts, and it is the OR'd-arm hole this
+    // codebase keeps re-finding. `airportCoordinator` is in touchesPrivilegeFields()
+    // so the OWNER arm below refuses it — but a manager IS the owner of their own
+    // document, and the manager arm beside it only refuses touchesRoleFields(). So a
+    // manager could appoint themselves in one write, and the coordinator gate on
+    // /airportProfiles — every traveller's exact date of birth and family contact,
+    // minors included — was one tap deep.
+    //
+    // Separation of duties instead: the flag must be granted BY SOMEBODY ELSE. Two
+    // managers have to agree, which is what the compliance register wants of a grant
+    // that unlocks that data.
+    //
+    // ASYMMETRIC ON PURPOSE. Setting it to true on yourself is refused; setting it to
+    // false is allowed. You may always give up a privilege and never hand yourself
+    // one — and a coordinator who wants to stop being woken at 5am must be able to
+    // step down without finding somebody, or the control is dead.
+    function selfGrantsAirportCoordinator(userId) {
+      return isOwner(userId)
+             && changedKeys().hasAny(['airportCoordinator'])
+             && request.resource.data.get('airportCoordinator', false) == true;
     }
 
     // What a rider is allowed to say about wanting to become a Sarthi.
@@ -357,7 +407,9 @@ service cloud.firestore {
       allow update: if (isOwner(userId)
                         && !touchesPrivilegeFields()
                         && writesOwnRoleRequestOnly())
-                    || (isManager() && !touchesRoleFields());
+                    || (isManager()
+                        && !touchesRoleFields()
+                        && !selfGrantsAirportCoordinator(userId));
 
       // Only approved managers can delete users.
       allow delete: if isManager();
@@ -805,6 +857,98 @@ service cloud.firestore {
       // cannot be trusted to do both. `deleteNotice` does it in order, and the
       // nightly sweep does it for expired ones. Same reasoning that makes
       // `events` undeletable from the client — a raw delete orphans something.
+      allow delete: if false;
+    }
+
+    // =====================================
+    // AIRPORT SEVA — arrivals board
+    // =====================================
+    //
+    // A trip carries the traveller's name, date of birth, both phone numbers, their
+    // destination address and their family's number. Every approved Sarthi can read
+    // it, which is an OWNER DECISION taken on 2026-08-25 so that a Sarthi can decide
+    // whether to volunteer and can confirm identity at an arrivals gate.
+    //
+    // That is deliberately the same shape as the hole closed on /rides on 2026-08-20,
+    // so the two things that made it a hole are handled here rather than repeated:
+    //
+    //   1. `get` and `list` are SEPARATE rules. `read` is `get` + `list` and allow
+    //      rules are OR'd, so a single `read` arm for Sarthis could not be narrowed
+    //      by a per-document arm above it. A bare isDriver() on /rides read let every
+    //      Sarthi list the whole collection.
+    //   2. The arm is isApprovedAs('driver'), never isAuthenticated(). A pending or
+    //      rejected account reads nothing.
+    //
+    // And the most sensitive field of all — the date of birth, which reverses
+    // compliance decision D2 — is duplicated onto `passenger` here ONLY as much as a
+    // Sarthi's card needs. The durable record it comes from is closed to them
+    // entirely; see /airportProfiles below.
+    //
+    // `resource.data.get(field, default)` throughout, never bare field access: a
+    // document missing the field would otherwise error the condition, and an errored
+    // condition denies the whole query rather than that one document.
+    match /airportPickups/{pickupId} {
+      allow get: if isApprovedAs('driver')
+                 || isManagerForRead()
+                 || (request.auth != null
+                     && resource.data.get('requesterUid', '') == request.auth.uid);
+
+      // Scoped, and the traveller's own arm is filtered on `requesterUid` — the
+      // board queries `arrivalAt` ranges, the rider's screen queries their own uid,
+      // and each returned document satisfies its own arm.
+      allow list: if isApprovedAs('driver')
+                  || isManagerForRead()
+                  || (request.auth != null
+                      && resource.data.get('requesterUid', '') == request.auth.uid);
+
+      // NOTHING is written from a browser. requestAirportPickup writes this document
+      // and airportProfiles together, and updateAirportPickup transitions it inside a
+      // transaction so two Sarthis cannot both be told they claimed it. Neither is
+      // something a client can do atomically, so a client may not do it at all.
+      //
+      // create/update/delete listed separately rather than `write`, because `write`
+      // silently includes delete and an OR'd `allow delete: if false` cannot take it
+      // back. Both callables run on the Admin SDK and bypass this entirely.
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // =====================================
+    // AIRPORT SEVA — the durable traveller record
+    // =====================================
+    //
+    // Keyed by uid, one per traveller, and it OUTLIVES the trip. It is the source for
+    // the Airport scope of the member export and the "database used for other
+    // purposes" the service was asked for.
+    //
+    // CLOSED TO SARTHIS, unlike the board above. It holds an exact date of birth and
+    // a family contact for every traveller who has ever asked, including people whose
+    // trip finished months ago and including minors. A Sarthi needs the passenger
+    // details for the trip in front of them, and those are snapshotted onto the trip
+    // itself — so there is nothing here they need and a great deal they do not.
+    //
+    // COORDINATOR, not isManagerForRead(). This is the one place the flag is a real
+    // read gate, and the one place it can be: there is no Sarthi arm here for the
+    // hierarchy to defeat. A manager who runs Friday nights has no reason to hold a
+    // traveller's date of birth, and isManagerForRead() would additionally accept a
+    // token claim that survives a demotion for up to an hour — fine for a rider list,
+    // not for this.
+    //
+    // The cost, accepted: one document read per request instead of a free token check,
+    // and until somebody is made a coordinator no manager can read this collection at
+    // all. Neither is a dead control, because the oversight panel and the Airport
+    // export are gated on the same flag in the UI — nothing is shown that cannot work.
+    //
+    // Read is not narrowed by resource.data, which keeps it list-safe: the export
+    // reads it as a collection query, and a condition that inspects the document makes
+    // a whole query fail. Same trap as /feedback and /notices.
+    match /airportProfiles/{uid} {
+      allow read: if isOwner(uid) || isAirportCoordinator();
+
+      // Written only by requestAirportPickup, on the Admin SDK.
+      allow create: if false;
+      allow update: if false;
       allow delete: if false;
     }
 

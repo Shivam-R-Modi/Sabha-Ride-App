@@ -1,8 +1,191 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-24**. Several separate pieces of work that day,
-from two sessions.
+at the end. Last updated **2026-08-25**.
+
+## BUILT 2026-08-25, NOT DEPLOYED — Airport Seva, a second service behind one login
+
+**On branch `claude/airport-pickup-workflow-89afab`, in a worktree. Nothing is
+released. It has never run against production data and has never been seen
+rendered.** Read the caveats at the end of this section before deploying any of it.
+
+### What it is
+
+The congregation collects people arriving in the USA from the airport. That journey
+does not fit the sabha one — it is scheduled weeks ahead rather than on the night, it
+is one party rather than a clustered carload, and the **Sarthi chooses the trip**
+rather than the server choosing the Sarthi. So it is a second service, not a feature:
+after sign-in you pick **Sabha Seva** or **Airport Seva** at a launcher, the choice is
+remembered in `localStorage`, and a switch sits in the mobile header and the sidebar.
+
+**The sabha branch in `App.tsx` was not edited.** A `service` check was inserted
+above it. `tests/components/airportService.test.tsx` asserts that picking Sabha still
+renders the same four docked destinations, which is the regression guard for the whole
+change.
+
+`globalAssignDriver`, `system/rideContext`, the `rideType` union and the dispatch
+solver are all untouched.
+
+### The shape of it
+
+| Piece | Where |
+|---|---|
+| Trip documents | `airportPickups/{autoId}` — flight, party, luggage, destination, status, plus a `passenger` snapshot |
+| Durable person record | `airportProfiles/{uid}` — DOB, both phones, family contact, university. **Coordinator-only read** |
+| Shared tables | `functions/src/utils/arrival.ts` ↔ `src/utils/arrival.ts`, pinned by `tests/quality/arrival-table-parity.test.ts` |
+| Create | `requestAirportPickup` — writes both docs in one batch, computes `arrivalAt` in the AIRPORT'S zone |
+| Every transition | `updateAirportPickup` — one `runTransaction`, nine actions, a transition table |
+| Alerts | `alertUnclaimedArrivals` — every 30 min, bands at 48h/24h/10h/2h, coordinators only |
+| Export | `exportMembers` — three scopes (Airport / Sabha / Everyone), airport scope coordinator-gated |
+| Screens | `components/airport/` — launcher, shell, month-grid board, card, request form, status card |
+
+### Three decisions that are owner calls, recorded so nobody "fixes" them
+
+1. **Every approved Sarthi can read the whole arrivals board**, including the
+   traveller's name, DOB, both phones and destination. Owner decision. It is the same
+   *shape* as the leak closed on 2026-08-20, so the two things that made that a leak
+   are handled here rather than repeated: `get` and `list` are SEPARATE rules, and the
+   arm is `isApprovedAs('driver')` and never `isAuthenticated()`.
+
+2. **An exact date of birth is stored.** This reverses compliance decision D2 ("age
+   bands only; no DOB field exists anywhere"). Recorded as a reversal in
+   `docs/compliance/README.md` and `technical-enforcement.md` rather than left to
+   contradict them. Mitigation added on top of the owner's call: the durable record
+   lives on `airportProfiles`, which an ordinary Sarthi cannot read at all.
+
+3. **`airportCoordinator` is a workload switch, not a wall — and it cannot be
+   anything else.** `grantsRole` expands manager downward to driver, so every approved
+   manager already passes `isApprovedAs('driver')` and the board is readable by them
+   whatever the flag says. What the flag really gates: the alerts, reassigning another
+   Sarthi's trip, and the airport export. A Friday-nights manager gets no 5am alerts,
+   which is what was asked for.
+
+### Two defects this work found in EXISTING code
+
+- **A manager could grant themselves `airportCoordinator` in one write.** Found by a
+  new rules test. `touchesPrivilegeFields()` refuses the owner arm, but a manager IS
+  the owner of their own document and the manager arm beside it is OR'd — so the gate
+  on `airportProfiles` was one tap deep. Fixed with
+  `selfGrantsAirportCoordinator(userId)`, which is **asymmetric on purpose**: turning
+  it on for yourself is refused, turning it off is allowed. You may always give up a
+  privilege and never hand yourself one.
+
+- **A latent fragility in `recordsRole`, NOT fixed and worth knowing.** The emulator
+  logs `Property registeredRole is undefined on object` while evaluating rules against
+  a user document that lacks the field. The `||` short-circuit usually saves it and an
+  errored condition denies, so nothing is currently wrong — but a document missing
+  `registeredRole` can make a rule error rather than evaluate. `driver_dave` in the
+  rules fixtures is such a document. Pre-existing; out of scope for this branch.
+
+### What the quality gates caught in the new code
+
+Worth reading, because all four were real and none would have been visible on screen:
+
+- `bg-gold-100` **does not exist** in the ramp (gold has DEFAULT/500/700 only), so the
+  "within 2 days" urgency chip had no fill at all. An undefined Tailwind class emits
+  nothing.
+- The WhatsApp button used WhatsApp's brand green with white text — about **2:1
+  contrast**. Now the app's saffron.
+- The service switch was written with `bg-cream-300` on the sidebar's `bg-surface`
+  panel, which in dark mode is **the same colour**. Caught by the `bg-cream-400` count
+  in `theme-tokens.test.ts`.
+- The family message said "Sabha Ride Seva". The app is **Bhulka Gaadi**;
+  `vocabulary.test.ts` scans for it.
+
+And one caught by a callable test rather than a gate: **`compact()` is shallow**, so
+an undefined `preferredLanguage` inside the nested `familyContact` would have thrown
+on every real write while the fake Firestore in the tests accepted it happily. The
+Admin SDK is not configured with `ignoreUndefinedProperties`.
+
+And two that only LOOKING found, both of which every test had passed:
+
+- **The urgency chips failed AA, badly.** Hand-mixed tints — `bg-saffron/20
+  text-saffron-dark` measured **2.24:1** and a 15%-opacity danger tint **2.95:1**, on
+  `text-[10px]` uppercase, which is small text and needs 4.5:1. Replaced with the
+  design system's own `--warning-bg`/`--warning-text` pairs, which is what
+  ManagerRecords and UserDetailSheet already use. The lesson worth keeping: the
+  per-shade ratios in `tailwind.config.js` are **against the canvas**, so a shade that
+  is AA on the page is not automatically AA on a tinted chip.
+- **The traveller's card told a no-show that a Sarthi was coming.** It rendered
+  "Nilesh is collecting you" whenever a Sarthi's name was set, which included
+  `completed` and — far worse — `no_show`, where the one thing the traveller knows is
+  that nobody found them. Now worded per status, and
+  `tests/components/ArrivalStatusCard.test.tsx` exists because of it.
+
+### Where the suite stands
+
+```
+client      1386 passing, 4 files erroring — see below   (was 1291)
+functions    924 passing                                (was 886)
+rules        231 passing                                (was 196)
+typecheck      0 errors
+functions build  clean
+npm run build  NOT RUN — needs .env.local, absent in this worktree
+```
+
+**The 4 erroring client files are a worktree limitation, not a regression.**
+`RiderHome`, `DatabaseConsole`, `errorReport` and `noticeImage` all import
+`firebase/config`, which calls `getAuth()` at module load — and this worktree has no
+`.env.local`. Verified by stashing every change and re-running: they fail identically
+at `HEAD`. They will pass on the owner's Mac.
+
+### Before deploying this
+
+- **`npm run build` has never run here** — it needs `.env.local`, which the worktree
+  does not have. Run the full sweep on the Mac first.
+- **It HAS been eyeballed, via the preview harness, and that is what found the last
+  four defects.** `preview/airport.html` was added to the screenshot harness
+  (`npx vite build --config preview/vite.config.ts` then the `screen-previews` launch
+  config) and renders the launcher, the month grid, the request form, all four
+  traveller states and eleven card states with only the Firestore boundary stubbed.
+  Confirmed there:
+  - No console errors on any of it.
+  - The date and time inputs **stack at 375px**, each full width — the WebKit rule
+    `native-date-time-inputs.test.ts` exists for, verified by measuring rather than by
+    reading the class string.
+  - Urgency-chip contrast **light 4.96:1 worst case, dark 6.74:1**, measured with
+    `getComputedStyle` against the real stylesheet with transitions disabled. They
+    were **2.24:1** when first written — see below.
+  - Detail-row text 6.36:1 worst case in dark.
+
+  **What has NOT been looked at:** the two-service switch inside the real shell (the
+  harness renders components, not `ResponsiveLayout`), the coordinator toggle in
+  `UserDetailSheet`, and the member-export card. Those have tests and no screenshots.
+
+  A note for whoever does the next visual pass: **the screenshot tool here returns a
+  cached frame after a JS-driven scroll.** The first paint after a fresh `navigate` is
+  reliable and everything after it is not, which is the same trap recorded further
+  down this file. Narrow the viewport so what you want is above the fold rather than
+  scrolling to it.
+- **`airportPickups` and `airportProfiles` need the rules deployed FIRST.** Every
+  client write is `if false`, so an old client with new rules degrades to a clean
+  permission error; a new client with old rules would have no rule at all for either
+  collection and would be denied by default — which is safe, but means the feature
+  simply does nothing until rules land. Order is unchanged: **rules → functions →
+  hosting**.
+- **No composite index is required.** Every query filters and orders on one field, or
+  narrows in memory. Nothing needs adding to `firestore.indexes.json`.
+- **`retainUntil` is written and nothing reads it.** There is no purge job. Do not
+  describe the retention schedule as implemented.
+- **Push reaches nobody today.** The unclaimed alerts are built and audited, but no
+  coordinator has notifications switched on, so in practice the in-app board is the
+  only channel that works. That is why the urgency is derived client-side on every
+  render rather than depending on a delivery.
+
+### Deliberately not built
+
+Live tracking of an airport ride; in-app chat; Sarthi ratings; payment; automated
+flight-status lookup (every usable API is paid, and the assigned Sarthi can ask);
+server-sent SMS to the family; a manager-fills-it-in-on-somebody's-behalf path; the
+departures UI (the `direction` field is written on every document, so turning it on
+later is a UI change and not a migration); a separate oversight screen (reassign lives
+on the card, where the trip you want to move is the one you are looking at).
+
+---
+
+## Before that — 2026-08-24
+
+**Several separate pieces of work that day, from two sessions.**
 
 **The evening's work is at the top**: the sabha day moving silently stranded two
 riders who had already said yes (production repaired, then the cause fixed), and

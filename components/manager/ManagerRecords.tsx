@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, ShieldCheck } from 'lucide-react';
 import { DatabaseConsole } from './DatabaseConsole';
+import { MemberExportCard } from './MemberExportCard';
 
 /**
  * The raw record editor, and the warning that has to travel with it.
@@ -67,6 +68,11 @@ export const ManagerRecords: React.FC = () => (
                 while a run is under way, and is written to the audit log.
             </p>
         </div>
+
+        {/* Above the raw editor, not below: downloading a list is the thing a manager
+            comes here to do most often, and the console underneath is the thing they
+            should have to scroll to. */}
+        <MemberExportCard />
 
         <DatabaseConsole />
     </div>

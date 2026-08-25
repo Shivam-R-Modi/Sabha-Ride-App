@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LotusIcon } from '../constants';
-import { TabView, UserRole } from '../types';
-import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database, Megaphone } from 'lucide-react';
+import { Service, TabView, UserRole } from '../types';
+import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database, Megaphone, Plane, Repeat, CalendarDays, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { RoleSwitcher } from './RoleSwitcher';
 import { InstallAppButton } from './shared/InstallAppButton';
+import { hasGrantedRole } from '../src/roles';
+import { SERVICE_LABEL } from '../src/constants/service';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -60,6 +62,51 @@ export const ResponsiveLayout: React.FC<LayoutProps> = ({ children, role }) => {
   );
 };
 
+/**
+ * Move between the two services.
+ *
+ * ALWAYS VISIBLE, in the mobile header and the sidebar, and that placement is the
+ * point rather than a convenience. The mobile dock's overflow drawer is reached by a
+ * SWIPE and by nothing else — an owner decision recorded on GrabHandle below — so a
+ * switch that lived only in there would be unreachable by keyboard, switch access or
+ * VoiceOver, and Airport Seva would be a room with no door out.
+ *
+ * A single toggle rather than a menu, because there are exactly two. It is labelled
+ * with the service it takes you TO, with the icon to match, so the tap is not a guess.
+ * Where you currently are is said by the screen itself — "Arrivals", "Dispatch" — and
+ * by the sidebar's own subtitle.
+ */
+const ServiceSwitch: React.FC<{ compact?: boolean }> = ({ compact }) => {
+  const { userProfile } = useAuth();
+  const { service, setService } = useNavigation();
+  if (!service) return null;
+
+  const other: Service = service === 'sabha' ? 'airport' : 'sabha';
+  const Icon = other === 'airport' ? Plane : Car;
+  // A Sarthi lands on the arrivals board, a Bhulku on their own pickup. Decided here
+  // and passed down so NavigationContext stays unaware of roles.
+  const canSeeBoard = hasGrantedRole(userProfile, 'driver');
+
+  return (
+    <button
+      onClick={() => setService(other, canSeeBoard)}
+      aria-label={`Switch to ${SERVICE_LABEL[other]}`}
+      title={`Switch to ${SERVICE_LABEL[other]}`}
+      // cream-400, not cream-300, and for the reason spelled out on the nav pill and
+      // the Sign Out button below: in DARK mode `--canvas-deep` (cream-300) and
+      // `--surface` are the same colour, so a cream-300 fill on this panel has no
+      // visible edge at all. Hover goes to a saffron tint rather than a fifth grey.
+      className={compact
+        ? 'tap-target p-2 text-coffee-500 hover:text-saffron btn-feedback'
+        : 'w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-cream-400 text-coffee text-sm font-bold hover:bg-saffron/15 transition-colors min-h-11'}
+    >
+      <Icon size={compact ? 20 : 16} aria-hidden="true" />
+      {!compact && <span className="truncate">{SERVICE_LABEL[other]}</span>}
+      {!compact && <Repeat size={14} className="ml-auto shrink-0 text-coffee-500" aria-hidden="true" />}
+    </button>
+  );
+};
+
 // No props. It declared `userName` and `role` and destructured neither, so both were
 // dead weight that read as though the header rendered them.
 const MobileHeader: React.FC = () => {
@@ -80,6 +127,7 @@ const MobileHeader: React.FC = () => {
           <h1 className="font-header font-bold text-base text-coffee truncate">Bhulka Gaadi</h1>
         </div>
         <div className="flex items-center gap-2">
+          <ServiceSwitch compact />
           <RoleSwitcher />
           <button onClick={logout} className="tap-target p-2 text-coffee-500 hover:text-[rgb(var(--danger-text))] btn-feedback">
             <LogOut size={20} />
@@ -92,9 +140,9 @@ const MobileHeader: React.FC = () => {
 
 const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const { logout, userProfile } = useAuth();
-  const { currentTab, setCurrentTab, isSidebarCollapsed, toggleSidebar } = useNavigation();
+  const { currentTab, setCurrentTab, isSidebarCollapsed, toggleSidebar, service } = useNavigation();
 
-  const navItems = getNavItems(role);
+  const navItems = getNavItems(role, service ?? 'sabha');
 
   return (
     // Same rung as the mobile header: it is chrome, and it holds a RoleSwitcher too.
@@ -109,15 +157,23 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
         {!isSidebarCollapsed && (
           <div className="animate-in fade-in slide-in-from-left-2">
             <h1 className="font-header font-bold text-coffee leading-none">Bhulka Gaadi</h1>
-            <p className="text-[10px] text-gold-700 font-bold uppercase tracking-widest mt-1">Seva Portal</p>
+            <p className="text-[10px] text-gold-700 font-bold uppercase tracking-widest mt-1">
+              {service ? SERVICE_LABEL[service] : 'Seva Portal'}
+            </p>
           </div>
         )}
       </div>
 
       {/* Role Switcher */}
       {!isSidebarCollapsed && (
-        <div className="px-6 pb-4">
+        <div className="px-6 pb-4 space-y-2">
           <RoleSwitcher />
+          <ServiceSwitch />
+        </div>
+      )}
+      {isSidebarCollapsed && (
+        <div className="px-3 pb-4 flex justify-center">
+          <ServiceSwitch compact />
         </div>
       )}
 
@@ -312,8 +368,8 @@ const GrabHandle: React.FC<{
  * manager hits every Friday.
  */
 const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
-  const { currentTab, setCurrentTab } = useNavigation();
-  const navItems = getNavItems(role);
+  const { currentTab, setCurrentTab, service } = useNavigation();
+  const navItems = getNavItems(role, service ?? 'sabha');
   const [expanded, setExpanded] = useState(false);
 
   const primary = navItems.filter(item => item.primary);
@@ -476,7 +532,32 @@ interface NavItem {
   primary?: boolean;
 }
 
-const getNavItems = (role: UserRole): NavItem[] => {
+/**
+ * The destinations for a role WITHIN a service.
+ *
+ * `service` defaults to 'sabha' so every existing caller and every existing test —
+ * tests/components/bottomNavOverflow.test.tsx and managerNavigation.test.tsx both pin
+ * this list — exercises exactly the code it did before.
+ *
+ * The airport lists are shorter on purpose. A Bhulku has one screen there (ask, then
+ * watch), and a Sarthi has two. Padding them out to match the sabha side would mean
+ * nav items pointing at screens that do not exist, which is the dead control this
+ * codebase keeps removing.
+ */
+const getNavItems = (role: UserRole, service: Service = 'sabha'): NavItem[] => {
+  if (service === 'airport') {
+    // A Bhulku gets no board: the rules refuse every query it makes, so the tab would
+    // render an empty screen that reads as "nobody is arriving".
+    const canSeeBoard = role === 'driver' || role === 'manager';
+    return [
+      ...(canSeeBoard
+        ? [{ id: 'airport-board' as TabView, label: 'Arrivals', icon: CalendarDays }]
+        : []),
+      { id: 'airport-request', label: 'My pickup', icon: Ticket },
+      { id: 'profile', label: 'Profile', icon: UserIcon },
+    ];
+  }
+
   if (role === 'driver') {
     return [
       { id: 'home', label: 'Dashboard', icon: Home },

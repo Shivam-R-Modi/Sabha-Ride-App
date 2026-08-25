@@ -7,6 +7,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '@/firebase/config';
 import type { PresenceClaim } from './presence';
 import type { RecurrenceRule } from './recurrence';
+import type { ArrivalAction, ArrivalStatus, WhatsappOn } from './arrival';
 import { codeOf, messageOf } from './errorText';
 
 const functions = getFunctions(app);
@@ -520,4 +521,119 @@ export function downloadCSV(csvContent: string, filename: string): void {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+// ============================================
+// AIRPORT SEVA
+// ============================================
+
+/**
+ * What the request form sends.
+ *
+ * Deliberately NOT `Partial<AirportPickup>`. The document carries fields the server
+ * owns — `arrivalAt`, `status`, `retainUntil`, the passenger snapshot — and typing
+ * the payload as the document invites a form to send one and a reader to believe it
+ * was honoured. Everything here is something a traveller actually types.
+ *
+ * `arrivalDate` and `arrivalTime` are read on a clock AT THE AIRPORT. The absolute
+ * instant is derived server-side, because no client in this app computes an hour.
+ */
+export interface AirportPickupRequest {
+    arrivalDate: string;        // 'YYYY-MM-DD'
+    arrivalTime: string;        // 'HH:MM' 24-hour
+    airportCode: string;
+    airline?: string;
+    flightNumber?: string;
+    terminal?: string;
+    isInternational: boolean;
+
+    partySize: number;
+    largeBags: number;
+    cabinBags: number;
+    dropoffAddress: string;
+    dropoffLat: number;
+    dropoffLng: number;
+    hasUsWorkingPhone: boolean;
+    meetingPointNote?: string;
+    needsStopOnTheWay?: string;
+    specialNeeds?: string;
+    notes?: string;
+
+    fullName: string;
+    preferredName?: string;
+    dateOfBirth: string;        // 'YYYY-MM-DD'
+    email: string;
+    phone: string;
+    altPhone?: string;
+    whatsappOn: WhatsappOn;
+    university?: string;
+    referredByName?: string;
+    familyContact?: {
+        name: string;
+        relationship: string;
+        phone: string;
+        hasWhatsapp: boolean;
+        preferredLanguage?: string;
+    };
+}
+
+export async function requestAirportPickup(
+    input: AirportPickupRequest,
+): Promise<{ success: boolean; pickupId: string; arrivalAt: string }> {
+    return callFunction<{ success: boolean; pickupId: string; arrivalAt: string }>(
+        'requestAirportPickup', input);
+}
+
+/**
+ * Every transition. One callable, because they all read one document, check the
+ * shared transition table and write it back inside a transaction.
+ *
+ * `action` is typed against the same union the server validates against — imported
+ * from src/utils/arrival.ts, which is pinned to its server mirror by
+ * tests/quality/arrival-table-parity.test.ts. A client that offered an action the
+ * server refuses would be a dead button.
+ */
+export interface AirportPickupUpdate {
+    pickupId: string;
+    action: ArrivalAction;
+    /** Why a trip was released or cancelled. Optional. */
+    reason?: string;
+    /** Who a coordinator is reassigning to. Required for `reassign`. */
+    toUid?: string;
+    /** The new flight, for `editFlight`. */
+    arrivalDate?: string;
+    arrivalTime?: string;
+    airportCode?: string;
+    airline?: string;
+    flightNumber?: string;
+    terminal?: string;
+    isInternational?: boolean;
+}
+
+export async function updateAirportPickup(
+    input: AirportPickupUpdate,
+): Promise<{ success: boolean; status: ArrivalStatus }> {
+    return callFunction<{ success: boolean; status: ArrivalStatus }>('updateAirportPickup', input);
+}
+
+/**
+ * The member directory as CSV, in one of three scopes.
+ *
+ * Spans both services, which is why it sits with the manager's other exports rather
+ * than inside Airport Seva. `airport` additionally requires the coordinator flag —
+ * that scope reads the collection holding exact dates of birth.
+ *
+ * `truncated` comes back rather than being swallowed. A short file that looks
+ * complete is how somebody concludes half the congregation has left.
+ */
+export interface MemberExport {
+    success: boolean;
+    scope: 'airport' | 'sabha' | 'all';
+    csv: string;
+    rowCount: number;
+    truncated: boolean;
+}
+
+export async function exportMembers(scope: 'airport' | 'sabha' | 'all'): Promise<MemberExport> {
+    return callFunction<MemberExport>('exportMembers', { scope });
 }

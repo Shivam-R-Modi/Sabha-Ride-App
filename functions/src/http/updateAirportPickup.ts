@@ -1,0 +1,293 @@
+// ============================================
+// HTTP FUNCTION: updateAirportPickup
+// Every state change an airport trip can go through.
+// ============================================
+//
+// ONE CALLABLE, ONE TRANSACTION, ONE DOCUMENT.
+//
+// A REAL TRANSACTION, not the advisory lock globalAssignDriver uses. That function
+// needs `system/assignmentLock` because it writes across many ride documents at
+// once and its read-then-write of the lock is itself non-atomic — a known ceiling,
+// documented there. A claim here touches exactly ONE document, so `runTransaction`
+// (already used in sarthiArrived, managerInvites, nudgeRider) is both correct and
+// smaller. Two Sarthis tapping Claim in the same second: one wins, the other is told
+// who won.
+//
+// The actions live in one function rather than nine because they all do the same
+// thing — read one document, check the transition table, write it back — and the
+// table is what differs. Nine files would be nine copies of the transaction.
+
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+import {
+    isAirportCoordinatorData, isApprovedDriverData, isApprovedStudentData,
+} from '../utils/authz';
+import { checkRateLimit } from '../utils/rateLimiter';
+import { writeAuditLog, AuditAction } from '../utils/audit';
+import { getTimeZone } from '../utils/settings';
+import {
+    PICKUPS_COLLECTION, ArrivalAction, ArrivalStatus, RESULT_OF, canRun, MAX_SHORT_TEXT,
+} from '../utils/arrival';
+import { compact, parseFlight, retainUntilFor } from '../utils/arrivalInput';
+
+const ACTIONS: ArrivalAction[] = [
+    'claim', 'release', 'met', 'completed', 'no_show',
+    'cancel', 'editFlight', 'reassign', 'familyNotified',
+];
+
+/** Which audit action each transition records. See the union for why these are split. */
+const AUDIT_FOR: Record<ArrivalAction, AuditAction> = {
+    claim: 'airport.claim',
+    reassign: 'airport.claim',
+    release: 'airport.release',
+    met: 'airport.update',
+    completed: 'airport.update',
+    no_show: 'airport.update',
+    editFlight: 'airport.update',
+    familyNotified: 'airport.update',
+    cancel: 'airport.cancel',
+};
+
+export const updateAirportPickup = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const db = admin.firestore();
+    const uid = context.auth.uid;
+
+    // Bound to real types BEFORE they are checked. `data` is `any`, and narrowing
+    // `any` with `!==` leaves it `any` — a functions deploy has already failed on
+    // exactly that shape, and `action` is used to index two Records below.
+    const pickupId: string = String(data?.pickupId ?? '').trim();
+    if (!pickupId) {
+        throw new functions.https.HttpsError('invalid-argument', 'A pickup id is required');
+    }
+    const rawAction: string = String(data?.action ?? '').trim();
+    const action = ACTIONS.find(a => a === rawAction);
+    if (!action) {
+        throw new functions.https.HttpsError('invalid-argument', `Unknown action "${rawAction}"`);
+    }
+
+    // ONE read of the actor, reused by every predicate below. assertApprovedDriver
+    // and friends each do their own get; three of them here would be three billed
+    // reads of the same document to answer one question.
+    const actorSnap = await db.collection('users').doc(uid).get();
+    const actor = actorSnap.data();
+    const actorName = String(actor?.name ?? 'Somebody');
+    const isCoordinator = isAirportCoordinatorData(actor);
+    const isDriver = isApprovedDriverData(actor);
+    const isRider = isApprovedStudentData(actor);
+
+    await checkRateLimit(uid, {
+        maxRequests: 60, windowMs: 60 * 60 * 1000, functionName: 'updateAirportPickup',
+    });
+
+    const now = new Date();
+    const timestamp = now.toISOString();
+
+    // `editFlight` and `reassign` need work done before the transaction: reading
+    // settings and another user's document inside one is legal but pointless, and
+    // neither is part of the invariant being protected. The invariant is the pickup
+    // document's own status, and that is all the transaction reads.
+    let flight: ReturnType<typeof parseFlight> | null = null;
+    if (action === 'editFlight') {
+        flight = parseFlight(data, await getTimeZone(), now);
+    }
+
+    let target: { uid: string; name: string } | null = null;
+    if (action === 'reassign') {
+        const toUid: string = String(data?.toUid ?? '').trim();
+        if (!toUid) {
+            throw new functions.https.HttpsError('invalid-argument', 'Pick a Sarthi to reassign to');
+        }
+        const targetSnap = await db.collection('users').doc(toUid).get();
+        const targetData = targetSnap.data();
+        // Checked HERE rather than trusting the picker. A coordinator's browser is a
+        // trust boundary too, and reassigning to a revoked account would hand a
+        // traveller's address to somebody who was cut off.
+        if (!isApprovedDriverData(targetData)) {
+            throw new functions.https.HttpsError(
+                'failed-precondition', 'That person is not an approved Sarthi.');
+        }
+        target = { uid: toUid, name: String(targetData?.name ?? 'A Sarthi') };
+    }
+
+    const reason: string = String(data?.reason ?? '').trim().slice(0, MAX_SHORT_TEXT);
+
+    const ref = db.collection(PICKUPS_COLLECTION).doc(pickupId);
+
+    const outcome = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) {
+            throw new functions.https.HttpsError('not-found', 'That airport request no longer exists.');
+        }
+        const pickup = snap.data() ?? {};
+        const status: ArrivalStatus = pickup.status;
+
+        // The transition table decides first, so every refusal below is about WHO
+        // rather than about WHEN, and the message a person sees says which it was.
+        if (!canRun(action, status)) {
+            const who = pickup.claimedByName ? ` It is with ${pickup.claimedByName}.` : '';
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                `That cannot be done to a request that is "${status}".${who}`,
+            );
+        }
+
+        const isMine = pickup.claimedByUid === uid;
+        const isRequester = pickup.requesterUid === uid;
+
+        switch (action) {
+            case 'claim':
+                if (!isDriver) {
+                    throw new functions.https.HttpsError(
+                        'permission-denied', 'Only approved Sarthis can claim an airport pickup.');
+                }
+                // A person cannot drive themselves from the airport. The sabha side
+                // enforces the mirror of this with `isHoldingAVehicle()` in the rules.
+                if (isRequester) {
+                    throw new functions.https.HttpsError(
+                        'failed-precondition', 'You cannot claim your own arrival.');
+                }
+                break;
+
+            case 'release':
+            case 'met':
+            case 'completed':
+            case 'no_show':
+            case 'familyNotified':
+                if (!(isMine || isCoordinator)) {
+                    throw new functions.https.HttpsError(
+                        'permission-denied',
+                        'Only the Sarthi who claimed this, or a coordinator, can do that.');
+                }
+                break;
+
+            case 'cancel':
+                if (!(isRequester || isCoordinator)) {
+                    throw new functions.https.HttpsError(
+                        'permission-denied',
+                        'Only the traveller, or a coordinator, can cancel a request.');
+                }
+                if (isRequester && !isRider) {
+                    throw new functions.https.HttpsError(
+                        'permission-denied', 'Your account is not approved.');
+                }
+                break;
+
+            case 'editFlight':
+                if (!(isRequester || isMine || isCoordinator)) {
+                    throw new functions.https.HttpsError(
+                        'permission-denied',
+                        'Only the traveller, their Sarthi, or a coordinator, can change the flight.');
+                }
+                break;
+
+            case 'reassign':
+                if (!isCoordinator) {
+                    throw new functions.https.HttpsError(
+                        'permission-denied', 'Only airport coordinators can reassign a trip.');
+                }
+                break;
+        }
+
+        const nextStatus = RESULT_OF[action];
+        const update: Record<string, unknown> = { updatedAt: timestamp };
+        if (nextStatus) update.status = nextStatus;
+
+        switch (action) {
+            case 'claim':
+                update.claimedByUid = uid;
+                update.claimedByName = actorName;
+                update.claimedAt = timestamp;
+                break;
+
+            case 'reassign':
+                update.claimedByUid = target!.uid;
+                update.claimedByName = target!.name;
+                update.claimedAt = timestamp;
+                // Cleared, because reassigning out of a no_show puts the trip back in
+                // front of somebody. Leaving them set would show a card that says both
+                // "with Ramesh" and "nobody turned up".
+                update.metAt = null;
+                update.completedAt = null;
+                break;
+
+            case 'release':
+                // Back to nobody. Every trace of the previous holder goes, or the
+                // board shows an unclaimed card with a Sarthi's name on it.
+                update.claimedByUid = null;
+                update.claimedByName = null;
+                update.claimedAt = null;
+                update.metAt = null;
+                if (reason) update.releaseReason = reason;
+                break;
+
+            case 'met':
+                update.metAt = timestamp;
+                break;
+
+            case 'completed':
+                update.completedAt = timestamp;
+                break;
+
+            case 'no_show':
+                update.noShowAt = timestamp;
+                break;
+
+            case 'familyNotified':
+                update.familyNotifiedAt = timestamp;
+                break;
+
+            case 'cancel':
+                update.cancelledAt = timestamp;
+                update.cancelledBy = uid;
+                update.cancellationReason = reason || null;
+                break;
+
+            case 'editFlight':
+                Object.assign(update, compact({ ...flight! }));
+                update.retainUntil = retainUntilFor(flight!.arrivalAt);
+                // Only when somebody is already driving to meet it. A change to an
+                // unclaimed request is just an edit; a change after a claim is news
+                // the Sarthi has to see, and the board badges it from this field.
+                if (status === 'claimed' && pickup.arrivalAt !== flight!.arrivalAt) {
+                    update.arrivalTimeChangedAt = timestamp;
+                }
+                break;
+        }
+
+        tx.update(ref, update);
+
+        return {
+            previousStatus: status,
+            nextStatus: nextStatus ?? status,
+            requesterName: String(pickup.requesterName ?? 'a traveller'),
+            previousHolder: pickup.claimedByName ? String(pickup.claimedByName) : null,
+        };
+    });
+
+    // AFTER the commit, so a row is never written for a transition that lost the
+    // race. writeAuditLog never throws, so losing the row cannot undo the change.
+    await writeAuditLog(db, {
+        action: AUDIT_FOR[action],
+        actorUid: uid,
+        actorName,
+        targetCollection: PICKUPS_COLLECTION,
+        targetDocumentId: pickupId,
+        summary: `${action} on ${outcome.requesterName}'s airport pickup`
+            + ` (${outcome.previousStatus} → ${outcome.nextStatus})`,
+        details: compact({
+            action,
+            previousStatus: outcome.previousStatus,
+            nextStatus: outcome.nextStatus,
+            previousHolder: outcome.previousHolder,
+            reassignedTo: target?.uid,
+            reason: reason || undefined,
+            newArrivalAt: flight?.arrivalAt,
+        }),
+    });
+
+    return { success: true, status: outcome.nextStatus };
+});
