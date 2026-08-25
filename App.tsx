@@ -18,7 +18,6 @@ import { ManagerRecords } from './components/manager/ManagerRecords';
 import { ManagerNotices } from './components/manager/ManagerNotices';
 // import { CleanupUtility } from './components/admin/CleanupUtility'; // removed — component does not exist
 import { AirportShell } from './components/airport/AirportShell';
-import { ArrivalBoard } from './components/airport/ArrivalBoard';
 import { arrivingMember } from './src/constants/service';
 import { useService } from './hooks/useService';
 import { ResponsiveLayout } from './components/Layout';
