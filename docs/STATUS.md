@@ -3,7 +3,20 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — the arrivals calendar, rebuilt for readability, 2026-08-25 (night)
+## DEPLOYED 2026-08-25 (night) — the arrivals calendar, rebuilt for readability
+
+**Live as `5e9deac`, and `main` is at that commit.**
+
+```
+firestore:rules  released — unchanged
+functions        29 of 29 "Skipped (No changes detected)"
+hosting          dist/assets/index-DqP9AsZC.js
+```
+
+Verified by hash (`aada1fac…dba33df88`) and then by grepping the shipped bundle for each
+change individually: `h-12 sm:h-14` present, `aspect-square rounded-xl` gone,
+`bg-saffron/10` present, the `--cta` pair present, the new copy present, `ArrivalGlance`
+gone. Only two shipped files changed — the rest of the diff is preview, tests and docs.
 
 Owner: *"can you make this calendar view more fancy and easy to read, keep the same colour
 theme."* The grid was ~518px of near-empty space on a laptop that said almost nothing.
@@ -142,6 +155,33 @@ clamp, and the error branch keeping the grid.
 
 `firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only.
 `main` held at the live commit until it ships.
+
+### THE AA FAILURE IS NOT JUST THE CALENDAR — 18 sites across 15 files
+
+Found while verifying this deploy, by grepping the shipped bundle for `bg-saffron
+text-white` and getting a hit. The board's only match is its own doc comment, so the
+calendar is clean — but the same pairing is live on **primary buttons all over the app**:
+
+```
+PWAPrompt ×2      UpdateBanner       PushPrompt        PushToggle
+RoleSelection ×2  PendingApproval    DatabaseConsole   RideWindowControl
+LocationSettings  FleetManagement    ManagerReports    BroadcastComposer
+SabhaCalendar ×2  VehicleForm        NoticeComposer
+```
+
+All of them are `text-xs`/`text-sm` bold, so all of them need 4.5:1 and all of them are at
+**2.84:1 in light and 2.68:1 in dark**. WCAG 1.4.11's 3:1 allowance covers a control's
+BOUNDARY, not the text inside it, so "it's a button" is not an exemption. `tailwind.config.js`
+already documents `saffron-600` at 3.42:1 as "large text / filled buttons", which is where
+the assumption seems to have come from — but 14px bold is not large text.
+
+**Not fixed here, deliberately.** It is 18 sites in 15 files that the owner did not ask
+about, and folding it into a calendar change would bury it. The fix itself is mechanical —
+`bg-saffron text-white` → `bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))]`, the pair
+`RequestTable.tsx` already uses — but it changes the look of every primary button in the
+app, which is a decision rather than a tidy-up. **It should be its own change, and the
+`theme-tokens.test.ts` ratchet should widen from the five airport files to the whole of
+`components/` on the same commit.**
 
 ### Deferred, deliberately
 
