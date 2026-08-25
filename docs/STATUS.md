@@ -3,6 +3,98 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## NOT DEPLOYED — the AA failure fixed app-wide, 2026-08-25 (later)
+
+Owner: *"yes fix the AA issue app wide."* Done, and the scope was **larger than I reported
+the first time** — 33 sites across 23 files, not the 18/15 in the earlier note. That first
+count came from grepping for the literal `bg-saffron text-white` adjacency and missed every
+**gradient** button.
+
+### Why no shade of orange could have fixed it
+
+White measured against the whole ramp:
+
+| | light | dark |
+|---|---|---|
+| `saffron` / `-500` | 2.84 | 2.68 |
+| `saffron-dark` | 2.88 | 3.07 |
+| `saffron-600` | 3.60 | 3.55 |
+| `saffron-700` | 4.15 | 3.55 |
+| `saffron-800` | **5.45** | 2.22 |
+| `--cta` | **5.45** | 3.06 |
+
+**Every one fails in dark mode**, because the ramp inverts — dark mode's saffron is a
+*light* colour and needs *dark* text. There is no static text colour that works in both
+themes, which is the whole reason `--text-on-accent` exists: white in light, near-black in
+dark. On `--cta` it measures **5.45 / 5.77**.
+
+### Three families, and only one changed how the app looks
+
+**1. The brand gradient — 10 sites, `from-saffron-800 to-gold-700`.** Auth banners and the
+primary auth buttons. **Text token only; the gradient is untouched.** That works because
+`--text-on-accent` *is* white in light mode, and both endpoints already pass there (5.45 and
+5.05). So this is a **dark-mode-only fix** — 2.22/1.82 → **7.95/9.71** — with the brand
+colours byte-identical and no light-mode change whatsoever.
+
+**2. Solid fills — 20 sites, `bg-saffron text-white`** (+ `hover:bg-saffron/90`). Moved to
+`bg-[rgb(var(--cta))]` / `text-[rgb(var(--text-on-accent))]` / `hover:bg-[rgb(var(--cta-dark))]`.
+**This is the one visible change:** primary buttons go from bright saffron to a deeper burnt
+orange in light mode, and in dark mode their label flips from white to near-black.
+
+**3. Small gradients — 3 sites.** `from-saffron to-saffron-dark` buttons and two
+`from-saffron to-saffron-light` avatar circles, moved to the `--cta` ramp.
+
+### Verified in the rendered DOM, not just by grep
+
+A grep can only see classes that land in the same string. So the check that actually
+matters walked the **computed styles** of every leaf text node across four preview pages in
+both themes, resolving each element's nearest painted ancestor — solid fill *or* gradient
+stops — and applying the real WCAG threshold (3:1 for large text, 4.5:1 otherwise).
+
+**Zero failures on a warm background, on every page, in both themes.**
+
+Getting that scanner right took three tries, and the mistakes are worth knowing because the
+first two both produced confident wrong answers:
+
+1. Treating a gradient element as having no background — so white-on-orange was measured
+   against the page behind it, and reported **0 failures** while the defect was live.
+2. Collecting gradient stops from **every** ancestor, so a button's white label was tested
+   against the pale card gradient two levels up. That reported failures that were not real.
+
+Only "the nearest painted ancestor, gradient stops included" gives the truth.
+
+### The ratchet now covers all of `components/`
+
+`tests/quality/theme-tokens.test.ts` walks every `.tsx` under `components/` instead of the
+five airport files, with a floor assertion (`> 50` files) so a broken walk cannot make it
+pass vacuously, and a use assertion (`> 15` files reference `--text-on-accent`) so deleting
+every saffron fill cannot make it pass either. **Mutation-checked** by reintroducing
+`bg-saffron text-white` in `VehicleForm.tsx` — a file the old five-file rule could never
+have seen — and confirming it fails by name.
+
+### Two OTHER families the DOM scan turned up. Neither is fixed, neither is saffron.
+
+- **`--danger` + `text-white`** on "Sign Out" — **3.76:1** at 16px bold. Same class of
+  mistake as the saffron one: `--danger` is a fill-only token that `theme-contrast.test.ts`
+  asserts stays below AA. It needs a `--danger-text`-style flip, or a `--on-danger` token
+  that does not exist yet.
+- **`coffee-500` on the `.clay-card` gradient's lightest stop** — **4.28:1** in dark mode.
+  Exactly one colour pair, repeated on every card, which is why a naive count reported 215
+  "failures". `theme-contrast.test.ts` checks text tokens against `--canvas` and `--surface`
+  but **not** against the card gradient's stops, and the lightest stop is lighter than
+  `--surface`. Marginal, pre-existing, and worth its own change.
+
+### Tests
+
+**Client 1604 (104 files), functions 953, rules 237. Both builds and typecheck clean.**
+The client count dropped by 2 because the widened ratchet replaced four narrow per-file
+cases with two whole-tree ones.
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`, from the BRANCH worktree. Client-only, 23
+shipped files.
+
 ## DEPLOYED 2026-08-25 (late night) — the calendar calmed, and an indicator that was invisible
 
 **Live as `31e0b94`, and `main` is at that commit.**

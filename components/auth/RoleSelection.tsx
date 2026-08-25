@@ -227,7 +227,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
     return (
         <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-surface to-gold/10 flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-8 text-center">
+            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-[rgb(var(--text-on-accent))] py-8 text-center">
                 {/* THREE headers, not two. The arriving branch has no role to choose, so
                     leaving it on "Choose Your Role" — as this did at first, caught by
                     looking at it in the preview harness — asked a question the screen was
@@ -277,7 +277,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                         the cards gone and nothing saying what they picked. */}
                     {whereabouts === 'arriving' && (
                         <div className="clay-card p-6 space-y-3 text-center animate-in slide-in-from-top-4">
-                            <div className="inline-flex p-4 rounded-2xl bg-saffron text-white">
+                            <div className="inline-flex p-4 rounded-2xl bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))]">
                                 <Plane className="w-12 h-12" />
                             </div>
                             <h3 className="text-xl font-header font-bold text-coffee">
@@ -327,7 +327,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                                 disabled={loading}
                             >
                                 <div className={`inline-flex p-4 rounded-2xl ${selectedRole === role.id
-                                    ? 'bg-saffron text-white'
+                                    ? 'bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))]'
                                     : 'bg-cream-300 text-saffron'
                                     }`}>
                                     {role.icon}
@@ -382,7 +382,7 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                         <button
                             onClick={handleSubmit}
                             disabled={loading || whereabouts === null || (whereabouts === 'local' && !selectedRole)}
-                            className="clay-button bg-gradient-to-r from-saffron-800 to-gold-700 text-white px-12 py-4 rounded-xl font-semibold text-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="clay-button bg-gradient-to-r from-saffron-800 to-gold-700 text-[rgb(var(--text-on-accent))] px-12 py-4 rounded-xl font-semibold text-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? 'Saving...' : whereabouts === 'arriving' ? 'Set up my pickup' : 'Continue'}
                         </button>

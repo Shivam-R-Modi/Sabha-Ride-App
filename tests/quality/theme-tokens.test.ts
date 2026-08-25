@@ -607,62 +607,102 @@ describe('the bottom banners stay one pair', () => {
  * that carries no text, and an allowlist is how a rule stops meaning anything. These are
  * the files where the defect happened and where the redesign put the replacements.
  */
+/**
+ * NO TEXT ON A FILL-ONLY SAFFRON TOKEN — ANYWHERE IN `components/`.
+ *
+ * Scoped to the five airport files when it was written on 2026-08-25, on the assumption
+ * that the arrivals board was where the defect lived. Verifying that deploy disproved it:
+ * grepping the shipped bundle found the same pairing on primary buttons in **32 places
+ * across 22 files**. It was never calendar-specific — it is how every primary button in
+ * this app was built.
+ *
+ * WHY `text-white` CANNOT BE RESCUED BY A DARKER ORANGE, which is the thing to understand
+ * before "fixing" a failure here. White measured against every shade of the ramp:
+ *
+ *   saffron / -500   2.84 light   2.68 dark
+ *   saffron-dark     2.88         3.07
+ *   saffron-600      3.60         3.55
+ *   saffron-700      4.15         3.55
+ *   saffron-800      5.45         2.22   <- passes light, fails dark
+ *   --cta            5.45         3.06
+ *
+ * Every one fails in dark mode, because the ramp INVERTS: dark mode's saffron is light,
+ * so it needs dark text. The answer is `--text-on-accent`, which is white in light and
+ * near-black in dark — 5.45/5.77 on `--cta`. There is no static text colour that works.
+ *
+ * A pleasant consequence, and the reason the auth banners look identical after the fix:
+ * `--text-on-accent` IS white in light mode, so swapping the token on a gradient whose
+ * endpoints already pass in light (`from-saffron-800 to-gold-700`, 5.45 and 5.05) is a
+ * DARK-MODE-ONLY change. Those ten sites kept their brand colours exactly.
+ *
+ * 14px bold needs 4.5:1. WCAG 1.4.11's 3:1 allowance is for a control's BOUNDARY, not the
+ * text inside it, so "it is a button" is not an exemption.
+ */
 describe('no text sits on a fill-only saffron token', () => {
-    const AIRPORT_FILES = [
-        'components/airport/ArrivalBoard.tsx',
-        'components/airport/ArrivalCard.tsx',
-        'components/airport/ArrivalStatusCard.tsx',
-        'components/airport/ArrivalRequestForm.tsx',
-        'components/airport/AirportShell.tsx',
-    ];
     const read = (file: string) => readFileSync(path.join(ROOT, file), 'utf8');
 
-    it.each(AIRPORT_FILES)('%s never pairs bg-saffron with text-white', (file) => {
-        // COMMENTS ARE STRIPPED AS BLOCKS, not by line prefix, and both halves of that
-        // were learned the hard way in the same sitting:
-        //
-        //   1. The board's own header comment quotes `bg-saffron text-white font-bold`
-        //      while explaining why it was removed. A rule that fails on the prose
-        //      describing the fix is a rule nobody keeps.
-        //   2. Filtering by line prefix does NOT remove `{/* … */}` JSX comments, whose
-        //      lines start with `{/*`. One of those contains the word "coordinator's",
-        //      and that lone apostrophe opens a `'…'` span that swallows the rest of the
-        //      file — so the scan found ZERO spans containing bg-saffron and passed while
-        //      the defect was sitting in the file. Verified by reintroducing it.
-        //
-        // Stripping `/* … */` first handles JSDoc and JSX comments in one pass.
-        const code = read(file)
-            .replace(/\/\*[\s\S]*?\*\//g, '')
-            .split('\n')
-            .filter(line => !line.trim().startsWith('//'))
-            .join('\n');
-        const spans = code.match(/'[^']*'|"[^"]*"|`[^`]*`/g) ?? [];
-        const offenders = spans.filter(s => /\bbg-saffron\b/.test(s) && /\btext-white\b/.test(s));
+    /** Every .tsx under components/, plus the two at the root. */
+    const componentFiles = (() => {
+        const out: string[] = ['App.tsx'];
+        const walk = (rel: string) => {
+            for (const entry of readdirSync(path.join(ROOT, rel), { withFileTypes: true })) {
+                const next = `${rel}/${entry.name}`;
+                if (entry.isDirectory()) walk(next);
+                else if (entry.name.endsWith('.tsx')) out.push(next);
+            }
+        };
+        walk('components');
+        return out;
+    })();
+
+    it('scans a plausible number of files, so this cannot pass by finding none', () => {
+        // The guard on the guard. A broken walk would make every assertion below vacuous,
+        // which is this repo's recurring quality-test failure.
+        expect(componentFiles.length).toBeGreaterThan(50);
+    });
+
+    it('never pairs a saffron fill with text-white, anywhere in components/', () => {
+        /**
+         * COMMENTS ARE STRIPPED AS BLOCKS, not by line prefix, and both halves of that
+         * were learned the hard way:
+         *
+         *   1. Several files quote the old classes while explaining why they went. A rule
+         *      that fails on the prose describing the fix is a rule nobody keeps.
+         *   2. Filtering by line prefix does NOT remove `{/* … *\/}` JSX comments, whose
+         *      lines start with `{/*`. One of those contains "coordinator's", and that
+         *      lone apostrophe opens a `'…'` span that swallows the rest of the file — so
+         *      the scan found ZERO spans and passed while the defect sat in the file.
+         *      Verified at the time by reintroducing it.
+         */
+        const offenders: string[] = [];
+        for (const file of componentFiles) {
+            const code = read(file)
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .split('\n')
+                .filter(line => !line.trim().startsWith('//'))
+                .join('\n');
+
+            for (const span of code.match(/'[^']*'|"[^"]*"|`[^`]*`/g) ?? []) {
+                const hasFill = /\b(?:bg|from|via|to)-saffron(?:-\w+)?\b/.test(span);
+                if (hasFill && /\btext-white\b/.test(span)) offenders.push(file);
+            }
+        }
 
         expect(
-            offenders,
-            `${file}: white on --accent is 2.84:1 (light) / 2.68:1 (dark). `
-            + 'Use bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] instead.',
+            [...new Set(offenders)],
+            'White on any saffron shade fails AA in dark mode — the ramp inverts. Use '
+            + 'text-[rgb(var(--text-on-accent))], which is white in light and near-black '
+            + 'in dark. For a solid fill also move to bg-[rgb(var(--cta))].',
         ).toEqual([]);
     });
 
-    /**
-     * THE COLLISION THAT SHIPPED INVISIBLY, and why this is a `tests/quality` rule.
-     *
-     * The arrivals board painted its "everyone has a Sarthi" badge `bg-cream-400` while
-     * the SELECTED CELL was also `bg-cream-400` — the same token, channel-sum distance
-     * ZERO. So on a day that was both selected and fully assigned, the indicator was
-     * drawn in exactly the colour behind it and vanished. The day's `aria-label` stayed
-     * correct throughout, and `tests/setup.ts` rightly forbids asserting class names in
-     * a component test, so nothing in 28 behavioural cases could see it. The owner
-     * spotted it in a screenshot.
-     *
-     * Stated as "never in this file" rather than "these two must differ", because the
-     * absence is one grep and cannot rot, while comparing two spans needs the test to
-     * know which is the badge and which is the cell. The board now carries no fill on a
-     * day cell at all — selection is a ring — so there is nothing legitimate left here
-     * for cream-400 to be.
-     */
+    it('the verified pair is actually in use, so this is not passing by absence', () => {
+        // Without this, deleting every saffron fill in the app would make the rule above
+        // pass while the design regressed.
+        const someUse = componentFiles.filter(f => read(f).includes('--text-on-accent'));
+        expect(someUse.length).toBeGreaterThan(15);
+    });
+
     it('the board never uses bg-cream-400, the colour its indicator vanished into', () => {
         const code = read('components/airport/ArrivalBoard.tsx')
             .replace(/\/\*[\s\S]*?\*\//g, '')

@@ -300,7 +300,7 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                             // Never appears beside the claim button, which is also
                             // saffron: claim only renders on an `open` trip and this
                             // only on a claimed or met one.
-                            className="clay-button w-full py-3 rounded-xl font-bold text-white bg-gradient-to-r from-saffron to-saffron-dark flex items-center justify-center gap-2"
+                            className="clay-button w-full py-3 rounded-xl font-bold text-[rgb(var(--text-on-accent))] bg-gradient-to-r from-[rgb(var(--cta))] to-[rgb(var(--cta-dark))] flex items-center justify-center gap-2"
                         >
                             <MessageCircle size={18} aria-hidden="true" />
                             {arrival.familyNotifiedAt ? 'Message the family again' : 'Tell the family they are safe'}
@@ -330,7 +330,7 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                                     onClick={() => run(action)}
                                     className={`clay-button w-full py-3 rounded-xl font-bold disabled:opacity-60
                                         ${action === 'claim'
-                                            ? 'text-white bg-gradient-to-r from-saffron to-saffron-dark'
+                                            ? 'text-[rgb(var(--text-on-accent))] bg-gradient-to-r from-[rgb(var(--cta))] to-[rgb(var(--cta-dark))]'
                                             : 'text-coffee bg-cream-300'}`}
                                 >
                                     {busy === action ? 'Saving…' : ACTION_LABEL[action]}

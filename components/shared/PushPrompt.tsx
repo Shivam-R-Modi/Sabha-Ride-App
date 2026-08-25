@@ -50,7 +50,7 @@ export const PushPrompt: React.FC = () => {
                 <button
                     onClick={enable}
                     disabled={busy}
-                    className="flex-1 min-h-11 px-4 rounded-xl bg-saffron text-white text-sm font-bold btn-feedback disabled:opacity-60"
+                    className="flex-1 min-h-11 px-4 rounded-xl bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] text-sm font-bold btn-feedback disabled:opacity-60"
                 >
                     {busy ? 'Turning on…' : 'Turn on notifications'}
                 </button>

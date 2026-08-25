@@ -74,7 +74,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
     return (
         <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-surface to-gold/10 flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-8 text-center">
+            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-[rgb(var(--text-on-accent))] py-8 text-center">
                 <h1 className="text-3xl md:text-4xl font-header font-bold">Verify Your Email</h1>
                 <p className="text-sm md:text-base mt-2 opacity-90">One quick step to activate your Seva account</p>
             </div>
@@ -117,7 +117,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
                         <button
                             onClick={handleCheckVerification}
                             disabled={isChecking}
-                            className="w-full clay-button bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:shadow-lg transition-all disabled:opacity-50"
+                            className="w-full clay-button bg-gradient-to-r from-saffron-800 to-gold-700 text-[rgb(var(--text-on-accent))] py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:shadow-lg transition-all disabled:opacity-50"
                         >
                             {isChecking ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
                             I Have Verified

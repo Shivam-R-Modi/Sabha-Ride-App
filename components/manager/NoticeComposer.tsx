@@ -187,7 +187,7 @@ export const NoticeComposer: React.FC = () => {
                 <button
                     onClick={publish}
                     disabled={busy || empty || tooLong || titleTooLong}
-                    className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl text-sm font-bold disabled:opacity-50 btn-feedback"
+                    className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] rounded-xl text-sm font-bold disabled:opacity-50 btn-feedback"
                 >
                     {busy ? <><Loader2 size={16} className="animate-spin" /> Posting…</> : <><Send size={16} /> Post notice</>}
                 </button>

@@ -406,7 +406,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                                 className={`clay-card p-4 transition-all ${isVisited ? 'opacity-75' : ''}`}
                             >
                                 <div className="flex items-start gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-saffron to-saffron-light flex items-center justify-center text-white font-bold text-sm shrink-0">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[rgb(var(--cta))] to-[rgb(var(--cta-light))] flex items-center justify-center text-[rgb(var(--text-on-accent))] font-bold text-sm shrink-0">
                                         {student.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                                     </div>
                                     <div className="flex-1 min-w-0">

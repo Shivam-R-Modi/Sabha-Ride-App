@@ -256,7 +256,7 @@ export const ManagerReports: React.FC = () => {
                         <button
                             onClick={handleDownloadAttendance}
                             disabled={isDownloading}
-                            className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-saffron text-white rounded-xl text-sm font-bold hover:bg-saffron/90 transition-colors disabled:opacity-50"
+                            className="shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] rounded-xl text-sm font-bold hover:bg-[rgb(var(--cta-dark))] transition-colors disabled:opacity-50"
                         >
                             {isDownloading ? (
                                 <Loader2 size={16} className="animate-spin" />

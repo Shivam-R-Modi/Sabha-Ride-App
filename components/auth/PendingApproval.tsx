@@ -65,7 +65,7 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
     return (
         <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-surface to-gold/10 flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-8 text-center">
+            <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-[rgb(var(--text-on-accent))] py-8 text-center">
                 <h1 className="text-3xl md:text-4xl font-header font-bold">Account Pending</h1>
             </div>
 
@@ -114,7 +114,7 @@ export const PendingApproval: React.FC<PendingApprovalProps> = ({ role, onBack }
                             <button
                                 type="submit"
                                 disabled={loading || !managerCode.trim()}
-                                className="w-full bg-saffron text-white py-2 rounded-lg text-sm font-bold hover:bg-saffron/90 transition-all disabled:opacity-50"
+                                className="w-full bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] py-2 rounded-lg text-sm font-bold hover:bg-[rgb(var(--cta-dark))] transition-all disabled:opacity-50"
                             >
                                 {loading ? 'Checking\u2026' : 'Unlock Manager Account'}
                             </button>

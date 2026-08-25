@@ -162,7 +162,7 @@ export const FleetManagement: React.FC = () => {
                     obvious guess. */}
                 <button
                     onClick={handleAddVehicle}
-                    className="shrink-0 whitespace-nowrap px-4 py-2 bg-saffron text-white rounded-xl font-semibold hover:bg-saffron/90 transition-colors"
+                    className="shrink-0 whitespace-nowrap px-4 py-2 bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] rounded-xl font-semibold hover:bg-[rgb(var(--cta-dark))] transition-colors"
                 >
                     Add Vehicle
                 </button>

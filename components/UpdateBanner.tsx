@@ -114,7 +114,7 @@ export const UpdateBanner: React.FC = () => {
                 because the elevation rule is border OR shadow, never both, and
                 `shadow-2xl` is what lifts this off the page. */}
             <div className="relative overflow-hidden bg-surface text-coffee p-4 pl-5 rounded-xl shadow-2xl flex items-center justify-between gap-3">
-                <span className="absolute inset-y-0 left-0 w-1.5 bg-saffron" aria-hidden="true" />
+                <span className="absolute inset-y-0 left-0 w-1.5 bg-[rgb(var(--cta))]" aria-hidden="true" />
                 <div>
                     <h4 className="font-bold text-sm">Update available</h4>
                     <p className="text-xs text-coffee-500">
@@ -124,7 +124,7 @@ export const UpdateBanner: React.FC = () => {
                 <button
                     onClick={handleReload}
                     disabled={reloading}
-                    className="bg-saffron text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-md active:scale-95 shrink-0 disabled:opacity-70"
+                    className="bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-md active:scale-95 shrink-0 disabled:opacity-70"
                 >
                     <RefreshCw size={14} className={reloading ? 'animate-spin' : undefined} />
                     {reloading ? 'Updating' : 'Reload'}

@@ -52,7 +52,7 @@ export const PWAPrompt: React.FC = () => {
             <ol className="mt-2 space-y-1">
               {steps.map((step, index) => (
                 <li key={step} className="text-xs text-coffee-700 flex items-start gap-2">
-                  <span className="shrink-0 w-4 h-4 rounded-full bg-saffron text-white text-[10px] font-bold flex items-center justify-center mt-px">
+                  <span className="shrink-0 w-4 h-4 rounded-full bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] text-[10px] font-bold flex items-center justify-center mt-px">
                     {index + 1}
                   </span>
                   <span className="min-w-0">{step}</span>
@@ -74,7 +74,7 @@ export const PWAPrompt: React.FC = () => {
           {availability === 'prompt' && (
             <button
               onClick={install}
-              className="bg-saffron text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-md active:scale-95"
+              className="bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-md active:scale-95"
             >
               <Download size={14} /> Install
             </button>

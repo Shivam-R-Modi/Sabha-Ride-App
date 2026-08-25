@@ -241,7 +241,7 @@ export const VehicleForm: React.FC<VehicleFormProps> = ({ vehicle, onClose, onSu
                         </button>
                         <button
                             type="submit"
-                            className="flex-1 px-4 py-3 bg-saffron text-white rounded-xl font-semibold hover:bg-saffron/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            className="flex-1 px-4 py-3 bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] rounded-xl font-semibold hover:bg-[rgb(var(--cta-dark))] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             disabled={isSubmitting}
                         >
                             {isSubmitting ? (

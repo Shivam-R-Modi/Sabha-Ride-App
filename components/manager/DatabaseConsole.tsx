@@ -321,7 +321,7 @@ export const DatabaseConsole: React.FC = () => {
         // inside it — not from painting it in a text colour.
         <div className="clay-card p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in slide-in-from-bottom duration-200">
           <div className="flex items-center gap-3">
-            <span className="bg-saffron text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
+            <span className="bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
               {selectedDocIds.length} Selected
             </span>
             <span className="text-xs text-coffee-500">

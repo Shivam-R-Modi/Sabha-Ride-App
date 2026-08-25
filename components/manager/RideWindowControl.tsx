@@ -106,7 +106,7 @@ export const RideWindowControl: React.FC = () => {
                         { rideType: 'home-to-sabha' },
                     )}
                     disabled={!!busy}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-saffron text-white rounded-lg font-semibold text-sm hover:bg-saffron/90 disabled:opacity-50 transition-all"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] rounded-lg font-semibold text-sm hover:bg-[rgb(var(--cta-dark))] disabled:opacity-50 transition-all"
                 >
                     {busy === 'pickup' ? <Loader2 size={16} className="animate-spin" /> : <Clock size={16} />}
                     Open ride requests now

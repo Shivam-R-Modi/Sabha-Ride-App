@@ -332,7 +332,7 @@ const EventDetail: React.FC<{
                     <div className="flex gap-2">
                         <button
                             onClick={save} disabled={busy || !valid}
-                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-saffron text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] rounded-lg text-xs font-bold disabled:opacity-50"
                         >
                             {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
                         </button>
@@ -625,7 +625,7 @@ export const SabhaCalendar: React.FC = () => {
                         <div className="flex gap-2">
                             <button
                                 onClick={add} disabled={busy}
-                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-saffron text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] rounded-lg text-xs font-bold disabled:opacity-50"
                             >
                                 {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Add
                             </button>

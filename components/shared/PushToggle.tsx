@@ -42,7 +42,7 @@ export const PushToggle: React.FC = () => {
                 <ol className="mt-2 space-y-1">
                     {steps.map((step, i) => (
                         <li key={step} className="text-xs text-coffee-700 flex items-start gap-2">
-                            <span className="shrink-0 w-4 h-4 rounded-full bg-saffron text-white text-[10px] font-bold flex items-center justify-center mt-px">
+                            <span className="shrink-0 w-4 h-4 rounded-full bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))] text-[10px] font-bold flex items-center justify-center mt-px">
                                 {i + 1}
                             </span>
                             <span className="min-w-0">{step}</span>

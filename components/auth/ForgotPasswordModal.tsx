@@ -134,7 +134,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                     <button
                         type="submit"
                         disabled={isLoading || cooldown > 0}
-                        className="w-full bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-3 rounded-xl font-bold text-sm hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-gradient-to-r from-saffron-800 to-gold-700 text-[rgb(var(--text-on-accent))] py-3 rounded-xl font-bold text-sm hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isLoading ? (
                             <Loader2 className="animate-spin" size={18} />

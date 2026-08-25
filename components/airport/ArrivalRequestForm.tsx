@@ -543,7 +543,7 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                 type="button"
                 onClick={submit}
                 disabled={saving}
-                className="clay-button w-full py-4 rounded-xl font-bold text-white bg-gradient-to-r from-saffron to-saffron-dark disabled:opacity-60"
+                className="clay-button w-full py-4 rounded-xl font-bold text-[rgb(var(--text-on-accent))] bg-gradient-to-r from-[rgb(var(--cta))] to-[rgb(var(--cta-dark))] disabled:opacity-60"
             >
                 {saving ? 'Sending…' : 'Ask for a pickup'}
             </button>

@@ -242,7 +242,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                         {assignment.students.map((student, idx) => (
                             <div key={student.id} className="clay-card p-4">
                                 <div className="flex items-start gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-saffron to-saffron-light flex items-center justify-center text-white font-bold text-sm shrink-0">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[rgb(var(--cta))] to-[rgb(var(--cta-light))] flex items-center justify-center text-[rgb(var(--text-on-accent))] font-bold text-sm shrink-0">
                                         {idx + 1}
                                     </div>
                                     <div className="flex-1 min-w-0">
