@@ -48,6 +48,9 @@ export const useAuth = () => {
         getAvailableRoles: () => ['manager', 'driver', 'student'],
         logout: () => {},
         refreshProfile: () => {},
+        // Added 2026-08-25 with the signup step. RoleSelection calls it on the manager
+        // path, and a stub missing it throws rather than rendering.
+        refreshClaims: async () => {},
     };
 };
 

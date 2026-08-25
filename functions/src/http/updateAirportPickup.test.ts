@@ -31,6 +31,15 @@ let auditRows: any[];
 let pickup: any;
 let users: Record<string, any>;
 let txRuns: number;
+/**
+ * Set when the code under test reads inside a transaction AFTER writing.
+ *
+ * Firestore refuses that — "all reads must be executed before all writes" — and the
+ * real SDK throws. A fake that quietly allows it is how a completion that fails on
+ * every single production call passes every test, which is exactly what happened while
+ * this was being written.
+ */
+let readAfterWrite: boolean;
 
 vi.mock('firebase-functions', () => {
     class FakeHttpsError extends Error {
@@ -72,11 +81,12 @@ const OPEN = {
 };
 
 function makeDb() {
-    updates = []; auditRows = []; txRuns = 0;
+    updates = []; auditRows = []; txRuns = 0; readAfterWrite = false;
     db = {
         collection: (name: string) => ({
             doc: (id: string) => ({
                 path: `${name}/${id}`,
+                id,
                 get: async () => ({
                     exists: name === 'users' ? !!users[id] : pickup !== null,
                     data: () => (name === 'users' ? users[id] : pickup),
@@ -85,9 +95,24 @@ function makeDb() {
         }),
         runTransaction: async (fn: any) => {
             txRuns += 1;
+            let hasWritten = false;
             return fn({
-                get: async (ref: any) => ({ exists: pickup !== null, data: () => pickup, ref }),
-                update: (ref: any, data: any) => { updates.push({ path: ref.path, data }); },
+                get: async (ref: any) => {
+                    // Firestore refuses a read that follows a write inside a
+                    // transaction. The real SDK throws; this fake records it so the test
+                    // below can assert the ordering, because getting it wrong throws on
+                    // EVERY completion in production and on none of them here.
+                    if (hasWritten) readAfterWrite = true;
+                    if (String(ref.path).startsWith('users/')) {
+                        const id = String(ref.path).split('/')[1];
+                        return { exists: !!users[id], data: () => users[id], ref };
+                    }
+                    return { exists: pickup !== null, data: () => pickup, ref };
+                },
+                update: (ref: any, data: any) => {
+                    hasWritten = true;
+                    updates.push({ path: ref.path, data });
+                },
             });
         },
     };
@@ -417,5 +442,110 @@ describe('the audit row', () => {
     it('separates a cancel from a claim, because only one strands somebody', async () => {
         await call({ action: 'cancel' }, 'rider_1');
         expect(auditRows[0].action).toBe('airport.cancel');
+    });
+});
+
+describe('completing a trip graduates the traveller', () => {
+    const claimed = {
+        status: 'claimed' as const, claimedByUid: 'sarthi_1', claimedByName: 'Kiran',
+        dropoffAddress: '360 Huntington Ave, Boston, MA',
+        dropoffLat: 42.3399, dropoffLng: -71.0881,
+    };
+
+    const travellerWrite = () => updates.find(u => u.path === 'users/rider_1')?.data;
+
+    beforeEach(() => { pickup = { ...OPEN, ...claimed }; });
+
+    it('clears isArriving, so their app becomes Sabha Seva', async () => {
+        // Dropping somebody off is the moment they stop arriving. Leaving the flag set
+        // would keep a person who now lives here in a one-screen newcomer app.
+        users.rider_1 = { ...RIDER, isArriving: true };
+        await call({ action: 'completed' }, 'sarthi_1');
+
+        expect(travellerWrite()).toMatchObject({ isArriving: false });
+    });
+
+    it('seeds their home address from the trip destination when they have none', async () => {
+        // The destination came from the same AddressAutocomplete the profile screen uses,
+        // so it is already geocoded and already the shape resolveHomeCoords reads. Their
+        // first sabha ride works with no extra typing.
+        users.rider_1 = { ...RIDER, isArriving: true };
+        await call({ action: 'completed' }, 'sarthi_1');
+
+        expect(travellerWrite()).toMatchObject({
+            address: '360 Huntington Ave, Boston, MA',
+            location: {
+                latitude: 42.3399,
+                longitude: -71.0881,
+                formattedAddress: '360 Huntington Ave, Boston, MA',
+                seededFromPickupId: 'p1',
+            },
+        });
+    });
+
+    it('does NOT overwrite an address they already had', async () => {
+        // A returning local has a real home. A trip destination might be a friend's sofa
+        // for the first week, and overwriting would send a Sarthi to the wrong door every
+        // Friday from then on.
+        users.rider_1 = { ...RIDER, address: '1 Real Home St', isArriving: false };
+        await call({ action: 'completed' }, 'sarthi_1');
+
+        expect(travellerWrite()).toEqual({ isArriving: false });
+    });
+
+    it('treats a blank address as none', async () => {
+        users.rider_1 = { ...RIDER, address: '   ' };
+        await call({ action: 'completed' }, 'sarthi_1');
+        expect(travellerWrite()).toHaveProperty('address', '360 Huntington Ave, Boston, MA');
+    });
+
+    it('refuses to seed the 0,0 placeholder', async () => {
+        // resolveHomeCoords rejects 0,0 as "never geocoded" precisely because somebody
+        // once stored it. Seeding it would put a Sarthi in the Atlantic.
+        pickup = { ...OPEN, ...claimed, dropoffLat: 0, dropoffLng: 0 };
+        users.rider_1 = { ...RIDER, isArriving: true };
+        await call({ action: 'completed' }, 'sarthi_1');
+
+        expect(travellerWrite()).toEqual({ isArriving: false });
+    });
+
+    it('still clears the flag when the destination is unusable', async () => {
+        // The graduation must not depend on the address seeding succeeding, or a bad
+        // coordinate strands them in the newcomer app.
+        pickup = { ...OPEN, ...claimed, dropoffAddress: '', dropoffLat: NaN, dropoffLng: NaN };
+        users.rider_1 = { ...RIDER, isArriving: true };
+        await call({ action: 'completed' }, 'sarthi_1');
+
+        expect(travellerWrite()).toEqual({ isArriving: false });
+    });
+
+    it('touches the traveller for NO other action', async () => {
+        for (const action of ['met', 'no_show', 'release', 'familyNotified']) {
+            updates.length = 0;
+            pickup = { ...OPEN, ...claimed };
+            await call({ action }, 'sarthi_1');
+            expect(travellerWrite(), action).toBeUndefined();
+        }
+    });
+
+    it('reads the traveller BEFORE writing anything', async () => {
+        // The bug this caught while being written. `tx.get` after `tx.update` throws in
+        // Firestore, so getting the order wrong breaks EVERY completion in production and
+        // nothing in a fake — which is why the fake now records it.
+        users.rider_1 = { ...RIDER, isArriving: true };
+        await call({ action: 'completed' }, 'sarthi_1');
+
+        expect(readAfterWrite, 'a transaction read followed a write').toBe(false);
+    });
+
+    it('writes the trip and the traveller in the SAME transaction', async () => {
+        // Or a traveller marked delivered could be left stuck in the newcomer app —
+        // exactly the half-done state a transaction exists to prevent.
+        users.rider_1 = { ...RIDER, isArriving: true };
+        await call({ action: 'completed' }, 'sarthi_1');
+
+        expect(txRuns).toBe(1);
+        expect(updates.map(u => u.path).sort())
+            .toEqual(['airportPickups/p1', 'users/rider_1']);
     });
 });

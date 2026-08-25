@@ -17,8 +17,10 @@ import { FleetManagement } from './components/manager/FleetManagement';
 import { ManagerRecords } from './components/manager/ManagerRecords';
 import { ManagerNotices } from './components/manager/ManagerNotices';
 // import { CleanupUtility } from './components/admin/CleanupUtility'; // removed — component does not exist
-import { ServiceLauncher } from './components/airport/ServiceLauncher';
 import { AirportShell } from './components/airport/AirportShell';
+import { ArrivalBoard } from './components/airport/ArrivalBoard';
+import { arrivingMember } from './src/constants/service';
+import { useService } from './hooks/useService';
 import { ResponsiveLayout } from './components/Layout';
 import { ProfileEditor } from './components/shared/ProfileEditor';
 import { PWAPrompt } from './components/PWAPrompt';
@@ -30,8 +32,9 @@ import { useNavigation } from './contexts/NavigationContext';
 
 export default function App() {
   const { currentUser, userProfile, loading, logout, activeRole, refreshProfile } = useAuth();
-  const { currentTab, service } = useNavigation();
+  const { currentTab } = useNavigation();
   const [showSplash, setShowSplash] = useState(true);
+  const { service } = useService();
 
   // Note: Automatic splash timer removed to favor user-initiated transition
 
@@ -51,9 +54,21 @@ export default function App() {
     return <RoleSelection onSelectRole={() => refreshProfile()} />;
   }
 
-  if (!userProfile.name || !userProfile.address) {
+  // A NAME IS ALWAYS REQUIRED. AN ADDRESS IS NOT, IF THEY HAVE NOT ARRIVED.
+  //
+  // ProfileSetup will not let anybody past without an address picked from Google Places
+  // suggestions, with coordinates. For somebody still in India that is either a dead end
+  // or — worse — their Ahmedabad address geocoded into `location`, which
+  // `resolveHomeCoords` would then hand to a Sarthi as a Friday pickup point.
+  //
+  // They get asked for one the moment they stop arriving: clearing `isArriving` drops
+  // them back through this same gate, which is exactly when a home address starts to
+  // mean something. The server also seeds it from their pickup's destination on
+  // completion, so most people never see the screen at all.
+  const arriving = arrivingMember(userProfile);
+  if (!userProfile.name || (!userProfile.address && !arriving)) {
     const userEmail = currentUser.email || userProfile.email || "";
-    return <ProfileSetup role={userProfile.role} email={userEmail} onComplete={() => refreshProfile()} />;
+    return <ProfileSetup role={userProfile.role} email={userEmail} arriving={arriving} onComplete={() => refreshProfile()} />;
   }
 
   if (userProfile.accountStatus === 'pending') {
@@ -80,18 +95,16 @@ export default function App() {
 
   // WHICH SERVICE, before which role.
   //
-  // Airport Seva is a second service behind the same login, not a feature inside the
-  // ride app — a different journey, a different lifecycle, and the Sarthi chooses the
-  // trip rather than the server choosing the Sarthi. So the choice sits ABOVE
-  // everything below, and the sabha branch is left exactly as it was rather than
-  // edited to make room. Every existing nav test still exercises the same code.
+  // Airport Seva is the whole app for somebody who has not arrived yet, and is not a
+  // destination for anybody else — so the service is DERIVED from the profile rather
+  // than chosen. The launcher that used to stand here, asking everybody which service
+  // they wanted, is deleted: a student who has lived here two years has no use for an
+  // Airport tab, and somebody in India has no use for a lift to sabha.
   //
-  // The launcher renders outside ResponsiveLayout on purpose: neither the sidebar nor
-  // the bottom nav means anything until a service is chosen. It lands here after the
-  // whole auth cascade above, so everybody reaching it is verified and approved.
-  if (service === null) {
-    return <ServiceLauncher />;
-  }
+  // Only a manager can override, and `resolveService` drops the override for anybody
+  // else rather than trusting the caller. See src/constants/service.ts.
+  //
+  // The sabha branch below is untouched by all of this.
 
   const renderContent = () => {
     if (service === 'airport') {
@@ -108,6 +121,10 @@ export default function App() {
           return <ManagerDashboard />;
         case 'people':
           return <ManagerPeople />;
+        case 'arrivals':
+          // A sabha destination, not a service. Claiming an airport trip is one more
+          // thing somebody who already lives here does, alongside driving on a Friday.
+          return <ArrivalBoard />;
         case 'history':
           return <ManagerReports />;
         case 'setup':
@@ -132,6 +149,7 @@ export default function App() {
       switch (currentTab) {
         case 'home': return <DriverDashboard />;
         case 'history': return <DriverHistory />;
+        case 'arrivals': return <ArrivalBoard />;
         case 'profile': return <ProfileEditor />;
         default: return <DriverDashboard />;
       }

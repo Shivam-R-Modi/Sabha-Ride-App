@@ -7,8 +7,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
 import { RoleSwitcher } from './RoleSwitcher';
 import { InstallAppButton } from './shared/InstallAppButton';
-import { hasGrantedRole } from '../src/roles';
 import { SERVICE_LABEL } from '../src/constants/service';
+import { useService } from '../hooks/useService';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -63,33 +63,33 @@ export const ResponsiveLayout: React.FC<LayoutProps> = ({ children, role }) => {
 };
 
 /**
- * Move between the two services.
+ * Move between the two services. MANAGERS ONLY.
  *
- * ALWAYS VISIBLE, in the mobile header and the sidebar, and that placement is the
- * point rather than a convenience. The mobile dock's overflow drawer is reached by a
- * SWIPE and by nothing else — an owner decision recorded on GrabHandle below — so a
- * switch that lived only in there would be unreachable by keyboard, switch access or
- * VoiceOver, and Airport Seva would be a room with no door out.
+ * It used to render for everybody, which was the whole bug: a student who has lived here
+ * two years got an Airport tab they will never use, and somebody still in India got
+ * offered lifts to a sabha they cannot attend. Service is derived from the profile now —
+ * see src/constants/service.ts — and this is the one exception, so a manager taking a
+ * support call can see what a newcomer sees.
  *
- * A single toggle rather than a menu, because there are exactly two. It is labelled
- * with the service it takes you TO, with the icon to match, so the tap is not a guess.
- * Where you currently are is said by the screen itself — "Arrivals", "Dispatch" — and
- * by the sidebar's own subtitle.
+ * `canSwitch` comes from the context, which gets it from `canSwitchService`. Not a local
+ * role check: the same predicate has to decide whether the control renders AND whether
+ * `resolveService` honours the override, or one of them is a lie.
+ *
+ * ALWAYS VISIBLE — header and sidebar, never only the dock's overflow drawer. That
+ * drawer opens on a swipe and nothing else, an owner decision recorded on GrabHandle
+ * below, so a switch that lived only there would be unreachable by keyboard, switch
+ * access or VoiceOver.
  */
 const ServiceSwitch: React.FC<{ compact?: boolean }> = ({ compact }) => {
-  const { userProfile } = useAuth();
-  const { service, setService } = useNavigation();
-  if (!service) return null;
+  const { service, switchService, canSwitch } = useService();
+  if (!canSwitch) return null;
 
   const other: Service = service === 'sabha' ? 'airport' : 'sabha';
   const Icon = other === 'airport' ? Plane : Car;
-  // A Sarthi lands on the arrivals board, a Bhulku on their own pickup. Decided here
-  // and passed down so NavigationContext stays unaware of roles.
-  const canSeeBoard = hasGrantedRole(userProfile, 'driver');
 
   return (
     <button
-      onClick={() => setService(other, canSeeBoard)}
+      onClick={() => switchService(other)}
       aria-label={`Switch to ${SERVICE_LABEL[other]}`}
       title={`Switch to ${SERVICE_LABEL[other]}`}
       // cream-400, not cream-300, and for the reason spelled out on the nav pill and
@@ -140,9 +140,10 @@ const MobileHeader: React.FC = () => {
 
 const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
   const { logout, userProfile } = useAuth();
-  const { currentTab, setCurrentTab, isSidebarCollapsed, toggleSidebar, service } = useNavigation();
+  const { currentTab, setCurrentTab, isSidebarCollapsed, toggleSidebar } = useNavigation();
+  const { service } = useService();
 
-  const navItems = getNavItems(role, service ?? 'sabha');
+  const navItems = getNavItems(role, service);
 
   return (
     // Same rung as the mobile header: it is chrome, and it holds a RoleSwitcher too.
@@ -158,7 +159,7 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
           <div className="animate-in fade-in slide-in-from-left-2">
             <h1 className="font-header font-bold text-coffee leading-none">Bhulka Gaadi</h1>
             <p className="text-[10px] text-gold-700 font-bold uppercase tracking-widest mt-1">
-              {service ? SERVICE_LABEL[service] : 'Seva Portal'}
+              {SERVICE_LABEL[service]}
             </p>
           </div>
         )}
@@ -368,8 +369,9 @@ const GrabHandle: React.FC<{
  * manager hits every Friday.
  */
 const BottomNav: React.FC<{ role: UserRole }> = ({ role }) => {
-  const { currentTab, setCurrentTab, service } = useNavigation();
-  const navItems = getNavItems(role, service ?? 'sabha');
+  const { currentTab, setCurrentTab } = useNavigation();
+  const { service } = useService();
+  const navItems = getNavItems(role, service);
   const [expanded, setExpanded] = useState(false);
 
   const primary = navItems.filter(item => item.primary);
@@ -545,22 +547,20 @@ interface NavItem {
  * codebase keeps removing.
  */
 const getNavItems = (role: UserRole, service: Service = 'sabha'): NavItem[] => {
+  // Airport Seva is one screen plus a profile. No board here: claiming a trip is
+  // something somebody who already LIVES here does, so that is a sabha tab below.
   if (service === 'airport') {
-    // A Bhulku gets no board: the rules refuse every query it makes, so the tab would
-    // render an empty screen that reads as "nobody is arriving".
-    const canSeeBoard = role === 'driver' || role === 'manager';
     return [
-      ...(canSeeBoard
-        ? [{ id: 'airport-board' as TabView, label: 'Arrivals', icon: CalendarDays }]
-        : []),
       { id: 'airport-request', label: 'My pickup', icon: Ticket },
       { id: 'profile', label: 'Profile', icon: UserIcon },
     ];
   }
 
   if (role === 'driver') {
+    // Four, so still inside the five-slot dock with no overflow drawer.
     return [
       { id: 'home', label: 'Dashboard', icon: Home },
+      { id: 'arrivals', label: 'Arrivals', icon: CalendarDays },
       { id: 'history', label: 'History', icon: History },
       { id: 'profile', label: 'Profile', icon: UserIcon },
     ];
@@ -587,6 +587,10 @@ const getNavItems = (role: UserRole, service: Service = 'sabha'): NavItem[] => {
       { id: 'setup', label: 'Setup', icon: Settings, primary: true },
       { id: 'profile', label: 'Profile', icon: UserIcon },
       { id: 'notices', label: 'Notices', icon: Megaphone },
+      // Ninth destination, unmarked, so it joins the swipe-up drawer rather than
+      // squeezing the four docked ones. Airport runs are weeks out; Dispatch, People,
+      // Fleet and Setup are what a manager touches on the night.
+      { id: 'arrivals', label: 'Arrivals', icon: CalendarDays },
       { id: 'records', label: 'Records', icon: Database, separated: true },
     ];
   }

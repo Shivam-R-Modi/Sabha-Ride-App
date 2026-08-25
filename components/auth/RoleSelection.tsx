@@ -6,19 +6,62 @@ import { redeemManagerInvite } from '../../src/utils/cloudFunctions';
 import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../../src/constants/tenancy';
 import { UserRole } from '../../types';
 import { grantedRoles } from '../../src/roles';
-import { Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Car, Eye, EyeOff, Plane } from 'lucide-react';
 
 interface RoleSelectionProps {
     onSelectRole: () => void;
 }
 
+/**
+ * Where they are, asked before what they want to do.
+ *
+ * `null` means unanswered, which is the first step of this screen.
+ */
+type Whereabouts = 'arriving' | 'local';
+
 export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) => {
     const { currentUser, refreshClaims } = useAuth();
+    /**
+     * HELD IN REACT STATE, NEVER WRITTEN ON ITS OWN, and that is load-bearing.
+     *
+     * The `setDoc` below writes role, registeredRole, roles, activeRole and
+     * accountStatus — five of the fields in `touchesPrivilegeFields()`. It is legal
+     * only because it is a CREATE: no user document exists yet, so firestore.rules
+     * takes the `createsUnprivilegedProfile()` arm, and `changedKeys()` is
+     * update-only.
+     *
+     * So a separate screen that asked this question and wrote the answer first would
+     * turn that create into an owner UPDATE touching privilege fields, the rules
+     * would deny it, and NOBODY COULD REGISTER — not a student, not a Sarthi.
+     * `tests/rules/firestore.rules.test.ts` guards exactly that, commented "if this
+     * breaks, no student can register at all".
+     *
+     * Hence: one screen, two steps, one write.
+     */
+    const [whereabouts, setWhereabouts] = useState<Whereabouts | null>(null);
     const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
     const [managerCode, setManagerCode] = useState('');
     const [showManagerCode, setShowManagerCode] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    const places: Array<{ id: Whereabouts; title: string; description: string; icon: React.ReactNode }> = [
+        {
+            id: 'local',
+            title: 'I am already in the USA',
+            description: 'Lifts to sabha and home again.',
+            icon: <Car className="w-12 h-12" />,
+        },
+        {
+            id: 'arriving',
+            title: 'I am arriving soon',
+            // No weekday and no clock time: tests/quality/schedule-not-hardcoded.test.ts
+            // scans this directory, and a sabha's schedule is a rule rather than a
+            // constant.
+            description: 'A Sarthi will collect you from the airport.',
+            icon: <Plane className="w-12 h-12" />,
+        },
+    ];
 
     const roles = [
         {
@@ -54,7 +97,13 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
     ];
 
     const handleSubmit = async () => {
-        if (!selectedRole) {
+        // STEP 0. Answering "already here" only advances the screen — it writes nothing,
+        // for the reason on `whereabouts` above.
+        if (whereabouts === null) {
+            setError('Please choose one');
+            return;
+        }
+        if (whereabouts === 'local' && !selectedRole) {
             setError('Please select a role');
             return;
         }
@@ -64,16 +113,22 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
             return;
         }
 
+        // An arriving traveller is a Bhulku and nothing else. They are never shown the
+        // role cards: they cannot drive on a Friday from another continent, and offering
+        // them Sarthi or Manager would be offering something that cannot work.
+        const role: UserRole = whereabouts === 'arriving' ? 'student' : selectedRole!;
+        const isArriving = whereabouts === 'arriving';
+
         setLoading(true);
         setError('');
 
         try {
             let initialStatus: 'approved' | 'pending' = 'pending';
 
-            if (selectedRole === 'student') {
+            if (role === 'student') {
                 // Students are auto-approved
                 initialStatus = 'approved';
-            } else if (selectedRole === 'manager') {
+            } else if (role === 'manager') {
                 const rawInput = managerCode.trim();
                 if (!rawInput) {
                     setError('Manager access code is required');
@@ -118,8 +173,8 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
 
             // Save user profile with final determined accountStatus
             await setDoc(doc(db, 'users', currentUser.uid), {
-                role: selectedRole,
-                registeredRole: selectedRole,
+                role,
+                registeredRole: role,
                 // THE GRANTED SET, not just the role they picked.
                 //
                 // This wrote `[selectedRole]` while the invite path
@@ -139,8 +194,12 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                 // `roles` is the GRANTED set everywhere now.
                 // tests/quality/role-table-parity.test.ts holds the table itself in
                 // step across all six copies.
-                roles: grantedRoles({ role: selectedRole }),
-                activeRole: selectedRole,
+                roles: grantedRoles({ role }),
+                activeRole: role,
+                // Absent for everybody who is already here, which is what makes this a
+                // no-op for every account that predates the field. See the note on
+                // `isArriving` in types.ts.
+                ...(isArriving ? { isArriving: true } : {}),
                 email: currentUser.email,
                 phone: currentUser.phoneNumber,
                 accountStatus: initialStatus,
@@ -169,13 +228,90 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
         <div className="min-h-screen bg-gradient-to-br from-saffron/10 via-surface to-gold/10 flex flex-col">
             {/* Header */}
             <div className="bg-gradient-to-r from-saffron-800 to-gold-700 text-white py-8 text-center">
-                <h1 className="text-3xl md:text-4xl font-header font-bold">Choose Your Role</h1>
-                <p className="text-sm md:text-base mt-2 opacity-90">How would you like to serve?</p>
+                {/* THREE headers, not two. The arriving branch has no role to choose, so
+                    leaving it on "Choose Your Role" — as this did at first, caught by
+                    looking at it in the preview harness — asked a question the screen was
+                    no longer showing. */}
+                <h1 className="text-3xl md:text-4xl font-header font-bold">
+                    {whereabouts === null ? 'Jai Swaminarayan'
+                        : whereabouts === 'arriving' ? 'Airport Seva'
+                            : 'Choose Your Role'}
+                </h1>
+                <p className="text-sm md:text-base mt-2 opacity-90">
+                    {whereabouts === null ? 'Where are you right now?'
+                        : whereabouts === 'arriving' ? 'We will meet you at arrivals'
+                            : 'How would you like to serve?'}
+                </p>
             </div>
 
             {/* Role Selection */}
             <div className="flex-1 flex items-center justify-center p-6">
                 <div className="max-w-4xl w-full space-y-6 animate-in fade-in zoom-in duration-500">
+                    {/* STEP 0 — where are they. Two cards, and answering advances rather
+                        than submitting, so a mistap is not a decision about their whole
+                        app. Nothing is written until Continue on the final step. */}
+                    {whereabouts === null && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {places.map((place) => (
+                                <button
+                                    key={place.id}
+                                    onClick={() => { setWhereabouts(place.id); setError(''); }}
+                                    className="clay-card p-6 text-center space-y-4 transition-all hover:scale-105 hover:shadow-lg"
+                                    disabled={loading}
+                                >
+                                    <div className="inline-flex p-4 rounded-2xl bg-cream-300 text-saffron">
+                                        {place.icon}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-header font-bold text-coffee">{place.title}</h3>
+                                        <p className="text-sm text-coffee-700 mt-2">{place.description}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* The arriving branch has no second step — they are a Bhulku by
+                        definition. So this confirms the choice and offers the way back,
+                        rather than leaving them looking at a lone Continue button with
+                        the cards gone and nothing saying what they picked. */}
+                    {whereabouts === 'arriving' && (
+                        <div className="clay-card p-6 space-y-3 text-center animate-in slide-in-from-top-4">
+                            <div className="inline-flex p-4 rounded-2xl bg-saffron text-white">
+                                <Plane className="w-12 h-12" />
+                            </div>
+                            <h3 className="text-xl font-header font-bold text-coffee">
+                                Welcome — we will collect you
+                            </h3>
+                            <p className="text-sm text-coffee-700">
+                                Next you will tell us your flight, and a Sarthi will be at
+                                arrivals to meet you. You will not be asked for an address
+                                here; your pickup takes the destination you give it.
+                            </p>
+                            <button
+                                onClick={() => { setWhereabouts(null); setError(''); }}
+                                disabled={loading}
+                                className="flex items-center gap-2 mx-auto text-sm font-bold text-coffee-500 hover:text-saffron transition-colors min-h-11"
+                            >
+                                <ArrowLeft size={16} aria-hidden="true" />
+                                Actually, I am already here
+                            </button>
+                        </div>
+                    )}
+
+                    {/* STEP 1 — the role cards, and ONLY for somebody already here. An
+                        arriving traveller skips this entirely: they submit straight from
+                        step 0 as a Bhulku. */}
+                    {whereabouts === 'local' && (
+                    <>
+                    <button
+                        onClick={() => { setWhereabouts(null); setSelectedRole(null); setError(''); }}
+                        disabled={loading}
+                        className="flex items-center gap-2 text-sm font-bold text-coffee-500 hover:text-saffron transition-colors min-h-11"
+                    >
+                        <ArrowLeft size={16} aria-hidden="true" />
+                        Not in the USA yet?
+                    </button>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {roles.map((role) => (
                             <button
@@ -233,6 +369,9 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                         </div>
                     )}
 
+                    </>
+                    )}
+
                     {error && (
                         <div className="clay-card bg-[rgb(var(--danger-bg))] border border-[rgb(var(--danger))]/40 p-4">
                             <p className="text-[rgb(var(--danger-text))] text-center">{error}</p>
@@ -242,10 +381,10 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                     <div className="text-center">
                         <button
                             onClick={handleSubmit}
-                            disabled={loading || !selectedRole}
+                            disabled={loading || whereabouts === null || (whereabouts === 'local' && !selectedRole)}
                             className="clay-button bg-gradient-to-r from-saffron-800 to-gold-700 text-white px-12 py-4 rounded-xl font-semibold text-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {loading ? 'Saving...' : 'Continue'}
+                            {loading ? 'Saving...' : whereabouts === 'arriving' ? 'Set up my pickup' : 'Continue'}
                         </button>
                     </div>
                 </div>

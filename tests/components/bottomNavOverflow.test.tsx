@@ -194,11 +194,19 @@ describe('the dock never reads as "nothing selected"', () => {
 
 describe('roles with nothing to overflow', () => {
     it('a driver gets no More control at all', () => {
-        // Three destinations. A More button here would open an empty drawer.
+        // FOUR destinations since Airport Seva — 'Arrivals' joined the sabha list on
+        // 2026-08-25, because claiming an airport trip is one more thing somebody who
+        // already lives here does rather than a service they switch to.
+        //
+        // The assertion that carries this test is unchanged and is not the list: four
+        // still fits the five-slot dock, so there is nothing behind a swipe. A fifth
+        // would push one destination into the drawer, which opens on a swipe and nothing
+        // else — unreachable by keyboard, switch access or VoiceOver. That is the line
+        // this guards.
         renderLayout('driver');
 
-        expect(dockLabels()).toEqual(['Dashboard', 'History', 'Profile']);
-        expect(within(dock()).getAllByRole('button')).toHaveLength(3);
+        expect(dockLabels()).toEqual(['Dashboard', 'Arrivals', 'History', 'Profile']);
+        expect(within(dock()).getAllByRole('button')).toHaveLength(4);
         // Not even the hint: there is nothing a swipe could reveal.
         expect(handleBar(dock())).toBeNull();
     });

@@ -135,6 +135,20 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
             );
         }
 
+        /**
+         * READ BEFORE ANY WRITE. Firestore transactions refuse a read that follows a
+         * write — "all reads must be executed before all writes" — so the traveller's
+         * document is fetched here, alongside the pickup, rather than down beside the
+         * `tx.update` that uses it. Getting that order wrong throws on EVERY completion,
+         * and the fake Firestore in the tests would not have noticed.
+         *
+         * Only for a completion, so no other action pays for a read it does not use.
+         */
+        const travellerRef = action === 'completed' && pickup.requesterUid
+            ? db.collection('users').doc(String(pickup.requesterUid))
+            : null;
+        const travellerSnap = travellerRef ? await tx.get(travellerRef) : null;
+
         const isMine = pickup.claimedByUid === uid;
         const isRequester = pickup.requesterUid === uid;
 
@@ -259,6 +273,62 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
         }
 
         tx.update(ref, update);
+
+        /**
+         * THEY HAVE ARRIVED, SO THEY ARE NOT ARRIVING ANY MORE.
+         *
+         * Dropping somebody off is the moment a traveller becomes a local member, so it
+         * is the moment their app should stop being the newcomer's one screen and start
+         * being Sabha Seva. Doing it here rather than asking them to notice a setting is
+         * the difference between a service that hands over and one that leaves people
+         * stranded in the wrong app.
+         *
+         * `isArriving` is only ever CLEARED here, never set, so this cannot promote
+         * anybody into a service they should not have — and it is not a privilege field,
+         * see the note in types.ts.
+         *
+         * AND their home address, but ONLY IF THEY HAVE NONE. The trip's destination came
+         * from the same AddressAutocomplete that ProfileSetup uses, so it is already
+         * geocoded and already the shape `resolveHomeCoords` reads — which means their
+         * first sabha ride works with no extra typing. Guarded on absence because a
+         * returning local already has an address, and a trip destination might be a
+         * friend's sofa for the first week; overwriting a real home with that would send
+         * a Sarthi to the wrong door every Friday.
+         *
+         * Inside the transaction, so it lands with the completion or not at all. A
+         * traveller marked delivered who is still stuck in the newcomer app is exactly
+         * the half-done state this avoids.
+         */
+        if (travellerRef) {
+            const traveller = travellerSnap?.data();
+            const graduation: Record<string, unknown> = { isArriving: false };
+
+            const hasAddress = typeof traveller?.address === 'string'
+                && traveller.address.trim().length > 0;
+            const lat = Number(pickup.dropoffLat);
+            const lng = Number(pickup.dropoffLng);
+            // 0,0 is the "never geocoded" placeholder resolveHomeCoords rejects; seeding
+            // it would put a Sarthi in the Atlantic.
+            const usableDestination = Number.isFinite(lat) && Number.isFinite(lng)
+                && !(lat === 0 && lng === 0);
+
+            if (!hasAddress && usableDestination && pickup.dropoffAddress) {
+                graduation.address = String(pickup.dropoffAddress);
+                graduation.location = {
+                    latitude: lat,
+                    longitude: lng,
+                    formattedAddress: String(pickup.dropoffAddress),
+                    // Says where this came from, because it was not typed on the profile
+                    // screen and somebody looking at the record later will wonder.
+                    seededFromPickupId: pickupId,
+                };
+            }
+
+            // `update`, not a `set` merge: the document is guaranteed to exist — they
+            // filed the request — and a merge would quietly create a ghost user document
+            // if the id were ever wrong, which is harder to notice than a failure.
+            tx.update(travellerRef, graduation);
+        }
 
         return {
             previousStatus: status,

@@ -57,6 +57,31 @@ export interface User {
    * give up a privilege and never hand yourself one.
    */
   airportCoordinator?: boolean;
+  /**
+   * They have not landed in the USA yet.
+   *
+   * ABSENT MEANS ALREADY HERE, and that default is the whole migration: every account
+   * that existed before this field keeps exactly the app it had. Same arrangement as
+   * `seatsRequested` and `rideType` — and like those, read it through
+   * `arrivingMember()` in src/roles.ts rather than `?? false` at a call site.
+   *
+   * It decides ONE thing: which service the shell shows you. `true` gives you Airport
+   * Seva and nothing else — one screen, your own pickup. `false` gives you Sabha Seva.
+   *
+   * DELIBERATELY NOT IN `touchesPrivilegeFields()`, unlike `airportCoordinator` beside
+   * it. It grants nothing — both services are already reachable by any approved
+   * account, the arrivals board stays gated on the driver role and `airportProfiles` on
+   * the coordinator flag, and neither reads this. Locking it down would mean a newcomer
+   * needs a manager awake before they can become a local, which is the bottleneck the
+   * whole design exists to avoid. Compare `activeRole`, which IS in that list and is
+   * therefore frozen at signup; this one has to survive a new device, so it lives on
+   * the document.
+   *
+   * Set at signup, and cleared two ways: the server clears it when their pickup
+   * completes, and they can clear it themselves with "I'm in the USA now" — so a Sarthi
+   * forgetting the last tap strands nobody.
+   */
+  isArriving?: boolean;
   accountStatus: AccountStatus;
   /**
    * A Bhulku's standing request to become a Sarthi, and its outcome.
@@ -168,6 +193,8 @@ export interface Driver {
    * give up a privilege and never hand yourself one.
    */
   airportCoordinator?: boolean;
+  /** Same field and the same document as on `User` above. */
+  isArriving?: boolean;
   accountStatus?: AccountStatus;
   avatarUrl?: string;
   // Properties from User that may be merged
@@ -403,17 +430,26 @@ export interface AssignmentResult {
  */
 export type TabView =
     | 'home' | 'rides' | 'profile' | 'history' | 'people' | 'setup' | 'fleet' | 'notices' | 'records'
-    // Airport Seva. In the SAME union as the sabha tabs, not a parallel one, because
-    // the nav bar, `currentTab` and `setCurrentTab` are all shared and a second union
-    // would mean a second state value and a dispatch on service at every call site.
+    // The arrivals board. A SABHA tab, for a Sarthi or a manager — not a separate
+    // service. Claiming an airport trip is one more thing somebody who already lives
+    // here does, alongside driving on a Friday, so it is one more destination in the
+    // app they already use rather than a place they switch to.
+    | 'arrivals'
+    // The traveller's own pickup, and the ONLY tab in Airport Seva. That service is
+    // the whole app for somebody who has not arrived yet and is not a destination for
+    // anybody else, so it has one screen.
     //
-    // The reason that is safe: `setService` resets `currentTab` to the new service's
-    // home, so a sabha `switch (currentTab)` can never be handed an airport value and
-    // an airport switch can never be handed a sabha one. The mobile dock also depends
-    // on that reset — without it no item would match after a switch and the dock would
-    // show nothing selected, which is the exact problem BottomNav's overflow
-    // highlighting was written to avoid.
-    | 'airport-board' | 'airport-request' | 'airport-oversight';
+    // In the same union as the sabha tabs rather than a parallel one, because the nav
+    // bar, `currentTab` and `setCurrentTab` are all shared. What keeps that safe is
+    // that a switch of service resets `currentTab` — so a sabha `switch (currentTab)`
+    // can never be handed this value, and the mobile dock always has an item that
+    // matches rather than showing nothing selected.
+    | 'airport-request';
+    // `'airport-oversight'` was here and is gone. It was DEAD AS SHIPPED: an oversight
+    // tab was planned, reassign moved onto the arrival card instead — where the trip
+    // you want to move is the one you are looking at — and the union member was left
+    // behind. Nothing ever set it and nothing ever rendered it, which is the
+    // unreachable-state smell this codebase keeps removing.
 
 /**
  * Which of the two services the app is showing.

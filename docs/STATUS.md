@@ -3,6 +3,118 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
+## BUILT 2026-08-25 (later), NOT DEPLOYED — who sees which service
+
+**On branch `claude/airport-pickup-workflow-89afab`. Airport Seva itself IS deployed (see
+the section below); this correction on top of it is not.**
+
+### What was wrong with what shipped
+
+Airport Seva went out with a launcher and a switch that **every account gets**. Wrong in
+both directions, and the planning error was mine: the question asked was how the switch
+should *look*, never *who should see which service*.
+
+- A student who has lived here two years got an Airport tab they will never use.
+- Somebody still in India got offered lifts to a sabha they cannot attend — and was
+  blocked behind `ProfileSetup`, which lets nobody past without a Google-Places address.
+  For them that is a dead end, or an Ahmedabad address geocoded into `location` and
+  handed to a Sarthi as a Friday pickup point.
+
+### The model now
+
+```
+arriving        Airport Seva only. One screen: their pickup.
+manager         Sabha Seva, plus a switch — the one exception, for support calls.
+everybody else  Sabha Seva only. A Sarthi additionally gets the Arrivals TAB.
+```
+
+The service is **derived from the profile, never chosen**. The launcher is deleted, and
+with it `SERVICE_STORAGE_KEY` and the remembered choice. `isArriving?: boolean` on
+`users`, **absent meaning already here** — which is the whole migration: every account
+that exists keeps exactly the app it had.
+
+The arrivals board moved from being a separate service to being a **sabha tab**, because
+claiming an airport trip is one more thing somebody who already lives here does. A
+returning local requests a pickup from **My Rides**, not by switching service.
+
+### THE LANDMINE, and why the question lives inside RoleSelection
+
+`RoleSelection` does one `setDoc` writing role, registeredRole, roles, activeRole and
+accountStatus — five fields in `touchesPrivilegeFields()`. It is legal **only because it
+is a create**: no user document exists yet, so the rules take the
+`createsUnprivilegedProfile()` arm, and `changedKeys()` is update-only.
+
+**A separate "where are you" screen that wrote its answer first would turn that create
+into an owner update touching privilege fields, the rules would deny it, and NOBODY
+COULD REGISTER.** So the question is step 0 of that same screen, its answer lives in
+React state, and there is still exactly one write. `tests/components/RoleSelection.test.tsx`
+asserts the write count; the rules suite guards it from the other side.
+
+That screen had **no test at all** before this. It does now — 20 of them.
+
+### Graduation: two independent routes, so nobody is stranded
+
+- **Server**, in `updateAirportPickup`'s `completed` branch: clears `isArriving`, and
+  seeds `address` + `location` from the trip's destination **only if they have none**.
+  The destination came from the same AddressAutocomplete the profile screen uses, so it
+  is already geocoded and already the shape `resolveHomeCoords` reads.
+- **Client**, always visible in the newcomer app: *"I am in the USA now"*.
+
+A Sarthi forgetting the last tap therefore cannot leave a real person unable to book a
+lift. `isArriving` is **deliberately not a privilege field** — locking it down would mean
+needing a manager awake, which is the bottleneck the design exists to remove.
+
+### Four bugs found while building this, three of them mine
+
+- **A transaction read after a write.** The graduation read the traveller's document
+  after `tx.update`. Firestore refuses that — "all reads must be executed before all
+  writes" — so it would have thrown on **every completion in production** and on nothing
+  in a fake. The fake now records the ordering, and reintroducing the bug was checked to
+  fail that assertion.
+- **The tab-reset effect watched for a change rather than enforcing an invariant.** An
+  arriving traveller whose profile is already loaded never sees a change, so `currentTab`
+  stayed at its `'home'` default and the mobile dock lit nothing. Replaced with
+  `tabBelongsTo`, which is true on the first render as well as later ones.
+- **`NavigationProvider` reading `useAuth()`** made every test that renders it need an
+  auth mock, including the PWA install prompt's. Moved to `hooks/useService.ts`.
+- **The returning-traveller button broke a stated design rule.** It went on `RiderHome`,
+  which is deliberately one card with at most one primary action —
+  `tests/components/RiderHome.test.tsx` counts every labelled button to keep it that way.
+  Moved to `MyRides`, where a trip belongs anyway.
+
+And one caught only by looking, in the preview harness: the arriving branch still said
+**"Choose Your Role"** in its header, a question that branch no longer asks.
+
+### Where the suite stands
+
+```
+client     1492 passing, 101 files    (was 1470)
+functions   933 passing               (was 924)
+rules       237 passing               (was 231)
+typecheck     0 errors
+build       clean — dist/assets/index-Dol8kJTL.js
+```
+
+Verified in the preview harness (`preview/airport.html`): the signup step, the newcomer
+app and the graduation button all render with no console errors, the date/time pair
+stacks at mobile width, and every new element passes AA — **light 4.89:1 worst case,
+dark 6.36:1**, measured against the real stylesheet with transitions disabled.
+
+**Not looked at:** the manager's switch inside the real shell, and the arrivals tab in a
+real manager's nav. Both have tests.
+
+### Before deploying
+
+- The rules change is **comment-only** — the substance is functions + hosting. Keep the
+  order anyway: **`firestore:rules` → `functions` → `hosting`**, then fast-forward `main`.
+- **Anybody who already filed a request has `isArriving` absent**, so they are treated as
+  local and see Sabha Seva rather than the newcomer app. Harmless, and worth knowing
+  before concluding the routing is broken. One Admin SDK read tells you whether any
+  `airportPickups` documents exist.
+- Stale `active_service` keys in people's browsers are ignored, and a test pins that.
+
+---
+
 ## DEPLOYED 2026-08-25 — Airport Seva, a second service behind one login
 
 **Live in production as `20f40c8`. All three steps, in order, and `main` is

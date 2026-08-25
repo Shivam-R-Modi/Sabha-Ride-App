@@ -10,8 +10,9 @@ import '../tailwind.css';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { ToastProvider } from '../contexts/ToastContext';
 import { NavigationProvider } from '../contexts/NavigationContext';
-import { ServiceLauncher } from '../components/airport/ServiceLauncher';
 import { ArrivalBoard } from '../components/airport/ArrivalBoard';
+import { RoleSelection } from '../components/auth/RoleSelection';
+import { AirportShell } from '../components/airport/AirportShell';
 import { ArrivalCard } from '../components/airport/ArrivalCard';
 import { ArrivalStatusCard } from '../components/airport/ArrivalStatusCard';
 import { ArrivalRequestForm } from '../components/airport/ArrivalRequestForm';
@@ -111,10 +112,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     frame after a JS-driven scroll (docs/STATUS.md records the same
                     trap), so anything worth looking at has to land on FIRST paint —
                     and a 440px window with one column puts a whole card on screen. */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 8, padding: 12, alignItems: 'start' }}>
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 8, padding: 12, alignItems: 'start' }}>
                     <div>
-                        <Label>Launcher — which seva</Label>
-                        <ServiceLauncher />
+                        <Label>Newcomer app — the whole of Airport Seva</Label>
+                        <AirportShell />
+                    </div>
+
+                    <div>
+                        <Label>Signup — step 0, where are you</Label>
+                        <RoleSelection onSelectRole={() => undefined} />
                     </div>
 
                     <div>

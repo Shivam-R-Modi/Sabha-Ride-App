@@ -447,6 +447,31 @@ describe('signup must still work', () => {
         }));
     });
 
+    it('an ARRIVING student CAN create their profile, with isArriving set', async () => {
+        // The same single create, plus one non-privilege field. It has to be one write:
+        // a screen that asked "where are you" and wrote the answer first would turn this
+        // create into an owner UPDATE touching five privilege fields, the rules would
+        // deny it, and nobody could register — which is why the question is step 0 of
+        // RoleSelection and its answer lives in React state until this moment.
+        const asNew = testEnv.authenticatedContext('brand_new_arrival').firestore();
+        await assertSucceeds(setDoc(doc(asNew, 'users', 'brand_new_arrival'), {
+            role: 'student', registeredRole: 'student', roles: ['student'],
+            activeRole: 'student', accountStatus: 'approved', isArriving: true,
+            email: 'arriving@x.com', createdAt: '2026-08-25',
+        }));
+    });
+
+    it('an arriving traveller can create a profile with NO address, and be asked later', async () => {
+        // ProfileSetup skips the address for them: they have no US home yet, and
+        // geocoding their Ahmedabad one would put it in the Friday dispatch pool.
+        const asNew = testEnv.authenticatedContext('brand_new_noaddr').firestore();
+        await assertSucceeds(setDoc(doc(asNew, 'users', 'brand_new_noaddr'), {
+            role: 'student', registeredRole: 'student', roles: ['student'],
+            activeRole: 'student', accountStatus: 'approved', isArriving: true,
+            name: 'Ramesh', phone: '+919876543210',
+        }));
+    });
+
     it('a new DRIVER can create their profile as pending', async () => {
         const asNew = testEnv.authenticatedContext('brand_new_driver').firestore();
         await assertSucceeds(setDoc(doc(asNew, 'users', 'brand_new_driver'), {
@@ -1975,6 +2000,39 @@ describe('Airport Seva — the arrivals board', () => {
             await assertFails(setDoc(profile(asUid(COORDINATOR)), { fullName: 'Changed' }));
             await assertFails(updateDoc(profile(asStudent()), { dateOfBirth: '2010-01-01' }));
             await assertFails(deleteDoc(profile(asUid(COORDINATOR))));
+        });
+    });
+
+    describe('saying you have arrived', () => {
+        it('a traveller may clear isArriving on themselves', async () => {
+            // Deliberately NOT a privilege field. If it were, a newcomer whose Sarthi
+            // forgot the last tap would need a manager awake before they could book a
+            // lift to sabha — and the server clears it on completion anyway, so a client
+            // write must be able to do the same thing.
+            await assertSucceeds(updateDoc(doc(asStudent(), 'users', STUDENT), {
+                isArriving: false,
+            }));
+        });
+
+        it('and may set it, which grants nothing', async () => {
+            // Worst case they show themselves a request form and lose their own sabha
+            // dashboard until they tap "I'm in the USA now". Self-inflicted, reversible,
+            // and it reaches no data they could not already read.
+            await assertSucceeds(updateDoc(doc(asStudent(), 'users', STUDENT), {
+                isArriving: true,
+            }));
+        });
+
+        it('but NOT on somebody else', async () => {
+            await assertFails(updateDoc(doc(asStudent(), 'users', OTHER_STUDENT), {
+                isArriving: true,
+            }));
+        });
+
+        it('and it does not smuggle a privilege field alongside it', async () => {
+            await assertFails(updateDoc(doc(asStudent(), 'users', STUDENT), {
+                isArriving: false, accountStatus: 'approved', role: 'manager',
+            }));
         });
     });
 

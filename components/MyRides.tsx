@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Ride } from '../types';
-import { Calendar, Clock, ChevronDown, ChevronUp, MapPin, Car, Loader2 } from 'lucide-react';
+import { Calendar, Clock, ChevronDown, ChevronUp, MapPin, Car, Loader2, Plane } from 'lucide-react';
+import { Sheet } from './shared/Sheet';
+import { ArrivalRequestForm } from './airport/ArrivalRequestForm';
 
 interface MyRidesProps {
   history: Ride[];
@@ -88,10 +90,50 @@ export const MyRides: React.FC<MyRidesProps> = ({
   loadingMore = false
 }) => {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
+  const [airportOpen, setAirportOpen] = useState(false);
 
   return (
     <div className="space-y-4 pb-6">
       <h2 className="text-xl font-header font-bold text-coffee px-4 pt-4">My Rides</h2>
+
+      {/* THE RETURNING TRAVELLER'S DOOR IN.
+          Airport Seva is a separate service only for somebody who has not arrived yet —
+          a Bhulku who already lives here never switches to it. But the seva is
+          explicitly not just for first-timers: fly to India for a wedding and you need
+          collecting on the way back. So the same request form is reachable as an ACTION,
+          and nobody's app changes shape for one trip. One component, two entry points.
+
+          HERE AND NOT ON RiderHome. That screen is deliberately one card with at most one
+          primary action, and tests/components/RiderHome.test.tsx counts every labelled
+          button on it to keep it that way. This is where a trip belongs anyway. */}
+      <div className="px-4">
+        <button
+          type="button"
+          onClick={() => setAirportOpen(true)}
+          className="w-full flex items-center gap-3 p-4 rounded-2xl bg-cream-400 text-left
+                     hover:bg-saffron/15 transition-colors min-h-11"
+        >
+          <Plane size={18} className="shrink-0 text-coffee-500" aria-hidden="true" />
+          <span className="min-w-0">
+            <span className="block text-sm font-bold text-coffee">
+              Flying back into the USA?
+            </span>
+            <span className="block text-xs text-coffee-500">
+              Ask a Sarthi to collect you from the airport.
+            </span>
+          </span>
+        </button>
+      </div>
+
+      <Sheet
+        open={airportOpen}
+        onClose={() => setAirportOpen(false)}
+        title="Airport pickup"
+        variant="sheet"
+        maxWidth="max-w-lg"
+      >
+        <ArrivalRequestForm onSubmitted={() => setAirportOpen(false)} />
+      </Sheet>
 
       {/* Tabs */}
       <div className="px-4">

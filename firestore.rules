@@ -229,6 +229,18 @@ service cloud.firestore {
       return changedKeys().hasAny([
         'role', 'registeredRole', 'roles', 'activeRole',
         'accountStatus', 'platformRole',
+        // `isArriving` is DELIBERATELY ABSENT FROM THIS LIST, and it belongs on a user's
+        // own document beside these. It grants nothing: `true` shows you your own airport
+        // request form, `false` shows you Sabha Seva, and any approved account already
+        // reaches both. The arrivals board is gated on the driver role and
+        // /airportProfiles on the coordinator flag; neither reads it.
+        //
+        // Listing it would mean a newcomer could not tell the app they had landed without
+        // a manager awake to do it for them — and the server clears it on a completed
+        // pickup, which a client write must be able to duplicate when a Sarthi forgets
+        // the last tap. A person stranded in the wrong app is the cost; nothing is the
+        // benefit.
+        //
         // Airport Seva's oversight flag. Self-appointment would hand somebody the
         // unclaimed-arrival alerts, the reassign control and the Airport scope of the
         // member export — which returns every traveller's date of birth, phone and

@@ -1,60 +1,44 @@
 import React, { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MapPin } from 'lucide-react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '../../contexts/NavigationContext';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../shared/useConfirm';
 import { useMyLiveArrival } from '../../hooks/useArrivals';
-import { hasGrantedRole } from '../../src/roles';
 import { ProfileEditor } from '../shared/ProfileEditor';
-import { ArrivalBoard } from './ArrivalBoard';
 import { ArrivalRequestForm } from './ArrivalRequestForm';
 import { ArrivalStatusCard } from './ArrivalStatusCard';
 
 /**
- * Airport Seva's own router.
+ * Airport Seva: the whole app for somebody who has not arrived yet.
  *
- * Sits beside the sabha branch in App, never inside it, which is what keeps the two
- * services separate: the existing screens are not edited to make room for this one,
- * and nothing here can be reached from a sabha tab.
+ * ONE SCREEN, plus their profile. There is no arrivals board here — claiming a trip is
+ * something a Sarthi who already lives here does, so that board is a TAB in the sabha
+ * app rather than a thing anybody switches service to see. This shell used to branch on
+ * `canSeeBoard` and render the board for a Sarthi; that branch is gone, and with it the
+ * possibility of a Bhulku landing on a board whose every query the rules refuse.
  *
- * It switches on the SAME `currentTab` as the sabha side, which is safe for one
- * reason: `setService` resets `currentTab` to the new service's home, so this switch
- * can never be handed 'people' or 'fleet' and the sabha switches can never be handed
- * an airport value. See the note on `TabView` in types.ts.
- *
- * `default` lands on whatever this person can actually use rather than on a fixed
- * screen — a Bhulku has no board, so defaulting everyone to it would open the service
- * on a page half the users cannot read.
+ * Reached only when `arrivingMember(profile)` is true, or when a manager has switched
+ * here deliberately to see what a newcomer sees.
  */
 export const AirportShell: React.FC = () => {
-    const { userProfile } = useAuth();
     const { currentTab } = useNavigation();
 
-    const canSeeBoard = hasGrantedRole(userProfile, 'driver');
-
-    switch (currentTab) {
-        case 'airport-board':
-            // Guarded, not assumed. A Bhulku reaching this tab would otherwise get a
-            // board whose every query the rules refuse — an empty screen that looks
-            // like "nobody is arriving".
-            return canSeeBoard ? <ArrivalBoard /> : <TravellerView />;
-        case 'airport-request':
-            return <TravellerView />;
-        case 'profile':
-            return <ProfileEditor />;
-        default:
-            return canSeeBoard ? <ArrivalBoard /> : <TravellerView />;
-    }
+    if (currentTab === 'profile') return <ProfileEditor />;
+    return <TravellerView />;
 };
 
 /**
- * The traveller's half: their live request if they have one, the form if they do not.
+ * Their live request if they have one, the form if they do not.
  *
  * One screen rather than two tabs, because "ask for a pickup" and "is somebody coming"
- * are the same question at different times, and a person with a live request has no
- * use for a second form — `requestAirportPickup` would refuse it anyway.
+ * are the same question at different times, and somebody with a live request has no use
+ * for a second form — `requestAirportPickup` would refuse it anyway.
  *
  * `resetKey` remounts the form after a cancel. Without it the previous answers would
- * still be sitting in its state, which reads as though the cancel had not happened.
+ * still be in its state, which reads as though the cancel had not happened.
  */
 const TravellerView: React.FC = () => {
     const { arrival, loading, error } = useMyLiveArrival();
@@ -69,27 +53,92 @@ const TravellerView: React.FC = () => {
         );
     }
 
-    // Said out loud rather than silently showing the form. Rendering a blank request
-    // form when the read failed invites somebody to file a second request they already
-    // have, and then be told they cannot.
+    // Said out loud rather than silently showing the form. A blank request form when the
+    // read failed invites somebody to file a second request they already have, and then
+    // be told they cannot.
     if (error) {
         return (
             <div className="p-6" role="alert">
-                <div className="clay-card p-4 text-sm font-bold text-[rgb(var(--danger))]">
+                <div className="clay-card p-4 text-sm font-bold text-[rgb(var(--danger-text))]">
                     {error}
                 </div>
             </div>
         );
     }
 
-    if (arrival) {
-        return (
-            <ArrivalStatusCard
-                arrival={arrival}
-                onCancelled={() => setResetKey(k => k + 1)}
-            />
-        );
-    }
+    return (
+        <>
+            {arrival
+                ? <ArrivalStatusCard arrival={arrival} onCancelled={() => setResetKey(k => k + 1)} />
+                : <ArrivalRequestForm key={resetKey} onSubmitted={() => setResetKey(k => k + 1)} />}
+            <AlreadyArrived />
+        </>
+    );
+};
 
-    return <ArrivalRequestForm key={resetKey} onSubmitted={() => setResetKey(k => k + 1)} />;
+/**
+ * The door out, and it is always here.
+ *
+ * The server clears `isArriving` when a Sarthi marks the trip dropped off — but a Sarthi
+ * who forgets that last tap would otherwise leave a real person in an app with no way to
+ * book a lift to sabha and no way to fix it themselves. That is the stranded-user
+ * failure this codebase keeps removing, so there are two independent routes out and this
+ * is the one that needs nobody else.
+ *
+ * Rendered below whatever they are looking at rather than only on a finished trip: it is
+ * also the escape for somebody who picked the wrong option at signup, or who came in on
+ * an earlier flight than the one they filed.
+ *
+ * A plain `updateDoc` on their own document. `isArriving` is not a privilege field —
+ * see the note on it in types.ts — so no callable is needed, and needing one would mean
+ * needing a manager awake.
+ */
+const AlreadyArrived: React.FC = () => {
+    const { currentUser } = useAuth();
+    const toast = useToast();
+    const { ask, confirmDialog } = useConfirm();
+    const [busy, setBusy] = useState(false);
+
+    const confirmArrived = async () => {
+        const ok = await ask({
+            title: 'You are in the USA?',
+            message: 'This swaps you over to Sabha Seva, so you can start asking for lifts '
+                + 'to sabha. You will be asked for your address here.',
+            confirmLabel: 'Yes, I have arrived',
+        });
+        if (!ok || !currentUser) return;
+
+        setBusy(true);
+        try {
+            await updateDoc(doc(db, 'users', currentUser.uid), { isArriving: false });
+            // No navigation call. AuthContext holds an onSnapshot on this document, so
+            // the write comes straight back as a profile change and the shell re-renders
+            // into Sabha Seva on its own.
+            toast.success('Welcome. Jai Swaminarayan.');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'That could not be saved');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="px-4 lg:px-6 pb-6 max-w-2xl mx-auto">
+            <button
+                type="button"
+                onClick={confirmArrived}
+                disabled={busy}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
+                           bg-cream-400 text-coffee text-sm font-bold hover:bg-saffron/15
+                           transition-colors min-h-11 disabled:opacity-60"
+            >
+                <MapPin size={16} aria-hidden="true" />
+                {busy ? 'Saving…' : 'I am in the USA now'}
+            </button>
+            <p className="text-xs text-coffee-500 text-center mt-2">
+                Tap this once you have landed and settled in.
+            </p>
+            {confirmDialog}
+        </div>
+    );
 };
