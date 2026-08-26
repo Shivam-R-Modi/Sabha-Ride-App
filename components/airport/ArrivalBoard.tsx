@@ -6,6 +6,7 @@ import { isApprovedManager } from '../../src/roles';
 import { formatTime } from '../../src/constants/schedule';
 import { TERMINAL } from '../../src/utils/arrival';
 import { ArrivalCard } from './ArrivalCard';
+import { PushPrompt } from '../shared/PushPrompt';
 import type { AirportPickup } from '../../types';
 
 /**
@@ -558,6 +559,24 @@ export const ArrivalBoard: React.FC = () => {
                         ))
                 )}
             </section>
+
+            {/* Under the board, because the board is the thing it is talking about.
+                Airport Seva had NO push prompt at all until 2026-08-25 — the whole
+                mechanism existed and was offered only on the two sabha screens, so a
+                Sarthi who never used Sabha Seva was never asked, and every airport
+                notification the server sent went nowhere.
+
+                The wording is what this person actually receives: the change alert on
+                a trip they hold, and — coordinators only — the unclaimed sweep. It
+                does not promise a coordinator alert to somebody who will not get one. */}
+            <PushPrompt
+                title="Get told when an airport pickup needs you"
+                detail={isCoordinator
+                    ? 'One notification if something changes on a pickup you are collecting, '
+                      + 'and one if an arrival still has nobody. Nothing else.'
+                    : 'One notification if something changes on a pickup you are collecting. '
+                      + 'Nothing else.'}
+            />
 
             <PressingStrip days={monthDays} onPick={pick} />
         </div>

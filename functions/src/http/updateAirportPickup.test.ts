@@ -28,6 +28,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 let db: any;
 let updates: any[];
 let merges: any[];
+let pushes: any[];
 let auditRows: any[];
 let pickup: any;
 let users: Record<string, any>;
@@ -59,6 +60,23 @@ vi.mock('../utils/audit', () => ({
     writeAuditLog: async (_db: any, entry: any) => { auditRows.push({ ...entry }); return null; },
 }));
 
+/**
+ * Push, recorded rather than sent. Both helpers land here so a test can assert WHO was
+ * told and WHAT — the two cases go to opposite people, which is the easy thing to get
+ * backwards.
+ */
+vi.mock('../utils/notifications', () => ({
+    tokensOf: (uid: string, data: any) => (data?.fcmTokens
+        ? Object.keys(data.fcmTokens).map(token => ({ uid, token }))
+        : []),
+    notifyArrivalChanged: async (to: any[], changed: string[], pickupId: string) => {
+        pushes.push({ kind: 'changed', to, changed, pickupId });
+    },
+    notifyTravellerSarthiAssigned: async (to: any[], sarthiName: string, pickupId: string) => {
+        pushes.push({ kind: 'claimed', to, sarthiName, pickupId });
+    },
+}));
+
 import { updateAirportPickup } from './updateAirportPickup';
 
 const FROZEN = new Date('2026-09-01T12:00:00Z');
@@ -82,7 +100,7 @@ const OPEN = {
 };
 
 function makeDb() {
-    updates = []; merges = []; auditRows = []; txRuns = 0; readAfterWrite = false;
+    updates = []; merges = []; pushes = []; auditRows = []; txRuns = 0; readAfterWrite = false;
     db = {
         collection: (name: string) => ({
             doc: (id: string) => ({
@@ -649,5 +667,63 @@ describe('completing a trip graduates the traveller', () => {
         expect(txRuns).toBe(1);
         expect(updates.map(u => u.path).sort())
             .toEqual(['airportPickups/p1', 'users/rider_1']);
+    });
+});
+
+/**
+ * WHO GETS TOLD. Added 2026-08-25 alongside the push permission prompt.
+ *
+ * The two pushes go to OPPOSITE people — a claim tells the traveller, an edit tells the
+ * Sarthi — which is the easy thing to get backwards, and getting it backwards would
+ * send a traveller's itinerary to a volunteer's lock screen or vice versa.
+ */
+describe('push, and who it reaches', () => {
+    beforeEach(() => {
+        users.rider_1 = { ...RIDER, fcmTokens: { tok_rider: {} } };
+        users.sarthi_1 = { ...SARTHI, fcmTokens: { tok_sarthi: {} } };
+    });
+
+    it('tells the TRAVELLER when a Sarthi claims their pickup', async () => {
+        // The one thing they are waiting for, and the reason their screen may ask for
+        // notification permission at all.
+        await call({ action: 'claim' }, 'sarthi_1');
+        expect(pushes).toHaveLength(1);
+        expect(pushes[0]).toMatchObject({ kind: 'claimed', sarthiName: 'Kiran', pickupId: 'p1' });
+        expect(pushes[0].to).toEqual([{ uid: 'rider_1', token: 'tok_rider' }]);
+    });
+
+    it('tells the SARTHI when the traveller changes something that matters', async () => {
+        pickup = {
+            ...OPEN, status: 'claimed', claimedByUid: 'sarthi_1', claimedByName: 'Kiran',
+            partySize: 2, largeBags: 4, cabinBags: 2, terminal: 'E', hasUsWorkingPhone: false,
+            passenger: { phone: '+16175550123' },
+        };
+        await call({
+            action: 'editRequest',
+            arrivalDate: '2026-09-20', arrivalTime: '22:00', airportCode: 'BOS', terminal: 'E',
+            partySize: 2, largeBags: 8, cabinBags: 2, hasUsWorkingPhone: false,
+            fullName: 'Ramesh Patel', dateOfBirth: '2007-04-11',
+            email: 'ramesh@example.com', phone: '+16175550123', whatsappOn: 'primary',
+        }, 'rider_1');
+
+        expect(pushes).toHaveLength(1);
+        expect(pushes[0]).toMatchObject({ kind: 'changed' });
+        expect(pushes[0].to).toEqual([{ uid: 'sarthi_1', token: 'tok_sarthi' }]);
+        expect(pushes[0].changed).toContain('the luggage');
+    });
+
+    it('sends nothing for a transition nobody is waiting on', async () => {
+        pickup = { ...OPEN, status: 'claimed', claimedByUid: 'sarthi_1' };
+        await call({ action: 'met' }, 'sarthi_1');
+        expect(pushes).toHaveLength(0);
+    });
+
+    it('costs nothing when the recipient has no device registered', async () => {
+        // Which is nearly everybody today. `sendNotification` never throws and an empty
+        // recipient list must not change the outcome of the transition.
+        users.rider_1 = { ...RIDER };
+        const result = await call({ action: 'claim' }, 'sarthi_1');
+        expect(result).toMatchObject({ success: true, status: 'claimed' });
+        expect(pushes[0].to).toEqual([]);
     });
 });

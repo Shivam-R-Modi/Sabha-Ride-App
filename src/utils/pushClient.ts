@@ -27,6 +27,30 @@ export function hasVapidKey(): boolean {
 }
 
 /**
+ * SAID OUT LOUD, ONCE, IN DEV.
+ *
+ * Without the key `pushAvailability` reports 'unsupported', so `shouldOfferPush` is
+ * false and the prompt renders nothing — correctly, because there is nothing that could
+ * work. But the whole feature then LOOKS wired up and does nothing at all, which is the
+ * exact failure this codebase keeps removing, and it is invisible: no error, no empty
+ * state, no clue.
+ *
+ * It was invisible for months. `docs/STATUS.md` recorded push as "delivered once, to one
+ * phone" and read as an adoption problem; the prompt could not physically appear on any
+ * screen, on any device, because `VITE_FIREBASE_VAPID_KEY` is not set.
+ *
+ * Dev only — a warning in production would be noise on a congregation that has decided
+ * against push.
+ */
+if (import.meta.env.DEV && !hasVapidKey()) {
+    console.warn(
+        '[push] VITE_FIREBASE_VAPID_KEY is not set, so notifications are switched off '
+        + 'everywhere: no prompt will ever appear and nothing will be delivered. '
+        + 'Firebase console → Project settings → Cloud Messaging → Web Push certificates.',
+    );
+}
+
+/**
  * Register the messaging worker, passing the Firebase config on the query
  * string so there is exactly one copy of it.
  *

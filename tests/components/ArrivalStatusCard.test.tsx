@@ -28,6 +28,33 @@ vi.mock('../../src/utils/cloudFunctions', () => ({
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock('../../contexts/ToastContext', () => ({ useToast: () => toast }));
 
+/**
+ * jsdom has no PushManager, so the real hook reports 'unsupported' and `PushPrompt`
+ * correctly renders nothing — which would make the assertions below pass for the wrong
+ * reason if they were written against absence. Forced to 'off' so the offer is actually
+ * on screen and its WORDING can be checked.
+ */
+vi.mock('../../hooks/usePush', () => ({
+    usePush: () => ({
+        availability: 'off', busy: false, error: null,
+        enable: vi.fn(), disable: vi.fn(),
+    }),
+}));
+
+
+/**
+ * The card carries a `PushPrompt` as of 2026-08-25, and that reaches `usePush` →
+ * `useAuth`. Mocked rather than wrapped in a provider: this file is about what the
+ * traveller's card says, and a real AuthProvider would drag Firebase in with it.
+ */
+vi.mock('../../contexts/AuthContext', () => ({
+    useAuth: () => ({
+        currentUser: { uid: 'traveller_1' },
+        userProfile: { name: 'Cab Exa' },
+        refreshProfile: () => undefined,
+    }),
+}));
+
 const ask = vi.fn(async () => true);
 vi.mock('../../components/shared/useConfirm', () => ({
     useConfirm: () => ({ ask, confirmDialog: null }),
@@ -237,5 +264,34 @@ describe('changing the details afterwards', () => {
         show('open');
         await userEvent.click(screen.getByRole('button', { name: /Change my details/i }));
         expect(onEdit).toHaveBeenCalled();
+    });
+});
+
+/**
+ * ASKING FOR NOTIFICATION PERMISSION AT ALL. Airport Seva had no push prompt until
+ * 2026-08-25 — the whole mechanism existed and was offered only on the two Sabha Seva
+ * screens, so a traveller was never asked and every airport push went nowhere.
+ */
+describe('the offer to turn notifications on', () => {
+    it('is made while the trip is live', () => {
+        show('open');
+        expect(screen.getByText(/takes your pickup/i)).toBeInTheDocument();
+    });
+
+    it('promises ONE message, which is exactly what the server sends', () => {
+        // notifyTravellerSarthiAssigned, on claim. Promising more would spend the one
+        // iOS permission against something that never arrives.
+        show('open');
+        expect(screen.getByText(/One notification, when somebody is assigned/i)).toBeInTheDocument();
+    });
+
+    it('is NOT made on a finished trip, where it would buy nothing', () => {
+        show('completed', { claimedByName: 'Kiran' });
+        expect(screen.queryByText(/takes your pickup/i)).not.toBeInTheDocument();
+    });
+
+    it('is NOT made on a cancelled one either', () => {
+        show('cancelled');
+        expect(screen.queryByText(/takes your pickup/i)).not.toBeInTheDocument();
     });
 });

@@ -23,8 +23,25 @@ import {
  * Not a fixed banner. `UpdateBanner` and `PWAPrompt` already share the bottom
  * strip; a third would be a pile. This sits in the page, under the thing it is
  * talking about.
+ *
+ * THE WORDS ARE A PARAMETER, and that is not decoration. The default copy promises
+ * "when a Sarthi is assigned, one when they are outside" — which is true on the sabha
+ * screens and false everywhere else. Airport Seva sends different things to different
+ * people, so each caller states what THAT person will actually receive. A permission
+ * spent on a promise the app does not keep is worse than never asking: iOS allows one
+ * refusal and it is permanent.
  */
-export const PushPrompt: React.FC = () => {
+interface PushPromptProps {
+    /** What they get. Defaults to the sabha ride wording. */
+    title?: string;
+    /** Exactly what will be sent — and nothing that will not be. */
+    detail?: string;
+}
+
+export const PushPrompt: React.FC<PushPromptProps> = ({
+    title = 'Get told when your Sarthi is on the way',
+    detail = 'One notification when a Sarthi is assigned, one when they are outside. Nothing else.',
+}) => {
     const { availability, busy, enable } = usePush();
     const [dismissals, setDismissals] = React.useState(() => readPushDismissals());
 
@@ -39,13 +56,11 @@ export const PushPrompt: React.FC = () => {
     return (
         <div className="clay-card p-4 text-left animate-in fade-in slide-in-from-bottom-2">
             <p className="text-sm font-bold text-coffee flex items-center gap-2">
-                <Bell size={16} className="shrink-0" /> Get told when your Sarthi is on the way
+                <Bell size={16} className="shrink-0" /> {title}
             </p>
             {/* Says exactly what will be sent. A promise this specific is what
                 makes the yes worth asking for. */}
-            <p className="text-xs text-coffee-500 mt-1">
-                One notification when a Sarthi is assigned, one when they are outside. Nothing else.
-            </p>
+            <p className="text-xs text-coffee-500 mt-1">{detail}</p>
             <div className="flex gap-2 mt-3">
                 <button
                     onClick={enable}

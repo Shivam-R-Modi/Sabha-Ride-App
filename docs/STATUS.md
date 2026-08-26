@@ -3,7 +3,75 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — Airport Seva round two, five commits, 2026-08-25 (last)
+## NOT DEPLOYED — notification prompts, and why push has never worked, 2026-08-25 (last)
+
+Owner: *"yes, add the notification permission prompt."*
+
+### THE BLOCKER, and it is not in the code
+
+**`VITE_FIREBASE_VAPID_KEY` is not set.** It is absent from `.env.local` entirely and
+empty in `.env.example`, and it is absent from the built bundle.
+
+`hasVapidKey()` is therefore false, so `pushAvailability` returns `'unsupported'`,
+so `shouldOfferPush` returns false, so **`PushPrompt` has never rendered on any screen,
+on any device.** Including the two Sabha Seva screens where it has been wired up for
+months.
+
+This file has carried "push has delivered exactly once, to one phone, on request —
+nobody has been asked to turn it on" for a long time, and that read as an adoption
+problem. It was not. **Nobody has been asked because the ask is impossible.** Every
+notification the server has ever sent had no token to send to, and could not have had one.
+
+**The fix is one line in `.env.local`, and it needs the owner's Firebase console:**
+
+    Firebase console → Project settings → Cloud Messaging → Web Push certificates
+    → generate a key pair, then:  VITE_FIREBASE_VAPID_KEY=<the key>
+
+Then rebuild and redeploy hosting. It is a public key, safe in a client bundle — that is
+what VAPID is — but it is not in this repo and cannot be guessed.
+
+`src/utils/pushClient.ts` now logs a dev-only warning naming this, so the next person
+does not spend a day on it. A silent no-op that looks wired up is the failure mode this
+project keeps removing; this one had been hiding in an unset environment variable.
+
+### What was built
+
+**The prompt now exists in Airport Seva**, which it never did — the whole mechanism was
+offered only on the two sabha screens, so a Sarthi who never used Sabha Seva was never
+asked, and every airport notification went nowhere twice over.
+
+`PushPrompt` takes its wording as props now, defaulting to the existing sabha copy so
+both existing callers are untouched. That is not decoration: the default promises "one
+when a Sarthi is assigned, one when they are outside", which is false in Airport Seva,
+and iOS allows exactly one refusal, permanently. So each caller states what THAT person
+actually receives — and a plain Sarthi is not promised the unclaimed sweep, which goes to
+coordinators only.
+
+**One step beyond the literal ask, and the reason matters:** nothing was ever sent to a
+traveller. Prompting them would have been a permission spent against a notification that
+does not exist. So `notifyTravellerSarthiAssigned` now fires on claim — the one thing
+somebody waiting to be collected actually wants — and the traveller's prompt promises
+exactly that and nothing more.
+
+It names the Sarthi, deliberately breaking the no-names rule the ride notifications
+follow. Those omit names because naming a child on a lock screen tells a stranger who is
+travelling and when. This names the VOLUNTEER, to the person being collected, which is
+the reassurance the service exists for.
+
+### Verification
+
+Client **1672**, functions **962**, rules 237, both builds, typecheck zero.
+
+Mutation-checked. The first attempt at the functions half was **invalid** — reverting
+`functions/src/` removes the tests too, since they sit beside the source, so it reported
+a clean pass that proved nothing. Redone against the two source files alone: two tests
+fail, including "tells the TRAVELLER when a Sarthi claims their pickup".
+
+The component tests needed `usePush` mocked to `'off'`: jsdom has no PushManager, so the
+real hook says 'unsupported' and the prompt renders nothing — assertions written against
+its absence would have passed for the wrong reason.
+
+## NOT DEPLOYED — Airport Seva round two, five commits, 2026-08-25
 
 Owner walked five screenshots. `docs/PLAN-airport-seva-round-2.md` has the full plan and
 the four decisions taken. Commits `fb0a3ef` → `b08b7bc`.

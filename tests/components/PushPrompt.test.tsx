@@ -78,3 +78,30 @@ describe('PushPrompt', () => {
         expect(container).toBeEmptyDOMElement();
     });
 });
+
+/**
+ * THE WORDS ARE THE PROMISE. Added 2026-08-25 with Airport Seva's prompts.
+ *
+ * The default copy — "when a Sarthi is assigned, one when they are outside" — is true
+ * on the sabha screens and false everywhere else. iOS allows exactly one refusal and
+ * it is permanent, so a permission spent against a notification that never arrives is
+ * worse than never asking.
+ */
+describe('what it promises', () => {
+    it('uses the sabha ride wording by default, so existing callers are unchanged', () => {
+        render(<PushPrompt />);
+        expect(screen.getByText(/when your Sarthi is on the way/i)).toBeInTheDocument();
+        expect(screen.getByText(/one when they are outside/i)).toBeInTheDocument();
+    });
+
+    it('says what THIS caller sends, when given words of its own', () => {
+        render(<PushPrompt
+            title="Get told when a Sarthi takes your pickup"
+            detail="One notification, and nothing else."
+        />);
+        expect(screen.getByText(/takes your pickup/i)).toBeInTheDocument();
+        expect(screen.getByText(/One notification, and nothing else/i)).toBeInTheDocument();
+        // And the wrong promise is gone, not merely joined.
+        expect(screen.queryByText(/one when they are outside/i)).not.toBeInTheDocument();
+    });
+});

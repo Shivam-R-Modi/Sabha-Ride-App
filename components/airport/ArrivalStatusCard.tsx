@@ -5,6 +5,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { updateAirportPickup } from '../../src/utils/cloudFunctions';
 import { airportLabel, canRun } from '../../src/utils/arrival';
 import { formatTime } from '../../src/constants/schedule';
+import { PushPrompt } from '../shared/PushPrompt';
 import type { ArrivalStatus } from '../../src/utils/arrival';
 import type { AirportPickup } from '../../types';
 
@@ -184,6 +185,20 @@ export const ArrivalStatusCard: React.FC<ArrivalStatusCardProps> = ({ arrival, o
             {/* Rendered only when the shared transition table says a cancel is
                 possible. A finished or already-cancelled trip shows no button rather
                 than one that returns failed-precondition. */}
+            {/* Only while the trip is live. Offering notifications for a journey that
+                is finished or withdrawn spends the one iOS permission on nothing.
+
+                The promise is exactly one message, which is exactly what the server
+                sends: notifyTravellerSarthiAssigned, on claim. Their Sarthi changing
+                the flight is not mentioned because the traveller is the one who
+                changes it. */}
+            {canCancel && (
+                <PushPrompt
+                    title="Get told when a Sarthi takes your pickup"
+                    detail="One notification, when somebody is assigned to collect you. Nothing else."
+                />
+            )}
+
             {/* ABOVE the cancel, and worded as the smaller act. A traveller whose
                 flight moved was cancelling and re-filing, which loses their Sarthi. */}
             {canEdit && (

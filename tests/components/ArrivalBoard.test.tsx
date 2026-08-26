@@ -34,6 +34,20 @@ vi.mock('../../hooks/useUsers', () => ({
     useAvailableDrivers: () => ({ drivers: [], loading: false }),
 }));
 
+/**
+ * jsdom has no PushManager, so the real hook reports 'unsupported' and `PushPrompt`
+ * correctly renders nothing — which would make the assertions below pass for the wrong
+ * reason if they were written against absence. Forced to 'off' so the offer is actually
+ * on screen and its WORDING can be checked.
+ */
+vi.mock('../../hooks/usePush', () => ({
+    usePush: () => ({
+        availability: 'off', busy: false, error: null,
+        enable: vi.fn(), disable: vi.fn(),
+    }),
+}));
+
+
 let profile: Record<string, unknown> = {
     name: 'Kiran', role: 'driver', roles: ['driver', 'student'], accountStatus: 'approved',
 };
@@ -549,5 +563,35 @@ describe('while loading', () => {
         expect(day(25)).toBeInTheDocument();
         expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
         expect(screen.getByRole('heading', { name: /Tuesday, August 25/i })).toBeInTheDocument();
+    });
+});
+
+/**
+ * THE SARTHI SIDE OF THE SAME GAP. The board never offered notifications, so every
+ * `notifyArrivalChanged` and every unclaimed-arrival alert the server sent had nobody
+ * to reach.
+ */
+describe('the offer to turn notifications on', () => {
+    it('is made on the board', () => {
+        show();
+        expect(screen.getByText(/when an airport pickup needs you/i)).toBeInTheDocument();
+    });
+
+    it('promises a coordinator the unclaimed sweep as well', () => {
+        profile = {
+            name: 'Tonny', role: 'manager', roles: ['manager', 'driver', 'student'],
+            accountStatus: 'approved', airportCoordinator: true,
+        };
+        show();
+        expect(screen.getByText(/still has nobody/i)).toBeInTheDocument();
+    });
+
+    it('does NOT promise it to a plain Sarthi, who will not receive it', () => {
+        // The unclaimed sweep goes to coordinators only. Promising it to everybody
+        // would be a notification that never arrives for most of them.
+        show();
+        expect(screen.queryByText(/still has nobody/i)).not.toBeInTheDocument();
+        expect(screen.getByText(/if something changes on a pickup you are collecting/i))
+            .toBeInTheDocument();
     });
 });

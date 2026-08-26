@@ -33,7 +33,9 @@ import {
 import {
     compact, parseFlight, parseTrip, parsePerson, retainUntilFor,
 } from '../utils/arrivalInput';
-import { notifyArrivalChanged, tokensOf } from '../utils/notifications';
+import {
+    notifyArrivalChanged, notifyTravellerSarthiAssigned, tokensOf,
+} from '../utils/notifications';
 
 const ACTIONS: ArrivalAction[] = [
     'claim', 'release', 'met', 'completed', 'no_show',
@@ -154,8 +156,17 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
         const isMine = pickup.claimedByUid === uid;
         const isRequester = pickup.requesterUid === uid;
 
-        /** Who to push to once this commits, if anybody. See the editRequest branch. */
-        let notify: { uid: string; summary: string[] } | null = null;
+        /**
+         * Who to push to once this commits, if anybody.
+         *
+         * `kind` rather than two fields, because the two cases go to opposite people —
+         * a claim tells the TRAVELLER, an edit tells the SARTHI — and a single nullable
+         * "notify uid" would make that the reader's job to remember.
+         */
+        let notify:
+            | { kind: 'changed'; uid: string; summary: string[] }
+            | { kind: 'claimed'; uid: string; sarthiName: string }
+            | null = null;
 
         switch (action) {
             case 'claim':
@@ -214,6 +225,13 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
                 update.claimedByUid = uid;
                 update.claimedByName = actorName;
                 update.claimedAt = timestamp;
+                // The one thing the traveller is waiting for. Until now the only way
+                // to learn it was to open the app and look.
+                notify = {
+                    kind: 'claimed',
+                    uid: String(pickup.requesterUid ?? ''),
+                    sarthiName: actorName,
+                };
                 break;
 
             case 'release':
@@ -314,6 +332,7 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
                         // `let`: TypeScript does not narrow a variable written inside a
                         // callback, so the push site would have seen `never`.
                         notify = {
+                            kind: 'changed',
                             uid: String(pickup.claimedByUid ?? ''),
                             summary: changeSummary(changed),
                         };
@@ -419,9 +438,13 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
      */
     const notify = outcome.notify;
     if (notify?.uid) {
-        const sarthiSnap = await db.collection('users').doc(notify.uid).get();
-        await notifyArrivalChanged(
-            tokensOf(notify.uid, sarthiSnap.data()), notify.summary, pickupId);
+        const snap = await db.collection('users').doc(notify.uid).get();
+        const to = tokensOf(notify.uid, snap.data());
+        if (notify.kind === 'changed') {
+            await notifyArrivalChanged(to, notify.summary, pickupId);
+        } else {
+            await notifyTravellerSarthiAssigned(to, notify.sarthiName, pickupId);
+        }
     }
 
     // AFTER the commit, so a row is never written for a transition that lost the

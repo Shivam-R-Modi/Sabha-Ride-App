@@ -288,6 +288,34 @@ export async function notifyStudentRideCompleted(recipients: Recipient[]): Promi
 }
 
 /**
+ * SOMEBODY IS COMING FOR THEM. Sent when a Sarthi claims an airport pickup.
+ *
+ * This is the single thing the traveller is actually waiting for, and until now the
+ * only way to learn it was to open the app and look. It also exists so the push
+ * pre-prompt on their screen has something true to promise — a permission asked for
+ * against a notification that never arrives is worse than not asking, because iOS
+ * only allows one refusal and it is permanent.
+ *
+ * The SARTHI'S NAME IS INCLUDED, deliberately, and it is the exception to the
+ * no-names rule the ride notifications follow. Those omit names because naming a
+ * child on a lock screen tells a stranger who is travelling and when. This names the
+ * VOLUNTEER, to the person being collected — which is exactly the reassurance the
+ * whole service is for, and is the same fact the card already shows.
+ */
+export async function notifyTravellerSarthiAssigned(
+    recipients: Recipient[],
+    sarthiName: string,
+    pickupId: string,
+): Promise<void> {
+    await sendNotification(
+        recipients,
+        'A Sarthi is coming for you',
+        `${sarthiName} will meet you at arrivals.`,
+        { type: 'airport-claimed', pickupId },
+    );
+}
+
+/**
  * A claimed airport pickup changed in a way that affects the drive.
  *
  * NO TRAVELLER NAME AND NO ADDRESS, same rule as the ride notifications above: this
