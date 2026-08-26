@@ -281,12 +281,16 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                                 <Plane className="w-12 h-12" />
                             </div>
                             <h3 className="text-xl font-header font-bold text-coffee">
-                                Welcome — we will collect you
+                                Jai Swaminarayan!
                             </h3>
+                            {/* The sentence about not being asked for an address is gone
+                                deliberately: it explained the ABSENCE of a field, which
+                                nobody arriving here is wondering about, and it was the
+                                longest clause on a welcome screen. */}
                             <p className="text-sm text-coffee-700">
-                                Next you will tell us your flight, and a Sarthi will be at
-                                arrivals to meet you. You will not be asked for an address
-                                here; your pickup takes the destination you give it.
+                                Tell us about your flight and a Sarthi will be waiting for
+                                you at arrivals. Nothing else to arrange — we will take it
+                                from there.
                             </p>
                             <button
                                 onClick={() => { setWhereabouts(null); setError(''); }}

@@ -107,8 +107,8 @@ describe('arriving soon', () => {
     });
 
     it('says what happens next, rather than leaving a lone button', () => {
-        expect(screen.getByText(/we will collect you/i)).toBeInTheDocument();
-        expect(screen.getByText(/not be asked for an address/i)).toBeInTheDocument();
+        expect(screen.getByText(/Jai Swaminarayan/i)).toBeInTheDocument();
+        expect(screen.getByText(/a Sarthi will be waiting for you at arrivals/i)).toBeInTheDocument();
     });
 
     it('stops asking about a role, in the header too', () => {

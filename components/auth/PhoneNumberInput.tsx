@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import {
     CountryCode,
     SUPPORTED_COUNTRIES,
@@ -53,6 +53,18 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
     const rawDigitsRef = useRef(rawDigits);
     rawDigitsRef.current = rawDigits;
 
+    /**
+     * The label was tied to NOTHING. No `htmlFor`, no `id`, so every screen reader on
+     * every form in this app announced this as an unlabelled text box — registration,
+     * profile, and three times over on the airport request form.
+     *
+     * `useId` rather than a prop, because that airport form stacks three of these and a
+     * hardcoded id would make one label point at another field's box, which is worse
+     * than none.
+     */
+    const inputId = useId();
+    const messageId = `${inputId}-message`;
+
     // Re-sync when `value` changes externally and differs from what is typed.
     useEffect(() => {
         if (!value) {
@@ -101,7 +113,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
     return (
         <div className="space-y-1.5">
             {label && (
-                <label className="block text-sm font-medium text-coffee">
+                <label htmlFor={inputId} className="block text-sm font-medium text-coffee">
                     {label} {required && <span className="text-[rgb(var(--danger-text))]">*</span>}
                 </label>
             )}
@@ -114,6 +126,9 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
                         onChange={handleCountryChange}
                         disabled={disabled}
                         className="appearance-none bg-cream-300/60 hover:bg-cream-300/70 border-2 border-r-0 border-mocha/20 rounded-l-xl px-3 py-3 pr-7 text-sm font-medium text-coffee focus:outline-none focus:border-saffron transition-colors cursor-pointer disabled:opacity-50"
+                        // `title` alone is not an accessible name for a control — it is a
+                        // tooltip, and it is not announced reliably by anything.
+                        aria-label="Country code"
                         title="Select Country Code"
                     >
                         {SUPPORTED_COUNTRIES.map((c) => (
@@ -130,6 +145,7 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
                 {/* Phone Input */}
                 <div className="relative flex-1">
                     <input
+                        id={inputId}
                         type="tel"
                         inputMode="numeric"
                         value={formattedLocal}
@@ -137,6 +153,10 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
                         placeholder={selectedCountry.mask}
                         disabled={disabled}
                         required={required}
+                        // So the refusal below is READ OUT, rather than sitting there
+                        // being looked at by people who can see it.
+                        aria-invalid={Boolean(error) || (rawDigits.length > 0 && !validation.isValid)}
+                        aria-describedby={messageId}
                         className={`w-full px-4 py-3 rounded-r-xl border-2 border-mocha/20 focus:border-saffron focus:outline-none transition-colors text-coffee font-medium placeholder-mocha/30 disabled:opacity-50 ${
                             validation.isValid ? 'pr-10 border-[rgb(var(--success))]/50' : ''
                         }`}
@@ -152,22 +172,28 @@ export const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
             </div>
 
             {/* Validation / Custom Error */}
+            <div id={messageId} role={error ? 'alert' : undefined}>
             {error ? (
                 <p className="text-xs text-[rgb(var(--danger-text))] font-medium">{error}</p>
             ) : !validation.isValid && rawDigits.length > 0 ? (
                 <p className="text-xs text-coffee-500">{validation.error}</p>
             ) : validation.isValid ? (
                 <p className="text-xs text-[rgb(var(--success-text))] font-medium flex items-center gap-1">
-                    ✓ Valid phone number ({selectedCountry.dialCode} {validation.e164})
+                    {/* `e164` ALREADY CARRIES THE DIAL CODE. Printing `selectedCountry.dialCode`
+                        beside it rendered "+91 +911293812944" — the country code twice, once
+                        detached and once attached, on the line whose whole job is to reassure
+                        somebody the number is right. */}
+                    ✓ Valid phone number ({validation.e164})
                 </p>
             ) : null}
+            </div>
 
             {/* SMS & Privacy Legal Consent Notice */}
             {showPrivacyNote && (
                 <div className="pt-1 flex items-start gap-1.5 text-[11px] text-coffee-500 leading-tight">
                     <ShieldCheck size={14} className="text-saffron shrink-0 mt-0.5" />
                     <span>
-                        Phone numbers are kept private and used exclusively for ride updates and volunteer driver/student pickup coordination.
+                        Kept private, used only to arrange your ride.
                     </span>
                 </div>
             )}

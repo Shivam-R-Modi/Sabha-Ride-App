@@ -188,7 +188,7 @@ describe('an expanded card', () => {
     it('offers a call button per number it actually has', () => {
         showOpen({ passenger: { ...BASE.passenger, altPhone: '+919876500000' } });
         expect(screen.getByRole('link', { name: /^Call$/ })).toHaveAttribute('href', 'tel:+16175550123');
-        expect(screen.getByRole('link', { name: /other number/i })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /second number/i })).toBeInTheDocument();
         expect(screen.getByRole('link', { name: /Bhavna/ })).toBeInTheDocument();
     });
 
@@ -201,42 +201,69 @@ describe('an expanded card', () => {
 describe('the buttons follow the transition table', () => {
     it('an open arrival offers only the claim', () => {
         showOpen();
-        expect(buttonNames()).toContain('I will collect them');
-        expect(buttonNames()).not.toContain('I have met them');
+        expect(buttonNames()).toContain("I'll collect them");
+        expect(buttonNames()).not.toContain("I've found them");
     });
 
     it('a Sarthi is NOT offered their own arrival', () => {
         // The server refuses it; rendering it would be a button that always fails.
         showOpen({ requesterUid: 'sarthi_1' });
-        expect(buttonNames()).not.toContain('I will collect them');
+        expect(buttonNames()).not.toContain("I'll collect them");
     });
 
     it('the Sarthi holding it gets the next steps, and no second claim', () => {
         showOpen({ status: 'claimed', claimedByUid: 'sarthi_1', claimedByName: 'Kiran' });
         const names = buttonNames();
-        expect(names).toContain('I have met them');
-        expect(names).toContain('Dropped off safely');
-        expect(names).toContain('Hand this back');
-        expect(names).not.toContain('I will collect them');
+        expect(names).toContain("I've found them");
+        expect(names).toContain('Dropped them off');
+        expect(names).toContain("I can't go");
+        expect(names).not.toContain("I'll collect them");
     });
 
     it('another Sarthi gets no action buttons at all on a claimed trip', () => {
         showOpen({ status: 'claimed', claimedByUid: 'sarthi_2', claimedByName: 'Nilesh' });
         const names = buttonNames();
-        expect(names).not.toContain('I have met them');
-        expect(names).not.toContain('Hand this back');
+        expect(names).not.toContain("I've found them");
+        expect(names).not.toContain("I can't go");
     });
 
     it('a coordinator gets them on a trip they do not hold', () => {
         showOpen({ status: 'claimed', claimedByUid: 'sarthi_2', claimedByName: 'Nilesh' }, true);
-        expect(buttonNames()).toContain('I have met them');
+        expect(buttonNames()).toContain("I've found them");
     });
 
     it('a completed trip offers nothing', () => {
         showOpen({ status: 'completed', claimedByUid: 'sarthi_1' });
         const names = buttonNames();
-        expect(names).not.toContain('Dropped off safely');
-        expect(names).not.toContain('Hand this back');
+        expect(names).not.toContain('Dropped them off');
+        expect(names).not.toContain("I can't go");
+    });
+
+    it('sends the action to the server with the pickup id', async () => {
+        showOpen();
+        await userEvent.click(screen.getByRole('button', { name: "I'll collect them" }));
+        expect(update).toHaveBeenCalledWith({ pickupId: 'p1', action: 'claim' });
+    });
+
+    it('shows the server’s own refusal, not a generic retry', async () => {
+        // "It is with Kiran" is the one thing a Sarthi who lost the race needs.
+        update.mockRejectedValueOnce(new Error('That cannot be done. It is with Kiran.'));
+        showOpen();
+        await userEvent.click(screen.getByRole('button', { name: "I'll collect them" }));
+        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('with Kiran'));
+    });
+
+    it('confirms before handing a trip back', async () => {
+        showOpen({ status: 'claimed', claimedByUid: 'sarthi_1' });
+        await userEvent.click(screen.getByRole('button', { name: "I can't go" }));
+        expect(ask).toHaveBeenCalled();
+    });
+
+    it('does nothing when the confirmation is declined', async () => {
+        ask.mockResolvedValueOnce(false);
+        showOpen({ status: 'claimed', claimedByUid: 'sarthi_1' });
+        await userEvent.click(screen.getByRole('button', { name: "I can't go" }));
+        expect(update).not.toHaveBeenCalled();
     });
 });
 
@@ -286,35 +313,12 @@ describe('a trip that is already done', () => {
     });
 
     it('leaves a live trip measured by the clock, exactly as before', () => {
+        // 'Dropped off' is the CHIP. The button a claimed trip correctly offers reads
+        // 'Dropped them off', which is why those two must not share a label — this
+        // assertion could not tell them apart when they did.
         showOpen({ status: 'claimed', claimedByUid: 'sarthi_1' });
         expect(screen.queryByText('Dropped off')).not.toBeInTheDocument();
-    });
-
-    it('sends the action to the server with the pickup id', async () => {
-        showOpen();
-        await userEvent.click(screen.getByRole('button', { name: 'I will collect them' }));
-        expect(update).toHaveBeenCalledWith({ pickupId: 'p1', action: 'claim' });
-    });
-
-    it('shows the server’s own refusal, not a generic retry', async () => {
-        // "It is with Kiran" is the one thing a Sarthi who lost the race needs.
-        update.mockRejectedValueOnce(new Error('That cannot be done. It is with Kiran.'));
-        showOpen();
-        await userEvent.click(screen.getByRole('button', { name: 'I will collect them' }));
-        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('with Kiran'));
-    });
-
-    it('confirms before handing a trip back', async () => {
-        showOpen({ status: 'claimed', claimedByUid: 'sarthi_1' });
-        await userEvent.click(screen.getByRole('button', { name: 'Hand this back' }));
-        expect(ask).toHaveBeenCalled();
-    });
-
-    it('does nothing when the confirmation is declined', async () => {
-        ask.mockResolvedValueOnce(false);
-        showOpen({ status: 'claimed', claimedByUid: 'sarthi_1' });
-        await userEvent.click(screen.getByRole('button', { name: 'Hand this back' }));
-        expect(update).not.toHaveBeenCalled();
+        expect(screen.queryByText(/Dropped off safely on/)).not.toBeInTheDocument();
     });
 });
 
@@ -367,7 +371,7 @@ describe('telling the family', () => {
     it('says the family has already been told, when they have', () => {
         showOpen({ ...claimedByMe, familyNotifiedAt: '2026-09-21T03:00:00.000Z' });
         expect(screen.getByText(/family has been messaged/i)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /message the family again/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /message them again/i })).toBeInTheDocument();
     });
 });
 

@@ -313,7 +313,6 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                         checked={form.isInternational}
                         onChange={v => set('isInternational', v)}
                         label="This is an international arrival"
-                        hint="So your Sarthi allows time for immigration and baggage."
                     />
                 </div>
             </Disclosure>
@@ -338,10 +337,12 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                         label="Cabin bags" value={form.cabinBags}
                         min={0} max={MAX_BAGS} onChange={v => set('cabinBags', v)}
                     />
+                    {/* Kept, shortened. Everything else on this screen lost its helper
+                        line; this one stays because it is the only hint that prevents a
+                        real failure — the wrong car turning up for the luggage. */}
                     <p className="flex items-start gap-2 text-xs text-coffee-500">
                         <Briefcase size={14} className="shrink-0 mt-0.5" aria-hidden="true" />
-                        Be honest about the suitcases — it decides which car can come.
-                        Two people with four large cases do not fit in a saloon.
+                        Bags decide which car can come.
                     </p>
                 </div>
             </Disclosure>
@@ -372,15 +373,12 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                             }))}
                             placeholder="Dorm, apartment or host's address"
                         />
-                        {/* Says what each choice buys instead of demanding one. Picking
-                            from the suggestions is better, so it is asked for — but
-                            leaving this blank no longer blocks the request, because
-                            plenty of people file before they know where they will
-                            live. */}
+                        {/* Leaving this blank does not block the request — plenty of
+                            people file before they know where they will live. Three
+                            sentences to say "optional" was the longest hint on the
+                            screen. */}
                         <p className="text-xs text-coffee-500 mt-1">
-                            Leave it blank if you do not know yet — your Sarthi will ask
-                            you when you land. If you do know, pick it from the
-                            suggestions so they can navigate straight to it.
+                            Leave it blank if you do not know yet.
                         </p>
                     </div>
 
@@ -415,9 +413,6 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                             id="dob" type="date" className={FIELD} value={form.dateOfBirth}
                             onChange={e => set('dateOfBirth', e.target.value)}
                         />
-                        <p className="text-xs text-coffee-500 mt-1">
-                            So your Sarthi can be sure they have met the right person.
-                        </p>
                     </div>
                     <Field
                         id="email" label="Email" value={form.email}
@@ -476,14 +471,14 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                         checked={form.hasUsWorkingPhone}
                         onChange={v => set('hasUsWorkingPhone', v)}
                         label="I will have a working phone when I land"
-                        hint="Most people arrive on a dead SIM. If you will not, agree a meeting point below."
+                        hint="Most people land on a dead SIM."
                     />
                     {!form.hasUsWorkingPhone && (
                         <Field
                             id="meeting-point" label="Where should your Sarthi wait for you?"
                             value={form.meetingPointNote} max={MAX_SHORT_TEXT}
                             onChange={v => set('meetingPointNote', v)}
-                            placeholder="By the exit doors at arrivals, holding a sign with my name"
+                            placeholder="Meet at arrivals"
                         />
                     )}
 
@@ -495,8 +490,7 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                     <hr className="border-0 border-t border-hairline/10" />
 
                     <p className="text-sm text-coffee-500">
-                        Your Sarthi can message your family to say you have been met and
-                        you are safe. Give a number and it takes them one tap.
+                        We can message your family once you are met.
                     </p>
                     <Field
                         id="family-name" label="Family contact name" value={form.familyName}

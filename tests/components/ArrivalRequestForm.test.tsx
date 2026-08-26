@@ -246,7 +246,7 @@ describe('the phone numbers', () => {
         // Three copies of the same sentence reads as a rendering fault.
         show();
         await openSection(...YOU);
-        expect(screen.getAllByText(/kept private and used exclusively/i)).toHaveLength(1);
+        expect(screen.getAllByText(/kept private, used only/i)).toHaveLength(1);
     });
 
     it('offers a country selector on each number, so a +91 number is valid', async () => {

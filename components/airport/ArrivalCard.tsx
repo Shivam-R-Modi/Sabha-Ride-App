@@ -81,11 +81,15 @@ const URGENCY_STYLE: Record<UrgencyLevel, { chip: string; label: string }> = {
 
 /** Labels the actions a Sarthi or coordinator can take, in the order they happen. */
 const ACTION_LABEL: Partial<Record<ArrivalAction, string>> = {
-    claim: 'I will collect them',
-    met: 'I have met them',
-    completed: 'Dropped off safely',
-    no_show: 'Could not find them',
-    release: 'Hand this back',
+    claim: "I'll collect them",
+    met: "I've found them",
+    // NOT 'Dropped off' — that is what DONE_STYLE's chip says. One is a state, the
+    // other is a thing you tap; sharing a label makes a card that reads twice.
+    completed: 'Dropped them off',
+    no_show: "Couldn't find them",
+    // "I can't go" rather than "Hand this back": it says why the person is tapping,
+    // which is what they would say out loud, and it is two words shorter.
+    release: "I can't go",
 };
 
 /** Which of those need confirming, and what the dialog says. */
@@ -297,7 +301,7 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                     <div className="flex flex-wrap gap-2">
                         <CallButton label="Call" phone={arrival.passenger.phone} />
                         {arrival.passenger.altPhone && (
-                            <CallButton label="Call other number" phone={arrival.passenger.altPhone} />
+                            <CallButton label="Call second number" phone={arrival.passenger.altPhone} />
                         )}
                         {family && <CallButton label={`Call ${family.name}`} phone={family.phone} />}
                     </div>
@@ -336,7 +340,7 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                             className="clay-button w-full py-3 rounded-xl font-bold text-[rgb(var(--text-on-accent))] bg-gradient-to-r from-[rgb(var(--cta))] to-[rgb(var(--cta-dark))] flex items-center justify-center gap-2"
                         >
                             <MessageCircle size={18} aria-hidden="true" />
-                            {arrival.familyNotifiedAt ? 'Message the family again' : 'Tell the family they are safe'}
+                            {arrival.familyNotifiedAt ? 'Message them again' : 'Tell the family'}
                         </button>
                     )}
                     {arrival.familyNotifiedAt && (
