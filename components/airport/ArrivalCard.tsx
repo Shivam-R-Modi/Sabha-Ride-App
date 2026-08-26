@@ -113,13 +113,30 @@ interface ArrivalCardProps {
 export const ArrivalCard: React.FC<ArrivalCardProps> = ({
     arrival, isCoordinator, open, onToggle,
 }) => {
-    const { currentUser, userProfile } = useAuth();
+    const { currentUser, userProfile, activeRole } = useAuth();
     const toast = useToast();
     const { ask, confirmDialog } = useConfirm();
     const [busy, setBusy] = useState<ArrivalAction | null>(null);
 
     const uid = currentUser?.uid ?? '';
     const isMine = arrival.claimedByUid === uid;
+
+    /**
+     * CLAIMING IS A SARTHI'S ACT, so it is offered to whoever is wearing that hat —
+     * not to whoever holds the capability.
+     *
+     * The role hierarchy expands downward, `manager → driver → student`, so every
+     * manager is a granted Sarthi and every manager was being shown "I'll collect
+     * them" while doing coordinator work. A manager who wants to drive switches to
+     * Sarthi, which is one tap and is what the switcher is for.
+     *
+     * DELIBERATELY UI-ONLY. `updateAirportPickup` still accepts a claim from any
+     * approved driver, which is right: this decides what we OFFER, not what we ALLOW,
+     * and a stale tab must not start failing. Every other action is unchanged — a
+     * coordinator's oversight buttons are organising work, not driving, and with the
+     * picker gone their `release` is the only way to recover an abandoned trip.
+     */
+    const wearingSarthiHat = activeRole === 'driver';
     const isDone = arrival.status === 'completed';
     const style = isDone ? DONE_STYLE : URGENCY_STYLE[urgencyOf(arrival.arrivalAt)];
     const bags = arrival.largeBags + arrival.cabinBags;
@@ -150,7 +167,7 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
      */
     const actions = (Object.keys(ACTION_LABEL) as ArrivalAction[]).filter(action => {
         if (!canRun(action, arrival.status)) return false;
-        if (action === 'claim') return arrival.requesterUid !== uid;
+        if (action === 'claim') return arrival.requesterUid !== uid && wearingSarthiHat;
         return isMine || isCoordinator;
     });
 
@@ -316,6 +333,19 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                     )}
                     {arrival.familyNotifiedAt && (
                         <p className="text-xs text-coffee-500">The family has been messaged.</p>
+                    )}
+
+                    {/* WHY THE CLAIM BUTTON IS NOT HERE. Without this line a manager
+                        sees a trip nobody has taken, no way to take it, and no reason
+                        given — which reads as a broken screen rather than as a role
+                        they are not currently wearing. */}
+                    {canRun('claim', arrival.status)
+                        && arrival.requesterUid !== uid
+                        && activeRole !== null
+                        && !wearingSarthiHat && (
+                        <p className="text-sm text-coffee-500 pt-2 border-t border-hairline/10">
+                            Switch to Sarthi to collect someone yourself.
+                        </p>
                     )}
 
                     {actions.length > 0 && (

@@ -43,11 +43,18 @@ vi.mock('../../hooks/useUsers', () => ({
     useAvailableDrivers: () => ({ drivers: sarthis, loading: false }),
 }));
 
-let viewer = { uid: 'sarthi_1', name: 'Kiran' };
+/**
+ * `activeRole` is the hat currently worn, not the capability held — the claim button
+ * is gated on it, so it belongs in this mock. Default 'driver', because most of this
+ * file is about a Sarthi doing Sarthi things.
+ */
+let viewer: { uid: string; name: string; activeRole: string | null } =
+    { uid: 'sarthi_1', name: 'Kiran', activeRole: 'driver' };
 vi.mock('../../contexts/AuthContext', () => ({
     useAuth: () => ({
         currentUser: { uid: viewer.uid },
         userProfile: { name: viewer.name },
+        activeRole: viewer.activeRole,
     }),
 }));
 
@@ -119,7 +126,7 @@ const buttonNames = () =>
 
 beforeEach(() => {
     vi.clearAllMocks();
-    viewer = { uid: 'sarthi_1', name: 'Kiran' };
+    viewer = { uid: 'sarthi_1', name: 'Kiran', activeRole: 'driver' };
     sarthis = [
         { id: 'sarthi_1', name: 'Kiran', capacity: 5 },
         { id: 'sarthi_2', name: 'Nilesh', capacity: 7 },
@@ -399,6 +406,58 @@ describe('the urgency chip', () => {
  * frozen every no-show forever, and invisibly, because every "needs somebody" count in
  * the app filters on status == 'open'.
  */
+/**
+ * WHOSE JOB IS IT TO CLAIM. Reported 2026-08-25 from a screenshot: a manager doing
+ * coordinator work was being offered "I will collect them", because the role hierarchy
+ * expands downward and every manager is a granted Sarthi.
+ *
+ * The gate is on the HAT, not the capability — and the server still accepts a claim
+ * from any approved driver, so this is about what is offered, never about what is
+ * allowed.
+ */
+describe('claiming belongs to whoever is wearing the Sarthi hat', () => {
+    it('offers the claim to a Sarthi', () => {
+        showOpen();
+        expect(buttonNames()).toContain("I'll collect them");
+    });
+
+    it('does NOT offer it to somebody currently being a manager', () => {
+        viewer = { uid: 'coord_1', name: 'Tonny', activeRole: 'manager' };
+        showOpen({}, true);
+        expect(buttonNames()).not.toContain("I'll collect them");
+    });
+
+    it('says WHY it is missing, rather than just removing it', () => {
+        // A control that vanishes with no reason reads as a broken screen. This is the
+        // half of the change that stops the gate becoming its own defect.
+        viewer = { uid: 'coord_1', name: 'Tonny', activeRole: 'manager' };
+        showOpen({}, true);
+        expect(screen.getByText(/Switch to Sarthi/i)).toBeInTheDocument();
+    });
+
+    it('says nothing of the sort to a Sarthi, who has the button', () => {
+        showOpen();
+        expect(screen.queryByText(/Switch to Sarthi/i)).not.toBeInTheDocument();
+    });
+
+    it('offers no hint on a trip that could not be claimed anyway', () => {
+        // Already taken. Telling a manager to switch hats for a trip nobody can claim
+        // would be advice that leads to another empty screen.
+        viewer = { uid: 'coord_1', name: 'Tonny', activeRole: 'manager' };
+        showOpen({ status: 'claimed', claimedByUid: 'sarthi_2', claimedByName: 'Nilesh' }, true);
+        expect(screen.queryByText(/Switch to Sarthi/i)).not.toBeInTheDocument();
+    });
+
+    it('leaves the coordinator oversight buttons alone', () => {
+        // Only `claim` is gated. These are organising work, and one of them is now the
+        // only way to recover a trip from a Sarthi who has gone quiet.
+        viewer = { uid: 'coord_1', name: 'Tonny', activeRole: 'manager' };
+        showOpen({ status: 'claimed', claimedByUid: 'sarthi_2', claimedByName: 'Nilesh' }, true);
+        expect(buttonNames()).toContain("I've found them");
+        expect(buttonNames()).toContain("I can't go");
+    });
+});
+
 describe('no picker, and no dead end where it used to be', () => {
     const claimed = {
         status: 'claimed' as const, claimedByUid: 'sarthi_2', claimedByName: 'Nilesh',
