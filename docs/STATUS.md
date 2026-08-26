@@ -3,7 +3,72 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — a finished trip now looks finished, 2026-08-25 (last)
+## NOT DEPLOYED — Airport Seva round two, five commits, 2026-08-25 (last)
+
+Owner walked five screenshots. `docs/PLAN-airport-seva-round-2.md` has the full plan and
+the four decisions taken. Commits `fb0a3ef` → `b08b7bc`.
+
+### The one to read first: removing reassign nearly created a trap
+
+The owner asked for hand-to-a-named-Sarthi to go — "a Sarthi releases and another picks it
+up". But `reassign` was the **only** transition out of `no_show`. Removing it alone would
+have frozen every no-show forever, and invisibly: every "needs somebody" count in this app
+filters on `status == 'open'`, so a frozen no-show draws no badge, appears in no list,
+fires no alert, and the traveller is still told to ring a coordinator about a button that
+no longer exists.
+
+`release` therefore now runs from `no_show` too, in the **same commit**. Eight tests fail
+if that widening is reverted — one of which was already in the repo:
+`arrival.test.ts`'s *"no action lands on a status it cannot then be moved out of by
+mistake"*, which catches the whole class unaided.
+
+Consequence worth knowing: **coordinator release is now load-bearing.** With the picker
+gone it is the only way to recover a trip from a Sarthi who has stopped responding. Two
+tests pin it.
+
+### What else changed
+
+- **Words, everywhere.** Welcome screen opens "Jai Swaminarayan!". Form lost five helper
+  lines and shortened two; the two that stayed are the two that prevent something. Action
+  labels are shorter — "I can't go" rather than "Hand this back".
+- **Claim is gated on `activeRole`**, not on capability — the role hierarchy made every
+  manager a granted Sarthi. UI-only; the server still accepts a claim from any approved
+  driver. A manager sees *"Switch to Sarthi to collect someone yourself"* where the button
+  would be, because a control that vanishes without explanation is the other face of the
+  same defect.
+- **`releaseReason` is finally displayed**, and `alertsSent` is cleared on release so a
+  late hand-back cannot go unannounced.
+- **The traveller can edit** — `editFlight` → `editRequest`, covering the whole request,
+  validated by the same three parsers as create. `changedAt` + `changedFields` replace
+  `arrivalTimeChangedAt`, so the card names what moved. Push follows the sabha pattern and
+  is the backstop; the in-app red line is the guarantee.
+
+### Four defects found while doing it, none of them in scope
+
+- **The phone field printed the country code twice** — `+91 +911293812944`. Shared with
+  Sabha Seva.
+- **Its `<label>` was tied to nothing.** No `htmlFor`, no `id` — announced as an
+  unlabelled text box on every form in the app. Now `useId`, plus `aria-invalid` and
+  `aria-describedby`.
+- **The edit form could not be saved at all**: `missing()` refuses while the primary phone
+  is unvalidated, and those flags started blank.
+- **The preview auth stub was pinned to `activeRole: 'manager'`**, so the harness could
+  only ever show the signpost and never the button it stands in for. `?role=driver` now
+  switches it.
+
+`PhoneNumberInput` had no tests; it has ten. Every fix above was mutation-checked by
+reverting the source and confirming the named tests fail.
+
+Full sweep: **client 1663, functions 958, rules 237**, both builds, typecheck zero. Both
+role paths checked in the rendered harness.
+
+### Still open
+
+- **Notifications are IN scope** — corrected by the owner. Delivery is still near-zero
+  because nobody has been asked to enable it; that is an adoption problem, not a scope one.
+- `--gold-text` on `--canvas-mid` at 4.45:1 on the role label, unchanged brand decision.
+
+## NOT DEPLOYED — a finished trip now looks finished, 2026-08-25
 
 Owner, from a screenshot of the live app: *"I cannot see where sarthi is able to click on
 hand this back? and even on the managers dashboard where is hand this back?"*
