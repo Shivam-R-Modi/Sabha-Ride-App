@@ -204,6 +204,20 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
                 // "nobody turned up" — the second being about a Sarthi who has gone.
                 update.noShowAt = null;
                 if (reason) update.releaseReason = reason;
+                /**
+                 * AND THE ALARM IS REARMED.
+                 *
+                 * `alertsSent` records which urgency bands have already fired, and
+                 * `alertUnclaimedArrivals` skips any band it finds stamped. Time only
+                 * decreases, so that is a sufficient record for a trip that stays
+                 * open — but a trip that was open, claimed, and then handed back has
+                 * a stamp from a band it is now PAST, and the job would stay silent
+                 * for the rest of the trip's life.
+                 *
+                 * Which is the one case that most needs it: a hand-back the night
+                 * before a landing is exactly when nobody is watching the board.
+                 */
+                update.alertsSent = null;
                 break;
 
             case 'met':

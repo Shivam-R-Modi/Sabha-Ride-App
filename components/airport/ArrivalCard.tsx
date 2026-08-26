@@ -234,6 +234,18 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                         card rather than a delivered passenger — and that is exactly how
                         it was read. Nothing transitions out of 'completed', so the
                         absence is correct and only the explanation was missing. */}
+                    {/* WHY THIS IS BACK ON THE BOARD. `releaseReason` has been written
+                        since the feature shipped and read by nothing — a Sarthi typed
+                        "car trouble" into a field no human ever saw. Shown only while
+                        the trip is open again, because once somebody else has taken it
+                        the previous holder's reason is history. */}
+                    {arrival.status === 'open' && arrival.releaseReason && (
+                        <p className="flex items-start gap-2 text-sm text-[rgb(var(--warning-text))]">
+                            <AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+                            Handed back: {arrival.releaseReason}
+                        </p>
+                    )}
+
                     {isDone && (
                         <p className="flex items-center gap-2 text-sm font-bold text-[rgb(var(--success-text))]">
                             <CheckCircle2 size={16} className="shrink-0" aria-hidden="true" />

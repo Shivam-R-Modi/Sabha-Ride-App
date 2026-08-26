@@ -415,6 +415,29 @@ describe('the urgency chip', () => {
  * from any approved driver, so this is about what is offered, never about what is
  * allowed.
  */
+/**
+ * `releaseReason` was written by the server from the day the feature shipped and read
+ * by NOTHING — a Sarthi typing "car trouble" into a field no human would ever see.
+ * A dead field is this repo's signature defect wearing a database hat.
+ */
+describe('why a trip came back', () => {
+    it('shows the reason the previous Sarthi gave', () => {
+        showOpen({ status: 'open', releaseReason: 'Car trouble' });
+        expect(screen.getByText(/Handed back: Car trouble/i)).toBeInTheDocument();
+    });
+
+    it('says nothing when they gave no reason', () => {
+        showOpen({ status: 'open' });
+        expect(screen.queryByText(/Handed back/i)).not.toBeInTheDocument();
+    });
+
+    it('stops showing it once somebody else has taken the trip', () => {
+        // History at that point, and a live card is not the place for it.
+        showOpen({ status: 'claimed', claimedByUid: 'sarthi_2', releaseReason: 'Car trouble' });
+        expect(screen.queryByText(/Handed back/i)).not.toBeInTheDocument();
+    });
+});
+
 describe('claiming belongs to whoever is wearing the Sarthi hat', () => {
     it('offers the claim to a Sarthi', () => {
         showOpen();

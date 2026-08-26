@@ -262,6 +262,19 @@ describe('once claimed', () => {
         });
     });
 
+    it('rearms the unclaimed alarm, so a late hand-back is not silent', async () => {
+        // `alertsSent` stops a band firing twice. A trip that was open, claimed, then
+        // handed back carries stamps from bands it is now past — and the scheduled job
+        // skips any band it finds stamped, so it would stay quiet for the rest of the
+        // trip. Exactly the case that most needs the alarm.
+        pickup = {
+            ...OPEN, status: 'claimed', claimedByUid: 'sarthi_1', claimedByName: 'Kiran',
+            alertsSent: { '48h': '2026-09-19T00:00:00.000Z', '24h': '2026-09-20T00:00:00.000Z' },
+        };
+        await call({ action: 'release' }, 'sarthi_1');
+        expect(written().alertsSent).toBeNull();
+    });
+
     it('a release with no reason is still allowed', async () => {
         await call({ action: 'release' }, 'sarthi_1');
         expect(written().status).toBe('open');
