@@ -389,60 +389,58 @@ describe('the urgency chip', () => {
     });
 });
 
-describe('a coordinator moving a trip', () => {
+/**
+ * HANDING A TRIP TO A NAMED SARTHI NO LONGER EXISTS. Removed 2026-08-25 on the owner's
+ * instruction — "a Sarthi releases and another Sarthi picks it up" — which is one
+ * action instead of two and needs no roster.
+ *
+ * The trap it left behind is why this block is not simply deleted: `reassign` was the
+ * ONLY transition out of 'no_show'. Removing it without widening `release` would have
+ * frozen every no-show forever, and invisibly, because every "needs somebody" count in
+ * the app filters on status == 'open'.
+ */
+describe('no picker, and no dead end where it used to be', () => {
     const claimed = {
         status: 'claimed' as const, claimedByUid: 'sarthi_2', claimedByName: 'Nilesh',
     };
 
-    it('is offered to a coordinator', () => {
+    it('offers no hand-to-a-named-Sarthi control, not even to a coordinator', () => {
         showOpen(claimed, true);
-        expect(screen.getByRole('button', { name: /Give this to another Sarthi/i }))
-            .toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /another Sarthi/i })).not.toBeInTheDocument();
     });
 
-    it('is NOT offered to an ordinary Sarthi, even the one holding it', async () => {
-        // The one thing the coordinator flag genuinely gates, and the server checks
-        // the same. A visible button here would always come back permission-denied.
-        showOpen({ ...claimed, claimedByUid: 'sarthi_1', claimedByName: 'Kiran' }, false);
-        expect(screen.queryByRole('button', { name: /Give this to another Sarthi/i }))
-            .not.toBeInTheDocument();
+    it('lets the Sarthi who marked a no-show put it back on the board', () => {
+        // THE DEAD-END GUARD. Without release from 'no_show' this card renders no
+        // actions at all and the trip is stranded.
+        showOpen({ status: 'no_show', claimedByUid: 'sarthi_1', claimedByName: 'Kiran' });
+        expect(buttonNames()).toContain("I can't go");
     });
 
-    it('is not offered on an unclaimed trip — there is nobody to move it from', () => {
-        showOpen({}, true);
-        expect(screen.queryByRole('button', { name: /Give this to another Sarthi/i }))
-            .not.toBeInTheDocument();
+    it('lets a coordinator put back a no-show they do not hold', () => {
+        // With the picker gone, this is the ONLY way to recover a trip from a Sarthi
+        // who has stopped responding. It must not be tidied away.
+        showOpen({ status: 'no_show', claimedByUid: 'sarthi_2', claimedByName: 'Nilesh' }, true);
+        expect(buttonNames()).toContain("I can't go");
     });
 
-    it('sends the reassign with the chosen Sarthi', async () => {
-        showOpen(claimed, true);
-        await userEvent.click(screen.getByRole('button', { name: /Give this to another Sarthi/i }));
-        await userEvent.click(screen.getByText('Kiran'));
-
-        expect(update).toHaveBeenCalledWith({
-            pickupId: 'p1', action: 'reassign', toUid: 'sarthi_1',
-        });
+    it('sends a plain release, with no target', async () => {
+        showOpen({ status: 'no_show', claimedByUid: 'sarthi_1', claimedByName: 'Kiran' });
+        await userEvent.click(screen.getByRole('button', { name: "I can't go" }));
+        expect(update).toHaveBeenCalledWith({ pickupId: 'p1', action: 'release' });
     });
 
-    it('does not offer the Sarthi who already holds it', async () => {
-        // Reassigning to the current holder is a no-op dressed as an action.
-        showOpen(claimed, true);
-        await userEvent.click(screen.getByRole('button', { name: /Give this to another Sarthi/i }));
-
-        expect(screen.queryByText('Nilesh')).not.toBeInTheDocument();
-        expect(screen.getByText('Kiran')).toBeInTheDocument();
+    it('still offers nothing at all once the trip is finished', () => {
+        showOpen({ status: 'completed', claimedByUid: 'sarthi_1' }, true);
+        // `buttonNames` includes the disclosure header, which is always there — so the
+        // assertion is "no ACTION survives", not "no button exists".
+        const names = buttonNames();
+        for (const label of ["I'll collect them", "I've found them", 'Dropped them off',
+            "Couldn't find them", "I can't go"]) {
+            expect(names, label).not.toContain(label);
+        }
     });
 });
 
-/**
- * A DESTINATION THAT WAS NEVER GIVEN.
- *
- * The address became optional because somebody filing a month before they fly often
- * does not have one. That moves the burden onto this card: the Sarthi has to be told
- * it is a question to ask, not left looking at a blank row they will read as a
- * loading failure. And `dropoffAddress?.split(',')` is now the only thing standing
- * between an absent address and a crash that takes the whole board down.
- */
 describe('when they did not give an address', () => {
     const NO_ADDRESS: Partial<AirportPickup> = {
         dropoffAddress: undefined, dropoffLat: undefined, dropoffLng: undefined,

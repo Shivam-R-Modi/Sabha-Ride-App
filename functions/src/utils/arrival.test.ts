@@ -54,10 +54,17 @@ describe('the transition table', () => {
         expect(canRun('completed', 'met')).toBe(true);
     });
 
-    it('a wrongly-marked no_show can be rescued by reassigning', () => {
+    it('a wrongly-marked no_show can be rescued by releasing it', () => {
         // Otherwise no_show is terminal and the traveller has to file a second
-        // request while standing in an airport.
-        expect(canRun('reassign', 'no_show')).toBe(true);
+        // request while standing in an airport. This was `reassign` until 2026-08-25;
+        // when that action was removed, release had to widen or no_show became a
+        // one-way door — and an INVISIBLE one, since every count filters on 'open'.
+        expect(canRun('release', 'no_show')).toBe(true);
+    });
+
+    it('has no reassign at all any more', () => {
+        expect(ALLOWED_FROM).not.toHaveProperty('reassign');
+        expect(RESULT_OF).not.toHaveProperty('reassign');
     });
 
     it('every action says what status it leaves behind, or says it leaves it alone', () => {

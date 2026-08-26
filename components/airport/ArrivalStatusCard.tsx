@@ -167,8 +167,12 @@ export const ArrivalStatusCard: React.FC<ArrivalStatusCardProps> = ({ arrival, o
             {arrival.status === 'no_show' && (
                 <p className="flex items-start gap-2 text-sm text-[rgb(var(--danger))]" role="alert">
                     <Phone size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
-                    If you are still at the airport, call the seva coordinator — this
-                    request needs somebody to reassign it.
+                    {/* Said "needs somebody to reassign it" until 2026-08-25, when the
+                        reassign button was removed. Advice naming a control that no
+                        longer exists is worse than no advice — it sends somebody
+                        standing in an airport looking for it. */}
+                    If you are still at the airport, call the seva coordinator so we can
+                    put you back on the board for another Sarthi.
                 </p>
             )}
 

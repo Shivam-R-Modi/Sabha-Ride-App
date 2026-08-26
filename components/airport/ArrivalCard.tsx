@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { AlertTriangle, CheckCircle2, MessageCircle, Phone, Plane } from 'lucide-react';
 import { Disclosure } from '../shared/Disclosure';
 import { useConfirm } from '../shared/useConfirm';
-import { DriverPicker } from '../manager/DriverPicker';
-import { useAvailableDrivers } from '../../hooks/useUsers';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { updateAirportPickup } from '../../src/utils/cloudFunctions';
@@ -99,7 +97,7 @@ const ACTION_CONFIRM: Partial<Record<ArrivalAction, { message: string; destructi
         destructive: true,
     },
     no_show: {
-        message: 'Mark that you could not find them? A coordinator will be able to reassign it.',
+        message: 'Mark that you could not find them? It stays with you until you hand it back.',
         destructive: true,
     },
 };
@@ -119,14 +117,6 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
     const toast = useToast();
     const { ask, confirmDialog } = useConfirm();
     const [busy, setBusy] = useState<ArrivalAction | null>(null);
-    const [picking, setPicking] = useState(false);
-    const [reassigningTo, setReassigningTo] = useState<string | null>(null);
-
-    // Every approved Sarthi, not only the ones on shift for a sabha tonight — an
-    // airport run is weeks out and has nothing to do with a Friday rota. The hook
-    // already queries the GRANTED role set, which is why it finds the managers who
-    // drive; querying `role == 'driver'` listed nobody in this congregation.
-    const { drivers, loading: driversLoading } = useAvailableDrivers();
 
     const uid = currentUser?.uid ?? '';
     const isMine = arrival.claimedByUid === uid;
@@ -151,25 +141,6 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
             setBusy(null);
         }
     };
-
-    const reassign = async (toUid: string, toName: string) => {
-        setReassigningTo(toUid);
-        try {
-            await updateAirportPickup({ pickupId: arrival.id, action: 'reassign', toUid });
-            toast.success(`Given to ${toName}`);
-            setPicking(false);
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'That could not be reassigned');
-        } finally {
-            setReassigningTo(null);
-        }
-    };
-
-    // Coordinator-only, and the server checks the same thing — the flag is the one
-    // place it really is a gate. Rendered on the CARD rather than on a separate
-    // oversight screen: the trip you want to move is the one you are looking at, and
-    // a second list of the same arrivals would be a screen to keep in step.
-    const canReassign = isCoordinator && canRun('reassign', arrival.status);
 
     /**
      * The actions this person may take, from the shared table plus who they are.
@@ -347,16 +318,6 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                         <p className="text-xs text-coffee-500">The family has been messaged.</p>
                     )}
 
-                    {canReassign && (
-                        <button
-                            type="button"
-                            onClick={() => setPicking(true)}
-                            className="clay-button w-full py-3 rounded-xl font-bold text-coffee bg-cream-300"
-                        >
-                            Give this to another Sarthi
-                        </button>
-                    )}
-
                     {actions.length > 0 && (
                         <div className="space-y-2 pt-2 border-t border-hairline/10">
                             {actions.map(action => (
@@ -378,19 +339,6 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                 </div>
             </Disclosure>
 
-            {/* The manager's existing picker, unchanged. `seats` is the party size
-                here rather than a rider count, so the capacity hint beside each name
-                still answers the right question: will they all fit. */}
-            <DriverPicker
-                open={picking}
-                onClose={() => setPicking(false)}
-                riderName={arrival.passenger.name}
-                seats={arrival.partySize}
-                drivers={drivers.filter(d => d.id !== arrival.claimedByUid)}
-                loading={driversLoading}
-                assigningId={reassigningTo}
-                onPick={d => reassign(d.id, String(d.name ?? 'a Sarthi'))}
-            />
             {confirmDialog}
         </>
     );

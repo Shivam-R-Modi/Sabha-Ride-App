@@ -17,10 +17,10 @@
  *  - **a Sarthi cannot claim their own arrival.** They would be driving themselves.
  *  - **only the holder or a coordinator can mark met/completed/no_show.** Otherwise
  *    any Sarthi could close somebody else's trip.
- *  - **reassign re-checks the target.** A coordinator's browser is a trust boundary
- *    too, and reassigning to a revoked account hands over an address.
  *  - **release clears the holder's name.** Leaving it renders an unclaimed card with
  *    a Sarthi's name on it.
+ *  - **a no_show can still be released.** It is the only way out of that status since
+ *    reassign was removed, and a frozen no_show is invisible to every count.
  */
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
@@ -284,8 +284,8 @@ describe('a finished trip is finished', () => {
     for (const status of ['completed', 'cancelled']) {
         it(`refuses every action on a "${status}" trip`, async () => {
             pickup = { ...OPEN, status, claimedByUid: 'sarthi_1' };
-            for (const action of ['claim', 'release', 'met', 'completed', 'cancel', 'reassign']) {
-                await expect(call({ action, toUid: 'sarthi_2' }, 'coord_1'), action)
+            for (const action of ['claim', 'release', 'met', 'completed', 'cancel', 'no_show']) {
+                await expect(call({ action }, 'coord_1'), action)
                     .rejects.toThrow(/cannot be done to a request that is/i);
             }
             expect(updates).toHaveLength(0);
@@ -316,41 +316,44 @@ describe('cancelling', () => {
     });
 });
 
-describe('reassigning', () => {
+/**
+ * REASSIGN IS GONE — removed 2026-08-25 on the owner's instruction, in favour of "a
+ * Sarthi releases and another picks it up". These cases replace the reassign block and
+ * exist mainly to guard the trap that removal set: `reassign` was the only transition
+ * out of 'no_show'.
+ */
+describe('a no-show goes back on the board', () => {
     beforeEach(() => {
-        pickup = { ...OPEN, status: 'claimed', claimedByUid: 'sarthi_1', claimedByName: 'Kiran' };
-    });
-
-    it('is coordinator-only', async () => {
-        await expect(call({ action: 'reassign', toUid: 'sarthi_2' }, 'sarthi_1'))
-            .rejects.toThrow(/coordinators can reassign/i);
-    });
-
-    it('moves the trip to the new Sarthi', async () => {
-        await call({ action: 'reassign', toUid: 'sarthi_2' }, 'coord_1');
-        expect(written()).toMatchObject({
-            status: 'claimed', claimedByUid: 'sarthi_2', claimedByName: 'Nilesh',
-        });
-    });
-
-    it('re-checks the target rather than trusting the picker', async () => {
-        // A coordinator's browser is a trust boundary too.
-        users.sarthi_2 = { ...SARTHI, accountStatus: 'pending' };
-        await expect(call({ action: 'reassign', toUid: 'sarthi_2' }, 'coord_1'))
-            .rejects.toThrow(/not an approved Sarthi/i);
-    });
-
-    it('needs a target at all', async () => {
-        await expect(call({ action: 'reassign' }, 'coord_1'))
-            .rejects.toThrow(/Pick a Sarthi/i);
-    });
-
-    it('rescues a wrongly-marked no_show and clears its stale stamps', async () => {
         pickup = { ...OPEN, status: 'no_show', claimedByUid: 'sarthi_1', claimedByName: 'Kiran' };
-        await call({ action: 'reassign', toUid: 'sarthi_2' }, 'coord_1');
+    });
+
+    it('is releasable, so a wrongly-tapped no-show is not a one-way door', async () => {
+        // THE DEAD-END GUARD. With release limited to 'claimed', this throws and the
+        // trip is frozen at a status no count in the app looks for.
+        await call({ action: 'release' }, 'sarthi_1');
+        expect(written().status).toBe('open');
+    });
+
+    it('clears the no-show stamp along with the holder', async () => {
+        // Left set, the card would say both "nobody yet" and "nobody turned up" — the
+        // second being about a Sarthi who is no longer on it.
+        await call({ action: 'release' }, 'sarthi_1');
         expect(written()).toMatchObject({
-            status: 'claimed', claimedByUid: 'sarthi_2', metAt: null, completedAt: null,
+            status: 'open', claimedByUid: null, claimedByName: null,
+            claimedAt: null, metAt: null, noShowAt: null,
         });
+    });
+
+    it('can be released by a coordinator who does not hold it', async () => {
+        // The ONLY remaining way to recover a trip from a Sarthi who has stopped
+        // responding, now that the picker is gone.
+        await call({ action: 'release' }, 'coord_1');
+        expect(written().status).toBe('open');
+    });
+
+    it('refuses reassign outright — the action no longer exists', async () => {
+        await expect(call({ action: 'reassign', toUid: 'sarthi_2' }, 'coord_1'))
+            .rejects.toThrow(/Unknown action/i);
     });
 });
 
@@ -424,11 +427,11 @@ describe('the audit row', () => {
         expect(auditRows[0].summary).toMatch(/open → claimed/);
     });
 
-    it('records who held it before a reassign', async () => {
+    it('records who held it before a release, and why they let it go', async () => {
         pickup = { ...OPEN, status: 'claimed', claimedByUid: 'sarthi_1', claimedByName: 'Kiran' };
-        await call({ action: 'reassign', toUid: 'sarthi_2' }, 'coord_1');
+        await call({ action: 'release', reason: 'Car trouble' }, 'sarthi_1');
         expect(auditRows[0].details).toMatchObject({
-            previousHolder: 'Kiran', reassignedTo: 'sarthi_2',
+            previousHolder: 'Kiran', reason: 'Car trouble',
         });
     });
 

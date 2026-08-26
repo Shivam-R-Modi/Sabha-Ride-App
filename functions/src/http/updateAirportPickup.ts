@@ -32,13 +32,12 @@ import { compact, parseFlight, retainUntilFor } from '../utils/arrivalInput';
 
 const ACTIONS: ArrivalAction[] = [
     'claim', 'release', 'met', 'completed', 'no_show',
-    'cancel', 'editFlight', 'reassign', 'familyNotified',
+    'cancel', 'editFlight', 'familyNotified',
 ];
 
 /** Which audit action each transition records. See the union for why these are split. */
 const AUDIT_FOR: Record<ArrivalAction, AuditAction> = {
     claim: 'airport.claim',
-    reassign: 'airport.claim',
     release: 'airport.release',
     met: 'airport.update',
     completed: 'airport.update',
@@ -86,31 +85,13 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
     const now = new Date();
     const timestamp = now.toISOString();
 
-    // `editFlight` and `reassign` need work done before the transaction: reading
-    // settings and another user's document inside one is legal but pointless, and
-    // neither is part of the invariant being protected. The invariant is the pickup
-    // document's own status, and that is all the transaction reads.
+    // `editFlight` needs work done before the transaction: reading settings inside one
+    // is legal but pointless, and it is not part of the invariant being protected. The
+    // invariant is the pickup document's own status, and that is all the transaction
+    // reads.
     let flight: ReturnType<typeof parseFlight> | null = null;
     if (action === 'editFlight') {
         flight = parseFlight(data, await getTimeZone(), now);
-    }
-
-    let target: { uid: string; name: string } | null = null;
-    if (action === 'reassign') {
-        const toUid: string = String(data?.toUid ?? '').trim();
-        if (!toUid) {
-            throw new functions.https.HttpsError('invalid-argument', 'Pick a Sarthi to reassign to');
-        }
-        const targetSnap = await db.collection('users').doc(toUid).get();
-        const targetData = targetSnap.data();
-        // Checked HERE rather than trusting the picker. A coordinator's browser is a
-        // trust boundary too, and reassigning to a revoked account would hand a
-        // traveller's address to somebody who was cut off.
-        if (!isApprovedDriverData(targetData)) {
-            throw new functions.https.HttpsError(
-                'failed-precondition', 'That person is not an approved Sarthi.');
-        }
-        target = { uid: toUid, name: String(targetData?.name ?? 'A Sarthi') };
     }
 
     const reason: string = String(data?.reason ?? '').trim().slice(0, MAX_SHORT_TEXT);
@@ -198,12 +179,6 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
                 }
                 break;
 
-            case 'reassign':
-                if (!isCoordinator) {
-                    throw new functions.https.HttpsError(
-                        'permission-denied', 'Only airport coordinators can reassign a trip.');
-                }
-                break;
         }
 
         const nextStatus = RESULT_OF[action];
@@ -217,17 +192,6 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
                 update.claimedAt = timestamp;
                 break;
 
-            case 'reassign':
-                update.claimedByUid = target!.uid;
-                update.claimedByName = target!.name;
-                update.claimedAt = timestamp;
-                // Cleared, because reassigning out of a no_show puts the trip back in
-                // front of somebody. Leaving them set would show a card that says both
-                // "with Ramesh" and "nobody turned up".
-                update.metAt = null;
-                update.completedAt = null;
-                break;
-
             case 'release':
                 // Back to nobody. Every trace of the previous holder goes, or the
                 // board shows an unclaimed card with a Sarthi's name on it.
@@ -235,6 +199,10 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
                 update.claimedByName = null;
                 update.claimedAt = null;
                 update.metAt = null;
+                // Cleared because a release out of a no_show puts the trip back in front
+                // of somebody. Left set, the card would say both "nobody yet" and
+                // "nobody turned up" — the second being about a Sarthi who has gone.
+                update.noShowAt = null;
                 if (reason) update.releaseReason = reason;
                 break;
 
@@ -353,7 +321,6 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
             previousStatus: outcome.previousStatus,
             nextStatus: outcome.nextStatus,
             previousHolder: outcome.previousHolder,
-            reassignedTo: target?.uid,
             reason: reason || undefined,
             newArrivalAt: flight?.arrivalAt,
         }),

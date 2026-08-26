@@ -50,7 +50,6 @@ export type ArrivalAction =
     | 'no_show'
     | 'cancel'
     | 'editFlight'
-    | 'reassign'
     // Not a state change: the Sarthi opened the pre-filled WhatsApp message to the
     // family. Stamped so the board can tell "told them" from "meant to" — without
     // it, the one reassurance the family was promised can quietly never go.
@@ -68,19 +67,28 @@ export type WhatsappOn = 'primary' | 'alt' | 'none';
  * looking at a button that cannot work, and a stuck record is worse than a slightly
  * imprecise one.
  *
- * `reassign` is reachable from 'no_show' for the same reason: a wrongly-tapped
- * no-show would otherwise be terminal, and the traveller would have to file a
- * second request while standing in an airport.
+ * `release` is reachable from 'no_show' for the same reason: a wrongly-tapped no-show
+ * would otherwise be terminal, and the traveller would have to file a second request
+ * while standing in an airport.
+ *
+ * THERE IS NO `reassign`. Handing a trip directly to a named Sarthi was removed on
+ * 2026-08-25 — a Sarthi who cannot go releases it, and whoever is free takes it. That
+ * also removed the only thing on this screen that needed to read the users collection.
  */
 export const ALLOWED_FROM: Record<ArrivalAction, ArrivalStatus[]> = {
     claim: ['open'],
-    release: ['claimed'],
+    // FROM 'no_show' AS WELL AS 'claimed', and that is load-bearing. `reassign` used
+    // to be the only way out of a no-show; when it was removed on 2026-08-25 in favour
+    // of "a Sarthi releases and another picks it up", a no-show would otherwise have
+    // become a one-way door — frozen forever, and INVISIBLE, because every "needs
+    // somebody" count in the app filters on status == 'open'. No badge, no list entry,
+    // no scheduled alert, for the one traveller nobody could find.
+    release: ['claimed', 'no_show'],
     met: ['claimed'],
     completed: ['claimed', 'met'],
     no_show: ['claimed', 'met'],
     cancel: ['open', 'claimed'],
     editFlight: ['open', 'claimed'],
-    reassign: ['claimed', 'no_show'],
     // From 'claimed' as well as 'met', because a Sarthi who has the passenger in the
     // car and has not yet tapped "I've got them" should still be able to reassure
     // the family. Refusing would render a button that cannot work.
@@ -96,7 +104,6 @@ export const RESULT_OF: Record<ArrivalAction, ArrivalStatus | null> = {
     no_show: 'no_show',
     cancel: 'cancelled',
     editFlight: null,
-    reassign: 'claimed',
     familyNotified: null,
 };
 
