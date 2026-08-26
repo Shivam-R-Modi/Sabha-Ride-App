@@ -72,10 +72,13 @@ const BASE: AirportPickup = {
     updatedAt: '2026-09-01T12:00:00.000Z',
 };
 
+const onEdit = vi.fn();
+
 const show = (status: ArrivalStatus, over: Partial<AirportPickup> = {}) => render(
     <ArrivalStatusCard
         arrival={{ ...BASE, status, ...over }}
         onCancelled={() => undefined}
+        onEdit={onEdit}
     />,
 );
 
@@ -198,5 +201,41 @@ describe('the screenshot block when no address was given', () => {
     it('shows the row when there is an address', () => {
         show('open');
         expect(screen.getByText(/going to/i)).toBeInTheDocument();
+    });
+});
+
+/**
+ * CHANGING A REQUEST AFTER FILING IT. Until 2026-08-25 the only controls here were
+ * "cancel" and "I am in the USA now", so a traveller whose flight moved had to cancel
+ * and file again — which loses the Sarthi who had already taken it, and puts them back
+ * on the board from scratch.
+ */
+describe('changing the details afterwards', () => {
+    it('is offered while the request is still open', () => {
+        show('open');
+        expect(screen.getByRole('button', { name: /Change my details/i })).toBeInTheDocument();
+    });
+
+    it('is still offered once a Sarthi has taken it — a flight can move either way', () => {
+        show('claimed', { claimedByName: 'Kiran' });
+        expect(screen.getByRole('button', { name: /Change my details/i })).toBeInTheDocument();
+    });
+
+    it('disappears once the Sarthi has them, when the details are settled', () => {
+        show('met', { claimedByName: 'Kiran' });
+        expect(screen.queryByRole('button', { name: /Change my details/i })).not.toBeInTheDocument();
+    });
+
+    it('disappears on a finished trip rather than failing', () => {
+        // The shared transition table decides, so a rendered control is one the server
+        // would accept — this file exists partly to keep that true.
+        show('completed', { claimedByName: 'Kiran' });
+        expect(screen.queryByRole('button', { name: /Change my details/i })).not.toBeInTheDocument();
+    });
+
+    it('hands the job upward rather than doing it here', async () => {
+        show('open');
+        await userEvent.click(screen.getByRole('button', { name: /Change my details/i }));
+        expect(onEdit).toHaveBeenCalled();
     });
 });

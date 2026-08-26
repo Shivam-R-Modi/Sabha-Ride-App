@@ -25,7 +25,7 @@ describe('the transition table', () => {
     it('only one action can be taken on an open request, and it is claim', () => {
         const fromOpen = (Object.keys(ALLOWED_FROM) as ArrivalAction[])
             .filter(a => canRun(a, 'open'));
-        expect(fromOpen.sort()).toEqual(['cancel', 'claim', 'editFlight']);
+        expect(fromOpen.sort()).toEqual(['cancel', 'claim', 'editRequest']);
     });
 
     it('nothing at all can be done to a completed or cancelled request', () => {
@@ -72,7 +72,7 @@ describe('the transition table', () => {
             expect(RESULT_OF, `${action} missing from RESULT_OF`).toHaveProperty(action);
         }
         // The two that change fields rather than state.
-        expect(RESULT_OF.editFlight).toBeNull();
+        expect(RESULT_OF.editRequest).toBeNull();
         expect(RESULT_OF.familyNotified).toBeNull();
     });
 

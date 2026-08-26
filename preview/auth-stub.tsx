@@ -43,7 +43,16 @@ export const useAuth = () => {
     return {
         currentUser: { uid: 'preview_1', email: 'preview@example.com' },
         userProfile,
-        activeRole: 'manager',
+        /**
+         * SWITCHABLE FROM THE URL — `?role=driver`, default manager.
+         *
+         * The claim button is gated on `activeRole` as of 2026-08-25, so a stub pinned
+         * to one value can only ever show half the screen. Hardcoded 'manager' is why
+         * the harness showed the "Switch to Sarthi" signpost and never the button it
+         * is standing in for.
+         */
+        activeRole: new URLSearchParams(window.location.search).get('role') === 'driver'
+            ? 'driver' : 'manager',
         setActiveRole: () => {},
         getAvailableRoles: () => ['manager', 'driver', 'student'],
         logout: () => {},

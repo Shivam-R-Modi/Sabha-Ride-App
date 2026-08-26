@@ -597,20 +597,23 @@ export interface AirportPickupUpdate {
     action: ArrivalAction;
     /** Why a trip was released or cancelled. Optional. */
     reason?: string;
-    /** Who a coordinator is reassigning to. Required for `reassign`. */
-    toUid?: string;
-    /** The new flight, for `editFlight`. */
-    arrivalDate?: string;
-    arrivalTime?: string;
-    airportCode?: string;
-    airline?: string;
-    flightNumber?: string;
-    terminal?: string;
-    isInternational?: boolean;
 }
 
+/**
+ * `editRequest` carries THE WHOLE REQUEST, not a patch.
+ *
+ * The server runs the same three parsers the create path runs — anything less would
+ * be a second, laxer way into a collection no client may write directly — so the
+ * payload has to be complete. Typed as the create request plus the id, which is
+ * exactly what that means, and keeps the two from drifting apart.
+ */
+export type AirportPickupEdit = AirportPickupRequest & {
+    pickupId: string;
+    action: 'editRequest';
+};
+
 export async function updateAirportPickup(
-    input: AirportPickupUpdate,
+    input: AirportPickupUpdate | AirportPickupEdit,
 ): Promise<{ success: boolean; status: ArrivalStatus }> {
     return callFunction<{ success: boolean; status: ArrivalStatus }>('updateAirportPickup', input);
 }

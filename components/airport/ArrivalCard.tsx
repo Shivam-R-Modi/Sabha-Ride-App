@@ -5,7 +5,7 @@ import { useConfirm } from '../shared/useConfirm';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { updateAirportPickup } from '../../src/utils/cloudFunctions';
-import { airportLabel, canRun, urgencyOf } from '../../src/utils/arrival';
+import { airportLabel, canRun, changeSummary, urgencyOf } from '../../src/utils/arrival';
 import type { ArrivalAction, UrgencyLevel } from '../../src/utils/arrival';
 import { familyReassuranceMessage, waLink } from '../../src/utils/whatsapp';
 import { formatTime } from '../../src/constants/schedule';
@@ -220,12 +220,22 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                 }
             >
                 <div className="space-y-4">
-                    {arrival.arrivalTimeChangedAt && !isDone && (
-                        // The flight moved after somebody claimed it. Loud, because a
-                        // Sarthi who does not see this drives to an empty barrier.
+                    {arrival.changedAt && !isDone && (
+                        /* Something changed after somebody claimed it. Loud, because a
+                           Sarthi who does not see this drives to an empty barrier — or
+                           turns up in a car that will not hold the luggage.
+
+                           NAMES WHAT CHANGED, from the same shared table the server
+                           diffed against, so the card and the push say the same thing
+                           and there is no second list to drift. The old version said
+                           only "the flight time has changed", which was all it could
+                           ever detect. */
                         <p className="flex items-start gap-2 text-sm font-bold text-[rgb(var(--danger))]">
                             <AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
-                            The flight time has changed since this was claimed.
+                            {changeSummary(arrival.changedFields ?? []).length > 0
+                                ? `Changed since you claimed this: ${
+                                    changeSummary(arrival.changedFields ?? []).join(', ')}.`
+                                : 'This request changed after it was claimed.'}
                         </p>
                     )}
 

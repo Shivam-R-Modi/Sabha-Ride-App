@@ -184,12 +184,22 @@ describe('an expanded card', () => {
         expect(screen.getByText(/No meeting point agreed/i)).toBeInTheDocument();
     });
 
-    it('badges a flight time that moved after somebody claimed it', () => {
+    it('names what changed after somebody claimed it, not just that something did', () => {
+        // Was a fixed sentence about the flight time, which was all the old
+        // `arrivalTimeChangedAt` could ever mean. A Sarthi needs to know WHICH thing.
         showOpen({
             status: 'claimed', claimedByUid: 'sarthi_1',
-            arrivalTimeChangedAt: '2026-09-10T00:00:00.000Z',
+            changedAt: '2026-09-10T00:00:00.000Z',
+            changedFields: ['arrivalAt', 'terminal'],
         });
-        expect(screen.getByText(/flight time has changed/i)).toBeInTheDocument();
+        expect(screen.getByText(/the arrival time, the terminal/i)).toBeInTheDocument();
+    });
+
+    it('still says something changed when the field list is missing', () => {
+        // Documents written before changedFields existed. A silent card would be worse
+        // than a vague one.
+        showOpen({ status: 'claimed', claimedByUid: 'sarthi_1', changedAt: '2026-09-10T00:00:00.000Z' });
+        expect(screen.getByText(/changed after it was claimed/i)).toBeInTheDocument();
     });
 
     it('offers a call button per number it actually has', () => {
@@ -311,12 +321,12 @@ describe('a trip that is already done', () => {
         expect(screen.getByText(/Dropped off by Kiran/)).toBeInTheDocument();
     });
 
-    it('drops the flight-changed warning, which is only news to somebody still driving', () => {
+    it('drops the changed warning, which is only news to somebody still driving', () => {
         showOpen({
             status: 'completed', claimedByUid: 'sarthi_1',
-            arrivalTimeChangedAt: '2026-09-19T00:00:00.000Z',
+            changedAt: '2026-09-19T00:00:00.000Z', changedFields: ['arrivalAt'],
         });
-        expect(screen.queryByText(/flight time has changed/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Changed since you claimed/i)).not.toBeInTheDocument();
     });
 
     it('leaves a live trip measured by the clock, exactly as before', () => {

@@ -287,6 +287,37 @@ export async function notifyStudentRideCompleted(recipients: Recipient[]): Promi
     );
 }
 
+/**
+ * A claimed airport pickup changed in a way that affects the drive.
+ *
+ * NO TRAVELLER NAME AND NO ADDRESS, same rule as the ride notifications above: this
+ * lands on a lock screen anybody can read. It names WHAT changed and nothing else,
+ * because "the arrival time" is enough to make somebody open the app and "Ramesh lands
+ * at 06:30 at Terminal E" is an itinerary handed to a stranger.
+ *
+ * PUSH IS THE BACKSTOP, NOT THE MECHANISM — the same note alertUnclaimedArrivals
+ * carries. Almost nobody in this congregation has granted notification permission, so
+ * the guarantee is the red line on the card, which is derived from `changedFields` on
+ * every render. This exists for the Sarthi who is not looking at the app.
+ */
+export async function notifyArrivalChanged(
+    recipients: Recipient[],
+    changed: string[],
+    pickupId: string,
+): Promise<void> {
+    // "the arrival time and the terminal have changed" — the list is built from the
+    // shared table so the wording matches the card exactly.
+    const what = changed.length === 1
+        ? changed[0]
+        : `${changed.slice(0, -1).join(', ')} and ${changed[changed.length - 1]}`;
+    await sendNotification(
+        recipients,
+        'An airport pickup changed',
+        `Something you are collecting has changed: ${what}. Open the app.`,
+        { type: 'airport-changed', pickupId },
+    );
+}
+
 export async function notifyManagerUnassignedStudents(recipients: Recipient[]): Promise<void> {
     // No count: a number on a lock screen is a headcount of unaccompanied
     // children waiting somewhere.

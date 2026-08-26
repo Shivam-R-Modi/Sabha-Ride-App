@@ -72,18 +72,23 @@ const TONE_CLASS = {
 } as const;
 
 interface ArrivalStatusCardProps {
+    /** Open the request form, pre-filled from this trip. */
+    onEdit: () => void;
     arrival: AirportPickup;
     /** Lets the traveller start a new request once this one is cancelled. */
     onCancelled: () => void;
 }
 
-export const ArrivalStatusCard: React.FC<ArrivalStatusCardProps> = ({ arrival, onCancelled }) => {
+export const ArrivalStatusCard: React.FC<ArrivalStatusCardProps> = ({ arrival, onCancelled, onEdit }) => {
     const toast = useToast();
     const { ask, confirmDialog } = useConfirm();
     const [busy, setBusy] = useState(false);
 
     const status = STATUS_LINE[arrival.status];
     const canCancel = canRun('cancel', arrival.status);
+    // Same shared table the server checks. Once the Sarthi has them, the details
+    // are settled and the edit disappears rather than failing.
+    const canEdit = canRun('editRequest', arrival.status);
 
     const cancel = async () => {
         const ok = await ask({
@@ -179,6 +184,18 @@ export const ArrivalStatusCard: React.FC<ArrivalStatusCardProps> = ({ arrival, o
             {/* Rendered only when the shared transition table says a cancel is
                 possible. A finished or already-cancelled trip shows no button rather
                 than one that returns failed-precondition. */}
+            {/* ABOVE the cancel, and worded as the smaller act. A traveller whose
+                flight moved was cancelling and re-filing, which loses their Sarthi. */}
+            {canEdit && (
+                <button
+                    type="button"
+                    onClick={onEdit}
+                    className="clay-button w-full py-3 rounded-xl font-bold text-coffee bg-cream-300"
+                >
+                    Change my details
+                </button>
+            )}
+
             {canCancel && (
                 <button
                     type="button"

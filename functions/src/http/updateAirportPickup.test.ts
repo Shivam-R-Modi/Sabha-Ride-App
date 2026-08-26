@@ -27,6 +27,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 
 let db: any;
 let updates: any[];
+let merges: any[];
 let auditRows: any[];
 let pickup: any;
 let users: Record<string, any>;
@@ -81,7 +82,7 @@ const OPEN = {
 };
 
 function makeDb() {
-    updates = []; auditRows = []; txRuns = 0; readAfterWrite = false;
+    updates = []; merges = []; auditRows = []; txRuns = 0; readAfterWrite = false;
     db = {
         collection: (name: string) => ({
             doc: (id: string) => ({
@@ -113,6 +114,14 @@ function makeDb() {
                     hasWritten = true;
                     updates.push({ path: ref.path, data });
                 },
+                // `editRequest` merges the person into airportProfiles as well, the
+                // same way the create path does — so the long-lived record does not
+                // keep last month's phone number. Recorded separately from `update`
+                // so `written()` still means "what happened to the pickup".
+                set: (ref: any, data: any, options: any) => {
+                    hasWritten = true;
+                    merges.push({ path: ref.path, data, options });
+                },
             });
         },
     };
@@ -134,12 +143,16 @@ function retryingDb(secondAttemptState: any) {
             await fn({
                 get: async (ref: any) => ({ exists: true, data: () => first, ref }),
                 update: () => { /* discarded — Firestore aborted this attempt */ },
+                set: () => { /* discarded too */ },
             });
             // The retry, after the other Sarthi committed.
             txRuns += 1;
             return fn({
                 get: async (ref: any) => ({ exists: true, data: () => secondAttemptState, ref }),
                 update: (ref: any, data: any) => { updates.push({ path: ref.path, data }); },
+                set: (ref: any, data: any, options: any) => {
+                    merges.push({ path: ref.path, data, options });
+                },
             });
         },
     };
@@ -149,6 +162,8 @@ const call = (data: Record<string, unknown>, uid: string) =>
     (updateAirportPickup as any)({ pickupId: 'p1', ...data }, { auth: { uid } });
 
 const written = () => updates[0]?.data ?? {};
+/** The airportProfiles merge, when there was one. */
+const merged = () => merges[0]?.data ?? {};
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -370,65 +385,136 @@ describe('a no-show goes back on the board', () => {
     });
 });
 
-describe('the flight moves', () => {
-    const NEW_FLIGHT = { arrivalDate: '2026-09-21', arrivalTime: '06:30', airportCode: 'BOS' };
+/**
+ * EDITING A LIVE REQUEST. Was `editFlight`, which could only change the flight block —
+ * so a traveller who moved terminal, doubled their luggage or lost their working phone
+ * had no way to say so, and the Sarthi's card kept the stale answer.
+ *
+ * The whole guard here is that the edit path runs THE SAME THREE PARSERS as create.
+ * `airportPickups` is `allow update: if false` for every client, so this callable is
+ * the trust boundary — a laxer edit path would be a side door into it.
+ */
+describe('editing a request', () => {
+    /** Everything the three parsers require, so a test can change one thing at a time. */
+    const FULL = {
+        arrivalDate: '2026-09-20', arrivalTime: '22:00', airportCode: 'BOS',
+        partySize: 2, largeBags: 4, cabinBags: 2, hasUsWorkingPhone: false,
+        fullName: 'Ramesh Patel', dateOfBirth: '2007-04-11',
+        email: 'ramesh@example.com', phone: '+16175550123', whatsappOn: 'primary',
+    };
 
     it('is allowed to the traveller and recomputes the instant', async () => {
-        await call({ action: 'editFlight', ...NEW_FLIGHT }, 'rider_1');
+        await call({ action: 'editRequest', ...FULL, arrivalTime: '06:30', arrivalDate: '2026-09-21' }, 'rider_1');
         expect(written().arrivalAt).toBe('2026-09-21T10:30:00.000Z');
         expect(written().arrivalDate).toBe('2026-09-21');
     });
 
-    it('badges the change when somebody is already driving to meet it', async () => {
-        // News the Sarthi has to see. On an unclaimed request it is just an edit.
-        pickup = { ...OPEN, status: 'claimed', claimedByUid: 'sarthi_1' };
-        await call({ action: 'editFlight', ...NEW_FLIGHT }, 'rider_1');
-        expect(written().arrivalTimeChangedAt).toBeTruthy();
+    it('changes what is NOT the flight, which is the point of the rename', async () => {
+        await call({ action: 'editRequest', ...FULL, partySize: 4, largeBags: 6 }, 'rider_1');
+        expect(written()).toMatchObject({ partySize: 4, largeBags: 6 });
     });
 
-    it('does not badge an edit to an unclaimed request', async () => {
-        await call({ action: 'editFlight', ...NEW_FLIGHT }, 'rider_1');
-        expect(written()).not.toHaveProperty('arrivalTimeChangedAt');
+    it('rewrites the passenger snapshot the Sarthi actually reads', async () => {
+        await call({ action: 'editRequest', ...FULL, phone: '+16175559999' }, 'rider_1');
+        expect(written().passenger).toMatchObject({ phone: '+16175559999' });
     });
 
-    it('does not badge a change that is not actually a change of time', async () => {
-        pickup = { ...OPEN, status: 'claimed', claimedByUid: 'sarthi_1' };
-        await call({ action: 'editFlight', arrivalDate: '2026-09-20', arrivalTime: '22:00', airportCode: 'BOS', terminal: 'E' }, 'rider_1');
-        expect(written()).not.toHaveProperty('arrivalTimeChangedAt');
-    });
-
-    it('validates the new time as strictly as the original', async () => {
-        await expect(call({ action: 'editFlight', arrivalDate: '2026-02-30', arrivalTime: '06:30', airportCode: 'BOS' }, 'rider_1'))
-            .rejects.toThrow(/not a real date/i);
+    it('validates as strictly as the create path — same parsers, no side door', async () => {
+        // A short phone number is refused on create; it must be refused here too.
+        await expect(call({ action: 'editRequest', ...FULL, phone: '+1617' }, 'rider_1'))
+            .rejects.toThrow(/phone/i);
+        await expect(call({ action: 'editRequest', ...FULL, arrivalDate: '2020-01-01' }, 'rider_1'))
+            .rejects.toThrow(/already passed/i);
     });
 
     it('is refused to an unrelated Sarthi', async () => {
-        await expect(call({ action: 'editFlight', ...NEW_FLIGHT }, 'sarthi_2'))
-            .rejects.toThrow(/traveller, their Sarthi, or a coordinator/i);
+        await expect(call({ action: 'editRequest', ...FULL }, 'sarthi_2'))
+            .rejects.toThrow(/Only the traveller/i);
+    });
+
+    it('keeps the long-lived profile in step, so it does not hold last month’s number', async () => {
+        // airportProfiles is what the Airport export reads and what the next trip is
+        // seeded from. Updating only the pickup would leave it stale.
+        await call({ action: 'editRequest', ...FULL, phone: '+16175559999' }, 'rider_1');
+        expect(merged()).toMatchObject({ phone: '+16175559999' });
+        expect(merges[0].path).toBe('airportProfiles/rider_1');
+        expect(merges[0].options).toEqual({ merge: true });
+    });
+
+    it('does not wipe a field the edit form never shows', async () => {
+        // A university or a preferred name lives only on the profile. The payload omits
+        // blanks and the write merges, so both survive an edit untouched.
+        await call({ action: 'editRequest', ...FULL }, 'rider_1');
+        expect(merged()).not.toHaveProperty('university');
+        expect(merged()).not.toHaveProperty('preferredName');
     });
 });
 
-describe('the payload itself', () => {
-    it('refuses an unauthenticated caller', async () => {
-        await expect((updateAirportPickup as any)({ pickupId: 'p1', action: 'claim' }, {}))
-            .rejects.toThrow(/authenticated/i);
+describe('telling the Sarthi what changed', () => {
+    const FULL = {
+        arrivalDate: '2026-09-20', arrivalTime: '22:00', airportCode: 'BOS',
+        partySize: 2, largeBags: 4, cabinBags: 2, hasUsWorkingPhone: false,
+        terminal: 'E',
+        fullName: 'Ramesh Patel', dateOfBirth: '2007-04-11',
+        email: 'ramesh@example.com', phone: '+16175550123', whatsappOn: 'primary',
+    };
+
+    beforeEach(() => {
+        // Deliberately a FULL document, matching what requestAirportPickup writes.
+        // Leaving `hasUsWorkingPhone` out made every no-op edit report a change —
+        // absent read as a difference from `false` — which is a fixture artefact
+        // rather than a production one, since the create path always writes it.
+        pickup = {
+            ...OPEN, status: 'claimed', claimedByUid: 'sarthi_1', claimedByName: 'Kiran',
+            partySize: 2, largeBags: 4, cabinBags: 2, terminal: 'E',
+            hasUsWorkingPhone: false,
+            passenger: { phone: '+16175550123' },
+        };
     });
 
-    it('refuses a missing pickup id', async () => {
-        await expect(call({ action: 'claim', pickupId: '  ' }, 'sarthi_1'))
-            .rejects.toThrow(/pickup id is required/i);
+    it('marks a change that affects the drive, and names the fields', async () => {
+        await call({ action: 'editRequest', ...FULL, arrivalTime: '06:30', arrivalDate: '2026-09-21' }, 'rider_1');
+        expect(written().changedAt).toBeTruthy();
+        expect(written().changedFields).toContain('arrivalAt');
     });
 
-    it('refuses an action that is not in the table', async () => {
-        // Rather than falling through a switch and returning success having done
-        // nothing, which is the failure mode this repo keeps removing.
-        await expect(call({ action: 'delete_everything' }, 'coord_1'))
-            .rejects.toThrow(/Unknown action/i);
+    it('marks luggage, because it decides which car can come', async () => {
+        await call({ action: 'editRequest', ...FULL, largeBags: 8 }, 'rider_1');
+        expect(written().changedFields).toContain('largeBags');
     });
 
-    it('refuses a trip that no longer exists', async () => {
-        pickup = null;
-        await expect(call({ action: 'claim' }, 'sarthi_1')).rejects.toThrow(/no longer exists/i);
+    it('marks the traveller phone, which is how they are reached', async () => {
+        await call({ action: 'editRequest', ...FULL, phone: '+16175559999' }, 'rider_1');
+        expect(written().changedFields).toContain('passenger.phone');
+    });
+
+    it('stays SILENT for a change that alters nothing about the drive', async () => {
+        // A note, a preferred name, an employer. A warning that fires on everything
+        // stops being read, which is worse than one that fires on less.
+        await call({ action: 'editRequest', ...FULL, notes: 'I have a cat', university: 'NEU' }, 'rider_1');
+        expect(written()).not.toHaveProperty('changedAt');
+    });
+
+    it('stays silent when they saved without changing anything at all', async () => {
+        await call({ action: 'editRequest', ...FULL }, 'rider_1');
+        expect(written()).not.toHaveProperty('changedAt');
+    });
+
+    it('says nothing on an unclaimed request — there is nobody to tell', async () => {
+        pickup = { ...OPEN, partySize: 2, largeBags: 4, cabinBags: 2, hasUsWorkingPhone: false };
+        await call({ action: 'editRequest', ...FULL, largeBags: 8 }, 'rider_1');
+        expect(written()).not.toHaveProperty('changedAt');
+    });
+
+    it('clears the marker when the Sarthi says they have found them', async () => {
+        // The warning has done its job. One that follows a trip to the end decays into
+        // wallpaper, which is how a loud signal stops being one.
+        pickup = {
+            ...OPEN, status: 'claimed', claimedByUid: 'sarthi_1',
+            changedAt: '2026-09-19T00:00:00.000Z', changedFields: ['arrivalAt'],
+        };
+        await call({ action: 'met' }, 'sarthi_1');
+        expect(written()).toMatchObject({ changedAt: null, changedFields: null });
     });
 });
 

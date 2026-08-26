@@ -49,7 +49,7 @@ export type ArrivalAction =
     | 'completed'
     | 'no_show'
     | 'cancel'
-    | 'editFlight'
+    | 'editRequest'
     // Not a state change: the Sarthi opened the pre-filled WhatsApp message to the
     // family. Stamped so the board can tell "told them" from "meant to" — without
     // it, the one reassurance the family was promised can quietly never go.
@@ -88,14 +88,14 @@ export const ALLOWED_FROM: Record<ArrivalAction, ArrivalStatus[]> = {
     completed: ['claimed', 'met'],
     no_show: ['claimed', 'met'],
     cancel: ['open', 'claimed'],
-    editFlight: ['open', 'claimed'],
+    editRequest: ['open', 'claimed'],
     // From 'claimed' as well as 'met', because a Sarthi who has the passenger in the
     // car and has not yet tapped "I've got them" should still be able to reassure
     // the family. Refusing would render a button that cannot work.
     familyNotified: ['claimed', 'met'],
 };
 
-/** The status an action leaves behind. `editFlight` changes fields, not state. */
+/** The status an action leaves behind. `editRequest` changes fields, not state. */
 export const RESULT_OF: Record<ArrivalAction, ArrivalStatus | null> = {
     claim: 'claimed',
     release: 'open',
@@ -103,9 +103,46 @@ export const RESULT_OF: Record<ArrivalAction, ArrivalStatus | null> = {
     completed: 'completed',
     no_show: 'no_show',
     cancel: 'cancelled',
-    editFlight: null,
+    editRequest: null,
     familyNotified: null,
 };
+
+/**
+ * WHICH EDITS INTERRUPT A SARTHI, and which are merely saved.
+ *
+ * The test is one question: would they drive differently, arrive somewhere else, or
+ * fail to recognise the person? Everything else — a preferred name, a note, an
+ * employer, the family's language — is real information that changes nothing about the
+ * journey, and a warning that fires on all of it stops being read.
+ *
+ * The family contact's PHONE is deliberately in the quiet group. It changes who gets
+ * reassured afterwards, not how or when somebody drives. Owner's call, 2026-08-25.
+ *
+ * Keyed by the document field so the server can diff mechanically, and the labels are
+ * here rather than in the component so the card names them the same way the audit row
+ * does.
+ */
+export const NOTIFIABLE_FIELDS: Record<string, string> = {
+    arrivalAt: 'the arrival time',
+    airportCode: 'the airport',
+    terminal: 'the terminal',
+    partySize: 'how many people',
+    largeBags: 'the luggage',
+    cabinBags: 'the luggage',
+    dropoffAddress: 'where they are going',
+    hasUsWorkingPhone: 'whether they will have a phone',
+    meetingPointNote: 'the meeting point',
+    'passenger.phone': 'their phone number',
+};
+
+/** The distinct labels for a set of changed fields, in table order, deduplicated. */
+export function changeSummary(fields: string[]): string[] {
+    const seen = new Set<string>();
+    for (const key of Object.keys(NOTIFIABLE_FIELDS)) {
+        if (fields.includes(key)) seen.add(NOTIFIABLE_FIELDS[key]);
+    }
+    return [...seen];
+}
 
 export function canRun(action: ArrivalAction, from: ArrivalStatus): boolean {
     return ALLOWED_FROM[action].includes(from);

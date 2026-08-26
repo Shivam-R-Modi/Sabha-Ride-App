@@ -71,7 +71,7 @@ const cards: Array<[string, AirportPickup]> = [
     ['Unclaimed — already landed', pickup({ arrivalAt: soon(-2) })],
     ['Claimed by me', pickup({ status: 'claimed', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark' })],
     ['Claimed by somebody else', pickup({ status: 'claimed', claimedByUid: 'other', claimedByName: 'Nilesh' })],
-    ['Flight moved after the claim', pickup({ status: 'claimed', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark', arrivalTimeChangedAt: soon(-1) })],
+    ['Changed after the claim', pickup({ status: 'claimed', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark', changedAt: soon(-1), changedFields: ['arrivalAt', 'terminal'] })],
     ['Met — family already told', pickup({ status: 'met', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark', metAt: soon(-1), familyNotifiedAt: soon(-1) })],
     ['No family contact — no WhatsApp button', pickup({ status: 'claimed', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark', passenger: { ...BASE.passenger, familyContact: null } })],
     ['Completed', pickup({ status: 'completed', claimedByUid: 'preview_1', claimedByName: 'Tonny Stark', completedAt: soon(-1) })],
@@ -141,7 +141,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     {statuses.map(([label, arrival]) => (
                         <div key={label}>
                             <Label>Traveller — {label}</Label>
-                            <ArrivalStatusCard arrival={arrival} onCancelled={() => undefined} />
+                            <ArrivalStatusCard arrival={arrival} onCancelled={() => undefined} onEdit={() => undefined} />
                         </div>
                     ))}
 

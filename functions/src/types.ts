@@ -395,8 +395,20 @@ export interface AirportPickup {
     cancelledAt?: string | null;
     cancelledBy?: string | null;
     cancellationReason?: string | null;
-    /** Set when the flight time moved AFTER a Sarthi had already claimed it. */
-    arrivalTimeChangedAt?: string | null;
+    /**
+     * WHEN SOMETHING THAT MATTERS TO THE DRIVE CHANGED, and which fields.
+     *
+     * Was `arrivalTimeChangedAt`, which only ever covered the flight time — so a
+     * traveller who moved to a different terminal, doubled their luggage or lost their
+     * working phone changed nothing the Sarthi's card would mention. The fields
+     * compared are `NOTIFIABLE_FIELDS` in utils/arrival.ts, shared with the client so
+     * the card names them exactly as the server decided them.
+     *
+     * Cleared when the Sarthi taps "I've found them": the warning has done its job,
+     * and one that follows a trip to the end decays into wallpaper.
+     */
+    changedAt?: string | null;
+    changedFields?: string[] | null;
     /**
      * Which unclaimed-alert bands have already fired. Idempotency, the same shape as
      * `arrivedAt` on a ride: time only decreases, so a band once passed can never

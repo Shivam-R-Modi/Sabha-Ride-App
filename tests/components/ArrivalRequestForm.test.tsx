@@ -34,8 +34,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const requestAirportPickup = vi.fn(async (_payload: unknown) => ({
     success: true, pickupId: 'p_new', arrivalAt: '2026-12-02T05:00:00.000Z',
 }));
+const updateAirportPickup = vi.fn(async (_payload: unknown) => ({
+    success: true, status: 'open' as const,
+}));
 vi.mock('../../src/utils/cloudFunctions', () => ({
     requestAirportPickup: (payload: unknown) => requestAirportPickup(payload),
+    updateAirportPickup: (payload: unknown) => updateAirportPickup(payload),
 }));
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
@@ -63,8 +67,28 @@ vi.mock('../../hooks/useGooglePlaces', () => ({
 import { ArrivalRequestForm } from '../../components/airport/ArrivalRequestForm';
 
 const onSubmitted = vi.fn();
+const onCancelEdit = vi.fn();
 
 const show = () => render(<ArrivalRequestForm onSubmitted={onSubmitted} />);
+
+/** The same form, seeded from a live request. One component, two jobs. */
+const LIVE = {
+    id: 'p_live',
+    arrivalDate: '2026-12-02', arrivalTime: '00:00', airportCode: 'BOS',
+    airline: 'Emirates', flightNumber: 'EK237', terminal: 'E', isInternational: true,
+    partySize: 3, largeBags: 5, cabinBags: 2,
+    dropoffAddress: '5 Woodbine St, Roxbury, MA',
+    hasUsWorkingPhone: false, meetingPointNote: 'Meet at arrivals',
+    passenger: {
+        name: 'Cab Exa', dateOfBirth: '1998-04-23', phone: '+16175550123',
+        whatsappOn: 'primary', email: 'cab@example.com',
+        familyContact: { name: 'Sheetal', relationship: 'Mother', phone: '+919876543210', hasWhatsapp: true },
+    },
+} as never;
+
+const showEditing = () => render(
+    <ArrivalRequestForm existing={LIVE} onSubmitted={onSubmitted} onCancelEdit={onCancelEdit} />,
+);
 
 /**
  * Open a named accordion section, if it is not open already.
@@ -286,5 +310,75 @@ describe('the two fields that were removed', () => {
         expect(screen.getByLabelText(/stop on the way/i)).toBeInTheDocument();
         await openSection(...YOU);
         expect(screen.getByLabelText(/anything else/i)).toBeInTheDocument();
+    });
+});
+
+/**
+ * THE SAME FORM, EDITING. Added 2026-08-25: a traveller could file a request and then
+ * only cancel it, so a moved flight meant cancelling and starting again — which loses
+ * the Sarthi who had already taken it.
+ *
+ * One component rather than two. A separate edit screen would be these twenty fields
+ * and this validation a second time, drifting the first time either changed.
+ */
+describe('editing a request that already exists', () => {
+    it('opens pre-filled, rather than making them type it all again', () => {
+        showEditing();
+        expect(screen.getByDisplayValue('EK237')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Emirates')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('E')).toBeInTheDocument();
+    });
+
+    it('says save rather than ask, because the request already exists', () => {
+        showEditing();
+        expect(screen.getByRole('button', { name: /Save changes/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Ask for a pickup/i })).not.toBeInTheDocument();
+    });
+
+    it('offers a way out that changes nothing', async () => {
+        showEditing();
+        await userEvent.click(screen.getByRole('button', { name: /Leave it as it was/i }));
+        expect(onCancelEdit).toHaveBeenCalled();
+        expect(updateAirportPickup).not.toHaveBeenCalled();
+    });
+
+    it('sends the WHOLE request with the id, not a patch', async () => {
+        // The server runs the same three parsers the create path runs, so a partial
+        // payload would be refused — and a laxer edit path would be a side door into a
+        // collection no client may write directly.
+        showEditing();
+        await userEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+        expect(updateAirportPickup).toHaveBeenCalledWith(expect.objectContaining({
+            pickupId: 'p_live', action: 'editRequest',
+            flightNumber: 'EK237', partySize: 3, largeBags: 5,
+            fullName: 'Cab Exa', phone: '+16175550123',
+        }));
+        expect(requestAirportPickup).not.toHaveBeenCalled();
+    });
+
+    it('hides the two fields that live on the profile, not on the trip', () => {
+        // A university and a preferred name are stored on airportProfiles, which no
+        // client may read — so showing them would mean showing a blank box beside a
+        // value the traveller knows they typed.
+        showEditing();
+        expect(screen.queryByLabelText(/University or employer/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/What you like to be called/i)).not.toBeInTheDocument();
+    });
+
+    it('still shows both of them on a NEW request', async () => {
+        show();
+        await openSection(...YOU);
+        expect(screen.getByLabelText(/University or employer/i)).toBeInTheDocument();
+    });
+
+    it('accepts the stored phone numbers without making them be retyped', async () => {
+        // `missing()` refuses to submit while the primary number is unvalidated. With
+        // these left blank, a traveller changing only their terminal was told to check
+        // a number they had never touched, and Save could not be made to work.
+        showEditing();
+        await userEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+        expect(toast.error).not.toHaveBeenCalled();
+        expect(updateAirportPickup).toHaveBeenCalled();
     });
 });

@@ -26,13 +26,18 @@ import { checkRateLimit } from '../utils/rateLimiter';
 import { writeAuditLog, AuditAction } from '../utils/audit';
 import { getTimeZone } from '../utils/settings';
 import {
-    PICKUPS_COLLECTION, ArrivalAction, ArrivalStatus, RESULT_OF, canRun, MAX_SHORT_TEXT,
+    PICKUPS_COLLECTION, PROFILES_COLLECTION,
+    ArrivalAction, ArrivalStatus, RESULT_OF, canRun, MAX_SHORT_TEXT,
+    NOTIFIABLE_FIELDS, changeSummary,
 } from '../utils/arrival';
-import { compact, parseFlight, retainUntilFor } from '../utils/arrivalInput';
+import {
+    compact, parseFlight, parseTrip, parsePerson, retainUntilFor,
+} from '../utils/arrivalInput';
+import { notifyArrivalChanged, tokensOf } from '../utils/notifications';
 
 const ACTIONS: ArrivalAction[] = [
     'claim', 'release', 'met', 'completed', 'no_show',
-    'cancel', 'editFlight', 'familyNotified',
+    'cancel', 'editRequest', 'familyNotified',
 ];
 
 /** Which audit action each transition records. See the union for why these are split. */
@@ -42,7 +47,7 @@ const AUDIT_FOR: Record<ArrivalAction, AuditAction> = {
     met: 'airport.update',
     completed: 'airport.update',
     no_show: 'airport.update',
-    editFlight: 'airport.update',
+    editRequest: 'airport.update',
     familyNotified: 'airport.update',
     cancel: 'airport.cancel',
 };
@@ -85,13 +90,29 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
     const now = new Date();
     const timestamp = now.toISOString();
 
-    // `editFlight` needs work done before the transaction: reading settings inside one
-    // is legal but pointless, and it is not part of the invariant being protected. The
-    // invariant is the pickup document's own status, and that is all the transaction
-    // reads.
-    let flight: ReturnType<typeof parseFlight> | null = null;
-    if (action === 'editFlight') {
-        flight = parseFlight(data, await getTimeZone(), now);
+    // `editRequest` needs work done before the transaction: reading settings inside
+    // one is legal but pointless, and it is not part of the invariant being protected.
+    // The invariant is the pickup document's own status, and that is all the
+    // transaction reads.
+    let edit: {
+        flight: ReturnType<typeof parseFlight>;
+        trip: ReturnType<typeof parseTrip>;
+        person: ReturnType<typeof parsePerson>;
+    } | null = null;
+    if (action === 'editRequest') {
+        /**
+         * THE SAME THREE PARSERS THE CREATE PATH USES, and that is the whole guard.
+         *
+         * `airportPickups` is `allow update: if false` for every client, so this
+         * callable IS the trust boundary. An edit path with its own laxer validation
+         * would let a traveller store, on their second attempt, a value the first
+         * attempt refused — which is a trust boundary with a side door.
+         */
+        edit = {
+            flight: parseFlight(data, await getTimeZone(), now),
+            trip: parseTrip(data),
+            person: parsePerson(data, now),
+        };
     }
 
     const reason: string = String(data?.reason ?? '').trim().slice(0, MAX_SHORT_TEXT);
@@ -133,6 +154,9 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
         const isMine = pickup.claimedByUid === uid;
         const isRequester = pickup.requesterUid === uid;
 
+        /** Who to push to once this commits, if anybody. See the editRequest branch. */
+        let notify: { uid: string; summary: string[] } | null = null;
+
         switch (action) {
             case 'claim':
                 if (!isDriver) {
@@ -171,11 +195,11 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
                 }
                 break;
 
-            case 'editFlight':
+            case 'editRequest':
                 if (!(isRequester || isMine || isCoordinator)) {
                     throw new functions.https.HttpsError(
                         'permission-denied',
-                        'Only the traveller, their Sarthi, or a coordinator, can change the flight.');
+                        'Only the traveller, their Sarthi, or a coordinator, can change these details.');
                 }
                 break;
 
@@ -222,6 +246,11 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
 
             case 'met':
                 update.metAt = timestamp;
+                // The warning has done its job — they have the person. Left standing it
+                // would follow the trip to the end and decay into wallpaper, which is
+                // how a loud signal stops being one.
+                update.changedAt = null;
+                update.changedFields = null;
                 break;
 
             case 'completed':
@@ -242,19 +271,79 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
                 update.cancellationReason = reason || null;
                 break;
 
-            case 'editFlight':
-                Object.assign(update, compact({ ...flight! }));
-                update.retainUntil = retainUntilFor(flight!.arrivalAt);
-                // Only when somebody is already driving to meet it. A change to an
-                // unclaimed request is just an edit; a change after a claim is news
-                // the Sarthi has to see, and the board badges it from this field.
-                if (status === 'claimed' && pickup.arrivalAt !== flight!.arrivalAt) {
-                    update.arrivalTimeChangedAt = timestamp;
+            case 'editRequest': {
+                const { flight, trip, person } = edit!;
+                const passenger = compact({
+                    name: person.fullName,
+                    dateOfBirth: person.dateOfBirth,
+                    phone: person.phone,
+                    altPhone: person.altPhone,
+                    whatsappOn: person.whatsappOn,
+                    email: person.email,
+                    familyContact: person.familyContact,
+                });
+                Object.assign(update, compact({ ...flight, ...trip }), { passenger });
+                update.retainUntil = retainUntilFor(flight.arrivalAt);
+
+                /**
+                 * WHAT ACTUALLY CHANGED, DIFFED AGAINST THE STORED DOCUMENT.
+                 *
+                 * Not "they pressed save" — a traveller who opens the form, changes a
+                 * note and saves must not put a red warning on a Sarthi's card. Only
+                 * the fields in NOTIFIABLE_FIELDS are compared, and only a real
+                 * difference counts.
+                 *
+                 * Only while somebody is driving to meet it, too. A change to an
+                 * unclaimed request is news to nobody.
+                 */
+                if (status === 'claimed') {
+                    const before: Record<string, unknown> = {
+                        ...pickup,
+                        'passenger.phone': pickup.passenger?.phone,
+                    };
+                    const after: Record<string, unknown> = {
+                        ...pickup, ...update, passenger,
+                        'passenger.phone': passenger.phone,
+                    };
+                    const changed = Object.keys(NOTIFIABLE_FIELDS)
+                        .filter(key => (before[key] ?? null) !== (after[key] ?? null));
+                    if (changed.length > 0) {
+                        update.changedAt = timestamp;
+                        update.changedFields = changed;
+                        // Carried out on the outcome rather than assigned to an outer
+                        // `let`: TypeScript does not narrow a variable written inside a
+                        // callback, so the push site would have seen `never`.
+                        notify = {
+                            uid: String(pickup.claimedByUid ?? ''),
+                            summary: changeSummary(changed),
+                        };
+                    }
                 }
                 break;
+            }
         }
 
         tx.update(ref, update);
+
+        /**
+         * THE LONG-LIVED RECORD MOVES WITH THE TRIP.
+         *
+         * `requestAirportPickup` writes the person to `airportProfiles` as well as to
+         * the pickup, so an edit that changed only the pickup would leave a traveller
+         * whose profile still holds last month's phone number — and that profile is
+         * what the Airport export reads and what their next trip is seeded from.
+         *
+         * MERGE, and `compact` strips the blanks, so a field the edit form does not
+         * show (a university, a preferred name) survives untouched rather than being
+         * overwritten with nothing. That is the same reason the create path merges.
+         */
+        if (action === 'editRequest') {
+            tx.set(
+                db.collection(PROFILES_COLLECTION).doc(String(pickup.requesterUid)),
+                compact({ ...edit!.person, updatedAt: timestamp }),
+                { merge: true },
+            );
+        }
 
         /**
          * THEY HAVE ARRIVED, SO THEY ARE NOT ARRIVING ANY MORE.
@@ -317,8 +406,23 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
             nextStatus: nextStatus ?? status,
             requesterName: String(pickup.requesterName ?? 'a traveller'),
             previousHolder: pickup.claimedByName ? String(pickup.claimedByName) : null,
+            notify,
         };
     });
+
+    /**
+     * AFTER THE COMMIT, and only then.
+     *
+     * Inside the transaction a retry would send the push twice, and a push cannot be
+     * rolled back. `sendNotification` never throws, so a Sarthi with no token — which
+     * is nearly all of them — costs nothing and changes nothing.
+     */
+    const notify = outcome.notify;
+    if (notify?.uid) {
+        const sarthiSnap = await db.collection('users').doc(notify.uid).get();
+        await notifyArrivalChanged(
+            tokensOf(notify.uid, sarthiSnap.data()), notify.summary, pickupId);
+    }
 
     // AFTER the commit, so a row is never written for a transition that lost the
     // race. writeAuditLog never throws, so losing the row cannot undo the change.
@@ -336,7 +440,7 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
             nextStatus: outcome.nextStatus,
             previousHolder: outcome.previousHolder,
             reason: reason || undefined,
-            newArrivalAt: flight?.arrivalAt,
+            newArrivalAt: edit?.flight.arrivalAt,
         }),
     });
 

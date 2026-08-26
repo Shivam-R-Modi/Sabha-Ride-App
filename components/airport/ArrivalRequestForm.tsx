@@ -6,12 +6,15 @@ import { PhoneNumberInput } from '../auth/PhoneNumberInput';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { requestAirportPickup } from '../../src/utils/cloudFunctions';
+import { updateAirportPickup } from '../../src/utils/cloudFunctions';
 import type { AirportPickupRequest } from '../../src/utils/cloudFunctions';
+import type { AirportPickup } from '../../types';
 import {
     AIRPORTS, MAX_BAGS, MAX_NOTES, MAX_PARTY_SIZE, MAX_SHORT_TEXT,
 } from '../../src/utils/arrival';
 import type { WhatsappOn } from '../../src/utils/arrival';
 import type { PlaceDetails } from '../../hooks/useGooglePlaces';
+import { parsePhoneNumber, validatePhoneNumber } from '../../src/utils/phoneUtils';
 
 /**
  * Asking to be collected from the airport.
@@ -42,11 +45,25 @@ const LABEL = 'block text-xs font-bold uppercase tracking-wide text-coffee-500 m
 
 interface ArrivalRequestFormProps {
     onSubmitted: () => void;
+    /**
+     * The live request, when this is an EDIT rather than a new ask.
+     *
+     * One form for both, not two. The alternative is a second screen with the same
+     * twenty fields and the same validation, which would drift the first time either
+     * changed — and the server takes the whole request either way, so the payload is
+     * already identical.
+     */
+    existing?: AirportPickup;
+    /** Leave the edit without saving. Only rendered when `existing` is set. */
+    onCancelEdit?: () => void;
 }
 
-export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmitted }) => {
+export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({
+    onSubmitted, existing, onCancelEdit,
+}) => {
     const { userProfile, currentUser } = useAuth();
     const toast = useToast();
+    const editing = Boolean(existing);
 
     const [open, setOpen] = useState<Section | null>('flight');
     const [saving, setSaving] = useState(false);
@@ -54,43 +71,48 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
     // Seeded from the profile they already filled in at signup. Not read-only —
     // the phone that matters here is the one they will have on landing, which is
     // often not the one on their profile.
-    const [form, setForm] = useState({
-        arrivalDate: '',
-        arrivalTime: '',
-        airportCode: 'BOS',
-        airline: '',
-        flightNumber: '',
-        terminal: '',
-        isInternational: true,
+    const [form, setForm] = useState(() => ({
+        arrivalDate: existing?.arrivalDate ?? '',
+        arrivalTime: existing?.arrivalTime ?? '',
+        airportCode: existing?.airportCode ?? 'BOS',
+        airline: existing?.airline ?? '',
+        flightNumber: existing?.flightNumber ?? '',
+        terminal: existing?.terminal ?? '',
+        isInternational: existing?.isInternational ?? true,
 
-        partySize: 1,
-        largeBags: 2,
-        cabinBags: 1,
+        partySize: existing?.partySize ?? 1,
+        largeBags: existing?.largeBags ?? 2,
+        cabinBags: existing?.cabinBags ?? 1,
 
         // Optional, all three. Somebody filing a month out often has no address yet.
-        dropoffAddress: '',
-        dropoffLat: 0,
-        dropoffLng: 0,
+        dropoffAddress: existing?.dropoffAddress ?? '',
+        dropoffLat: existing?.dropoffLat ?? 0,
+        dropoffLng: existing?.dropoffLng ?? 0,
 
-        fullName: userProfile?.name ?? '',
+        fullName: existing?.passenger.name ?? userProfile?.name ?? '',
+        // NOT seeded, and hidden below when editing. These two live on
+        // `airportProfiles`, which no client may read — so showing them would mean
+        // showing a blank box beside a value the traveller knows they typed. Sending
+        // them empty is harmless: the payload omits blanks, and the profile write
+        // merges, so nothing already stored is wiped.
         preferredName: '',
-        dateOfBirth: '',
-        email: currentUser?.email ?? userProfile?.email ?? '',
-        phone: userProfile?.phone ?? '',
-        altPhone: '',
-        whatsappOn: 'primary' as WhatsappOn,
-        hasUsWorkingPhone: false,
-        meetingPointNote: '',
+        dateOfBirth: existing?.passenger.dateOfBirth ?? '',
+        email: existing?.passenger.email ?? currentUser?.email ?? userProfile?.email ?? '',
+        phone: existing?.passenger.phone ?? userProfile?.phone ?? '',
+        altPhone: existing?.passenger.altPhone ?? '',
+        whatsappOn: (existing?.passenger.whatsappOn ?? 'primary') as WhatsappOn,
+        hasUsWorkingPhone: existing?.hasUsWorkingPhone ?? false,
+        meetingPointNote: existing?.meetingPointNote ?? '',
         university: '',
-        needsStopOnTheWay: '',
-        notes: '',
+        needsStopOnTheWay: existing?.needsStopOnTheWay ?? '',
+        notes: existing?.notes ?? '',
 
-        familyName: '',
-        familyRelationship: '',
-        familyPhone: '',
-        familyHasWhatsapp: true,
-        familyLanguage: '',
-    });
+        familyName: existing?.passenger.familyContact?.name ?? '',
+        familyRelationship: existing?.passenger.familyContact?.relationship ?? '',
+        familyPhone: existing?.passenger.familyContact?.phone ?? '',
+        familyHasWhatsapp: existing?.passenger.familyContact?.hasWhatsapp ?? true,
+        familyLanguage: existing?.passenger.familyContact?.preferredLanguage ?? '',
+    }));
 
     /**
      * The three phone numbers, kept apart from `form`.
@@ -106,10 +128,30 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
      * server re-checks the digit count within the E.164 envelope, because a client is
      * a trust boundary even when it belongs to the person whose number it is.
      */
-    const [phones, setPhones] = useState({
-        phone: { e164: '', valid: false },
-        altPhone: { e164: '', valid: false },
-        familyPhone: { e164: '', valid: false },
+    /**
+     * SEEDED, NOT BLANK, WHEN EDITING — and that is a correctness fix, not a nicety.
+     *
+     * `missing()` refuses to submit while `phones.phone.valid` is false. Starting the
+     * edit form with these blank meant a traveller who changed only their terminal was
+     * told to check a phone number they had never touched, and "Save changes" could
+     * not be made to work at all without retyping it.
+     *
+     * Re-validated rather than trusted: the stored value is run back through the same
+     * `phoneUtils` check the field itself uses, so a number that was stored before a
+     * rule tightened is caught here rather than at the server.
+     */
+    const [phones, setPhones] = useState(() => {
+        const seed = (stored?: string) => {
+            if (!stored) return { e164: '', valid: false };
+            const { country, localDigits } = parsePhoneNumber(stored);
+            const check = validatePhoneNumber(localDigits, country);
+            return { e164: check.e164 ?? '', valid: check.isValid };
+        };
+        return {
+            phone: seed(existing?.passenger.phone),
+            altPhone: seed(existing?.passenger.altPhone),
+            familyPhone: seed(existing?.passenger.familyContact?.phone),
+        };
     });
 
     type PhoneKey = keyof typeof phones;
@@ -215,8 +257,18 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                     : undefined,
             };
 
-            await requestAirportPickup(payload);
-            toast.success('Your request is on the board. A Sarthi will take it.');
+            if (existing) {
+                // The WHOLE request, not a patch — the server runs the same three
+                // parsers the create path runs, and anything less would be a second,
+                // laxer way into a collection no client may write directly.
+                await updateAirportPickup({
+                    ...payload, pickupId: existing.id, action: 'editRequest',
+                });
+                toast.success('Your pickup has been updated.');
+            } else {
+                await requestAirportPickup(payload);
+                toast.success('Your request is on the board. A Sarthi will take it.');
+            }
             onSubmitted();
         } catch (err) {
             // The server's own message. "You already have an airport pickup request
@@ -403,10 +455,10 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                         id="full-name" label="Full name, as on your passport"
                         value={form.fullName} onChange={v => set('fullName', v)}
                     />
-                    <Field
+                    {!editing && <Field
                         id="preferred-name" label="What you like to be called (optional)"
                         value={form.preferredName} onChange={v => set('preferredName', v)}
-                    />
+                    />}
                     <div>
                         <label className={LABEL} htmlFor="dob">Date of birth</label>
                         <input
@@ -482,10 +534,10 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                         />
                     )}
 
-                    <Field
+                    {!editing && <Field
                         id="university" label="University or employer (optional)"
                         value={form.university} onChange={v => set('university', v)}
-                    />
+                    />}
 
                     <hr className="border-0 border-t border-hairline/10" />
 
@@ -539,8 +591,21 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({ onSubmit
                 disabled={saving}
                 className="clay-button w-full py-4 rounded-xl font-bold text-[rgb(var(--text-on-accent))] bg-gradient-to-r from-[rgb(var(--cta))] to-[rgb(var(--cta-dark))] disabled:opacity-60"
             >
-                {saving ? 'Sending…' : 'Ask for a pickup'}
+                {saving
+                    ? (editing ? 'Saving…' : 'Sending…')
+                    : (editing ? 'Save changes' : 'Ask for a pickup')}
             </button>
+            {/* Only in edit mode. On a new request there is nothing to go back to. */}
+            {editing && onCancelEdit && (
+                <button
+                    type="button"
+                    onClick={onCancelEdit}
+                    disabled={saving}
+                    className="clay-button w-full py-3 rounded-xl font-bold text-coffee bg-cream-300 disabled:opacity-60"
+                >
+                    Leave it as it was
+                </button>
+            )}
         </div>
     );
 };

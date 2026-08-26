@@ -52,6 +52,16 @@ export const AirportShell: React.FC = () => {
 const TravellerView: React.FC = () => {
     const { arrival, loading, error } = useMyLiveArrival();
     const [resetKey, setResetKey] = useState(0);
+    /**
+     * THE THIRD STATE. This screen used to be a binary — a live request, or the form —
+     * which meant a traveller whose flight moved could only cancel and file again, and
+     * cancelling loses the Sarthi who had already taken it.
+     *
+     * The same form does both jobs, seeded from the live document. A second edit
+     * screen would be the same twenty fields and the same validation, drifting from
+     * this one the first time either changed.
+     */
+    const [editing, setEditing] = useState(false);
 
     if (loading) {
         return (
@@ -77,9 +87,21 @@ const TravellerView: React.FC = () => {
 
     return (
         <>
-            {arrival
-                ? <ArrivalStatusCard arrival={arrival} onCancelled={() => setResetKey(k => k + 1)} />
-                : <ArrivalRequestForm key={resetKey} onSubmitted={() => setResetKey(k => k + 1)} />}
+            {arrival && editing ? (
+                <ArrivalRequestForm
+                    existing={arrival}
+                    onSubmitted={() => setEditing(false)}
+                    onCancelEdit={() => setEditing(false)}
+                />
+            ) : arrival ? (
+                <ArrivalStatusCard
+                    arrival={arrival}
+                    onEdit={() => setEditing(true)}
+                    onCancelled={() => { setEditing(false); setResetKey(k => k + 1); }}
+                />
+            ) : (
+                <ArrivalRequestForm key={resetKey} onSubmitted={() => setResetKey(k => k + 1)} />
+            )}
             <AlreadyArrived />
         </>
     );
