@@ -45,10 +45,16 @@ vi.mock('../../src/utils/cloudFunctions', () => ({
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
 vi.mock('../../contexts/ToastContext', () => ({ useToast: () => toast }));
 
+/**
+ * `profilePhone` is a variable, and that is the point. It was hardcoded to '' — which
+ * is why nothing here caught the bug that made this form unsubmittable for anybody
+ * whose profile already held a number. See "a profile that already has a number".
+ */
+let profilePhone = '';
 vi.mock('../../contexts/AuthContext', () => ({
     useAuth: () => ({
         currentUser: { uid: 'traveller_1', email: 'cab@example.com' },
-        userProfile: { name: 'Cab Exa', phone: '' },
+        userProfile: { name: 'Cab Exa', phone: profilePhone },
     }),
 }));
 
@@ -145,6 +151,7 @@ const fillMinimum = async () => {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    profilePhone = '';
 });
 
 describe('the destination, which is now optional', () => {
@@ -380,5 +387,68 @@ describe('editing a request that already exists', () => {
         await userEvent.click(screen.getByRole('button', { name: /Save changes/i }));
         expect(toast.error).not.toHaveBeenCalled();
         expect(updateAirportPickup).toHaveBeenCalled();
+    });
+});
+
+/**
+ * A PROFILE THAT ALREADY HAS A NUMBER, which is every returning member.
+ *
+ * Reported from a phone on 2026-08-25: "Ask for a pickup" refused with "Check your
+ * phone number — it does not have the right number of digits", pointing at a field that
+ * showed a correct number and a green tick.
+ *
+ * The form pre-filled `form.phone` from the profile but seeded `phones.phone.valid`
+ * from `existing` only — two expressions for the same three numbers, one with a
+ * fallback and one without. So the request could not be sent at all unless the person
+ * deleted a correct number and retyped it, which nobody would think to try.
+ *
+ * Nothing caught it because the auth mock hardcoded `phone: ''`, so every test typed
+ * its own number and fired the field's onChange.
+ */
+describe('a profile that already has a number', () => {
+    it('can be submitted without retyping it', async () => {
+        profilePhone = '+18572302738';
+        show();
+
+        // Everything EXCEPT the phone, which is already there from the profile.
+        await openSection(...FLIGHT);
+        await userEvent.type(screen.getByLabelText(/date you land/i), '2026-12-02');
+        await userEvent.type(screen.getByLabelText(/time you land/i), '01:00');
+        await openSection(...YOU);
+        await userEvent.type(screen.getByLabelText(/full name/i), 'Cab Exa');
+        await userEvent.type(screen.getByLabelText(/date of birth/i), '1998-04-23');
+
+        expect(reason()).toBe('');
+        await submit();
+        expect(requestAirportPickup).toHaveBeenCalled();
+    });
+
+    it('sends the stored number in E.164, not the display string', async () => {
+        profilePhone = '+18572302738';
+        show();
+        await openSection(...FLIGHT);
+        await userEvent.type(screen.getByLabelText(/date you land/i), '2026-12-02');
+        await userEvent.type(screen.getByLabelText(/time you land/i), '01:00');
+        await openSection(...YOU);
+        await userEvent.type(screen.getByLabelText(/full name/i), 'Cab Exa');
+        await userEvent.type(screen.getByLabelText(/date of birth/i), '1998-04-23');
+        await submit();
+
+        expect(sent().phone).toBe('+18572302738');
+    });
+
+    it('still refuses a stored number that is genuinely too short', async () => {
+        // The seed is RE-VALIDATED, not trusted — a number stored before a rule
+        // tightened must fail here rather than at the server.
+        profilePhone = '+1857230';
+        show();
+        await openSection(...FLIGHT);
+        await userEvent.type(screen.getByLabelText(/date you land/i), '2026-12-02');
+        await userEvent.type(screen.getByLabelText(/time you land/i), '01:00');
+        await openSection(...YOU);
+        await userEvent.type(screen.getByLabelText(/full name/i), 'Cab Exa');
+        await userEvent.type(screen.getByLabelText(/date of birth/i), '1998-04-23');
+
+        expect(reason()).toMatch(/right number of digits/i);
     });
 });

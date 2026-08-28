@@ -68,6 +68,26 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({
     const [open, setOpen] = useState<Section | null>('flight');
     const [saving, setSaving] = useState(false);
 
+    /**
+     * THE THREE NUMBERS, SEEDED ONCE, READ TWICE.
+     *
+     * `form` needs them to display, `phones` needs them to judge validity — and those
+     * were two separate expressions, which is precisely how this broke. `form` fell
+     * back to the profile's number; `phones` did not. So a traveller whose profile
+     * already held a phone number saw it in the field, saw a green tick under it, and
+     * was told "check your phone number — it does not have the right number of digits"
+     * on every single attempt. The form could not be submitted at all without deleting
+     * a correct number and retyping it, which nobody would think to try.
+     *
+     * Reported from a phone on 2026-08-25. Named and shared so the two cannot disagree
+     * again — the fix is the single source, not the extra fallback.
+     */
+    const seedNumbers = {
+        phone: existing?.passenger.phone ?? userProfile?.phone ?? '',
+        altPhone: existing?.passenger.altPhone ?? '',
+        familyPhone: existing?.passenger.familyContact?.phone ?? '',
+    };
+
     // Seeded from the profile they already filled in at signup. Not read-only —
     // the phone that matters here is the one they will have on landing, which is
     // often not the one on their profile.
@@ -98,8 +118,8 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({
         preferredName: '',
         dateOfBirth: existing?.passenger.dateOfBirth ?? '',
         email: existing?.passenger.email ?? currentUser?.email ?? userProfile?.email ?? '',
-        phone: existing?.passenger.phone ?? userProfile?.phone ?? '',
-        altPhone: existing?.passenger.altPhone ?? '',
+        phone: seedNumbers.phone,
+        altPhone: seedNumbers.altPhone,
         whatsappOn: (existing?.passenger.whatsappOn ?? 'primary') as WhatsappOn,
         hasUsWorkingPhone: existing?.hasUsWorkingPhone ?? false,
         meetingPointNote: existing?.meetingPointNote ?? '',
@@ -109,7 +129,7 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({
 
         familyName: existing?.passenger.familyContact?.name ?? '',
         familyRelationship: existing?.passenger.familyContact?.relationship ?? '',
-        familyPhone: existing?.passenger.familyContact?.phone ?? '',
+        familyPhone: seedNumbers.familyPhone,
         familyHasWhatsapp: existing?.passenger.familyContact?.hasWhatsapp ?? true,
         familyLanguage: existing?.passenger.familyContact?.preferredLanguage ?? '',
     }));
@@ -129,28 +149,23 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({
      * a trust boundary even when it belongs to the person whose number it is.
      */
     /**
-     * SEEDED, NOT BLANK, WHEN EDITING — and that is a correctness fix, not a nicety.
-     *
-     * `missing()` refuses to submit while `phones.phone.valid` is false. Starting the
-     * edit form with these blank meant a traveller who changed only their terminal was
-     * told to check a phone number they had never touched, and "Save changes" could
-     * not be made to work at all without retyping it.
+     * SEEDED FROM `seedNumbers`, NOT BLANK — see the note there for what blank cost.
      *
      * Re-validated rather than trusted: the stored value is run back through the same
      * `phoneUtils` check the field itself uses, so a number that was stored before a
      * rule tightened is caught here rather than at the server.
      */
     const [phones, setPhones] = useState(() => {
-        const seed = (stored?: string) => {
+        const seed = (stored: string) => {
             if (!stored) return { e164: '', valid: false };
             const { country, localDigits } = parsePhoneNumber(stored);
             const check = validatePhoneNumber(localDigits, country);
             return { e164: check.e164 ?? '', valid: check.isValid };
         };
         return {
-            phone: seed(existing?.passenger.phone),
-            altPhone: seed(existing?.passenger.altPhone),
-            familyPhone: seed(existing?.passenger.familyContact?.phone),
+            phone: seed(seedNumbers.phone),
+            altPhone: seed(seedNumbers.altPhone),
+            familyPhone: seed(seedNumbers.familyPhone),
         };
     });
 
