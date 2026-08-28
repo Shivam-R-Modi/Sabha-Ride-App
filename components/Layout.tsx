@@ -168,7 +168,8 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
       {/* Role Switcher */}
       {!isSidebarCollapsed && (
         <div className="px-6 pb-4 space-y-2">
-          <RoleSwitcher />
+          {/* Both full width, matching each other and the nav pills below. */}
+          <RoleSwitcher fullWidth />
           <ServiceSwitch />
         </div>
       )}

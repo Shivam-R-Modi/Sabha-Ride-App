@@ -311,7 +311,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                     <button
                         onClick={handleAccept}
                         disabled={isAccepting || isReleasing}
-                        className="w-full clay-btn-cta-large py-4 text-lg flex items-center justify-center gap-2"
+                        className="w-full clay-btn-cta-large flex items-center justify-center gap-2"
                     >
                         {isAccepting ? (
                             <><Loader2 className="animate-spin" size={20} /> Starting...</>
@@ -323,7 +323,7 @@ export const AssignmentPreview: React.FC<AssignmentPreviewProps> = ({
                     <button
                         onClick={handleRelease}
                         disabled={isAccepting || isReleasing}
-                        className="w-full clay-button-secondary py-3 flex items-center justify-center gap-2"
+                        className="w-full clay-button-secondary flex items-center justify-center gap-2"
                     >
                         {isReleasing ? (
                             <><Loader2 className="animate-spin" size={18} /> Releasing...</>

@@ -21,7 +21,21 @@ const roleConfig: Record<UserRole, { label: string; icon: React.ReactNode; color
     }
 };
 
-export const RoleSwitcher: React.FC = () => {
+/**
+ * `fullWidth` exists because this control has two homes with opposite needs.
+ *
+ * In the SIDEBAR it is stacked directly above `ServiceSwitch` and the nav pills, all of
+ * which are full-width — so an auto-width trigger read as a different KIND of control
+ * sitting in a column of buttons. In the MOBILE HEADER it sits inline beside the compact
+ * service switch and a logout icon, where full width would push both off the row.
+ *
+ * Same skin either way; only the width differs.
+ */
+interface RoleSwitcherProps {
+    fullWidth?: boolean;
+}
+
+export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ fullWidth = false }) => {
     const { activeRole, setActiveRole, getAvailableRoles } = useAuth();
     const availableRoles = getAvailableRoles();
 
@@ -58,15 +72,36 @@ export const RoleSwitcher: React.FC = () => {
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-2 px-3 py-2 min-h-11 rounded-xl bg-[rgb(var(--surface)/0.8)] hover:bg-surface shadow-sm border border-gold/20 transition-all duration-200"
+                /*
+                 * THE SAME SHAPE AS `ServiceSwitch`, deliberately — they sit stacked and
+                 * do the same kind of job, and they used to disagree on width, fill,
+                 * border, shadow and font weight all at once.
+                 *
+                 * The fill is `bg-cream-400` (`--sunken`) rather than the old
+                 * `--surface`/0.8, and that was not only a consistency change. The
+                 * sidebar is itself `bg-surface`, so a translucent `--surface` fill on it
+                 * had almost no edge — in DARK mode `--canvas-deep` and `--surface` are
+                 * the same colour, which is the reason the nav pill below is cream-400
+                 * too. The button was relying on a 20%-alpha gold border to exist at all.
+                 */
+                className={`flex items-center gap-2 px-3 py-2 min-h-11 rounded-xl bg-cream-400
+                    text-coffee text-sm font-bold hover:bg-saffron/15 transition-colors
+                    ${fullWidth ? 'w-full' : ''}`}
             >
                 {currentConfig && (
                     <>
                         <span className={currentConfig.color}>{currentConfig.icon}</span>
-                        <span className="font-medium text-coffee text-sm">{currentConfig.label}</span>
+                        <span className="truncate">{currentConfig.label}</span>
                     </>
                 )}
-                <ChevronDown size={14} className={`text-mocha transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                {/* `ml-auto` only when full width, so the chevron lands on the right edge
+                    exactly where ServiceSwitch's own trailing icon does. Inline, it stays
+                    tucked against the label. */}
+                <ChevronDown
+                    size={14}
+                    className={`text-coffee-500 shrink-0 transition-transform
+                        ${fullWidth ? 'ml-auto' : ''} ${isOpen ? 'rotate-180' : ''}`}
+                />
             </button>
 
             {isOpen && (

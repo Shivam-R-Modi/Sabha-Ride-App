@@ -89,7 +89,7 @@ export default {
         gold: {
           DEFAULT: 'rgb(var(--gold) / <alpha-value>)',
           500: 'rgb(var(--gold) / <alpha-value>)',      // 2.00:1 — decorative only, never text
-          700: 'rgb(var(--gold-text) / <alpha-value>)', // 4.79:1 — AA text
+          700: 'rgb(var(--gold-text) / <alpha-value>)', // 5.68:1 on canvas, 4.55 on --sunken — AA everywhere
         },
         coffee: {
           DEFAULT: 'rgb(var(--text-strong) / <alpha-value>)',

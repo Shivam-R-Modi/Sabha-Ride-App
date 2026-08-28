@@ -337,9 +337,14 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                 <button
                     onClick={handleOpenMaps}
                     disabled={!mapsUrl}
-                    className={`w-full py-3 flex items-center justify-center gap-2 rounded-2xl ${mapsUrl
+                    /* No py-* and no rounded-*: `clay-button-secondary` already sets
+                        44px, 12px padding and a pill radius, and stating them again here
+                        with different values is what made this screen's buttons a
+                        different shape from every other screen's. The disabled arm keeps
+                        the pill explicitly, since it drops the shared class. */
+                    className={`w-full flex items-center justify-center gap-2 ${mapsUrl
                         ? 'clay-button-secondary'
-                        : 'bg-cream-400 text-coffee-500 cursor-not-allowed'
+                        : 'clay-button rounded-full bg-cream-400 text-coffee-500 cursor-not-allowed'
                         }`}
                 >
                     <Navigation size={18} />
@@ -360,7 +365,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                     <button
                         onClick={handleArrived}
                         disabled={isArriving}
-                        className="w-full py-3 rounded-2xl font-bold clay-button-secondary flex items-center justify-center gap-2 disabled:opacity-60"
+                        className="w-full clay-button-secondary flex items-center justify-center gap-2 disabled:opacity-60"
                     >
                         {isArriving
                             ? <><Loader2 className="animate-spin" size={18} /> Telling them…</>
@@ -375,7 +380,7 @@ export const ActiveRide: React.FC<ActiveRideProps> = ({ ride, onComplete, onBack
                 <button
                     onClick={() => setRosterOpen(true)}
                     disabled={isCompleting}
-                    className="w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all clay-btn-cta-large disabled:opacity-60"
+                    className="w-full clay-btn-cta-large flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                     {isCompleting ? (
                         <><Loader2 className="animate-spin" size={20} /> Completing...</>

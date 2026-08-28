@@ -123,15 +123,18 @@ describe('tokens that must NOT be used for text are still unsafe', () => {
  * goes on that surface". It came out of a computed-style sweep of the rendered preview
  * screens.
  *
- * SCOPED TO `--text-soft` ON PURPOSE. Widening it to every text token would fail on three
- * pre-existing light-mode pairings, and dragging those into an unrelated change is how a
+ * COVERS `--text-soft` AND `--gold-text`. Two more light-mode pairings still fail and are
+ * deliberately still outside it, because dragging them into an unrelated change is how a
  * fix becomes a refactor:
  *
  *   --accent-text on --sunken   4.15   (live: FeedbackCard's active segment)
  *   --warning-text on --sunken  4.18   (no live pairing found)
- *   --gold-text on --sunken     3.84   (no live pairing found)
  *
- * Those are recorded in docs/STATUS.md. When they are fixed, fold them in here.
+ * `--gold-text` was the third of those at 3.84 and was folded in on 2026-08-25, once the
+ * token was darkened to clear all seven. Its worst surface is --sunken at 4.55, so the
+ * margin is thin — which is exactly why it is pinned rather than trusted.
+ *
+ * Those two are recorded in docs/STATUS.md. When they are fixed, fold them in here too.
  */
 describe('secondary text clears AA on every surface it can land on', () => {
     const NEUTRAL_SURFACES = [
@@ -139,11 +142,14 @@ describe('secondary text clears AA on every surface it can land on', () => {
         '--surface', '--surface-mid', '--surface-deep',
     ];
 
-    for (const theme of ['light', 'dark'] as const) {
-        it.each(NEUTRAL_SURFACES)(`--text-soft is AA on %s in ${theme}`, (surface) => {
-            expect(contrast(THEMES[theme]['--text-soft'], THEMES[theme][surface]))
-                .toBeGreaterThanOrEqual(AA_NORMAL);
-        });
+    // Both tokens, both themes, all seven surfaces. `--gold-text` joined on 2026-08-25.
+    for (const token of ['--text-soft', '--gold-text'] as const) {
+        for (const theme of ['light', 'dark'] as const) {
+            it.each(NEUTRAL_SURFACES)(`${token} is AA on %s in ${theme}`, (surface) => {
+                expect(contrast(THEMES[theme][token], THEMES[theme][surface]))
+                    .toBeGreaterThanOrEqual(AA_NORMAL);
+            });
+        }
     }
 
     it('and the card gradient is the reason --surface-deep is in that list', () => {
@@ -163,7 +169,7 @@ describe('the ratios written in theme.css comments are true', () => {
         '--text': 8.10,
         '--text-soft': 5.76,
         '--accent-text': 5.18,
-        '--gold-text': 4.79,
+        '--gold-text': 5.68,
     };
 
     it.each(Object.entries(DOCUMENTED_LIGHT))('%s really is %s:1 on cream', (role, claimed) => {

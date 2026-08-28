@@ -178,7 +178,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                     <button
                         onClick={handleAssignNext}
                         disabled={isAssigning || isFinishing}
-                        className="w-full clay-btn-cta-large py-4 text-lg flex items-center justify-center gap-2 animate-pulse"
+                        className="w-full clay-btn-cta-large flex items-center justify-center gap-2 animate-pulse"
                     >
                         {isAssigning ? (
                             <><Loader2 className="animate-spin" size={20} /> Finding...</>
@@ -190,7 +190,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
                     <button
                         onClick={handleDoneForToday}
                         disabled={isAssigning || isFinishing}
-                        className="w-full clay-button-secondary py-4 flex items-center justify-center gap-2"
+                        className="w-full clay-button-secondary flex items-center justify-center gap-2"
                     >
                         {isFinishing ? (
                             <><Loader2 className="animate-spin" size={18} /> Processing...</>

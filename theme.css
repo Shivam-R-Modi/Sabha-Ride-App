@@ -143,8 +143,19 @@
   /* ── Secondary brand ─────────────────────────────────────────── */
   --gold: 212 175 55;
   /* #D4AF37 2.00:1 — decorative only, NEVER text */
-  --gold-text: 138 106 31;
-  /* #8A6A1F 4.79:1 — AA */
+  --gold-text: 124 95 28;
+  /* #7C5F1C 5.68:1 on the canvas, and 4.55 on --sunken — the WORST of the seven
+     neutral surfaces, which is what this value is chosen against.
+
+     Was 138 106 31, picked against the canvas alone at 4.79. That failed on FOUR of
+     the seven: --canvas-mid 4.45, --canvas-deep 4.14, --sunken 3.84, --surface-deep
+     4.45. The role label in ProfileEditor sits on a --canvas-mid card, so it was live
+     at 4.45 — the same category error --text-soft had, and for the same reason: a
+     token chosen against one surface and then used on the others.
+
+     Darkened by 10% on all three channels, so the HUE is unchanged. It is a brand
+     colour and had to stay recognisably the same gold, only deeper. Dark mode is
+     untouched: 214 190 132 measures 6.52 at worst there and never failed. */
   --mocha: 92 64 51;
   /* #5C4033 */
   --header-bg: 61 79 61;
