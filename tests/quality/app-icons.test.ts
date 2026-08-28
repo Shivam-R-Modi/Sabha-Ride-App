@@ -97,3 +97,50 @@ describe('app icons', () => {
         }
     });
 });
+
+/**
+ * THE IN-APP LOGO IS THE HOME SCREEN ICON, and the same file.
+ *
+ * The sidebar and mobile header used to draw `LotusIcon` in a saffron tile — a
+ * different mark from the one on the home screen, so the app somebody tapped and the
+ * app that opened did not look like the same product. Changed on 2026-08-25 at the
+ * owner's request.
+ *
+ * Pinned from BOTH ends, because either half drifting reintroduces the mismatch: the
+ * header must reference an icon the manifest declares, and the manifest must declare
+ * the one the header uses. A test that only checked the file exists would pass happily
+ * while the manifest pointed somewhere else.
+ */
+describe('the header logo and the app icon are one asset', () => {
+    const layout = readFileSync(path.join(ROOT, 'components/Layout.tsx'), 'utf8');
+    const viteConfig = readFileSync(path.join(ROOT, 'vite.config.ts'), 'utf8');
+
+    /** Every `/icons/...png` the header renders. */
+    const inHeader = [...layout.matchAll(/\/icons\/[\w.-]+\.png/g)].map(m => m[0]);
+
+    it('the header renders an icon at all, in both of its homes', () => {
+        // Two: the desktop sidebar and the mobile header. If this ever reads 1, one of
+        // them has quietly gone back to something else.
+        expect(inHeader).toHaveLength(2);
+        expect(new Set(inHeader).size).toBe(1);
+    });
+
+    it('renders a file that actually exists', () => {
+        for (const src of new Set(inHeader)) {
+            expect(existsSync(path.join(ROOT, 'public', src)), `${src} is missing`).toBe(true);
+        }
+    });
+
+    it('renders an icon the PWA manifest also declares', () => {
+        for (const src of new Set(inHeader)) {
+            expect(viteConfig, `${src} is not in the manifest`).toContain(`src: '${src}'`);
+        }
+    });
+
+    it('does not wrap it in a coloured tile', () => {
+        // The icon carries its own background. Putting it inside a saffron gradient
+        // stacked two backgrounds, which is what the lotus tile did.
+        const logoBlock = layout.slice(0, layout.indexOf('Bhulka Gaadi'));
+        expect(logoBlock).not.toMatch(/from-saffron[^\n]*>\s*<img/);
+    });
+});

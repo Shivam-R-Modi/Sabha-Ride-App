@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LotusIcon } from '../constants';
 import { Service, TabView, UserRole } from '../types';
 import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database, Megaphone, Plane, Repeat, CalendarDays, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -121,9 +120,22 @@ const MobileHeader: React.FC = () => {
     <header className="app-header lg:hidden sticky top-0 z-chrome bg-cream/80 backdrop-blur-md border-b border-hairline/10 pt-safe">
       <div className="px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2 overflow-hidden">
-          <div className="bg-saffron/10 p-2 rounded-full">
-            <LotusIcon className="w-5 h-5 text-saffron" />
-          </div>
+          {/* THE APP ICON ITSELF, not a stand-in. The lotus that used to sit here
+              was a different mark from the one on the home screen, so the app a
+              person tapped and the app that opened did not look like the same thing.
+
+              No coloured wrapper: the icon carries its own background, and putting
+              it inside a saffron tint stacked two backgrounds. `alt=""` and
+              aria-hidden because the wordmark beside it already says the name —
+              labelling it would make a screen reader read "Bhulka Gaadi" twice. */}
+          <img
+            src="/icons/icon-192x192.png"
+            alt=""
+            aria-hidden="true"
+            width={36}
+            height={36}
+            className="w-9 h-9 rounded-full shrink-0"
+          />
           <h1 className="font-header font-bold text-base text-coffee truncate">Bhulka Gaadi</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -152,9 +164,17 @@ const Sidebar: React.FC<{ role: UserRole }> = ({ role }) => {
 
       {/* Logo Section */}
       <div className="p-6 flex items-center gap-3 overflow-hidden">
-        <div className="bg-gradient-to-br from-saffron to-saffron-dark p-2 rounded-xl shadow-lg shrink-0">
-          <LotusIcon className="w-6 h-6 text-white" />
-        </div>
+        {/* Same mark as the home screen icon — see the note in MobileHeader. The
+            radius is kept at rounded-xl, which is both what was here and what the
+            icon looks like once a phone has rounded it. */}
+        <img
+          src="/icons/icon-192x192.png"
+          alt=""
+          aria-hidden="true"
+          width={40}
+          height={40}
+          className="w-10 h-10 rounded-xl shadow-lg shrink-0"
+        />
         {!isSidebarCollapsed && (
           <div className="animate-in fade-in slide-in-from-left-2">
             <h1 className="font-header font-bold text-coffee leading-none">Bhulka Gaadi</h1>
