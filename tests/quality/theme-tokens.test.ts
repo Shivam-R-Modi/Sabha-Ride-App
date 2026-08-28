@@ -638,6 +638,37 @@ describe('the bottom banners stay one pair', () => {
  * 14px bold needs 4.5:1. WCAG 1.4.11's 3:1 allowance is for a control's BOUNDARY, not the
  * text inside it, so "it is a button" is not an exemption.
  */
+/**
+ * DE-EMPHASIS MUST NOT DIM TEXT.
+ *
+ * The signup screen steers somebody outside the USA toward Airport Seva by playing DOWN
+ * the sabha card. The obvious way is `opacity-60` on that card — and it fails, measured
+ * in the rendered page on 2026-08-25: the card's body text drops to 2.90:1 and its
+ * "I actually live here" line to 2.49:1, against the 4.5 small text needs. That second
+ * line is the escape hatch for a Boston resident filing from Ahmedabad, so of everything
+ * on the screen it is the line that most has to be readable.
+ *
+ * De-emphasis is carried by the icon's HUE and a ring on the suggested card instead,
+ * neither of which touches anything that has to be read. One grep, so the shortcut
+ * cannot come back.
+ */
+describe('the signup screen never dims its own text', () => {
+    const read = (file: string) => readFileSync(path.join(ROOT, file), 'utf8');
+
+    it('does not reach for opacity-60 on the whereabouts cards', () => {
+        // COMMENTS STRIPPED AS BLOCKS, then `//` lines dropped — the same shape as the
+        // saffron scan below, and for the same reason. The component explains in a JSX
+        // comment why it does NOT use this class, and a rule that fails on the prose
+        // describing the fix is a rule nobody keeps.
+        const code = read('components/auth/RoleSelection.tsx')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n')
+            .filter(line => !line.trim().startsWith('//'))
+            .join('\n');
+        expect(code).not.toContain('opacity-60');
+    });
+});
+
 describe('no text sits on a fill-only saffron token', () => {
     const read = (file: string) => readFileSync(path.join(ROOT, file), 'utf8');
 

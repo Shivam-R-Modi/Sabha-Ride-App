@@ -41,6 +41,16 @@ vi.mock('../../contexts/AuthContext', () => ({
     }),
 }));
 
+/**
+ * Only `deviceTimeZone` is faked. `likelyInUsa` stays REAL, so these cases exercise the
+ * actual zone table rather than a stub agreeing with itself.
+ */
+let deviceZone: string | undefined = 'America/New_York';
+vi.mock('../../src/utils/whereabouts', async (importActual) => ({
+    ...(await importActual<typeof import('../../src/utils/whereabouts')>()),
+    deviceTimeZone: () => deviceZone,
+}));
+
 import { RoleSelection } from '../../components/auth/RoleSelection';
 
 const onSelectRole = vi.fn();
@@ -56,6 +66,7 @@ const click = (name: RegExp | string) =>
 beforeEach(() => {
     vi.clearAllMocks();
     redeemManagerInvite.mockResolvedValue({ redeemed: true, message: '' });
+    deviceZone = 'America/New_York';
 });
 
 describe('step 0 — where are you', () => {
@@ -244,5 +255,74 @@ describe('the Continue button', () => {
         show();
         await click(/arriving soon/i);
         expect(screen.getByRole('button', { name: /set up my pickup/i })).toBeEnabled();
+    });
+});
+
+/**
+ * STEERING BY TIMEZONE, added 2026-08-25.
+ *
+ * The device's zone picks which service is put forward. Deliberately NOT the geolocation
+ * API: that costs a permission prompt at sign-up, before the app has been any use, and
+ * this app already spends that prompt later where the value is obvious — a denial here
+ * would be sticky and would break rider pickup and driver tracking.
+ *
+ * NOTHING IS WRITTEN. The verdict lives in React state and is forgotten. That matters
+ * more than it looks: see this file's header — a write on this screen becomes an owner
+ * update touching privilege fields, the rules deny it, and signup stops working. The
+ * write-count assertions above are what guard it.
+ */
+describe('which service is offered first', () => {
+    it('says nothing and dims nothing for somebody in the USA', () => {
+        deviceZone = 'America/New_York';
+        show();
+        expect(screen.queryByText(/outside the USA/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/I actually live here/i)).not.toBeInTheDocument();
+    });
+
+    it('says so, once, for somebody abroad', () => {
+        deviceZone = 'Asia/Kolkata';
+        show();
+        expect(screen.getByText(/It looks like you are outside the USA/i)).toBeInTheDocument();
+    });
+
+    it('offers the local card a way to disagree, rather than blocking it', () => {
+        deviceZone = 'Asia/Kolkata';
+        show();
+        expect(screen.getByText(/I actually live here/i)).toBeInTheDocument();
+    });
+
+    it('KEEPS the local card clickable — a Boston student may be filing from abroad', () => {
+        // The whole reason this is a hint and not a gate. Blocking it would strand a
+        // resident who signed up while visiting family.
+        deviceZone = 'Asia/Kolkata';
+        show();
+        const local = screen.getByRole('button', { name: /I am already in the USA/i });
+        expect(local).not.toBeDisabled();
+    });
+
+    it('still reaches the role step when the dimmed card is tapped', async () => {
+        deviceZone = 'Asia/Kolkata';
+        show();
+        await userEvent.click(screen.getByRole('button', { name: /I am already in the USA/i }));
+        expect(screen.getByText('Bhulku')).toBeInTheDocument();
+    });
+
+    it('claims nothing when the zone is unreadable', () => {
+        // `likelyInUsa` returns null here, and null must read as "ask, do not guess".
+        // A confident line produced by a coin flip is worse than no line.
+        deviceZone = undefined;
+        show();
+        expect(screen.queryByText(/outside the USA/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/I actually live here/i)).not.toBeInTheDocument();
+    });
+
+    it('treats Toronto as abroad, which a prefix check would not', () => {
+        // `America/` is a CONTINENT. `startsWith('America/')` would call Toronto the USA
+        // and show no hint at all — hiding the airport service from somebody flying in
+        // from Canada. Asserted here as well as in the util, because this screen is
+        // where the mistake would actually be seen.
+        deviceZone = 'America/Toronto';
+        show();
+        expect(screen.getByText(/outside the USA/i)).toBeInTheDocument();
     });
 });

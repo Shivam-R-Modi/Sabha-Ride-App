@@ -28,6 +28,7 @@ const FIREBASE_STUB = path.resolve(__dirname, 'firebase-stub.ts');
 const CF_STUB = path.resolve(__dirname, 'cloud-functions-stub.ts');
 const HOOKS_STUB = path.resolve(__dirname, 'hooks-stub.ts');
 const AUTH_STUB = path.resolve(__dirname, 'auth-stub.tsx');
+const WHEREABOUTS_STUB = path.resolve(__dirname, 'whereabouts-stub.ts');
 const ADMIN_DB_STUB = path.resolve(__dirname, 'admin-db-stub.ts');
 const EVENTS_STUB = path.resolve(__dirname, 'events-stub.ts');
 const FIRESTORE_STUB = path.resolve(__dirname, 'firestore-stub.ts');
@@ -48,6 +49,10 @@ const stubFirebase = {
     if (/(^|\/)contexts\/AuthContext(\.tsx)?$/.test(source)) return AUTH_STUB;
     if (/(^|\/)hooks\/useAdminDatabase(\.ts)?$/.test(source)) return ADMIN_DB_STUB;
     if (/(^|\/)hooks\/(useEvents|useSettings)(\.ts)?$/.test(source)) return EVENTS_STUB;
+    // Lets `?zone=Asia/Kolkata` show the signup screen's abroad state. The stub
+    // re-exports the real `likelyInUsa`, so only the DEVICE ZONE is forced — which is
+    // why the importer guard above matters here.
+    if (/(^|\/)utils\/whereabouts(\.ts)?$/.test(source)) return WHEREABOUTS_STUB;
     if (source === 'firebase/firestore') return FIRESTORE_STUB;
     return null;
   },

@@ -6,6 +6,7 @@ import { redeemManagerInvite } from '../../src/utils/cloudFunctions';
 import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../../src/constants/tenancy';
 import { UserRole } from '../../types';
 import { grantedRoles } from '../../src/roles';
+import { deviceTimeZone, likelyInUsa } from '../../src/utils/whereabouts';
 import { ArrowLeft, Car, Eye, EyeOff, Plane } from 'lucide-react';
 
 interface RoleSelectionProps {
@@ -44,6 +45,17 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
     const [showManagerCode, setShowManagerCode] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    /**
+     * Which service to put forward first, from the DEVICE TIMEZONE — no permission
+     * prompt, no network call, nothing stored. See src/utils/whereabouts.ts for why it
+     * is not the geolocation API, which this app deliberately spends later, at the
+     * moment a rider or driver can see what it buys them.
+     *
+     * Read once on mount: it cannot change while somebody is on this screen, and
+     * re-deriving it would re-run `Intl` on every keystroke in the steps below.
+     */
+    const [inUsa] = useState(() => likelyInUsa(deviceTimeZone()));
 
     const places: Array<{ id: Whereabouts; title: string; description: string; icon: React.ReactNode }> = [
         {
@@ -251,24 +263,67 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                         than submitting, so a mistap is not a decision about their whole
                         app. Nothing is written until Continue on the final step. */}
                     {whereabouts === null && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {places.map((place) => (
-                                <button
-                                    key={place.id}
-                                    onClick={() => { setWhereabouts(place.id); setError(''); }}
-                                    className="clay-card p-6 text-center space-y-4 transition-all hover:scale-105 hover:shadow-lg"
-                                    disabled={loading}
-                                >
-                                    <div className="inline-flex p-4 rounded-2xl bg-cream-300 text-saffron">
-                                        {place.icon}
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-header font-bold text-coffee">{place.title}</h3>
-                                        <p className="text-sm text-coffee-700 mt-2">{place.description}</p>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
+                        <>
+                            {/* Only when we actually know. `likelyInUsa` returns null for a
+                                browser with no usable timezone, and null must read as "ask,
+                                do not guess" — a confident line produced by a coin flip is
+                                worse than no line at all. */}
+                            {inUsa === false && (
+                                <p className="text-center text-sm text-coffee-700" role="status">
+                                    It looks like you are outside the USA.
+                                </p>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {places.map((place) => {
+                                    /*
+                                     * DE-EMPHASISED, NEVER DISABLED. A timezone is two taps
+                                     * to change and the server cannot verify it, so treating
+                                     * it as a gate would be decoration — and it answers a
+                                     * slightly different question than the one asked: a
+                                     * Boston student filling this in from Ahmedabad is
+                                     * "outside the USA" and still needs Sabha Seva.
+                                     *
+                                     * AND NOT WITH AN OPACITY CLASS, which is measured rather
+                                     * than preferred: dimming the card dims its TEXT. In the
+                                     * rendered page the body line fell to 2.90:1 and "I
+                                     * actually live here" to 2.49:1, against 4.5 — and that
+                                     * second line is the escape hatch for exactly the person
+                                     * this guess gets wrong, so of everything here it is what
+                                     * most has to stay readable.
+                                     *
+                                     * So: the icon's HUE carries the de-emphasis and a ring
+                                     * marks the suggestion. Nothing that must be read is
+                                     * touched. Pinned by tests/quality/theme-tokens.
+                                     */
+                                    const dimmed = inUsa === false && place.id === 'local';
+                                    const suggested = inUsa === false && place.id === 'arriving';
+                                    return (
+                                        <button
+                                            key={place.id}
+                                            onClick={() => { setWhereabouts(place.id); setError(''); }}
+                                            className={`clay-card p-6 text-center space-y-4 transition-all
+                                                hover:scale-105 hover:shadow-lg
+                                                ${suggested ? 'ring-2 ring-inset ring-[rgb(var(--cta))]' : ''}`}
+                                            disabled={loading}
+                                        >
+                                            <div className={`inline-flex p-4 rounded-2xl bg-cream-300
+                                                ${dimmed ? 'text-coffee-500' : 'text-saffron'}`}>
+                                                {place.icon}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-header font-bold text-coffee">{place.title}</h3>
+                                                <p className="text-sm text-coffee-700 mt-2">{place.description}</p>
+                                                {dimmed && (
+                                                    <p className="text-xs font-bold text-saffron-800 mt-3">
+                                                        I actually live here
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </>
                     )}
 
                     {/* The arriving branch has no second step — they are a Bhulku by
