@@ -4,8 +4,11 @@
  * This replaces TWO abandoned modules that both tried to do this job and
  * disagreed with each other — `src/utils/fcm.ts` (deleted) and the older half of
  * `src/utils/notifications.ts`. Neither was ever called from anywhere, and both
- * were tree-shaken out of the production bundle, so push has never delivered a
- * single message in this app. See docs/STATUS.md.
+ * were tree-shaken out of the production bundle. Push then delivered nothing for
+ * months for a second reason, unrelated and much duller: `VITE_FIREBASE_VAPID_KEY`
+ * was never set, so `hasVapidKey()` was false and no prompt could render on any
+ * screen. The key was set on 2026-08-25 and delivery was confirmed end to end the
+ * same day — the first notification this app has ever sent. See docs/STATUS.md.
  *
  * The verdict function is PURE and takes the browser in as arguments, so the
  * whole matrix can be tested without a browser — the same shape as

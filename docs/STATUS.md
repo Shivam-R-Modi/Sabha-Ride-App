@@ -3,7 +3,58 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-25**.
 
-## NOT DEPLOYED — notification prompts, and why push has never worked, 2026-08-25 (last)
+## DEPLOYED — push works, for the first time ever, 2026-08-25 (last)
+
+**Confirmed end to end by the owner on 2026-08-25.** A Sarthi claimed a pickup and the
+traveller's phone received *"A Sarthi is coming for you."* That is the first notification
+this application has ever delivered.
+
+Every earlier note in this file about push — "delivered exactly once, to one phone, on
+request", "nobody has been asked to turn it on" — was reading a configuration gap as an
+adoption problem. **`VITE_FIREBASE_VAPID_KEY` was never set.** With no key,
+`hasVapidKey()` is false, `pushAvailability` returns 'unsupported', `shouldOfferPush`
+returns false, and `PushPrompt` cannot render on any screen on any device — including the
+two Sabha Seva screens it had been wired into for months. The ask was impossible, so of
+course nobody had said yes.
+
+The stale claims in `src/utils/push.ts` and `alertUnclaimedArrivals.ts` have been
+corrected rather than left to mislead the next reader.
+
+**Push is still the backstop, not the guarantee**, and the in-app signal must stay. A
+token only exists for somebody who granted permission on a device that supports it, an
+iPhone must be added to the Home Screen first, and a refusal there is permanent.
+
+### Setting the key, if it is ever lost
+
+    Firebase console → Project settings → Cloud Messaging → Web Push certificates
+    → Key pair (87 chars, starts with 'B')  →  VITE_FIREBASE_VAPID_KEY=<key>
+
+It is a public key and ships in the client bundle by design. **Vite inlines it at build
+time**, so hosting must be rebuilt and redeployed — setting it alone changes nothing.
+`.env.local` exists separately in the main checkout AND in each worktree; both need it.
+`pushClient.ts` now warns in dev when it is missing.
+
+### The blocker found while testing, and it was not small
+
+**Nobody could file an airport pickup request at all.** The form pre-filled `form.phone`
+from the profile but seeded `phones.phone.valid` from `existing` only — two expressions
+for the same three numbers, one with a fallback and one without. The number showed with a
+green tick and was simultaneously judged invalid, so "Ask for a pickup" refused every
+time. All **ten** traveller accounts in production have a profile phone set, so this
+affected every one of them; it worked only for a brand-new account.
+
+Same root cause as the edit-form fix in `b08b7bc`, missed on the create path because that
+one patched the symptom instead of the duplication. Fixed in `6ae4d72` with a single
+`seedNumbers` source read by both. The auth mock had hardcoded `phone: ''`, which is why
+no test caught it.
+
+### What is live
+
+Commits `fb0a3ef` → `6ae4d72`. Airport Seva round two, the completed-trip display fixes,
+the app-wide AA work, the notification prompts, and the phone-seed fix. `main` matches
+production.
+
+## SUPERSEDED — notification prompts, and why push had never worked, 2026-08-25
 
 Owner: *"yes, add the notification permission prompt."*
 

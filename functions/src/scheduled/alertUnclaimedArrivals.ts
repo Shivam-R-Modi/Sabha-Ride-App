@@ -3,12 +3,17 @@
 // Nobody has taken an arrival and the plane is getting closer.
 // ============================================
 //
-// PUSH IS THE BACKSTOP HERE, NOT THE MECHANISM. `docs/STATUS.md` records that this
-// app's push has delivered exactly once, to one phone, on request — nobody has been
-// asked to turn it on. So the alert that always works is the coordinator's own
-// screen, which derives the same urgency from `arrivalAt` on every render. This job
-// exists for the case where nobody is looking at it, and it must not be the only
-// thing that can raise the alarm.
+// PUSH IS THE BACKSTOP HERE, NOT THE MECHANISM — and it stays the backstop even now
+// that it works. Delivery was confirmed end to end on 2026-08-25, once
+// `VITE_FIREBASE_VAPID_KEY` was finally set; before that no prompt could render, so
+// nobody held a token and every send went nowhere.
+//
+// It is still not the guarantee, because a token only exists for somebody who granted
+// permission on a device that supports it — an iPhone must be installed to the Home
+// Screen first, and a refusal there is permanent. So the alert that always works is
+// the coordinator's own screen, which derives the same urgency from `arrivalAt` on
+// every render. This job exists for the case where nobody is looking at it, and it
+// must not be the only thing that can raise the alarm.
 //
 // THE BANDS ARE 48h / 24h / 10h / 2h, and `alertsSent` is what stops them repeating.
 // `bandFor` returns the TIGHTEST band already crossed, so a request filed nine hours
