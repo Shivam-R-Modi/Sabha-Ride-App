@@ -55,7 +55,7 @@ const stubFirebase = {
     // why the importer guard above matters here.
     if (/(^|\/)utils\/whereabouts(\.ts)?$/.test(source)) return WHEREABOUTS_STUB;
     // Canned address suggestions, so the dropdown — and the clipping bug fixed on
-    // 2026-08-25 — can actually be looked at without a Maps key.
+    // 2026-08-28 — can actually be looked at without a Maps key.
     if (/(^|\/)hooks\/useGooglePlaces(\.ts)?$/.test(source)) return PLACES_STUB;
     if (source === 'firebase/firestore') return FIRESTORE_STUB;
     return null;

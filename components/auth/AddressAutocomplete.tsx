@@ -7,7 +7,7 @@
  *
  * THE DROPDOWN IS PORTALLED TO `document.body`, and it has to be.
  *
- * Reported on 2026-08-25 from the manager's Setup screen: the suggestion list was cut
+ * Reported on 2026-08-28 from the manager's Setup screen: the suggestion list was cut
  * off at the bottom edge of the card. It was `position: absolute` inside the input's
  * wrapper, and FOUR of the six call sites sit inside an `overflow-hidden` ancestor —
  * SabhaCalendar's two cards, LocationSettings, and `Disclosure`, which wraps every

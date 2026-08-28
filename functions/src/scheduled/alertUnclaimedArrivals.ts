@@ -4,7 +4,7 @@
 // ============================================
 //
 // PUSH IS THE BACKSTOP HERE, NOT THE MECHANISM — and it stays the backstop even now
-// that it works. Delivery was confirmed end to end on 2026-08-25, once
+// that it works. Delivery was confirmed end to end on 2026-08-28, once
 // `VITE_FIREBASE_VAPID_KEY` was finally set; before that no prompt could render, so
 // nobody held a token and every send went nowhere.
 //

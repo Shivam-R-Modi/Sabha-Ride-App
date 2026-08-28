@@ -643,7 +643,7 @@ describe('the bottom banners stay one pair', () => {
  *
  * The signup screen steers somebody outside the USA toward Airport Seva by playing DOWN
  * the sabha card. The obvious way is `opacity-60` on that card — and it fails, measured
- * in the rendered page on 2026-08-25: the card's body text drops to 2.90:1 and its
+ * in the rendered page on 2026-08-28: the card's body text drops to 2.90:1 and its
  * "I actually live here" line to 2.49:1, against the 4.5 small text needs. That second
  * line is the escape hatch for a Boston resident filing from Ahmedabad, so of everything
  * on the screen it is the line that most has to be readable.
@@ -694,7 +694,7 @@ describe('no text is painted with a fill-only token', () => {
      * ArrivalStatusCard's status chip (2.76 light / 3.30 dark, with the /15 tint
      * COMPOSITED rather than scored as a full fill), its no-show alert and
      * ArrivalCard's changed-since-claimed warning (3.32 / 4.10), and its cancel button
-     * (3.09 light). Fixed 2026-08-25 — `--danger-text` gives 9.71 / 5.63 in the same
+     * (3.09 light). Fixed 2026-08-28 — `--danger-text` gives 9.71 / 5.63 in the same
      * places.
      */
     it('never uses --danger as a text colour', () => {

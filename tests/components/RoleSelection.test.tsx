@@ -245,7 +245,7 @@ describe('the Continue button', () => {
      * because `whereabouts` is null until a card is tapped — a control visible that
      * cannot work, which is this repo's signature defect, and one that actively misleads:
      * it implies you choose a card and then press Continue, when the card advances on its
-     * own. Reported from a screenshot on 2026-08-25.
+     * own. Reported from a screenshot on 2026-08-28.
      */
     it('is not rendered at all until step 0 is answered', () => {
         show();
@@ -285,7 +285,7 @@ describe('the Continue button', () => {
 });
 
 /**
- * STEERING BY TIMEZONE, added 2026-08-25.
+ * STEERING BY TIMEZONE, added 2026-08-28.
  *
  * The device's zone picks which service is put forward. Deliberately NOT the geolocation
  * API: that costs a permission prompt at sign-up, before the app has been any use, and

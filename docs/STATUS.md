@@ -1,11 +1,96 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-25**.
+at the end. Last updated **2026-08-28**.
 
-## DEPLOYED — push works, for the first time ever, 2026-08-25 (last)
+## DEPLOYED — a day of owner-reported UI fixes, 2026-08-28 (last)
 
-**Confirmed end to end by the owner on 2026-08-25.** A Sarthi claimed a pickup and the
+Ten commits, `6ae4d72` → `b81a3c7`, all live, `main` matches. Client **1780**, functions
+**962**, rules **237**.
+
+**A NOTE ON DATES.** This session ran across 2026-08-25 and 2026-08-28, and the earlier
+entries below are correctly dated 08-25. Comments written on the 28th were initially
+dated 08-25 by mistake and have been corrected — if a dated comment ever disagrees with
+`git log --date=short`, trust git.
+
+### Nobody could file an airport pickup — `6ae4d72`
+
+The form pre-filled the phone from the profile but seeded the VALIDITY flag from a
+different expression with no such fallback. The number showed with a green tick and was
+simultaneously judged invalid, so "Ask for a pickup" refused every time. **All ten
+traveller accounts in production have a profile phone**, so this blocked every one of
+them; only a brand-new account worked.
+
+Same root cause as the edit-form fix in `b08b7bc`, missed on the create path because that
+one patched the symptom instead of the duplication. Now one `seedNumbers` source read by
+both. The auth mock hardcoded `phone: ''`, which is why no test caught it.
+
+### Contrast, finished — `dc92f9c`, `48d9cfd`
+
+`--gold-text` and `--accent-text` were the second and third instances of the same
+category error as `--text-soft`: **a token measured against `--canvas` alone, then used
+on chips, pills and cards.** Gold failed on four of the seven surfaces (worst 3.84),
+accent on two (worst 4.15). Both darkened with the hue preserved; all three tokens are
+now in the `theme-contrast` ratchet.
+
+Scanning the rendered pages then found five more, none of them the ask: ManagerInvites'
+outline button used the **fill-only** `--accent` for its label AND its border (2.50:1),
+and ArrivalStatusCard painted three things with the fill-only `--danger`, including a
+chip mixing a 15% tint of a colour under text of that same colour. `--danger`-as-text is
+now banned across `components/`.
+
+**The scanner lied first.** It read each background's colour and ignored its ALPHA, so a
+15% tint scored as a full fill and it reported 1.00:1 figures that were fiction. The
+verdicts held; the numbers did not. Rewritten to composite alpha, then rerun across all
+seven preview pages in both themes: zero failures.
+
+**Only `--warning-text` on `--sunken` (4.18) is left**, and only because nothing renders
+that pair.
+
+### Signup — `03bf372`, `61cd15a`
+
+Steered by **device timezone**, not geolocation: no permission prompt, no network call,
+nothing stored. The zone list is explicit because `America/` is a CONTINENT — a prefix
+test would call Toronto and São Paulo the USA. It is a hint, never a gate: the sabha card
+stays clickable behind "I actually live here", because a Boston student filing from
+Ahmedabad is abroad by this test and still needs Sabha Seva.
+
+De-emphasis is carried by the icon's HUE, not opacity — `opacity-60` dropped the card's
+body text to 2.90:1 and its escape-hatch line to 2.49:1. Pinned in `theme-tokens`.
+
+Also: the Continue button on step 0 was rendered permanently disabled, because
+`whereabouts` is null until a card is tapped. Gone. Step 1 keeps it and now says why it
+is unusable. **The two tests that pinned the old behaviour asserted `toBeDisabled()` —
+they passed against the defect.**
+
+### Sarthi offers from abroad — `e1908e5`
+
+"Become a Sarthi" answers on the spot instead of queueing a request a manager could only
+refuse. The way through stays open, which costs nothing: a manager approves every one, so
+a human is the real gate.
+
+### Brand and a clipped dropdown — `f1d5cfa`, `b81a3c7`
+
+The in-app logo is now the home screen icon itself, pinned to the manifest from both ends.
+
+The address suggestion list was cut off by its card. **Not a stacking problem** —
+`overflow: hidden` clips an absolutely positioned descendant however high its z-index is,
+and FOUR of six call sites sit inside such an ancestor, including `Disclosure`, which
+wraps the airport form. Portalled to `document.body`, `position: fixed`, re-measured on
+captured scroll. It flips above when there is no room below, because a fixed list running
+off-screen cannot be scrolled to at all — worse than the clipping it replaced.
+
+### The harness kept hiding states, and that kept costing time
+
+Four gaps closed today, each one a state that could not be looked at: `?theme=dark` on
+three preview pages that silently rendered light, `?role=driver`, `?zone=`,
+`?roles=student`, and a Places stub so the address dropdown appears at all. **Every visual
+defect found this week was in a state with no fixture.** If a screen state cannot be
+rendered in `preview/`, assume it is broken.
+
+## DEPLOYED — push works, for the first time ever, 2026-08-28
+
+**Confirmed end to end by the owner on 2026-08-28.** A Sarthi claimed a pickup and the
 traveller's phone received *"A Sarthi is coming for you."* That is the first notification
 this application has ever delivered.
 
@@ -324,11 +409,11 @@ a refactor:
 
 | token | on `--sunken` | live pairing? |
 |---|---|---|
-| `--accent-text` | 4.15 | **FIXED 2026-08-25** — see the correction below |
+| `--accent-text` | 4.15 | **FIXED 2026-08-28** — see the correction below |
 | `--warning-text` | 4.18 | none found — still the only one outstanding |
-| `--gold-text` | 3.84 | **FIXED 2026-08-25** |
+| `--gold-text` | 3.84 | **FIXED 2026-08-28** |
 
-> **Correction, 2026-08-25.** "FeedbackCard's active segment" was the wrong pairing to
+> **Correction, 2026-08-28.** "FeedbackCard's active segment" was the wrong pairing to
 > name. That segment contains only a `<Star aria-hidden>`, and a non-text mark needs
 > **3:1**, not 4.5 — so 4.15 always cleared it. `--accent-text` did genuinely fail for
 > TEXT, on `--canvas-deep` (4.47) as well as `--sunken`, in four places that were never

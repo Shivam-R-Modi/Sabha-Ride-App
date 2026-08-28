@@ -125,7 +125,8 @@ describe('tokens that must NOT be used for text are still unsafe', () => {
  *
  * COVERS `--text-soft`, `--gold-text` AND `--accent-text`. All three were the same
  * category error — a token measured against `--canvas` alone and then used on chips,
- * pills and cards — and all three were folded in here as they were fixed, on 2026-08-25.
+ * pills and cards. `--text-soft` was folded in here on 2026-08-25, the other two on
+ * 2026-08-28, each as it was fixed.
  *
  * ONE LIGHT-MODE PAIRING IS STILL OUTSIDE IT:
  *
@@ -145,7 +146,7 @@ describe('secondary text clears AA on every surface it can land on', () => {
         '--surface', '--surface-mid', '--surface-deep',
     ];
 
-    // Both tokens, both themes, all seven surfaces. `--gold-text` joined on 2026-08-25.
+    // Both tokens, both themes, all seven surfaces. `--gold-text` joined on 2026-08-28.
     for (const token of ['--text-soft', '--gold-text', '--accent-text'] as const) {
         for (const theme of ['light', 'dark'] as const) {
             it.each(NEUTRAL_SURFACES)(`${token} is AA on %s in ${theme}`, (surface) => {

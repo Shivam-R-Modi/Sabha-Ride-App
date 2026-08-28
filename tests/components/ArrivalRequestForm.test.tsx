@@ -393,7 +393,7 @@ describe('editing a request that already exists', () => {
 /**
  * A PROFILE THAT ALREADY HAS A NUMBER, which is every returning member.
  *
- * Reported from a phone on 2026-08-25: "Ask for a pickup" refused with "Check your
+ * Reported from a phone on 2026-08-28: "Ask for a pickup" refused with "Check your
  * phone number — it does not have the right number of digits", pointing at a field that
  * showed a correct number and a green tick.
  *

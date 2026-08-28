@@ -103,7 +103,7 @@ describe('app icons', () => {
  *
  * The sidebar and mobile header used to draw `LotusIcon` in a saffron tile — a
  * different mark from the one on the home screen, so the app somebody tapped and the
- * app that opened did not look like the same product. Changed on 2026-08-25 at the
+ * app that opened did not look like the same product. Changed on 2026-08-28 at the
  * owner's request.
  *
  * Pinned from BOTH ends, because either half drifting reintroduces the mismatch: the

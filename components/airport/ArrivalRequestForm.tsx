@@ -79,7 +79,7 @@ export const ArrivalRequestForm: React.FC<ArrivalRequestFormProps> = ({
      * on every single attempt. The form could not be submitted at all without deleting
      * a correct number and retyping it, which nobody would think to try.
      *
-     * Reported from a phone on 2026-08-25. Named and shared so the two cannot disagree
+     * Reported from a phone on 2026-08-28. Named and shared so the two cannot disagree
      * again — the fix is the single source, not the extra fallback.
      */
     const seedNumbers = {

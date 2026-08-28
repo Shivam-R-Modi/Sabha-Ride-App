@@ -3,7 +3,7 @@
  *
  * The real hook needs a Maps key and a network, so in the harness the address
  * suggestion list simply never appeared — and that list is where a clipping bug was
- * reported on 2026-08-25 and fixed by portalling it out of its card. A screen state
+ * reported on 2026-08-28 and fixed by portalling it out of its card. A screen state
  * that cannot be looked at is how visual defects ship here; the same gap has been
  * closed three times this week (`?theme=dark` on three pages, `?role=driver`, `?zone=`).
  *
