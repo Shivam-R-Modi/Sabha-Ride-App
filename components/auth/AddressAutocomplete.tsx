@@ -4,9 +4,30 @@
  * Renders a styled text input with a dropdown of address suggestions.
  * When the user selects a suggestion, lat/lng is captured automatically
  * via Place Details and passed to the parent via onSelect.
+ *
+ * THE DROPDOWN IS PORTALLED TO `document.body`, and it has to be.
+ *
+ * Reported on 2026-08-25 from the manager's Setup screen: the suggestion list was cut
+ * off at the bottom edge of the card. It was `position: absolute` inside the input's
+ * wrapper, and FOUR of the six call sites sit inside an `overflow-hidden` ancestor —
+ * SabhaCalendar's two cards, LocationSettings, and `Disclosure`, which wraps every
+ * section of the airport request form. `overflow: hidden` clips an absolutely
+ * positioned descendant no matter how high its z-index is, so no amount of stacking
+ * would have fixed it.
+ *
+ * Fixed HERE rather than by removing `overflow-hidden` from four cards: those cards
+ * need it, because their coloured header and footer bands have square corners and the
+ * card is rounded. And escaping its ancestors is a property of a dropdown, not of any
+ * one card — the same reasoning `tailwind.config.js` records for the `chrome` z-rung,
+ * where a sticky header's stacking context had capped the role menu.
+ *
+ * `position: fixed` off the input's measured rect, re-measured on scroll and resize.
+ * Scroll is listened for with `capture: true`, so a scroll in ANY ancestor moves it —
+ * a window-only listener would leave the list floating where the input used to be.
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useGooglePlaces, PlaceDetails } from '../../hooks/useGooglePlaces';
 
 interface AddressAutocompleteProps {
@@ -36,13 +57,83 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     const [activeIndex, setActiveIndex] = useState(-1);
     const [fetchingDetails, setFetchingDetails] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
+    /**
+     * The portalled list is NOT inside `wrapperRef` any more, so the outside-click
+     * check has to know about it too. Without this, a `mousedown` on a suggestion is an
+     * outside click: the list closes before the `click` lands, and selecting an address
+     * silently does nothing.
+     */
+    const dropdownRef = useRef<HTMLUListElement>(null);
+
+    const open = showDropdown && predictions.length > 0;
+
+    /** Where to pin the portalled list, in viewport coordinates. */
+    const [anchor, setAnchor] = useState<
+        { top: number; left: number; width: number; maxHeight: number } | null
+    >(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const measure = () => {
+            const el = wrapperRef.current;
+            if (!el) return;
+            const r = el.getBoundingClientRect();
+            const GAP = 4;
+            const PREFERRED = 240;
+
+            /**
+             * NO USABLE VIEWPORT HEIGHT, NO CLEVERNESS. Some embedded contexts report
+             * `innerHeight` as 0 — the in-app browser pane does — and the arithmetic
+             * below then concludes there is no room anywhere and crams the list into
+             * 96px at the top of the screen. When the height cannot be trusted, open
+             * downward at full size, which is what this did before any of it.
+             */
+            const vh = window.innerHeight || document.documentElement?.clientHeight || 0;
+            if (vh <= 0) {
+                setAnchor({ top: r.bottom + GAP, left: r.left, width: r.width, maxHeight: PREFERRED });
+                return;
+            }
+
+            /**
+             * FLIPS ABOVE WHEN THERE IS NO ROOM BELOW, and that is not a nicety once the
+             * list is `position: fixed`. Absolutely positioned, it scrolled with the
+             * page, so a list running past the bottom could still be reached. Pinned to
+             * the viewport it cannot — it would simply sit off-screen with no way to
+             * scroll to it, which is a worse bug than the clipping this replaced.
+             *
+             * `maxHeight` is clamped to whichever side is used, so the list scrolls
+             * internally rather than overflowing at all.
+             */
+            const below = vh - r.bottom - GAP;
+            const above = r.top - GAP;
+            const flip = below < Math.min(PREFERRED, above);
+            const maxHeight = Math.max(96, Math.min(PREFERRED, flip ? above : below));
+
+            setAnchor({
+                top: flip ? r.top - GAP - maxHeight : r.bottom + GAP,
+                left: r.left,
+                width: r.width,
+                maxHeight,
+            });
+        };
+        measure();
+        // capture: true — a scroll inside a card or a sheet does not bubble to window,
+        // and the list must follow the input rather than hang where it started.
+        window.addEventListener('scroll', measure, true);
+        window.addEventListener('resize', measure);
+        return () => {
+            window.removeEventListener('scroll', measure, true);
+            window.removeEventListener('resize', measure);
+        };
+    }, [open, predictions.length]);
 
     // Close dropdown on outside click
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-                setShowDropdown(false);
-            }
+            const target = e.target as Node;
+            const inInput = wrapperRef.current?.contains(target) ?? false;
+            const inList = dropdownRef.current?.contains(target) ?? false;
+            if (!inInput && !inList) setShowDropdown(false);
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -128,17 +219,17 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                 </div>
             )}
 
-            {/* Dropdown */}
-            {showDropdown && predictions.length > 0 && (
+            {/* Dropdown — see the note at the top of this file for why it is a portal. */}
+            {open && anchor && createPortal(
                 <ul
+                    ref={dropdownRef}
+                    className="z-dropdown"
                     style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        zIndex: 1000, // `dropdown` rung
-                        marginTop: '4px',
-                        maxHeight: '240px',
+                        position: 'fixed',
+                        top: anchor.top,
+                        left: anchor.left,
+                        width: anchor.width,
+                        maxHeight: anchor.maxHeight,
                         overflowY: 'auto',
                         borderRadius: '12px',
                         border: '1px solid rgba(92, 64, 51, 0.15)',
@@ -192,7 +283,8 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                             style={{ height: '14px', display: 'inline-block' }}
                         />
                     </li>
-                </ul>
+                </ul>,
+                document.body,
             )}
         </div>
     );

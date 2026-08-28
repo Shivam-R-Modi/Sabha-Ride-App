@@ -29,6 +29,7 @@ const CF_STUB = path.resolve(__dirname, 'cloud-functions-stub.ts');
 const HOOKS_STUB = path.resolve(__dirname, 'hooks-stub.ts');
 const AUTH_STUB = path.resolve(__dirname, 'auth-stub.tsx');
 const WHEREABOUTS_STUB = path.resolve(__dirname, 'whereabouts-stub.ts');
+const PLACES_STUB = path.resolve(__dirname, 'places-stub.ts');
 const ADMIN_DB_STUB = path.resolve(__dirname, 'admin-db-stub.ts');
 const EVENTS_STUB = path.resolve(__dirname, 'events-stub.ts');
 const FIRESTORE_STUB = path.resolve(__dirname, 'firestore-stub.ts');
@@ -53,6 +54,9 @@ const stubFirebase = {
     // re-exports the real `likelyInUsa`, so only the DEVICE ZONE is forced — which is
     // why the importer guard above matters here.
     if (/(^|\/)utils\/whereabouts(\.ts)?$/.test(source)) return WHEREABOUTS_STUB;
+    // Canned address suggestions, so the dropdown — and the clipping bug fixed on
+    // 2026-08-25 — can actually be looked at without a Maps key.
+    if (/(^|\/)hooks\/useGooglePlaces(\.ts)?$/.test(source)) return PLACES_STUB;
     if (source === 'firebase/firestore') return FIRESTORE_STUB;
     return null;
   },
