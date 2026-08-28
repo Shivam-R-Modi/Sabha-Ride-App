@@ -324,9 +324,18 @@ a refactor:
 
 | token | on `--sunken` | live pairing? |
 |---|---|---|
-| `--accent-text` | 4.15 | yes — FeedbackCard's active segment |
-| `--warning-text` | 4.18 | none found |
-| `--gold-text` | 3.84 | none found on sunken, but see below |
+| `--accent-text` | 4.15 | **FIXED 2026-08-25** — see the correction below |
+| `--warning-text` | 4.18 | none found — still the only one outstanding |
+| `--gold-text` | 3.84 | **FIXED 2026-08-25** |
+
+> **Correction, 2026-08-25.** "FeedbackCard's active segment" was the wrong pairing to
+> name. That segment contains only a `<Star aria-hidden>`, and a non-text mark needs
+> **3:1**, not 4.5 — so 4.15 always cleared it. `--accent-text` did genuinely fail for
+> TEXT, on `--canvas-deep` (4.47) as well as `--sunken`, in four places that were never
+> listed here: AssignmentPreview's two badges, RequestTable's seat count and
+> ManagerReports' export button. All three tokens above were the same category error —
+> measured against `--canvas` alone, then used on chips, pills and cards — and two of the
+> three are now folded into the `theme-contrast` ratchet.
 
 ### What is left, and it is one thing
 
