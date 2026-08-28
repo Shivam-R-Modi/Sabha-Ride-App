@@ -194,7 +194,24 @@
   --warning: 245 158 11;
   --warning-fill: 146 84 4;
   /* #925404 — 6.65:1 with white */
-  --warning-text: 133 100 4;
+  /* 5.66:1 on the canvas, 4.53 on --sunken — the WORST of the seven neutral surfaces,
+     which is what this value is chosen against, and 5.38 on its own `--warning-bg`.
+     NOTHING IN A COMMENT HERE MAY LOOK LIKE A DECLARATION. Three scanners read this
+     file by matching a custom-property name followed by a colon, and the value they
+     take runs to the next semicolon — so one written in prose swallows the real
+     declaration underneath it and the token silently disappears from the parsed map.
+     The first draft of this comment did exactly that, twice.
+
+     Was 133 100 4, which cleared six surfaces and failed --sunken at 4.18. The LAST of
+     the four tokens that shared one category error: measured against --canvas alone,
+     then used on chips, pills and cards. --text-soft, --gold-text and --accent-text
+     were the other three.
+
+     Unlike those, this one had no confirmed live pairing on --sunken — it is fixed so
+     that the ratchet can cover every text token without an exception, which is worth
+     more than the 5% darkening costs. Darkened on all three channels, hue unchanged.
+     Dark mode is untouched: 226 194 134 measures 6.94 at worst and never failed. */
+  --warning-text: 126 95 4;
   --warning-bg: 255 243 205;
   --danger: 239 68 68;
   --danger-fill: 185 28 28;

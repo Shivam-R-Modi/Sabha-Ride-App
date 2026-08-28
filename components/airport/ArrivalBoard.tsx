@@ -123,7 +123,7 @@ const BADGE = 'inline-flex items-center justify-center min-w-5 px-1.5 py-0.5 rou
  * day still needs somebody. Green only when every arrival has a Sarthi.
  *
  * Semantic `-bg`/`-text` pairs, measured rather than eyeballed. Text on its own fill:
- * warning 4.96 light / 7.10 dark, success 6.99 / 6.72. Channel-sum distance from the card
+ * warning 5.38 light / 7.10 dark, success 6.99 / 6.72. Channel-sum distance from the card
  * surface: warning 62 / 56, success 98 / 51 — so neither can sink into the card. And amber
  * against green is a HUE difference, not just a lightness one, so it survives greyscale
  * and most colour blindness.

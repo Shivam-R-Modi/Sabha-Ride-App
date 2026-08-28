@@ -44,8 +44,20 @@ now banned across `components/`.
 verdicts held; the numbers did not. Rewritten to composite alpha, then rerun across all
 seven preview pages in both themes: zero failures.
 
-**Only `--warning-text` on `--sunken` (4.18) is left**, and only because nothing renders
-that pair.
+**`--warning-text` was then fixed too** (4.18 → 4.53), which closes the set: the contrast
+ratchet now covers **every** text token on all seven neutral surfaces in both themes, with
+no documented exception left. It had no confirmed live pairing on `--sunken`; it was fixed
+anyway, because a ratchet with one exception is one somebody has to reason about every
+time they read it, and the cost was a 5% darkening.
+
+**A trap worth knowing about `theme.css`.** Three separate scanners read that file by
+matching a custom-property name followed by a colon, taking the value up to the next
+semicolon. A comment written in that shape therefore SWALLOWS the declaration under it and
+the token vanishes from the parsed map — silently, since nothing errors. The comment
+explaining the warning fix did this twice before it was caught: once with
+`` `--warning-bg: 5.38` `` and once with the literal `` `--token:` `` in a sentence
+warning against exactly this. Never write a property-name-plus-colon inside a comment
+there.
 
 ### Signup — `03bf372`, `61cd15a`
 

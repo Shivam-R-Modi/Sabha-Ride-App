@@ -123,22 +123,20 @@ describe('tokens that must NOT be used for text are still unsafe', () => {
  * goes on that surface". It came out of a computed-style sweep of the rendered preview
  * screens.
  *
- * COVERS `--text-soft`, `--gold-text` AND `--accent-text`. All three were the same
- * category error — a token measured against `--canvas` alone and then used on chips,
- * pills and cards. `--text-soft` was folded in here on 2026-08-25, the other two on
- * 2026-08-28, each as it was fixed.
+ * COVERS EVERY TEXT TOKEN, WITH NO EXCEPTIONS LEFT. All four shared one category error
+ * — measured against `--canvas` alone, then used on chips, pills and cards.
+ * `--text-soft` was folded in here on 2026-08-25; `--gold-text`, `--accent-text` and
+ * `--warning-text` on 2026-08-28, each as it was fixed.
  *
- * ONE LIGHT-MODE PAIRING IS STILL OUTSIDE IT:
+ * `--warning-text` was the last, and the only one of the four with no confirmed live
+ * pairing on `--sunken`. It was fixed anyway, because a ratchet with one documented
+ * exception is one somebody has to reason about every time they read it — and the cost
+ * was a 5% darkening.
  *
- *   --warning-text on --sunken  4.18   (no live pairing found)
- *
- * It stays out because there is nothing rendering it, and darkening a token to satisfy a
- * hypothetical is how a fix becomes a refactor. Recorded in docs/STATUS.md; fold it in
- * when something actually pairs them.
- *
- * The margins here are thin on purpose — 4.55 for gold, 4.57 for accent — because each
- * token was moved the SMALLEST distance that clears the bar, to keep the brand colour
- * recognisable. Thin margins are exactly what needs pinning rather than trusting.
+ * The margins are thin on purpose — 4.55 for gold, 4.57 for accent, 4.53 for warning —
+ * because each token was moved the SMALLEST distance that clears the bar, to keep the
+ * brand colour recognisable. Thin margins are exactly what needs pinning rather than
+ * trusting.
  */
 describe('secondary text clears AA on every surface it can land on', () => {
     const NEUTRAL_SURFACES = [
@@ -147,7 +145,7 @@ describe('secondary text clears AA on every surface it can land on', () => {
     ];
 
     // Both tokens, both themes, all seven surfaces. `--gold-text` joined on 2026-08-28.
-    for (const token of ['--text-soft', '--gold-text', '--accent-text'] as const) {
+    for (const token of ['--text-soft', '--gold-text', '--accent-text', '--warning-text'] as const) {
         for (const theme of ['light', 'dark'] as const) {
             it.each(NEUTRAL_SURFACES)(`${token} is AA on %s in ${theme}`, (surface) => {
                 expect(contrast(THEMES[theme][token], THEMES[theme][surface]))
