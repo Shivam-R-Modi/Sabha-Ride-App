@@ -240,15 +240,41 @@ describe('already here', () => {
 });
 
 describe('the Continue button', () => {
-    it('is inert until step 0 is answered', () => {
+    /**
+     * ABSENT ON STEP 0, not merely disabled. It used to render permanently dimmed there,
+     * because `whereabouts` is null until a card is tapped — a control visible that
+     * cannot work, which is this repo's signature defect, and one that actively misleads:
+     * it implies you choose a card and then press Continue, when the card advances on its
+     * own. Reported from a screenshot on 2026-08-25.
+     */
+    it('is not rendered at all until step 0 is answered', () => {
         show();
-        expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: /continue/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /set up my pickup/i })).not.toBeInTheDocument();
     });
 
-    it('is inert on step 1 until a role is picked', async () => {
+    it('appears once a card is tapped', async () => {
+        show();
+        await click(/already in the USA/i);
+        expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
+    });
+
+    it('is inert on step 1 until a role is picked, and SAYS WHY', async () => {
+        // Step 1 keeps the disabled state, because picking a role does not advance — so
+        // Continue is genuinely the next step. What it must not do is sit there dimmed
+        // with no explanation, which is the rule ArrivalRequestForm already follows.
         show();
         await click(/already in the USA/i);
         expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
+        expect(screen.getByRole('status')).toHaveTextContent(/Pick how you would like to take part/i);
+    });
+
+    it('drops the reason once a role is picked', async () => {
+        show();
+        await click(/already in the USA/i);
+        await click(/^Bhulku/);
+        expect(screen.queryByText(/Pick how you would like to take part/i)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled();
     });
 
     it('is live as soon as arriving is chosen — there is nothing else to ask', async () => {

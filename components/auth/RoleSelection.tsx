@@ -437,15 +437,36 @@ export const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelectRole }) =>
                         </div>
                     )}
 
-                    <div className="text-center">
-                        <button
-                            onClick={handleSubmit}
-                            disabled={loading || whereabouts === null || (whereabouts === 'local' && !selectedRole)}
-                            className="clay-button bg-gradient-to-r from-saffron-800 to-gold-700 text-[rgb(var(--text-on-accent))] px-12 py-4 rounded-xl font-semibold text-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {loading ? 'Saving...' : whereabouts === 'arriving' ? 'Set up my pickup' : 'Continue'}
-                        </button>
-                    </div>
+                    {/* NOT RENDERED ON STEP 0.
+                        It used to be, permanently disabled, because `whereabouts` is null
+                        there — a dimmed button that could never work, on the first screen
+                        anybody sees. Two costs: it is this repo's signature defect, a
+                        control visible that cannot work; and it MISLEADS, because it
+                        implies you pick a card and then press it, when tapping the card is
+                        the whole interaction and advances on its own.
+
+                        Step 1 is different and it stays: there, picking a role does not
+                        advance, so Continue is the next step and has to be visible. It is
+                        disabled until a role is chosen — with the reason said out loud
+                        beside it, which is the rule ArrivalRequestForm already follows: a
+                        disabled button and no explanation is indistinguishable from a
+                        broken one. */}
+                    {whereabouts !== null && (
+                        <div className="text-center space-y-2">
+                            {whereabouts === 'local' && !selectedRole && (
+                                <p className="text-sm text-coffee-500" role="status">
+                                    Pick how you would like to take part.
+                                </p>
+                            )}
+                            <button
+                                onClick={handleSubmit}
+                                disabled={loading || (whereabouts === 'local' && !selectedRole)}
+                                className="clay-button bg-gradient-to-r from-saffron-800 to-gold-700 text-[rgb(var(--text-on-accent))] px-12 py-4 rounded-xl font-semibold text-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {loading ? 'Saving...' : whereabouts === 'arriving' ? 'Set up my pickup' : 'Continue'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
