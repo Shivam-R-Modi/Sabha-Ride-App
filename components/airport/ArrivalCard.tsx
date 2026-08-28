@@ -230,7 +230,7 @@ export const ArrivalCard: React.FC<ArrivalCardProps> = ({
                            and there is no second list to drift. The old version said
                            only "the flight time has changed", which was all it could
                            ever detect. */
-                        <p className="flex items-start gap-2 text-sm font-bold text-[rgb(var(--danger))]">
+                        <p className="flex items-start gap-2 text-sm font-bold text-[rgb(var(--danger-text))]">
                             <AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
                             {changeSummary(arrival.changedFields ?? []).length > 0
                                 ? `Changed since you claimed this: ${

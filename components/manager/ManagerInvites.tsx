@@ -66,7 +66,21 @@ export const ManagerInvites: React.FC = () => {
             <button
                 onClick={handleCreateInvite}
                 disabled={minting}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-saffron text-saffron rounded-lg font-semibold text-sm hover:bg-saffron/5 disabled:opacity-50 transition-all"
+                /*
+                 * `saffron-800`, NOT `saffron`. `--accent` is the FILL-ONLY rung —
+                 * tailwind.config.js says "2.84:1, fills only" right beside it — and it
+                 * was being used here for both the LABEL and the boundary of an outline
+                 * button, where there is no fill to sit on. Measured on the card in the
+                 * rendered page: 2.50:1 for 14px semibold text, against 4.5.
+                 *
+                 * The same family as the two fixed earlier on 2026-08-25 — saffron fill
+                 * under white text, and clay-button-secondary's label taking `--cta-fill`.
+                 * A fill token doing a text job.
+                 *
+                 * The border moves with it: a control's own boundary needs 3:1 under WCAG
+                 * 1.4.11, and `--accent` gave 2.84 there too.
+                 */
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-saffron-800 text-saffron-800 rounded-lg font-semibold text-sm hover:bg-saffron/5 disabled:opacity-50 transition-all"
             >
                 {minting ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
                 {minting ? 'Creating…' : 'Create an invite'}

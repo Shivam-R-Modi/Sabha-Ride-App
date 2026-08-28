@@ -76,7 +76,7 @@ export default {
           500: 'rgb(var(--accent) / <alpha-value>)',      // 2.84:1 — fills only
           600: 'rgb(var(--accent-dark) / <alpha-value>)', // 3.42:1 — large text / filled buttons
           700: 'rgb(var(--accent-deep) / <alpha-value>)', // 3.94:1
-          800: 'rgb(var(--accent-text) / <alpha-value>)', // 5.18:1 — AA for all text sizes
+          800: 'rgb(var(--accent-text) / <alpha-value>)', // 5.70:1 on canvas, 4.57 on --sunken — AA everywhere
         },
         cream: {
           DEFAULT: 'rgb(var(--canvas) / <alpha-value>)',

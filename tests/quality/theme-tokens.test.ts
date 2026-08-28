@@ -669,7 +669,7 @@ describe('the signup screen never dims its own text', () => {
     });
 });
 
-describe('no text sits on a fill-only saffron token', () => {
+describe('no text is painted with a fill-only token', () => {
     const read = (file: string) => readFileSync(path.join(ROOT, file), 'utf8');
 
     /** Every .tsx under components/, plus the two at the root. */
@@ -685,6 +685,30 @@ describe('no text sits on a fill-only saffron token', () => {
         walk('components');
         return out;
     })();
+
+    /**
+     * THE DANGER HALF OF THE SAME RULE. `--danger` is asserted below AA in this file
+     * exactly like `--accent` and `--gold`; `--danger-text` is the rung to read.
+     *
+     * Four places used it as a text colour and all four failed once measured properly:
+     * ArrivalStatusCard's status chip (2.76 light / 3.30 dark, with the /15 tint
+     * COMPOSITED rather than scored as a full fill), its no-show alert and
+     * ArrivalCard's changed-since-claimed warning (3.32 / 4.10), and its cancel button
+     * (3.09 light). Fixed 2026-08-25 — `--danger-text` gives 9.71 / 5.63 in the same
+     * places.
+     */
+    it('never uses --danger as a text colour', () => {
+        const offenders: string[] = [];
+        for (const file of componentFiles) {
+            const code = read(file)
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .split('\n')
+                .filter(line => !line.trim().startsWith('//'))
+                .join('\n');
+            if (code.includes('text-[rgb(var(--danger))]')) offenders.push(file);
+        }
+        expect(offenders, 'use --danger-text; --danger is a fill').toEqual([]);
+    });
 
     it('scans a plausible number of files, so this cannot pass by finding none', () => {
         // The guard on the guard. A broken walk would make every assertion below vacuous,

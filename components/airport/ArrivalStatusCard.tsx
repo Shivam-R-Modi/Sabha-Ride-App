@@ -66,10 +66,32 @@ const CLAIMED_LINE: Partial<Record<ArrivalStatus, string>> = {
     completed: 'dropped you off.',
 };
 
+/**
+ * SEMANTIC PAIRS, not hand-mixed tints — and this is the same lesson ArrivalCard's
+ * URGENCY_STYLE already records a paragraph about, which this file never got.
+ *
+ * Measured with the tint COMPOSITED over the card, which is the only honest way to read
+ * a `/15` background:
+ *
+ *   good  bg-saffron/15 + text-saffron-dark    2.20 light  3.06 dark   ->  6.99 / 6.72
+ *   bad   bg-[--danger]/15 + text-[--danger]   2.76 light  3.30 dark   ->  8.25 / 6.74
+ *
+ * All four were under the 4.5 this 12px text needs, and "You were not found" is on the
+ * one card a traveller reads while standing in an airport nobody has come to.
+ *
+ * The cause is that `--accent` and `--danger` are FILL-ONLY rungs, asserted below AA on
+ * purpose, and a 15%-opacity tint of a colour is not a surface that same colour can be
+ * read on. The `-bg`/`-text` pairs are designed together and already measured.
+ *
+ * A NOTE ON THE MEASUREMENT, because it nearly went in wrong: the first pass reported
+ * 1.15 and 1.00, from a DOM scan that read each background's colour and ignored its
+ * ALPHA — so a 15% tint was scored as a full-strength fill. The verdict happened to be
+ * right and the numbers were nonsense. Composite the alpha, or do not quote a figure.
+ */
 const TONE_CLASS = {
     wait: 'bg-cream-300 text-coffee',
-    good: 'bg-saffron/15 text-saffron-dark',
-    bad: 'bg-[rgb(var(--danger))]/15 text-[rgb(var(--danger))]',
+    good: 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))]',
+    bad: 'bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))]',
 } as const;
 
 interface ArrivalStatusCardProps {
@@ -171,7 +193,7 @@ export const ArrivalStatusCard: React.FC<ArrivalStatusCardProps> = ({ arrival, o
             </section>
 
             {arrival.status === 'no_show' && (
-                <p className="flex items-start gap-2 text-sm text-[rgb(var(--danger))]" role="alert">
+                <p className="flex items-start gap-2 text-sm text-[rgb(var(--danger-text))]" role="alert">
                     <Phone size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
                     {/* Said "needs somebody to reassign it" until 2026-08-25, when the
                         reassign button was removed. Advice naming a control that no
@@ -216,7 +238,7 @@ export const ArrivalStatusCard: React.FC<ArrivalStatusCardProps> = ({ arrival, o
                     type="button"
                     onClick={cancel}
                     disabled={busy}
-                    className="clay-button w-full py-3 rounded-xl font-bold text-[rgb(var(--danger))] bg-cream-300 disabled:opacity-60"
+                    className="clay-button w-full py-3 rounded-xl font-bold text-[rgb(var(--danger-text))] bg-cream-300 disabled:opacity-60"
                 >
                     {busy ? 'Cancelling…' : 'Cancel this pickup'}
                 </button>

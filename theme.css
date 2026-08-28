@@ -106,9 +106,22 @@
   /* #F4722B — `saffron-dark` in Tailwind */
   --accent-deep: 212 83 31;
   /* #D4531F  3.94:1 — `saffron-700` */
-  /* 5.18:1 on canvas — the step to use when the accent must be READ. */
-  --accent-text: 184 67 24;
-  /* #B84318 saffron 800 */
+  /* 5.70:1 on the canvas, and 4.57 on --sunken — the WORST of the seven neutral
+     surfaces, which is what this value is chosen against. The step to use when the
+     accent must be READ.
+
+     Was 184 67 24, picked against the canvas alone at 5.18. That failed for TEXT on
+     two of the seven: --canvas-deep 4.47 and --sunken 4.15. Four live pairings sat on
+     cream-300 at 4.47 — AssignmentPreview's two badges, RequestTable's seat count and
+     ManagerReports' export button — all small bold text, all three-hundredths short.
+
+     The third instance of the same category error, after --text-soft and --gold-text:
+     a token measured against one surface and then used on the others.
+
+     Darkened 6% on all three channels, so the hue is unchanged. Dark mode is untouched;
+     233 156 116 measures 5.35 at worst there and never failed. */
+  --accent-text: 173 63 23;
+  /* #AD3F17 saffron 800 */
 
   /* CTA fill ramp. White on the brand accent is 2.84:1, so the accent
      cannot back a filled button. Same hue, chosen so the LIGHTEST stop

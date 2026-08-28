@@ -123,18 +123,21 @@ describe('tokens that must NOT be used for text are still unsafe', () => {
  * goes on that surface". It came out of a computed-style sweep of the rendered preview
  * screens.
  *
- * COVERS `--text-soft` AND `--gold-text`. Two more light-mode pairings still fail and are
- * deliberately still outside it, because dragging them into an unrelated change is how a
- * fix becomes a refactor:
+ * COVERS `--text-soft`, `--gold-text` AND `--accent-text`. All three were the same
+ * category error — a token measured against `--canvas` alone and then used on chips,
+ * pills and cards — and all three were folded in here as they were fixed, on 2026-08-25.
  *
- *   --accent-text on --sunken   4.15   (live: FeedbackCard's active segment)
+ * ONE LIGHT-MODE PAIRING IS STILL OUTSIDE IT:
+ *
  *   --warning-text on --sunken  4.18   (no live pairing found)
  *
- * `--gold-text` was the third of those at 3.84 and was folded in on 2026-08-25, once the
- * token was darkened to clear all seven. Its worst surface is --sunken at 4.55, so the
- * margin is thin — which is exactly why it is pinned rather than trusted.
+ * It stays out because there is nothing rendering it, and darkening a token to satisfy a
+ * hypothetical is how a fix becomes a refactor. Recorded in docs/STATUS.md; fold it in
+ * when something actually pairs them.
  *
- * Those two are recorded in docs/STATUS.md. When they are fixed, fold them in here too.
+ * The margins here are thin on purpose — 4.55 for gold, 4.57 for accent — because each
+ * token was moved the SMALLEST distance that clears the bar, to keep the brand colour
+ * recognisable. Thin margins are exactly what needs pinning rather than trusting.
  */
 describe('secondary text clears AA on every surface it can land on', () => {
     const NEUTRAL_SURFACES = [
@@ -143,7 +146,7 @@ describe('secondary text clears AA on every surface it can land on', () => {
     ];
 
     // Both tokens, both themes, all seven surfaces. `--gold-text` joined on 2026-08-25.
-    for (const token of ['--text-soft', '--gold-text'] as const) {
+    for (const token of ['--text-soft', '--gold-text', '--accent-text'] as const) {
         for (const theme of ['light', 'dark'] as const) {
             it.each(NEUTRAL_SURFACES)(`${token} is AA on %s in ${theme}`, (surface) => {
                 expect(contrast(THEMES[theme][token], THEMES[theme][surface]))
@@ -168,7 +171,7 @@ describe('the ratios written in theme.css comments are true', () => {
         '--text-strong': 13.07,
         '--text': 8.10,
         '--text-soft': 5.76,
-        '--accent-text': 5.18,
+        '--accent-text': 5.70,
         '--gold-text': 5.68,
     };
 

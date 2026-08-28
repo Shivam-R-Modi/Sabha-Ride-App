@@ -1,3 +1,17 @@
 <!doctype html>
-<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"><meta charset="utf-8"><title>Raw records preview</title></head>
+<html><head>
+<script>
+  // ?theme=dark renders dark from the first frame. Toggling data-theme at
+  // runtime works in the app, but the headless screenshot pipeline can return
+  // a cached frame from before the change — which made a correct dark screen
+  // photograph as light, and made a getComputedStyle audit report phantom
+  // contrast failures. Setting it before render removes the ambiguity.
+  var wanted = new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', wanted);
+  // AND the stored preference, or ThemeProvider overwrites the line above on mount.
+  // `DEFAULT_PREFERENCE` in src/utils/theme.ts is 'light', not 'system', so with
+  // nothing stored the app pins itself light and ignores both the attribute and the
+  // OS — which meant ?theme=dark silently did nothing for as long as it has existed.
+  try { localStorage.setItem('sabha-theme', wanted); } catch (e) { /* sandboxed */ }
+</script><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"><meta charset="utf-8"><title>Raw records preview</title></head>
 <body><div id="root"></div><script type="module" src="/preview/records.tsx"></script></body></html>
