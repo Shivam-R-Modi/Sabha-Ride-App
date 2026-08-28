@@ -8,9 +8,22 @@
 // from broken.
 import React from 'react';
 
+/**
+ * `?roles=student` renders the profile as a plain Bhulku.
+ *
+ * The default is all three, which is right for most screens — but it means anything
+ * gated on NOT already being a Sarthi is invisible in the harness. `UpgradeRequestCard`
+ * is exactly that: it renders nothing for a Sarthi or a manager, correctly, so with the
+ * default profile there was no way to look at it at all. Same idea as `?role=driver`
+ * below and `?zone=` in whereabouts-stub.
+ */
+const forcedRoles = new URLSearchParams(window.location.search).get('roles');
+
 const BASE = {
     id: 'preview_1', name: 'Tonny Stark', email: 'preview@example.com',
-    roles: ['manager', 'driver', 'student'], accountStatus: 'approved',
+    roles: forcedRoles ? forcedRoles.split(',') : ['manager', 'driver', 'student'],
+    role: forcedRoles ? forcedRoles.split(',')[0] : 'manager',
+    accountStatus: 'approved',
     avatarUrl: 'https://ui-avatars.com/api/?name=Tonny+Stark&background=FF6B35&color=fff',
 } as Record<string, unknown>;
 
