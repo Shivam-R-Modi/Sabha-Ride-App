@@ -249,16 +249,22 @@ export const updateAirportPickup = functions.https.onCall(async (data, context) 
                 /**
                  * AND THE ALARM IS REARMED.
                  *
-                 * `alertsSent` records which urgency bands have already fired, and
-                 * `alertUnclaimedArrivals` skips any band it finds stamped. Time only
-                 * decreases, so that is a sufficient record for a trip that stays
-                 * open — but a trip that was open, claimed, and then handed back has
-                 * a stamp from a band it is now PAST, and the job would stay silent
-                 * for the rest of the trip's life.
+                 * `lastAlertedBandHours` records the tightest urgency band that has
+                 * already fired, and `alertUnclaimedArrivals` skips anything no
+                 * tighter. Time only decreases, so that is a sufficient record for a
+                 * trip that stays open — but a trip that was open, claimed, and then
+                 * handed back carries a stamp from a band it is now PAST, and the job
+                 * would stay silent for the rest of the trip's life.
                  *
                  * Which is the one case that most needs it: a hand-back the night
                  * before a landing is exactly when nobody is watching the board.
+                 *
+                 * BOTH FIELDS, because `alertedBandHours` reads the legacy map too.
+                 * Clearing only the new one would leave a pre-migration stamp standing
+                 * and rearm nothing at all — silently, on exactly the trips that have
+                 * been open longest.
                  */
+                update.lastAlertedBandHours = null;
                 update.alertsSent = null;
                 break;
 

@@ -56,12 +56,30 @@ describe('buildCurrentEvent', () => {
         expect(event.dropoffOpensAt).toBe('2026-08-08T01:45:00.000Z');  // 9:45 PM
     });
 
-    it('opens requests PICKUP_LEAD_DAYS before, at local midnight', () => {
+    it('opens requests PICKUP_LEAD_DAYS before, at 10am local', () => {
         // Two days before Friday the 7th is Wednesday the 5th — the same
         // behaviour as the old hardcoded "Wednesday", but now it moves with the
         // date instead of being a fixed weekday.
         expect(PICKUP_LEAD_DAYS).toBe(2);
-        expect(fridayEvent().requestsOpenAt).toBe('2026-08-05T04:00:00.000Z'); // Wed 00:00 EDT
+        expect(fridayEvent().requestsOpenAt).toBe('2026-08-05T14:00:00.000Z'); // Wed 10:00 EDT
+    });
+
+    it('opens at a time a manager chose instead', () => {
+        const event = buildCurrentEvent('2026-08-07', '19:00', '22:00', ZONE, {
+            requestsOpenTime: '07:30',
+        });
+        expect(event.requestsOpenAt).toBe('2026-08-05T11:30:00.000Z'); // Wed 07:30 EDT
+    });
+
+    it('falls back to 10am rather than midnight when the setting is junk', () => {
+        // The whole reason this default moved. `?? '00:00'` would have put the
+        // announcement back in the middle of the night on a typo.
+        for (const junk of [undefined, null, '', 'half ten', '25:00', 42]) {
+            const event = buildCurrentEvent('2026-08-07', '19:00', '22:00', ZONE, {
+                requestsOpenTime: junk,
+            });
+            expect(event.requestsOpenAt, String(junk)).toBe('2026-08-05T14:00:00.000Z');
+        }
     });
 
     it('closes at the end of the gathering\'s own day', () => {
@@ -84,7 +102,7 @@ describe('buildCurrentEvent', () => {
         const tuesday = buildCurrentEvent('2026-08-11', '18:00', '20:00', ZONE);
         expect(tuesday.eventId).toBe('2026-08-11');
         expect(tuesday.startsAt).toBe('2026-08-11T22:00:00.000Z');
-        expect(tuesday.requestsOpenAt).toBe('2026-08-09T04:00:00.000Z'); // Sun 9th 00:00
+        expect(tuesday.requestsOpenAt).toBe('2026-08-09T14:00:00.000Z'); // Sun 9th 10:00
     });
 
     it('converts correctly in winter, when the offset changes', () => {
@@ -140,7 +158,10 @@ describe('resolveScheduleWindow', () => {
     });
 
     it('opens requests two days before, and keeps them open', () => {
-        expect(windowAt(WED, '00:01').rideType).toBe('home-to-sabha');
+        // Not at 00:01 any more. The lead day now starts at 10am, so that the
+        // "requests are open" push does not land in the middle of the night.
+        expect(windowAt(WED, '00:01').rideType).toBeNull();
+        expect(windowAt(WED, '10:00').rideType).toBe('home-to-sabha');
         expect(windowAt(WED, '14:00').rideType).toBe('home-to-sabha');
         expect(windowAt(THU, '09:00').rideType).toBe('home-to-sabha');
         expect(windowAt(FRI, '18:59').rideType).toBe('home-to-sabha');
@@ -182,7 +203,8 @@ describe('resolveScheduleWindow', () => {
         const at = (day: string, hhmm: string) =>
             resolveScheduleWindow(boston(day, hhmm), tuesday, ZONE);
 
-        expect(at('09', '10:00').rideType).toBe('home-to-sabha'); // Sun, 2 days before
+        expect(at('09', '09:00').rideType).toBeNull();            // Sun, before 10am
+        expect(at('09', '10:00').rideType).toBe('home-to-sabha'); // Sun, the moment it opens
         expect(at('11', '17:00').rideType).toBe('home-to-sabha'); // Tue, before start
         expect(at('11', '18:30').rideType).toBeNull();            // during
         expect(at('11', '19:45').rideType).toBe('sabha-to-home'); // 15 min before end

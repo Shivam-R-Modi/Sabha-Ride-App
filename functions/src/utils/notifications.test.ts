@@ -20,6 +20,16 @@ const batchUpdate = vi.fn();
 const batchCommit = vi.fn(async () => undefined);
 const usersGet = vi.fn();
 
+/**
+ * The manager's switch. Mocked at the seam `dispatch` actually calls, because the real
+ * reader caches for a minute and would leak one case's answer into the next.
+ */
+let enabled: Record<string, boolean>;
+vi.mock('./notificationSettings', () => ({
+    notificationEnabled: async (key: string | undefined) =>
+        key === undefined ? true : enabled[key] !== false,
+}));
+
 vi.mock('firebase-admin', () => ({
     messaging: () => ({ sendEachForMulticast }),
     firestore: Object.assign(
@@ -38,7 +48,53 @@ const fail = (code: string) => ({ success: false, error: { code } });
 
 beforeEach(() => {
     vi.clearAllMocks();
+    enabled = {};
     sendEachForMulticast.mockResolvedValue({ successCount: 1, failureCount: 0, responses: [ok()] });
+});
+
+/**
+ * THE MANAGER'S SWITCH, checked in `dispatch` — the single funnel every send in this
+ * codebase passes through. Putting it there rather than in each helper is what makes
+ * one guard cover all fourteen notifications, so these cases are as much about the
+ * PLACEMENT as the behaviour: `notifyEveryone` does not call `sendNotification`, and a
+ * guard in the latter would have missed broadcasts, notices and the ride window
+ * announcement entirely.
+ */
+describe('a notification a manager switched off', () => {
+    it('is not sent', async () => {
+        enabled['sarthi_waiting'] = false;
+        await notifyStudentSarthiWaiting([{ uid: 'u1', token: 'a' }]);
+        expect(sendEachForMulticast).not.toHaveBeenCalled();
+    });
+
+    it('reports nothing delivered rather than pretending it went', async () => {
+        // `nudgeRider` reads the count to tell the Sarthi whether the rider was
+        // reached. A silenced send that claimed success would have them standing
+        // outside waiting on a buzz that never happened.
+        enabled['sarthi_waiting'] = false;
+        const result = await notifyStudentSarthiWaiting([{ uid: 'u1', token: 'a' }]);
+        expect(result).toEqual({ delivered: 0, failed: 0, pruned: 0 });
+    });
+
+    it('covers notifyEveryone too, which does not go through sendNotification', async () => {
+        usersGet.mockResolvedValue({ docs: [{ id: 'u1', data: () => ({ fcmTokens: { a: {} } }) }] });
+        enabled['broadcast'] = false;
+        await notifyEveryone('T', 'B', { type: 'broadcast' });
+        expect(sendEachForMulticast).not.toHaveBeenCalled();
+    });
+
+    it('does not silence a DIFFERENT notification', async () => {
+        enabled['sarthi_waiting'] = false;
+        await sendNotification([{ uid: 'u1', token: 'a' }], 'T', 'B', { type: 'ride_starting' });
+        expect(sendEachForMulticast).toHaveBeenCalled();
+    });
+
+    it('sends anything with no type at all, rather than swallowing it', async () => {
+        // Failing open. An untagged send is a bug or an old code path, and delivering
+        // it is strictly safer than a notification vanishing with no trace.
+        await sendNotification([{ uid: 'u1', token: 'a' }], 'T', 'B');
+        expect(sendEachForMulticast).toHaveBeenCalled();
+    });
 });
 
 describe('tokensOf', () => {

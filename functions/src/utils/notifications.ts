@@ -3,6 +3,7 @@
 // ============================================
 
 import * as admin from 'firebase-admin';
+import { notificationEnabled } from './notificationSettings';
 
 /**
  * One deliverable device. The uid travels WITH the token because pruning is
@@ -95,6 +96,19 @@ async function dispatch(
 ): Promise<DispatchResult> {
     const result: DispatchResult = { delivered: 0, failed: 0, pruned: 0 };
     if (recipients.length === 0) return result;
+
+    // THE MANAGER'S SWITCH, CHECKED IN ONE PLACE. `dispatch` is the only path to FCM
+    // in this codebase — `sendNotification` and `notifyEveryone` both come through
+    // here — so one guard covers every notification rather than thirteen scattered
+    // checks that a fourteenth send would quietly not inherit.
+    //
+    // Keyed on `data.type`, which was already on the payload for client-side click
+    // routing, so nothing had to be threaded through the call sites. An absent or
+    // unrecognised type sends: see the note on `notificationEnabled`.
+    if (!(await notificationEnabled(data?.type))) {
+        console.log(`[push] "${data?.type}" is switched off by a manager — not sent`);
+        return result;
+    }
 
     const dead: Recipient[] = [];
 
@@ -346,13 +360,25 @@ export async function notifyArrivalChanged(
     );
 }
 
-export async function notifyManagerUnassignedStudents(recipients: Recipient[]): Promise<void> {
-    // No count: a number on a lock screen is a headcount of unaccompanied
-    // children waiting somewhere.
-    await sendNotification(
+/**
+ * A Bhulku has not asked for a lift and the window is open.
+ *
+ * THE ONE REPEATING NOTIFICATION IN THE APP, and the only one aimed at somebody who
+ * has done nothing. Everything else here reports an event; this one is a nudge, which
+ * is exactly the kind that becomes noise if it is careless. So it is bounded three
+ * ways: it stops the moment they request, it never fires outside the request window,
+ * and `remindUnrequestedRiders` sends it at most once a calendar day whatever the
+ * scheduler does.
+ *
+ * NO NAME, NO DATE, NO DESTINATION — the same rule the ride notifications follow. A
+ * lock screen reading "Ramesh, you have not booked your lift to sabha on Friday" tells
+ * a stranger who is going out and when. The app has the detail, behind the rules.
+ */
+export async function notifyRideReminder(recipients: Recipient[]): Promise<DispatchResult> {
+    return sendNotification(
         recipients,
-        'Bhulka still waiting',
-        'Some Bhulka need manual assignment. Open the app.',
-        { type: 'unassigned_students' },
+        'Need a ride to sabha?',
+        'Requests are open. Tap to ask for a lift.',
+        { type: 'ride-reminder' },
     );
 }

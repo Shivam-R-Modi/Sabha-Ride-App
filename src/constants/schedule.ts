@@ -87,6 +87,18 @@ export const DROPOFF_LEAD_MINUTES = 15;
 /** Ride requests open this many days before a sabha. Mirrors PICKUP_LEAD_DAYS. */
 export const PICKUP_LEAD_DAYS = 2;
 
+/**
+ * And at this time of day on that lead day. Mirrors DEFAULT_REQUESTS_OPEN_TIME in
+ * functions/src/utils/schedule.ts, which is the copy that actually decides the
+ * boundary — this one only seeds the manager's input when nothing is set yet.
+ *
+ * TEN, AND IT USED TO BE AN UNCHOSEN MIDNIGHT: "two days before" was a date with no
+ * time, so the boundary fell at 00:00 by default. That was invisible until the window
+ * learned to announce itself, at which point the congregation was woken at midnight
+ * to be told they could book a lift in two days.
+ */
+export const DEFAULT_REQUESTS_OPEN_TIME = '10:00';
+
 /** "19:00" → 1140. Null for anything that is not a well-formed time. */
 export function minutesOf(hhmm: string): number | null {
     const m = /^(\d{1,2}):(\d{2})$/.exec((hhmm || '').trim());

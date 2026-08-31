@@ -12,10 +12,11 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    ALERT_BANDS, ALLOWED_FROM, AIRPORTS, RESULT_OF, TERMINAL,
+    ALLOWED_FROM, AIRPORTS, RESULT_OF, TERMINAL, alertedBandHours,
     ArrivalAction, ArrivalStatus,
     airportByCode, airportLabel, airportZone, bandFor, canRun, urgencyOf,
 } from './arrival';
+import { DEFAULT_ALERT_BANDS } from '../constants/notifications';
 
 const HOUR = 60 * 60 * 1000;
 const ALL_STATUSES: ArrivalStatus[] =
@@ -101,25 +102,76 @@ describe('alert bands', () => {
     it('returns the TIGHTEST band already crossed, not every one of them', () => {
         // This is what stops three alerts firing at once for a request filed nine
         // hours before landing.
-        expect(bandFor(47 * HOUR)).toBe('48h');
-        expect(bandFor(23 * HOUR)).toBe('24h');
-        expect(bandFor(9 * HOUR)).toBe('10h');
-        expect(bandFor(1 * HOUR)).toBe('2h');
+        expect(bandFor(47 * HOUR)).toBe(48);
+        expect(bandFor(23 * HOUR)).toBe(24);
+        expect(bandFor(9 * HOUR)).toBe(10);
+        expect(bandFor(1 * HOUR)).toBe(2);
     });
 
     it('is inclusive at each boundary, so an exactly-48h check still fires', () => {
-        expect(bandFor(48 * HOUR)).toBe('48h');
-        expect(bandFor(2 * HOUR)).toBe('2h');
+        expect(bandFor(48 * HOUR)).toBe(48);
+        expect(bandFor(2 * HOUR)).toBe(2);
     });
 
     it('stays at the tightest band once the arrival time has passed', () => {
         // An overdue unclaimed arrival must not fall back to null and stop alerting.
-        expect(bandFor(0)).toBe('2h');
-        expect(bandFor(-5 * HOUR)).toBe('2h');
+        expect(bandFor(0)).toBe(2);
+        expect(bandFor(-5 * HOUR)).toBe(2);
     });
 
-    it('is ordered widest-first, which is what makes bandFor work', () => {
-        expect(ALERT_BANDS).toEqual(['48h', '24h', '10h', '2h']);
+    it('defaults to the list the panel ships with', () => {
+        expect(DEFAULT_ALERT_BANDS).toEqual([48, 24, 10, 2]);
+    });
+
+    it('honours a band list a manager chose instead', () => {
+        // The whole reason the bands stopped being a string union.
+        expect(bandFor(23 * HOUR, [24, 6])).toBe(24);
+        expect(bandFor(5 * HOUR, [24, 6])).toBe(6);
+        expect(bandFor(25 * HOUR, [24, 6])).toBeNull();
+    });
+
+    it('does not depend on the caller sorting the list', () => {
+        // An unsorted list would return the WIDEST band crossed rather than the
+        // tightest, so a pickup would alert at 48h and then never again.
+        expect(bandFor(1 * HOUR, [2, 48, 10, 24])).toBe(2);
+    });
+});
+
+describe('what has already been alerted', () => {
+    it('is null when nothing has fired', () => {
+        expect(alertedBandHours({})).toBeNull();
+        expect(alertedBandHours(undefined)).toBeNull();
+        expect(alertedBandHours(null)).toBeNull();
+    });
+
+    it('reads the number written now', () => {
+        expect(alertedBandHours({ lastAlertedBandHours: 10 })).toBe(10);
+    });
+
+    it('reads the OLD map, so a deploy does not re-alert every open trip', () => {
+        // Pickups written before the bands became configurable carry
+        // `alertsSent: { '48h': iso }`. Without this they would read as "never
+        // alerted" and start again from the widest band.
+        expect(alertedBandHours({ alertsSent: { '48h': 'x', '24h': 'x' } })).toBe(24);
+    });
+
+    it('prefers the new field when a document carries both', () => {
+        expect(alertedBandHours({
+            lastAlertedBandHours: 2, alertsSent: { '48h': 'x' },
+        })).toBe(2);
+    });
+
+    it('ignores map entries that were cleared rather than counting them', () => {
+        // `release` sets the whole field to null; a half-cleared map must not read as
+        // an alert that never happened.
+        expect(alertedBandHours({ alertsSent: { '48h': '' } })).toBeNull();
+        expect(alertedBandHours({ alertsSent: {} })).toBeNull();
+    });
+
+    it('survives junk in either field rather than throwing inside a scheduled job', () => {
+        expect(alertedBandHours({ lastAlertedBandHours: 'soon' as never })).toBeNull();
+        expect(alertedBandHours({ alertsSent: 'nope' as never })).toBeNull();
+        expect(alertedBandHours({ alertsSent: { nonsense: 'x' } })).toBeNull();
     });
 });
 

@@ -3,7 +3,7 @@
 // ============================================
 
 import type {
-    ArrivalDirection, ArrivalStatus, WhatsappOn, AlertBand,
+    ArrivalDirection, ArrivalStatus, WhatsappOn,
 } from './utils/arrival';
 
 export type UserRole = 'student' | 'driver' | 'manager';
@@ -410,11 +410,18 @@ export interface AirportPickup {
     changedAt?: string | null;
     changedFields?: string[] | null;
     /**
-     * Which unclaimed-alert bands have already fired. Idempotency, the same shape as
-     * `arrivedAt` on a ride: time only decreases, so a band once passed can never
-     * come round again and this is a sufficient record.
+     * The TIGHTEST unclaimed-alert band already fired, in hours. Idempotency: time only
+     * decreases, so a band once passed can never come round again, and one number is a
+     * complete record however the manager edits the band list.
      */
-    alertsSent?: Partial<Record<AlertBand, string>>;
+    lastAlertedBandHours?: number | null;
+    /**
+     * The shape this used to be — a map keyed by band name, `{ '48h': iso }`. Kept as a
+     * READ-ONLY migration path: pickups written before the bands became configurable
+     * still carry it, and `alertedBandHours` reads both so the deploy does not re-alert
+     * every open trip from the top. Nothing writes it any more.
+     */
+    alertsSent?: Record<string, string> | null;
     /** D7, as on AirportProfile. Nothing purges yet. */
     retainUntil: string;
     createdAt: string;

@@ -9,6 +9,7 @@ import type { PresenceClaim } from './presence';
 import type { RecurrenceRule } from './recurrence';
 import type { ArrivalAction, ArrivalStatus, WhatsappOn } from './arrival';
 import { codeOf, messageOf } from './errorText';
+import type { NotificationSettings } from '../constants/notifications';
 
 const functions = getFunctions(app);
 
@@ -146,6 +147,20 @@ export async function deleteNotice(noticeId: string): Promise<{ success: boolean
  */
 export async function managerBroadcast(body: string): Promise<{ success: boolean }> {
     return callFunction<{ success: boolean }>('managerBroadcast', { body });
+}
+
+/**
+ * Save the whole notification configuration.
+ *
+ * A WHOLE CONFIGURATION, not a patch. The panel holds every value on screen anyway,
+ * and a patch would need merge semantics for the nested `enabled` map — which is
+ * exactly how a document ends up in a half-state where one field was written and
+ * another silently was not.
+ */
+export async function updateNotificationSettings(
+    settings: NotificationSettings,
+): Promise<{ success: boolean; settings: NotificationSettings }> {
+    return callFunction('updateNotificationSettings', settings);
 }
 
 export async function sarthiArrived(rideId: string): Promise<{ success: boolean; alreadyArrived: boolean }> {

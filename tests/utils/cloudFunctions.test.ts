@@ -49,6 +49,7 @@ vi.mock('firebase/functions', () => ({
 vi.mock('@/firebase/config', () => ({ app: {}, default: {} }));
 
 import * as cloudFunctions from '../../src/utils/cloudFunctions';
+import { DEFAULT_NOTIFICATION_SETTINGS } from '../../src/constants/notifications';
 
 const ROOT = path.resolve(__dirname, '../..');
 
@@ -93,6 +94,8 @@ const WRAPPERS: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
     ['publishNotice', () => cloudFunctions.publishNotice({ title: 'Sabha moved', body: 'Sabha moved to 7pm' })],
     ['deleteNotice', () => cloudFunctions.deleteNotice('n1')],
     ['managerBroadcast', () => cloudFunctions.managerBroadcast('Sabha moved to 7pm')],
+    ['updateNotificationSettings', () => cloudFunctions.updateNotificationSettings(
+        DEFAULT_NOTIFICATION_SETTINGS)],
     ['sarthiArrived', () => cloudFunctions.sarthiArrived('r1')],
     ['nudgeRider', () => cloudFunctions.nudgeRider('r1', 's1')],
     ['completeRide', () => cloudFunctions.completeRide('r1')],

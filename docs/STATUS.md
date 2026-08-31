@@ -1,9 +1,94 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-28**.
+at the end. Last updated **2026-08-31**.
 
-## DEPLOYED — a day of owner-reported UI fixes, 2026-08-28 (last)
+## BUILT, NOT DEPLOYED — manager notification controls, 2026-08-31 (last)
+
+On branch `claude/airport-pickup-workflow-89afab`. Client **1862**, functions **1021**,
+rules **242**. Full six-step sweep clean. **Nothing is deployed and `main` does not have
+it.**
+
+### What a manager can now change
+
+A panel listing all fourteen notifications the app can send, each with an on/off switch,
+**split by service**: the eleven sabha rows in Setup → Notifications, the three airport
+rows on the Arrivals board behind a disclosure. Managers only, both places.
+
+Three of the fourteen have a frequency, and only those three show a control — the other
+eleven fire once when something happens, so a picker beside them would change nothing:
+
+| | control | default |
+|---|---|---|
+| `airport-unclaimed` | escalation bands, chips from a fixed set | 48/24/10/2h |
+| `sarthi_waiting` | nudge cooldown | 60s |
+| `ride-reminder` | cadence + hour | daily, 10am |
+
+**The message text is deliberately NOT editable.** It is a privacy control, not a
+preference — see the copy notes in `functions/src/utils/notifications.ts`.
+
+### Two behaviour changes that are not settings
+
+**Requests now open at 10:00, not midnight.** `buildCurrentEvent` had no time component,
+so "two days before" landed at 00:00 by default. Invisible until the window learned to
+announce itself, at which point the congregation was woken at midnight to be told they
+could book a lift in two days. Manager-editable in Ride window; the server falls back to
+10:00 rather than 00:00 on anything unparseable.
+
+**A new daily reminder**, `remindUnrequestedRiders`, to Bhulka who have not asked yet.
+Runs hourly and returns immediately unless the local hour matches the setting — a cron
+expression is fixed at deploy time and the hour has to be editable. Bounded five ways:
+only while `home-to-sabha` is open, stops the moment they request, one hour a day, at
+most one send per gathering per calendar day (Pub/Sub delivers at least once), and the
+manager can switch it off.
+
+### Things worth knowing before touching this
+
+- **The switch is `dispatch`, not each helper.** Every send funnels through `dispatch`,
+  keyed on the `data.type` tag that was already on the payload for click routing. One
+  guard, fourteen notifications. `notifyEveryone` does NOT call `sendNotification`, so a
+  guard in the latter would have missed broadcasts, notices and the window announcement.
+- **It fails open in every direction.** Missing document, malformed document, read
+  error, unknown key — all send. A config bug that sends something muted is a nuisance;
+  one that swallows "Your Sarthi is outside waiting for you" leaves a volunteer parked
+  outside and a child indoors.
+- **The alert bands stopped being a string union.** `'48h' | '24h' | ...` cannot survive
+  a manager editing the list. Bands are now plain hours, and the idempotency record went
+  from `alertsSent` (a map keyed by band NAME) to `lastAlertedBandHours` (one number).
+  The map was only sufficient while the names were fixed — edit the list and a pickup in
+  flight has stamps for bands that no longer exist. `alertedBandHours` still READS the
+  old map so the deploy does not re-alert every open trip.
+- **`notifyManagerUnassignedStudents` is deleted.** Defined, tagged, called from nowhere,
+  for months. `tests/quality/notifications-are-manageable.test.ts` now fails on both a
+  send whose tag is not in the catalogue and a catalogue key with no sender.
+- **The trap that nearly shipped:** `roles` is the GRANTED set, so a Sarthi's document
+  literally records `['driver','student']`. `hasRecordedRole(data,'student')` reads as
+  the obvious "is this a Bhulku" test and is true for the entire congregation — it would
+  have reminded every Sarthi and manager, daily. The predicate is
+  `!hasGrantedRole(data,'driver')`.
+
+### One real UI defect, found by measuring
+
+The OFF switch track was `--sunken` on a `--surface` card: **1.31:1**, and the knob is
+`--surface` too, so it scored 1.31 against the track it sits in. WCAG 1.4.11 wants 3:1
+for a control boundary, and at 1.31 you cannot see which side the knob is on — the one
+thing a switch exists to say. Same family as the calendar badge painted `--sunken` on a
+`--sunken` cell. Fixed with a `--text-soft` border on both parts (6.07 light / 5.65 dark
+against the card) and ratcheted in `theme-tokens.test.ts`.
+
+**Note:** the in-app browser pane returned blank screenshots for the preview harness this
+session. The colours above were measured with `getComputedStyle` and alpha compositing
+instead, which is a stronger check than eyeballing anyway — but nobody has LOOKED at this
+panel. Do that before or right after deploying.
+
+### To deploy
+
+`firestore:rules` → `functions` → `hosting`, then fast-forward `main`. Rules are
+unchanged in substance (`settings/notifications` inherits `settings/{settingId}`), but
+run the step anyway. Two new functions ship: `updateNotificationSettings` and
+`remindUnrequestedRiders`.
+
+## DEPLOYED — a day of owner-reported UI fixes, 2026-08-28
 
 Ten commits, `6ae4d72` → `b81a3c7`, all live, `main` matches. Client **1780**, functions
 **962**, rules **237**.

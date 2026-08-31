@@ -9,6 +9,7 @@ import { DriverPicker } from '../components/manager/DriverPicker';
 import { ManagerPeople } from '../components/manager/ManagerPeople';
 import { SabhaCalendar } from '../components/manager/SabhaCalendar';
 import { ManagerReports } from '../components/manager/ManagerReports';
+import { NotificationSettings } from '../components/manager/NotificationSettings';
 import { ToastProvider } from '../contexts/ToastContext';
 import type { Driver } from '../types';
 
@@ -39,6 +40,18 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <div>
       <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Sabha calendar — one card, twelve weeks behind it</p>
       <ToastProvider><SabhaCalendar /></ToastProvider>
+    </div>
+    <div>
+      {/* Both halves side by side, which is the one thing the real app deliberately
+          never shows: sabha settings live in Setup and airport settings on the
+          Arrivals board, two navigations and a service switch apart. Seeing them
+          together here is how the split gets checked. */}
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Notifications — sabha half (one muted)</p>
+      <NotificationSettings service="sabha" />
+    </div>
+    <div>
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Notifications — airport half, with the band picker</p>
+      <NotificationSettings service="airport" />
     </div>
     <div style={{ position: 'relative', minHeight: 700 }}>
       <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Sarthi picker — replaces the silent pick</p>

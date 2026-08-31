@@ -134,3 +134,35 @@ describe('the rule is the only schedule', () => {
     });
 
 });
+
+/**
+ * THE CLIENT'S COPY OF THE WINDOW CONSTANTS MUST MATCH THE SERVER'S.
+ *
+ * `src/constants/schedule.ts` restates PICKUP_LEAD_DAYS, DROPOFF_LEAD_MINUTES and
+ * DEFAULT_REQUESTS_OPEN_TIME so pure client modules can print "requests open
+ * Wednesday at 10am" without importing firebase. `functions/src/utils/schedule.ts` is
+ * the copy that actually decides the boundary. They carried a "mirrors X" comment and
+ * nothing else — a comment is a hope.
+ *
+ * The drift that matters is the last one: the client telling a rider requests open at
+ * 10am while the server still opens them at midnight is a screen that is simply wrong,
+ * and nothing anywhere would fail.
+ */
+describe('the client and server agree about the window constants', () => {
+    it('lead days, drop-off lead and the default open time', async () => {
+        const client = await import('../../src/constants/schedule');
+        const server = await import('../../functions/src/utils/schedule');
+
+        expect(client.PICKUP_LEAD_DAYS).toBe(server.PICKUP_LEAD_DAYS);
+        expect(client.DROPOFF_LEAD_MINUTES).toBe(server.DROPOFF_LEAD_MINUTES);
+        expect(client.DEFAULT_REQUESTS_OPEN_TIME).toBe(server.DEFAULT_REQUESTS_OPEN_TIME);
+    });
+
+    it('the default open time is not midnight, which is what it used to be', async () => {
+        // Stated as its own case because '00:00' on both sides would pass the test
+        // above. A window that opens at midnight is how the "requests are open" push
+        // came to wake the congregation in the middle of the night.
+        const server = await import('../../functions/src/utils/schedule');
+        expect(server.DEFAULT_REQUESTS_OPEN_TIME).not.toBe('00:00');
+    });
+});

@@ -42,10 +42,17 @@ describe('the two copies are the same table', () => {
         expect(client.TERMINAL).toEqual(server.TERMINAL);
     });
 
-    it('agree about the alert bands, in the same order', () => {
-        // The order is load-bearing: `bandFor` walks it widest-first and keeps the
-        // last match, which is what makes it return the TIGHTEST band crossed.
-        expect(client.ALERT_BANDS).toEqual(server.ALERT_BANDS);
+    it('agree about what has already been alerted, including the legacy shape', () => {
+        // `alertedBandHours` reads BOTH the number written now and the old
+        // `alertsSent` map. A divergence would mean one side re-alerting a pickup the
+        // other considers already handled.
+        for (const data of [
+            {}, { lastAlertedBandHours: 10 }, { alertsSent: { '48h': 'x', '24h': 'x' } },
+            { lastAlertedBandHours: 2, alertsSent: { '48h': 'x' } },
+            { alertsSent: { nonsense: 'x' } },
+        ]) {
+            expect(client.alertedBandHours(data)).toBe(server.alertedBandHours(data));
+        }
     });
 
     it('agree about every airport code and its zone', () => {

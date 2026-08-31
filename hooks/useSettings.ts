@@ -36,6 +36,8 @@ export interface AppSettings {
     sabhaLocation: SabhaLocation;
     sabhaStartTime: string;
     sabhaEndTime: string;
+    /** "HH:MM" local, on the lead day. Absent means the shipped 10:00. */
+    requestsOpenTime?: string;
     lastUpdated?: string;
     updatedBy?: string;
 }
@@ -153,10 +155,32 @@ export function useSettings() {
         );
     };
 
+    /**
+     * The time of day, on the lead day, that ride requests open.
+     *
+     * WAS AN UNCHOSEN MIDNIGHT. "Two days before" was expressed as a date with no
+     * time, so the boundary landed at 00:00 by default. Harmless while the only
+     * consequence was a button becoming tappable, and not harmless once the window
+     * started announcing itself — the congregation was woken to be told they could
+     * book a lift in two days.
+     *
+     * The server validates and falls back to 10:00 on anything unparseable, so a bad
+     * value here cannot stop the window opening. See buildCurrentEvent.
+     */
+    const updateRequestsOpenTime = async (requestsOpenTime: string, updatedByUid: string) => {
+        await setDoc(
+            doc(db, 'settings', 'main'),
+            { requestsOpenTime, lastUpdated: new Date().toISOString(), updatedBy: updatedByUid },
+            { merge: true },
+        );
+    };
+
     return {
         sabhaLocation: settings.sabhaLocation,
         sabhaStartTime: settings.sabhaStartTime,
         sabhaEndTime: settings.sabhaEndTime,
+        requestsOpenTime: settings.requestsOpenTime,
+        updateRequestsOpenTime,
         settings,
         loading,
         error,

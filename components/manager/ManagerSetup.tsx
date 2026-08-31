@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { CalendarDays, Clock, MapPin } from 'lucide-react';
+import { Bell, CalendarDays, Clock, MapPin } from 'lucide-react';
 import { SabhaCalendar } from './SabhaCalendar';
 import { RideWindowControl } from './RideWindowControl';
 import { LocationSettings } from './LocationSettings';
+import { NotificationSettings } from './NotificationSettings';
 import { Disclosure, type DisclosureProps } from '../shared/Disclosure';
 
 /**
@@ -55,6 +56,17 @@ export const ManagerSetup: React.FC = () => {
             title: 'Ride window',
             summary: 'When riders can request, and when drop-off opens',
             children: <RideWindowControl />,
+        },
+        {
+            id: 'notifications',
+            icon: <Bell size={20} />,
+            title: 'Notifications',
+            summary: 'Which messages go out, and how often',
+            // SABHA ONLY. The airport rows live on the Arrivals board, in the service
+            // where somebody is already thinking about them — see the note in
+            // NotificationSettings.tsx. `catalogueFor` decides the split, so neither
+            // half can quietly lose an entry.
+            children: <NotificationSettings service="sabha" />,
         },
         {
             id: 'venue',

@@ -154,27 +154,73 @@ export const TERMINAL: ArrivalStatus[] = ['completed', 'cancelled'];
 // URGENCY
 // ============================================
 
+import { DEFAULT_ALERT_BANDS } from '../constants/notifications';
+
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
- * The four points at which an unclaimed arrival is worth waking a coordinator for.
+ * The points at which an unclaimed arrival is worth waking a coordinator for, in HOURS.
  *
- * Ordered widest-first. `bandFor` returns the TIGHTEST band already crossed, which
- * is what stops three alerts firing at once for a request filed nine hours before
- * landing — and what makes `alertsSent` a sufficient record: time only ever
- * decreases, so a band that has been passed can never come round again.
+ * PLAIN NUMBERS, not the `'48h' | '24h' | '10h' | '2h'` string union this used to be.
+ * The union could not survive a manager editing the list — a literal type is fixed at
+ * compile time and the whole point is now that the bands come out of
+ * `settings/notifications`. Hours also removed the second representation: there was a
+ * `BAND_HOURS` map translating one into the other purely so the comparison could
+ * happen, and every read of `alertsSent` had to go back the other way.
+ *
+ * The default list is DEFAULT_ALERT_BANDS in ../constants/notifications, imported
+ * rather than restated, so the value the panel offers and the value the job falls back
+ * to cannot drift apart.
+ *
+ * Ordered widest-first at comparison time. `bandFor` keeps the LAST match, which is
+ * what makes it return the TIGHTEST band already crossed — so a request filed nine
+ * hours before landing fires once rather than three times at once.
  */
-export const ALERT_BANDS = ['48h', '24h', '10h', '2h'] as const;
-export type AlertBand = (typeof ALERT_BANDS)[number];
-
-const BAND_HOURS: Record<AlertBand, number> = { '48h': 48, '24h': 24, '10h': 10, '2h': 2 };
-
-export function bandFor(msRemaining: number): AlertBand | null {
-    let tightest: AlertBand | null = null;
-    for (const band of ALERT_BANDS) {
-        if (msRemaining <= BAND_HOURS[band] * HOUR_MS) tightest = band;
+export function bandFor(
+    msRemaining: number,
+    bands: readonly number[] = DEFAULT_ALERT_BANDS,
+): number | null {
+    let tightest: number | null = null;
+    // Sorted here rather than trusted from the caller: `resolveAlertBands` already
+    // orders them, but this is also called with hand-written lists in tests and with
+    // whatever a future caller passes, and an unsorted list would silently return the
+    // widest crossed band instead of the tightest — alerting at 48h forever.
+    for (const hours of [...bands].sort((a, b) => b - a)) {
+        if (msRemaining <= hours * HOUR_MS) tightest = hours;
     }
     return tightest;
+}
+
+/**
+ * The tightest band this pickup has ALREADY been alerted at, in hours, or null.
+ *
+ * TWO SHAPES, because production documents predate the change. `lastAlertedBandHours`
+ * is what is written now; `alertsSent` was a map keyed by band name, `{ '48h': iso }`,
+ * and rows carrying it are still in flight. Reading both is what stops every open
+ * pickup re-alerting from the top on the deploy that lands this.
+ *
+ * A NUMBER RATHER THAN A SET is the whole reason the bands can now be edited. The map
+ * recorded *which named bands* had fired, so changing the list left stamps for bands
+ * that no longer exist and none for the new ones — a pickup would either re-alert or
+ * skip. Time only ever decreases, so "the tightest one so far" is a complete record
+ * whatever the list is, and the test becomes one comparison.
+ */
+export function alertedBandHours(data: {
+    lastAlertedBandHours?: unknown;
+    alertsSent?: unknown;
+} | undefined | null): number | null {
+    const current = data?.lastAlertedBandHours;
+    if (typeof current === 'number' && Number.isFinite(current)) return current;
+
+    const legacy = data?.alertsSent;
+    if (!legacy || typeof legacy !== 'object') return null;
+
+    const hours = Object.entries(legacy as Record<string, unknown>)
+        .filter(([, stamp]) => !!stamp)
+        .map(([name]) => Number.parseInt(name, 10))
+        .filter(n => Number.isFinite(n));
+
+    return hours.length > 0 ? Math.min(...hours) : null;
 }
 
 /**

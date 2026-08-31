@@ -58,12 +58,21 @@ vi.mock('../utils/notifications', async (importOriginal) => {
     };
 });
 
+/** The manager's configuration. Mocked because `getNotificationSettings` caches. */
+let settings: any;
+vi.mock('../utils/notificationSettings', () => ({
+    getNotificationSettings: async () => settings,
+}));
+
 const checkRateLimit = vi.fn(async () => undefined);
 vi.mock('../utils/rateLimiter', () => ({
     checkRateLimit: (...a: unknown[]) => checkRateLimit(...(a as [])),
 }));
 
-import { nudgeRider, NUDGE_COOLDOWN_MS } from './nudgeRider';
+import { nudgeRider } from './nudgeRider';
+import { DEFAULT_NUDGE_COOLDOWN_SEC } from '../constants/notifications';
+
+const NUDGE_COOLDOWN_MS = DEFAULT_NUDGE_COOLDOWN_SEC * 1000;
 
 const DRIVER = 'driver_dave';
 const RIDER = 'stu_b';
@@ -101,6 +110,7 @@ const call = (payload: Record<string, unknown> = {}, uid = DRIVER) =>
 
 beforeEach(() => {
     vi.clearAllMocks();
+    settings = { nudgeCooldownSec: DEFAULT_NUDGE_COOLDOWN_SEC, enabled: {} };
     driverDoc = { name: 'Dave', accountStatus: 'approved', roles: ['driver'] };
     riderDoc = { name: 'Bhulku B', fcmTokens: { tok_1: {} } };
     rideDoc = {
@@ -225,6 +235,29 @@ describe('one tap is not twenty buzzes', () => {
         };
 
         await expect(call()).resolves.toMatchObject({ success: true });
+    });
+
+    it('uses the gap a manager set, not the shipped default', async () => {
+        // The frequency control on the notification panel. At the default 60s this
+        // nudge would be refused; at 30s it is allowed, so the assertion cannot pass
+        // by accident.
+        settings.nudgeCooldownSec = 30;
+        rideDoc = {
+            ...rideDoc,
+            nudges: { [RIDER]: new Date(Date.now() - 45_000).toISOString() },
+        };
+
+        await expect(call()).resolves.toMatchObject({ success: true });
+    });
+
+    it('refuses inside a LONGER gap a manager set', async () => {
+        settings.nudgeCooldownSec = 300;
+        rideDoc = {
+            ...rideDoc,
+            nudges: { [RIDER]: new Date(Date.now() - 120_000).toISOString() },
+        };
+
+        await expect(call()).rejects.toMatchObject({ code: 'resource-exhausted' });
     });
 
     it('holds a cooldown per rider, not per Sarthi', async () => {

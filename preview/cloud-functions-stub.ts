@@ -56,3 +56,16 @@ export const exportMembers = async (scope: 'airport' | 'sabha' | 'all') => ({
 export const downloadCSV = (_csv: string, filename: string) => {
     console.log(`[preview] would download ${filename}`);
 };
+
+/**
+ * The notification panel's save.
+ *
+ * Echoes back rather than writing, like every other stub here — the harness has no
+ * server. The panel's own snapshot listener is what would normally repaint it, and the
+ * firestore stub replays a fixed document, so a toggle flicks back after the save.
+ * That is correct for the harness: what is being looked at here is the LAYOUT and the
+ * colours, and the behaviour is covered by tests/components/NotificationSettings.test.tsx.
+ */
+export const updateNotificationSettings = async (settings: unknown) => ({
+    success: true, settings,
+});

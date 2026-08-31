@@ -8,7 +8,7 @@
  * Now a gathering has its own date, start and end (see ./events), and the
  * windows fall out of it:
  *
- *   date − 2 days, 00:00  ──────────────►  ride requests open (home → sabha)
+ *   date − 2 days, 10:00  ──────────────►  ride requests open (home → sabha)
  *   <start>                                 sabha in progress, no rides
  *   <end − 15min> ──────────────────────►  drop-off open (sabha → home)
  *   end of that day                         closed
@@ -44,6 +44,21 @@ export const PICKUP_LEAD_DAYS = 2;
  * set by a manager, read live. Nothing in this codebase may name a weekday for
  * scheduling — see tests/quality/schedule-not-hardcoded.test.ts.
  */
+
+/**
+ * The time of day, on the lead day, that ride requests open.
+ *
+ * TEN IN THE MORNING, AND IT USED TO BE MIDNIGHT. Midnight was never chosen — it fell
+ * out of "two days before" being expressed as a date with no time, so the boundary
+ * landed at 00:00 by default. That was harmless while the only consequence was a
+ * button becoming tappable, and stopped being harmless the moment
+ * `updateRideTypeContext` learned to announce the window: the congregation was woken
+ * at midnight to be told they could book a lift in two days' time.
+ *
+ * Manager-editable from the Ride window section, which is the one place already named
+ * "when riders can request".
+ */
+export const DEFAULT_REQUESTS_OPEN_TIME = '10:00';
 
 /** Drop-off opens this many minutes before sabha ends. */
 export const DROPOFF_LEAD_MINUTES = 15;
@@ -107,6 +122,8 @@ export function buildCurrentEvent(
     extras?: {
         venue?: { lat: number; lng: number; address: string } | null;
         agenda?: string;
+        /** "HH:MM" local. Anything unparseable falls back rather than becoming 00:00. */
+        requestsOpenTime?: unknown;
     },
 ): CurrentEvent {
     const startMinutes = parseTimeToMinutes(startTime)
@@ -134,7 +151,13 @@ export function buildCurrentEvent(
         eventId: eventDate,
         requestsOpenAt: zonedTimeToInstant(
             addDaysToDateKey(eventDate, -PICKUP_LEAD_DAYS),
-            '00:00',
+            // NOT `?? '00:00'`. A malformed setting must not silently become midnight,
+            // which is the exact behaviour this default was changed to get away from —
+            // and `parseTimeToMinutes` already returns null rather than guessing.
+            minutesToTime(
+                parseTimeToMinutes(extras?.requestsOpenTime)
+                ?? parseTimeToMinutes(DEFAULT_REQUESTS_OPEN_TIME)!,
+            ),
             timeZone,
         ),
         startsAt: zonedTimeToInstant(eventDate, minutesToTime(startMinutes), timeZone),

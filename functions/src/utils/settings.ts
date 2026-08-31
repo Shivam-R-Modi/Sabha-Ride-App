@@ -4,6 +4,7 @@
  */
 import * as admin from 'firebase-admin';
 import { DEFAULT_TIME_ZONE, isValidTimeZone } from './time';
+import { DEFAULT_REQUESTS_OPEN_TIME, parseTimeToMinutes } from './schedule';
 
 export interface SabhaLocation {
     lat: number;
@@ -105,5 +106,26 @@ export async function getTimeZone(): Promise<string> {
     } catch (err) {
         console.error('[getTimeZone] Error fetching settings:', err);
         return DEFAULT_TIME_ZONE;
+    }
+}
+
+/**
+ * The time of day ride requests open, on the lead day. "HH:MM" local.
+ *
+ * Same fall-back-rather-than-throw shape as `getTimeZone` above, and for the same
+ * reason: this is read inside a scheduled job that decides whether rides are open at
+ * all, so a typo in a settings document must not be able to stop the window opening.
+ */
+export async function getRequestsOpenTime(): Promise<string> {
+    try {
+        const db = admin.firestore();
+        const snap = await db.collection('settings').doc('main').get();
+        const configured = snap.data()?.requestsOpenTime;
+
+        if (parseTimeToMinutes(configured) !== null) return configured as string;
+        return DEFAULT_REQUESTS_OPEN_TIME;
+    } catch (err) {
+        console.error('[getRequestsOpenTime] Error fetching settings:', err);
+        return DEFAULT_REQUESTS_OPEN_TIME;
     }
 }

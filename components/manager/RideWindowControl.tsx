@@ -4,6 +4,9 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { manuallyUpdateRideContext } from '../../src/utils/cloudFunctions';
 import { useConfirm } from '../shared/useConfirm';
+import { useSettings } from '../../hooks/useSettings';
+import { useAuth } from '../../contexts/AuthContext';
+import { DEFAULT_REQUESTS_OPEN_TIME } from '../../src/constants/schedule';
 
 /**
  * Lets a manager open a ride window ahead of the schedule.
@@ -30,6 +33,16 @@ export const RideWindowControl: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState<string | null>(null);
     const { ask, confirmDialog } = useConfirm();
+    const { currentUser } = useAuth();
+    const { requestsOpenTime, updateRequestsOpenTime } = useSettings();
+    const [openTime, setOpenTime] = useState('');
+    const [savingTime, setSavingTime] = useState(false);
+
+    // Seeded from the setting once it has loaded, not on every render — otherwise a
+    // manager's half-typed time is overwritten by the snapshot mid-edit.
+    useEffect(() => {
+        if (requestsOpenTime !== undefined) setOpenTime(requestsOpenTime || DEFAULT_REQUESTS_OPEN_TIME);
+    }, [requestsOpenTime]);
 
     useEffect(() => {
         const unsub = onSnapshot(
@@ -96,6 +109,55 @@ export const RideWindowControl: React.FC = () => {
                         Opened manually — returns to the schedule at midnight
                     </p>
                 )}
+            </div>
+
+            {/*
+              * WHEN THE WINDOW OPENS ON ITS OWN, above the buttons that force it open
+              * early. This is the one screen already named "when riders can request",
+              * so the setting belongs here rather than beside the notification
+              * switches — and it is separate from the reminder hour on purpose: a
+              * congregation may want requests to open early and the nagging to start
+              * at a civil hour.
+              */}
+            <div className="px-4 py-3 border-b border-hairline/10">
+                <label htmlFor="requests-open-time" className="block text-xs text-coffee-500">
+                    Requests open at, two days before sabha
+                </label>
+                <div className="mt-1 flex items-center gap-2">
+                    <input
+                        id="requests-open-time"
+                        type="time"
+                        value={openTime}
+                        onChange={(e) => setOpenTime(e.target.value)}
+                        className="rounded-lg border border-hairline/20 bg-canvas px-2 py-1.5 text-sm text-coffee"
+                    />
+                    <button
+                        type="button"
+                        disabled={savingTime || !openTime || openTime === requestsOpenTime
+                            || !currentUser}
+                        onClick={async () => {
+                            if (!currentUser) return;
+                            setSavingTime(true);
+                            setError(null);
+                            try {
+                                await updateRequestsOpenTime(openTime, currentUser.uid);
+                                setDone('time');
+                                setTimeout(() => setDone(null), 3000);
+                            } catch (err: unknown) {
+                                console.error('[RideWindowControl] Could not save open time:', err);
+                                setError('Could not save that time.');
+                            } finally {
+                                setSavingTime(false);
+                            }
+                        }}
+                        className="rounded-lg border border-hairline/20 px-3 py-1.5 text-sm font-semibold text-coffee disabled:opacity-50"
+                    >
+                        {savingTime ? <Loader2 size={14} className="animate-spin" /> : 'Save'}
+                    </button>
+                    {done === 'time' && (
+                        <CheckCircle2 size={16} className="text-[rgb(var(--success-text))]" />
+                    )}
+                </div>
             </div>
 
             <div className="px-4 py-4 space-y-2">

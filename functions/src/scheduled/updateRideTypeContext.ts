@@ -112,12 +112,16 @@ async function readSabhaTimes(db: admin.firestore.Firestore) {
             sabhaEnd: data?.sabhaEndTime,
             timeZone: data?.timeZone || DEFAULT_TIME_ZONE,
             venue: data?.sabhaLocation,
+            // Validated inside buildCurrentEvent, so a typo falls back to the default
+            // rather than reopening the midnight behaviour this replaced.
+            requestsOpenTime: data?.requestsOpenTime,
         };
     } catch (error) {
         console.error('[rideContext] Could not read settings/main:', error);
         return {
             sabhaStart: undefined, sabhaEnd: undefined,
             timeZone: DEFAULT_TIME_ZONE, venue: undefined,
+            requestsOpenTime: undefined,
         };
     }
 }
@@ -144,7 +148,10 @@ async function announceIfWindowJustOpened(
             // Not "this Friday" any more — the date can move.
             ? 'Tap to request your ride to the next sabha.'
             : 'Sarthis are heading out. Tap when you are ready to leave.',
-        { rideType: next.rideType, reason: 'window-opened' },
+        // `type` is the key the manager's notification panel switches on — see
+        // src/constants/notifications.ts. It was the one send with no tag, so it
+        // was the one send nobody could turn off.
+        { type: 'window-opened', rideType: next.rideType, reason: 'window-opened' },
     );
 }
 
@@ -209,7 +216,7 @@ export const updateRideTypeContext = functions.pubsub
             // exists to prevent. The date is parked; this drains it.
             await sweepPendingAttendanceDeletes(db);
 
-            const { timeZone, venue } = await readSabhaTimes(db);
+            const { timeZone, venue, requestsOpenTime } = await readSabhaTimes(db);
 
             // The gathering is computed from the manager's rule, with any
             // exception for that date applied. No rule and no one-off means
@@ -227,6 +234,7 @@ export const updateRideTypeContext = functions.pubsub
                 ? buildCurrentEvent(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
                     venue: scheduled.venue,
                     agenda: scheduled.agenda,
+                    requestsOpenTime,
                 })
                 : null;
             const window = resolveScheduleWindow(now, event, timeZone);
@@ -279,13 +287,14 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
     // Only a manager may move the service window for everyone.
     await assertApprovedManager(db, context.auth.uid, 'change the ride window');
 
-    const { timeZone } = await readSabhaTimes(db);
+    const { timeZone, requestsOpenTime } = await readSabhaTimes(db);
     const rule = await readRecurrence(db);
     const scheduled = await findCurrentEvent(db, now, timeZone, rule);
     const event = scheduled
         ? buildCurrentEvent(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
             venue: scheduled.venue,
             agenda: scheduled.agenda,
+            requestsOpenTime,
         })
         : null;
 

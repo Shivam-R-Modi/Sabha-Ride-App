@@ -7,6 +7,7 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { assertApprovedDriver } from '../utils/authz';
 import { notifyStudentSarthiWaiting, tokensOf } from '../utils/notifications';
+import { getNotificationSettings } from '../utils/notificationSettings';
 import { checkRateLimit } from '../utils/rateLimiter';
 
 /**
@@ -46,8 +47,20 @@ import { checkRateLimit } from '../utils/rateLimiter';
  * protection on it.
  */
 
-/** How long before the same rider may be nudged again. */
-export const NUDGE_COOLDOWN_MS = 60_000;
+/*
+ * `NUDGE_COOLDOWN_MS = 60_000` used to live here and is deleted, not moved.
+ *
+ * The gap is now a manager's setting, from NUDGE_COOLDOWN_CHOICES on the notification
+ * panel — it is one of only three notifications in this app that has a frequency at
+ * all, and the one where the right answer genuinely varies: a congregation whose
+ * Sarthis wait in a busy pickup lane wants a shorter gap than one whose riders live
+ * down long driveways. The DEFAULT is DEFAULT_NUDGE_COOLDOWN_SEC in
+ * ../constants/notifications, and leaving a second copy of 60 seconds here would be one
+ * more number to forget when that one changes.
+ *
+ * Read at call time rather than closed over at module load, so a change takes effect
+ * within the settings cache window instead of at the next cold start.
+ */
 
 /** Statuses where somebody is genuinely waiting to be collected. */
 const NUDGEABLE_STATUSES = ['in_progress', 'arriving'];
@@ -84,6 +97,12 @@ export const nudgeRider = functions.https.onCall(async (data, context) => {
         windowMs: 60 * 60 * 1000,
         functionName: 'nudgeRider',
     });
+
+    // BEFORE the transaction, not inside it. A Firestore read of a document outside
+    // the transaction's own reads would be an untracked dependency, and
+    // `getNotificationSettings` may serve from cache without reading at all — neither
+    // belongs in a transaction body that can be retried.
+    const cooldownMs = (await getNotificationSettings(db)).nudgeCooldownSec * 1000;
 
     const rideRef = db.collection('rides').doc(rideId);
 
@@ -123,7 +142,7 @@ export const nudgeRider = functions.https.onCall(async (data, context) => {
 
         const lastNudge = Date.parse(ride.nudges?.[studentId] ?? '');
         if (Number.isFinite(lastNudge)) {
-            const remainingMs = lastNudge + NUDGE_COOLDOWN_MS - Date.now();
+            const remainingMs = lastNudge + cooldownMs - Date.now();
             if (remainingMs > 0) {
                 throw new functions.https.HttpsError(
                     'resource-exhausted',

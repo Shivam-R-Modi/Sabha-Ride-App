@@ -11,6 +11,12 @@
  * The other one worth its lines: the band is STAMPED even when there is nobody to
  * push to. A congregation with push switched off must not accumulate a backlog of
  * unsent bands that all fire at once the day somebody enables it.
+ *
+ * THE BANDS ARE NOW MANAGER-EDITABLE, which changed the record from a map keyed by
+ * band name to one number — the tightest band already fired. The cases that matter for
+ * that are at the bottom: a custom list is honoured, the old map is still read so a
+ * deploy does not re-alert everything, and turning the alert off stamps NOTHING, which
+ * is the non-obvious one.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -38,6 +44,18 @@ vi.mock('../utils/notifications', () => ({
         sent.push({ recipients, title, body });
         return { delivered: recipients.length, failed: 0, pruned: 0 };
     },
+}));
+
+/**
+ * The manager's configuration, faked per case.
+ *
+ * Mocked rather than driven through the db stub deliberately: `getNotificationSettings`
+ * caches for a minute, so a real read in a test file would leak one case's settings
+ * into the next.
+ */
+let settings: any;
+vi.mock('../utils/notificationSettings', () => ({
+    getNotificationSettings: async () => settings,
 }));
 
 vi.mock('../utils/audit', () => ({
@@ -114,6 +132,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     pickups = [arrival()];
     users = [{ id: 'coord_1', data: COORDINATOR }];
+    settings = { enabled: { 'airport-unclaimed': true }, alertBands: [48, 24, 10, 2] };
     makeDb();
 });
 
@@ -124,7 +143,7 @@ describe('which band fires', () => {
 
         expect(sent).toHaveLength(1);
         expect(sent[0].body).toMatch(/under ten hours/);
-        expect(merges[0].data.alertsSent).toHaveProperty('10h');
+        expect(merges[0].data.lastAlertedBandHours).toBe(10);
     });
 
     it('says nothing at all for something three days out', async () => {
@@ -141,7 +160,7 @@ describe('which band fires', () => {
         await run();
 
         expect(sent).toHaveLength(1);
-        expect(merges[0].data.alertsSent).toHaveProperty('2h');
+        expect(merges[0].data.lastAlertedBandHours).toBe(2);
     });
 });
 
@@ -149,10 +168,7 @@ describe('a band is never sent twice', () => {
     it('skips one already stamped', async () => {
         // 96 copies of the same alert is how a coordinator learns to turn
         // notifications off — which disables the channel for everything else too.
-        pickups = [arrival({
-            arrivalAt: inHours(9),
-            alertsSent: { '10h': '2026-09-20T11:00:00.000Z' },
-        })];
+        pickups = [arrival({ arrivalAt: inHours(9), lastAlertedBandHours: 10 })];
         await run();
 
         expect(sent).toHaveLength(0);
@@ -160,23 +176,80 @@ describe('a band is never sent twice', () => {
     });
 
     it('still fires the NEXT band down', async () => {
-        pickups = [arrival({
-            arrivalAt: inHours(1),
-            alertsSent: { '48h': 'x', '24h': 'x', '10h': 'x' },
-        })];
+        pickups = [arrival({ arrivalAt: inHours(1), lastAlertedBandHours: 10 })];
         await run();
 
         expect(sent).toHaveLength(1);
-        expect(merges[0].data.alertsSent).toHaveProperty('2h');
+        expect(merges[0].data.lastAlertedBandHours).toBe(2);
     });
 
-    it('merges the stamp rather than replacing the whole map', async () => {
-        // A `set` without merge would wipe the earlier bands and let them all fire
-        // again on the next run.
-        pickups = [arrival({ arrivalAt: inHours(1), alertsSent: { '10h': 'x' } })];
+    it('skips a band no TIGHTER than the one already sent', async () => {
+        // The comparison that replaced the per-band map. A stamp at 2h means every
+        // wider band is behind us, whatever the list currently says.
+        pickups = [arrival({ arrivalAt: inHours(9), lastAlertedBandHours: 2 })];
         await run();
 
-        expect(merges[0].data).toEqual({ alertsSent: { '2h': expect.any(String) } });
+        expect(sent).toHaveLength(0);
+        expect(merges).toHaveLength(0);
+    });
+
+    it('reads the OLD map, so the deploy does not re-alert every open trip', async () => {
+        // Pickups in flight when this shipped carry `alertsSent`. Read as "never
+        // alerted", every one of them would start again from the widest band.
+        pickups = [arrival({ arrivalAt: inHours(9), alertsSent: { '48h': 'x', '10h': 'x' } })];
+        await run();
+
+        expect(sent).toHaveLength(0);
+        expect(merges).toHaveLength(0);
+    });
+});
+
+describe('the bands a manager chose', () => {
+    it('honours a custom list', async () => {
+        settings.alertBands = [24, 6];
+        pickups = [arrival({ arrivalAt: inHours(5) })];
+        await run();
+
+        expect(sent).toHaveLength(1);
+        expect(sent[0].body).toMatch(/under six hours/);
+        expect(merges[0].data.lastAlertedBandHours).toBe(6);
+    });
+
+    it('says nothing before the widest band a manager kept', async () => {
+        // Dropping 48h and 24h means a trip two days out is no longer worth waking
+        // anybody for.
+        settings.alertBands = [6, 2];
+        pickups = [arrival({ arrivalAt: inHours(30) })];
+        await run();
+
+        expect(sent).toHaveLength(0);
+    });
+
+    it('does not re-alert a trip whose old band is no longer in the list', async () => {
+        // The exact failure the numeric stamp exists to prevent: a stamp of 10 with
+        // 10 removed from the list still means "wider than 6 is behind us".
+        settings.alertBands = [24, 6];
+        pickups = [arrival({ arrivalAt: inHours(9), lastAlertedBandHours: 10 })];
+        await run();
+
+        expect(sent).toHaveLength(0);
+    });
+});
+
+describe('when a manager switches the alert off', () => {
+    beforeEach(() => { settings.enabled['airport-unclaimed'] = false; });
+
+    it('sends nothing', async () => {
+        await run();
+        expect(sent).toHaveLength(0);
+    });
+
+    it('STAMPS NOTHING, so turning it back on does not skip the band', async () => {
+        // The non-obvious half. `dispatch` would refuse the send on its own, but only
+        // after this loop had recorded the band as done — and a band recorded but
+        // never announced is silently lost for the life of the trip.
+        await run();
+        expect(merges).toHaveLength(0);
     });
 });
 
@@ -215,7 +288,7 @@ describe('who hears about it', () => {
         await run();
 
         expect(sent).toHaveLength(0);
-        expect(merges[0].data.alertsSent).toHaveProperty('10h');
+        expect(merges[0].data.lastAlertedBandHours).toBe(10);
     });
 });
 
@@ -236,7 +309,7 @@ describe('the audit trail', () => {
         await run();
         expect(auditRows).toHaveLength(1);
         expect(auditRows[0].actorUid).toBe('system:alertUnclaimedArrivals');
-        expect(auditRows[0].details).toMatchObject({ band: '10h', recipients: 1 });
+        expect(auditRows[0].details).toMatchObject({ band: 10, recipients: 1 });
     });
 
     it('records it even when nobody heard it', async () => {

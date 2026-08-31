@@ -752,6 +752,56 @@ describe('no text is painted with a fill-only token', () => {
     });
 
     /**
+     * A TOGGLE SWITCH NEEDS A VISIBLE BOUNDARY, and `--sunken` on a card does not have
+     * one.
+     *
+     * MEASURED, not guessed: the notification panel's OFF switch was `bg-cream-400`
+     * (`--sunken`) on a `--surface` card, which is **1.31:1 in light mode**, and its
+     * knob is `--surface` — so the knob scored 1.31 against the track it sits inside.
+     * WCAG 1.4.11 asks 3:1 for the boundary of a control, and at 1.31 you cannot see
+     * which side the knob is on. The whole switch reads as one faint smudge, so the
+     * ONE thing it exists to communicate is invisible.
+     *
+     * This is the same family as the calendar badge painted `--sunken` on a `--sunken`
+     * cell, and as every other entry in this file: a token checked against `--canvas`
+     * and then used somewhere else. The fix is a `--text-soft` border on both parts —
+     * 6.07:1 light and 5.65:1 dark against the card, and 4.62 / 7.24 for the knob
+     * against the track fill.
+     *
+     * Stated as "a cream-400 track must carry a border" rather than as a contrast
+     * number, because a component test cannot see colour and tests/setup.ts rightly
+     * forbids class assertions there. This is the file where class invariants live.
+     */
+    it('gives every cream-400 toggle track a visible border', () => {
+        const offenders: string[] = [];
+        for (const file of componentFiles) {
+            const code = read(file)
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .split('\n')
+                .filter(line => !line.trim().startsWith('//'))
+                .join('\n');
+
+            for (const span of code.match(/'[^']*'|"[^"]*"|`[^`]*`/g) ?? []) {
+                // A rounded-full cream fill on a peer-checked control is a switch
+                // track. Nothing else in this codebase has that shape.
+                const isTrack = /\brounded-full\b/.test(span)
+                    && /\bbg-cream-400\b/.test(span)
+                    && /\bpeer-checked:/.test(span);
+                if (isTrack && !/\bborder-\[rgb\(var\(--text-soft\)\)\]/.test(span)) {
+                    offenders.push(file);
+                }
+            }
+        }
+
+        expect(
+            [...new Set(offenders)],
+            'A `--sunken` switch track is 1.31:1 on a `--surface` card, so its boundary '
+            + 'is invisible and the knob position cannot be read. Add '
+            + 'border-[rgb(var(--text-soft))] to the track and the knob.',
+        ).toEqual([]);
+    });
+
+    /**
      * THE SAME MISTAKE, IN RED. `--danger` is a fill-only token for exactly the reason
      * `--accent` is: `theme-contrast.test.ts` asserts it stays below AA. White on it
      * measures **3.76 light / 2.89 dark**, and the Sign Out button carried that at 16px

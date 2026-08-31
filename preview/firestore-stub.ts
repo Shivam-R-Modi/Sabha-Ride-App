@@ -18,7 +18,21 @@ const CANNED: Record<string, unknown> = {
     },
     'settings/main': {
         sabhaStartTime: '20:30', sabhaEndTime: '22:00',
+        requestsOpenTime: '10:00',
         sabhaLocation: { lat: 42.339362, lng: -71.0878001, address: '346 Huntington Ave, Boston, MA 02115' },
+    },
+    /**
+     * ONE NOTIFICATION DELIBERATELY OFF, so the "some are switched off" banner and a
+     * grey switch are both on screen. An all-defaults fixture renders the happy state
+     * only, and the muted state is the one worth looking at — it is what a manager
+     * sees a week after forgetting they changed something.
+     */
+    'settings/notifications': {
+        enabled: { notice: false },
+        alertBands: [48, 24, 10, 2],
+        nudgeCooldownSec: 60,
+        reminderHour: 10,
+        reminderCadence: 'daily',
     },
 };
 

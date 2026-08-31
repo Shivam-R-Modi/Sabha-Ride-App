@@ -607,6 +607,47 @@ describe('manager invites are server-only', () => {
     it('a student cannot write settings', async () => {
         await assertFails(updateDoc(doc(asStudent(), 'settings', 'main'), { sabhaLocation: { lat: 0, lng: 0 } }));
     });
+
+    /**
+     * settings/notifications — which notifications the app sends.
+     *
+     * IT INHERITS `match /settings/{settingId}`, which is the whole reason it needs
+     * testing rather than the reason it does not: the feature was built assuming that
+     * inheritance, and nothing said so. A later narrowing of that rule to
+     * `settingId == 'main'` would look like a tightening and would silently take the
+     * manager's panel offline — reads would fail, the panel would show an error, and
+     * the server would keep enforcing whatever was last saved.
+     *
+     * READABLE BY ANYBODY SIGNED IN, which is correct and worth stating: the document
+     * holds no personal data, only which message types are on, and the panel reads it
+     * live. WRITABLE BY MANAGERS ONLY — a Bhulku who could write it could silence
+     * "Sarthi has arrived" for the entire congregation.
+     */
+    it('a student CAN read the notification settings', async () => {
+        await assertSucceeds(getDoc(doc(asStudent(), 'settings', 'notifications')));
+    });
+
+    it('a student cannot change which notifications go out', async () => {
+        await assertFails(setDoc(doc(asStudent(), 'settings', 'notifications'), {
+            enabled: { sarthi_arrived: false },
+        }));
+    });
+
+    it('a Sarthi cannot either', async () => {
+        await assertFails(setDoc(doc(asDriver(), 'settings', 'notifications'), {
+            enabled: { sarthi_arrived: false },
+        }));
+    });
+
+    it('a manager can', async () => {
+        await assertSucceeds(setDoc(doc(asManager(), 'settings', 'notifications'), {
+            enabled: { notice: false }, alertBands: [24, 2],
+        }));
+    });
+
+    it('nobody deletes it, so the config cannot vanish mid-week', async () => {
+        await assertFails(deleteDoc(doc(asManager(), 'settings', 'notifications')));
+    });
 });
 
 describe('ride integrity', () => {

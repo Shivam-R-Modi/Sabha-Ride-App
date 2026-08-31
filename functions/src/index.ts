@@ -100,7 +100,9 @@ export { requestAirportPickup } from './http/requestAirportPickup';
 export { updateAirportPickup } from './http/updateAirportPickup';
 // Every 30 minutes rather than hourly: the tightest band is two hours out, and an
 // hourly job could make "in under two hours" a lie by 59 minutes.
+export { updateNotificationSettings } from './http/updateNotificationSettings';
 export { alertUnclaimedArrivals } from './scheduled/alertUnclaimedArrivals';
+export { remindUnrequestedRiders } from './scheduled/remindUnrequestedRiders';
 // Spans BOTH services, which is why it lives with the manager's other exports rather
 // than inside Airport Seva. The airport scope is gated on the coordinator flag.
 export { exportMembers } from './http/exportMembers';

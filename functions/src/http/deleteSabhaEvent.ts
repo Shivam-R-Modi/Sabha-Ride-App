@@ -25,6 +25,7 @@ import * as admin from 'firebase-admin';
 import { DEFAULT_TIME_ZONE, zonedDateKey } from '../utils/time';
 import { findCurrentEvent, EVENTS_COLLECTION, SEED_MARKER_DOC } from '../utils/events';
 import { buildCurrentEvent, resolveScheduleWindow } from '../utils/schedule';
+import { getRequestsOpenTime } from '../utils/settings';
 import { sendNotification, tokensOf } from '../utils/notifications';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { assertApprovedManager } from '../utils/authz';
@@ -243,6 +244,7 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
             ? buildCurrentEvent(nextEvent.date, nextEvent.startTime, nextEvent.endTime, timeZone, {
                 venue: nextEvent.venue,
                 agenda: nextEvent.agenda,
+                requestsOpenTime: await getRequestsOpenTime(),
             })
             : null;
         const window = resolveScheduleWindow(now, built, timeZone);
@@ -346,7 +348,9 @@ async function notifyAffected(
             recipients,
             'Sabha cancelled',
             `The sabha on ${label} is no longer scheduled. Your ride request has been cancelled.`,
-            { reason: 'sabha-deleted', eventId: date },
+            // Tagged so the manager panel can name it. Muting it is behind a
+            // confirmation: people who are not told wait outside for a ride.
+            { type: 'sabha-deleted', reason: 'sabha-deleted', eventId: date },
         );
     } catch (error) {
         console.error('[deleteSabhaEvent] Could not notify affected riders:', error);

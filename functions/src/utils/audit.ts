@@ -65,7 +65,14 @@ export type AuditAction =
     // phone numbers and home addresses, so the export is audited even though it
     // writes nothing — a revoked manager quietly exporting every family is a defect
     // this repo has already had once.
-    | 'members.export';
+    | 'members.export'
+    // A manager changed which notifications the app sends, or a scheduled reminder went
+    // out. Their own actions rather than 'doc.update' for the reason the whole union
+    // exists: `settings.notifications` is the row that explains why a notification
+    // people expected never arrived, and `reminder.send` is the row that explains why
+    // a whole congregation's phones buzzed at 10am.
+    | 'settings.notifications'
+    | 'reminder.send';
 
 export type AuditOutcome = 'pending' | 'ok' | 'failed';
 
