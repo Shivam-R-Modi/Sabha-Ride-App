@@ -64,9 +64,12 @@ export function useService(): {
      * costs nothing.
      */
     useEffect(() => {
-        if (tabBelongsTo(currentTab, service, arriving)) return;
-        setCurrentTab(serviceHome(service, arriving));
-    }, [service, arriving, currentTab, setCurrentTab]);
+        // `role` is passed because `notifications` exists only for a manager. Without
+        // it this would judge the tab illegal the instant a manager tapped it and bounce
+        // them straight back to the board — a nav item that cannot be navigated to.
+        if (tabBelongsTo(currentTab, service, arriving, role)) return;
+        setCurrentTab(serviceHome(service, arriving, role));
+    }, [service, arriving, role, currentTab, setCurrentTab]);
 
     return {
         service,

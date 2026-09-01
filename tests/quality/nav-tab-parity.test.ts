@@ -2,7 +2,7 @@
  * THE NAV LIST AND THE TAB INVARIANT MUST AGREE, FOR EVERY ROLE AND EVERY SERVICE.
  *
  * `getNavItems(role, service)` in components/Layout.tsx decides what a person can tap.
- * `tabBelongsTo(tab, service, role)` in src/constants/service.ts decides whether the tab
+ * `tabBelongsTo(tab, service, arriving, role)` in src/constants/service.ts decides whether the tab
  * they are on is legal, and `serviceHome` decides where they are sent when it is not.
  * Those are two statements of the same fact, written in two files, and until this test
  * existed nothing held them together.
@@ -64,7 +64,7 @@ describe('every nav item is a tab that belongs where it is shown', () => {
     it.each(REAL)('%s in %s, arriving=%s', (role, service, arriving) => {
         for (const item of getNavItems(role, service, arriving)) {
             expect(
-                tabBelongsTo(item.id, service, arriving),
+                tabBelongsTo(item.id, service, arriving, role),
                 `${role}/${service}/arriving=${arriving}: nav offers "${item.label}" `
                 + `(${item.id}) but tabBelongsTo refuses it`,
             ).toBe(true);
@@ -92,7 +92,7 @@ describe('a service-scoped tab that belongs is reachable from the nav', () => {
     it.each(REAL)('%s in %s, arriving=%s', (role, service, arriving) => {
         const navIds = getNavItems(role, service, arriving).map(item => item.id);
         for (const tab of SERVICE_SCOPED) {
-            if (!tabBelongsTo(tab, service, arriving)) continue;
+            if (!tabBelongsTo(tab, service, arriving, role)) continue;
             // A student is allowed 'arrivals' in sabha by the service test above and has
             // no nav item for it, which is correct: the board is gated on the driver
             // role in firestore.rules, so offering it would be a screen of refusals.
@@ -105,12 +105,14 @@ describe('a service-scoped tab that belongs is reachable from the nav', () => {
         }
     });
 
-    it('the sabha navs are exactly the pre-Airport-Seva ones again', () => {
-        // The tidiest outcome of the whole three-pass story: the board has one home in
-        // Airport Seva, so NEITHER sabha list carries it and both are back to what they
-        // were before any of this. A Sarthi is at three destinations, a manager at eight.
+    it('the sabha navs are the pre-Airport-Seva ones, plus Alerts for a manager', () => {
+        // The board has one home in Airport Seva, so NEITHER sabha list carries it.
+        // `notifications` is the one genuine addition since: a manager destination in
+        // BOTH services, listed before `records` so the destructive tab stays last
+        // behind its divider.
         expect(getNavItems('manager', 'sabha').map(i => i.id)).toEqual([
-            'home', 'people', 'history', 'fleet', 'setup', 'profile', 'notices', 'records',
+            'home', 'people', 'history', 'fleet', 'setup', 'profile', 'notices',
+            'notifications', 'records',
         ]);
         expect(getNavItems('driver', 'sabha').map(i => i.id)).toEqual([
             'home', 'history', 'profile',
@@ -123,9 +125,9 @@ describe('a service-scoped tab that belongs is reachable from the nav', () => {
 
 describe('the home of a service is in that service', () => {
     it.each(REAL)('%s in %s, arriving=%s', (role, service, arriving) => {
-        const home = serviceHome(service, arriving);
+        const home = serviceHome(service, arriving, role);
         expect(
-            tabBelongsTo(home, service, arriving),
+            tabBelongsTo(home, service, arriving, role),
             `${role}/${service}/arriving=${arriving}: home is ${home}`,
         ).toBe(true);
         expect(getNavItems(role, service, arriving).map(i => i.id)).toContain(home);
@@ -209,7 +211,10 @@ describe("a manager's Airport Seva is not the traveller's", () => {
         // newcomer's live request form, plus an "I am in the USA now" button that wrote
         // `isArriving: false` where it was already false and so did nothing at all.
         const ids = getNavItems('manager', 'airport', false).map(i => i.id);
-        expect(ids).toEqual(['arrivals', 'profile']);
+        // Plus Alerts, which is the airport half of the notification settings. It sits
+        // between the board and Profile deliberately: the board is why they came, and
+        // `serviceHome` takes the FIRST entry, so nothing may displace `arrivals`.
+        expect(ids).toEqual(['arrivals', 'notifications', 'profile']);
         expect(ids).not.toContain('airport-request');
     });
 
@@ -264,5 +269,46 @@ describe('a manager wearing the Sarthi hat', () => {
             .toEqual(['airport-request', 'profile']);
         expect(getNavItems('driver', 'airport', true).map(i => i.id))
             .toEqual(['airport-request', 'profile']);
+    });
+});
+
+/**
+ * THE ONE TAB THAT IS ROLE-GATED, ASSERTED DIRECTLY.
+ *
+ * The two invariants above compare the nav against `tabBelongsTo` and are both
+ * satisfied by a `tabBelongsTo` that simply says yes to everyone — a nav that never
+ * offers `notifications` to a Sarthi cannot detect a `tabBelongsTo` that would allow
+ * it. Verified by mutation: relaxing the sabha branch to `return true` left all 72
+ * cases in this file and serviceRouting green.
+ *
+ * That matters because `tabBelongsTo` is the ONLY thing standing between a non-manager
+ * and this screen. `AirportShell` deliberately performs no role check of its own —
+ * "the tab decides, so the nav and the screen cannot disagree" — so a permissive
+ * `tabBelongsTo` puts a Sarthi on a settings page whose every save the callable
+ * refuses, with no nav item and no way back but the browser.
+ */
+describe('the notification tab is managers-only, in both services', () => {
+    it.each(SERVICES)('allows a manager in %s', (service) => {
+        expect(tabBelongsTo('notifications', service, false, 'manager')).toBe(true);
+    });
+
+    it.each(SERVICES)('refuses a Sarthi in %s', (service) => {
+        expect(tabBelongsTo('notifications', service, false, 'driver')).toBe(false);
+    });
+
+    it.each(SERVICES)('refuses a Bhulku in %s', (service) => {
+        expect(tabBelongsTo('notifications', service, false, 'student')).toBe(false);
+    });
+
+    it('refuses an arriving traveller, who has no manager screen at all', () => {
+        expect(tabBelongsTo('notifications', 'airport', true, 'manager')).toBe(false);
+    });
+
+    it('never displaces the board as the airport home', () => {
+        // `serviceHome` takes the FIRST entry of the tab list. If Alerts were ordered
+        // ahead of Arrivals, every manager entering Airport Seva would land on settings
+        // instead of the thing they came for.
+        expect(serviceHome('airport', false, 'manager')).toBe('arrivals');
+        expect(serviceHome('sabha', false, 'manager')).toBe('home');
     });
 });

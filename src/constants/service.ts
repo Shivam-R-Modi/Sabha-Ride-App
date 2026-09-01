@@ -135,8 +135,31 @@ export function resolveService(
 const AIRPORT_TRAVELLER_TABS: TabView[] = ['airport-request', 'profile'];
 const AIRPORT_OVERSIGHT_TABS: TabView[] = ['arrivals', 'profile'];
 
-export function airportTabs(arriving: boolean): TabView[] {
-    return arriving ? AIRPORT_TRAVELLER_TABS : AIRPORT_OVERSIGHT_TABS;
+/**
+ * `role` IS BACK, and the reason is different from the one it left with.
+ *
+ * It used to be here to answer "does the board live in sabha or in airport for this
+ * person", which stopped being a question once the board got one home — so it was
+ * removed as dead weight, correctly.
+ *
+ * What brought it back is `notifications`: a manager configures which messages the app
+ * sends, and a Sarthi does not. That is a genuine per-role difference in WHICH TABS
+ * EXIST, not in where one tab lives, and it cannot be answered without knowing who is
+ * asking. The alternative — letting every Sarthi navigate to a screen whose callable
+ * refuses them — is the dead control this codebase keeps deleting.
+ *
+ * THE ACTIVE ROLE, not the recorded one, which matches every other manager destination:
+ * a manager wearing the Sarthi hat already loses People, Setup, Fleet and Records, and
+ * losing Notifications with them is the point of the hat.
+ *
+ * `arrivals` STAYS FIRST whatever the role, because `serviceHome` takes the first entry
+ * — so the home screen cannot drift as this list grows.
+ */
+export function airportTabs(arriving: boolean, role: UserRole = 'student'): TabView[] {
+    if (arriving) return AIRPORT_TRAVELLER_TABS;
+    return role === 'manager'
+        ? ['arrivals', 'notifications', 'profile']
+        : AIRPORT_OVERSIGHT_TABS;
 }
 
 /**
@@ -150,8 +173,10 @@ export function airportTabs(arriving: boolean): TabView[] {
  * The first tab of the list, not a separate constant, so the home screen cannot drift
  * away from being reachable in its own service.
  */
-export function serviceHome(service: Service, arriving: boolean): TabView {
-    return service === 'airport' ? airportTabs(arriving)[0] : 'home';
+export function serviceHome(
+    service: Service, arriving: boolean, role: UserRole = 'student',
+): TabView {
+    return service === 'airport' ? airportTabs(arriving, role)[0] : 'home';
 }
 
 /**
@@ -170,14 +195,14 @@ export function serviceHome(service: Service, arriving: boolean): TabView {
  * cleared `isArriving` when their pickup completed.
  */
 /**
- * NO `role` PARAMETER, and it had one until the board became airport-only.
- *
- * While the board lived in sabha for a Sarthi and in airport for a manager, this had to
- * know who was asking. Now that it has one home, the answer is the same for everybody
- * and the parameter was dead weight — one more thing for a caller to pass wrongly.
+ * `role` CAME BACK WITH `notifications` — see the note on `airportTabs`. It was removed
+ * when the board got one home and there was nothing left for it to decide; a tab that
+ * only managers have is something it must decide.
  */
-export function tabBelongsTo(tab: TabView, service: Service, arriving: boolean): boolean {
-    if (service === 'airport') return airportTabs(arriving).includes(tab);
+export function tabBelongsTo(
+    tab: TabView, service: Service, arriving: boolean, role: UserRole = 'student',
+): boolean {
+    if (service === 'airport') return airportTabs(arriving, role).includes(tab);
 
     // Sabha. Stated as "which tabs do NOT belong" because the sabha list is long and
     // role-dependent, and duplicating it here would be a second copy of
@@ -187,6 +212,9 @@ export function tabBelongsTo(tab: TabView, service: Service, arriving: boolean):
     // The board is an AIRPORT destination for everybody now, so it never belongs in
     // sabha — for any role, in any hat. That is what lets one screen have one home.
     if (tab === 'arrivals') return false;
+    // Managers only, in either service. A Sarthi who reached it would find a screen
+    // whose every save the callable refuses.
+    if (tab === 'notifications') return role === 'manager';
     return true;
 }
 

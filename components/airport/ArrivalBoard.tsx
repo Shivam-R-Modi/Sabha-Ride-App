@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Bell, CalendarCheck, ChevronLeft, ChevronRight, Loader2, Plane } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, ChevronLeft, ChevronRight, Loader2, Plane } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useArrivalsBetween } from '../../hooks/useArrivals';
 import { isApprovedManager } from '../../src/roles';
@@ -7,8 +7,6 @@ import { formatTime } from '../../src/constants/schedule';
 import { TERMINAL } from '../../src/utils/arrival';
 import { ArrivalCard } from './ArrivalCard';
 import { PushPrompt } from '../shared/PushPrompt';
-import { Disclosure } from '../shared/Disclosure';
-import { NotificationSettings } from '../manager/NotificationSettings';
 import type { AirportPickup } from '../../types';
 
 /**
@@ -145,9 +143,7 @@ const ALL_ASSIGNED = 'bg-[rgb(var(--success-bg))] text-[rgb(var(--success-text))
 
 export const ArrivalBoard: React.FC = () => {
     const { userProfile } = useAuth();
-    const isManager = isApprovedManager(userProfile);
-    const isCoordinator = isManager && userProfile?.airportCoordinator === true;
-    const [settingsOpen, setSettingsOpen] = useState(false);
+    const isCoordinator = isApprovedManager(userProfile) && userProfile?.airportCoordinator === true;
 
     const [cursor, setCursor] = useState(() => {
         const now = new Date();
@@ -583,34 +579,6 @@ export const ArrivalBoard: React.FC = () => {
             />
 
             <PressingStrip days={monthDays} onPick={pick} />
-
-            {/*
-              * THE AIRPORT HALF OF THE NOTIFICATION PANEL, and it lives here rather
-              * than in the manager's Setup tab because this is the service it is
-              * about. A coordinator being woken at 5am by the unclaimed escalation
-              * should be able to retune it without leaving Airport Seva — Setup is a
-              * sabha tab, two navigations away behind a service switch.
-              *
-              * MANAGERS ONLY. `isApprovedManager` reads the RECORDED role, so a
-              * manager wearing the Sarthi hat keeps it and a plain Sarthi — who
-              * reaches this same board — never sees it. The callable enforces the same
-              * thing server-side; this only decides whether to render a control that
-              * would otherwise fail on tap.
-              *
-              * Collapsed, like every section in Setup: somebody opening the board came
-              * to look at arrivals, not at settings.
-              */}
-            {isManager && (
-                <Disclosure
-                    icon={<Bell size={20} />}
-                    title="Notifications"
-                    summary="Which airport messages go out, and how often"
-                    open={settingsOpen}
-                    onToggle={() => setSettingsOpen(open => !open)}
-                >
-                    <NotificationSettings service="airport" />
-                </Disclosure>
-            )}
         </div>
     );
 };

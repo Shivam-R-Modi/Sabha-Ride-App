@@ -9,6 +9,7 @@ import { useConfirm } from '../shared/useConfirm';
 import { useMyLiveArrival } from '../../hooks/useArrivals';
 import { ProfileEditor } from '../shared/ProfileEditor';
 import { ArrivalBoard } from './ArrivalBoard';
+import { NotificationSettingsPage } from '../manager/NotificationSettings';
 import { ArrivalRequestForm } from './ArrivalRequestForm';
 import { ArrivalStatusCard } from './ArrivalStatusCard';
 
@@ -36,6 +37,10 @@ export const AirportShell: React.FC = () => {
 
     if (currentTab === 'profile') return <ProfileEditor />;
     if (currentTab === 'arrivals') return <ArrivalBoard />;
+    // Managers only, and `tabBelongsTo` is what enforces that — a Sarthi on this tab is
+    // bounced to the board before this line is reached. Same rule as every other
+    // decision in this file: the tab decides, so the nav and the screen cannot disagree.
+    if (currentTab === 'notifications') return <NotificationSettingsPage service="airport" />;
     return <TravellerView />;
 };
 

@@ -13,6 +13,7 @@ import { ManagerDashboard } from './components/manager/ManagerDashboard';
 import { ManagerReports } from './components/manager/ManagerReports';
 import { ManagerPeople } from './components/manager/ManagerPeople';
 import { ManagerSetup } from './components/manager/ManagerSetup';
+import { NotificationSettingsPage } from './components/manager/NotificationSettings';
 import { FleetManagement } from './components/manager/FleetManagement';
 import { ManagerRecords } from './components/manager/ManagerRecords';
 import { ManagerNotices } from './components/manager/ManagerNotices';
@@ -131,6 +132,8 @@ export default function App() {
           return <FleetManagement />;
         case 'notices':
           return <ManagerNotices />;
+        case 'notifications':
+          return <NotificationSettingsPage service="sabha" />;
         case 'records':
           // Wrapped, not the bare console: ManagerRecords carries the warning
           // that used to live on Setup's accordion row. See that file.

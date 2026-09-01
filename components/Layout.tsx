@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Service, TabView, UserRole } from '../types';
-import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database, Megaphone, Plane, Repeat, CalendarDays, Ticket } from 'lucide-react';
+import { Home, Car, User as UserIcon, History, LayoutDashboard, LogOut, ChevronLeft, ChevronRight, UserCheck, Settings, Database, Megaphone, Plane, Repeat, CalendarDays, Ticket, Bell } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../contexts/NavigationContext';
@@ -595,6 +595,13 @@ export const getNavItems = (
       ]
       : [
         { id: 'arrivals', label: 'Arrivals', icon: CalendarDays },
+        // MANAGERS ONLY, and it is the same tab id a manager also has in Sabha Seva —
+        // one screen, two services, showing the notifications that belong to whichever
+        // one they are in. It was a disclosure stapled under the arrivals list, which
+        // put settings in the middle of a scrolling board.
+        ...(role === 'manager'
+          ? [{ id: 'notifications' as const, label: 'Alerts', icon: Bell }]
+          : []),
         { id: 'profile', label: 'Profile', icon: UserIcon },
       ];
   }
@@ -631,6 +638,14 @@ export const getNavItems = (
       { id: 'setup', label: 'Setup', icon: Settings, primary: true },
       { id: 'profile', label: 'Profile', icon: UserIcon },
       { id: 'notices', label: 'Notices', icon: Megaphone },
+      // Its own destination rather than a section inside Setup's accordion. Setup is
+      // "what shapes how rides run" — the calendar, the window, the venue — and which
+      // messages go out is a different job a manager comes here to do on its own.
+      //
+      // Labelled `Alerts`, not `Notifications`: the bottom nav gives each item ~47px at
+      // 375px, and NOTIFICATIONS at text-[10px] uppercase overflows and truncates. Same
+      // reason `Records` is not `Raw records`.
+      { id: 'notifications', label: 'Alerts', icon: Bell },
       // NO `arrivals` here. It used to be the ninth destination, in the swipe-up
       // drawer. It moved to Airport Seva, which is the service a manager switches to
       // and the only one that held nothing useful for them before. A Sarthi still

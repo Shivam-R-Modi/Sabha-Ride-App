@@ -16,7 +16,7 @@
  */
 
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -184,6 +184,8 @@ describe('a Sarthi', () => {
 
         expect(screen.getByTestId('service')).toHaveTextContent('airport');
         expect(screen.getByTestId('tab')).toHaveTextContent('arrivals');
+        // NO Alerts. That screen is a manager's, and a Sarthi reaching it would find
+        // a form whose every save the callable refuses.
         expect(dockLabels()).toEqual(['Arrivals', 'Profile']);
     });
 
@@ -232,7 +234,9 @@ describe('a manager, the one exception', () => {
         // value, and what keeps an item lit in the dock. It sends a MANAGER to
         // 'arrivals', not 'airport-request' — the whole point of the 2026-08-25 change.
         expect(screen.getByTestId('tab')).toHaveTextContent('arrivals');
-        expect(dockLabels()).toEqual(['Arrivals', 'Profile']);
+        // Alerts is the manager-only notification screen, present in both services.
+        // A Sarthi's Airport Seva is still just the board and their profile.
+        expect(dockLabels()).toEqual(['Arrivals', 'Alerts', 'Profile']);
     });
 
     it('is never offered the newcomer form, which would file their own pickup', () => {
@@ -292,5 +296,77 @@ describe('nothing is remembered between sessions', () => {
         renderShell('student');
 
         expect(screen.getByTestId('service')).toHaveTextContent('sabha');
+    });
+});
+
+/**
+ * THE NOTIFICATION SCREEN IS A DESTINATION IN BOTH SERVICES, and it is the only tab that
+ * is. It began as an accordion row inside Setup and a disclosure stapled under the
+ * arrivals list — the second put settings in the middle of a scrolling board, below the
+ * pickups, so a manager looking for tomorrow's arrivals scrolled into a wall of switches.
+ *
+ * WHAT THESE CASES GUARD is the thing that makes a two-service tab fragile: `useService`
+ * resets `currentTab` whenever `tabBelongsTo` says it does not belong here. Get the role
+ * wrong in either place and tapping Alerts bounces straight back to the board — a nav
+ * item that cannot be navigated to, which is this repo's signature defect.
+ */
+describe('the notification screen, in both services', () => {
+    /**
+     * THE SIDEBAR, NOT THE DOCK. A manager's sabha nav is nine destinations and the
+     * bottom dock holds five, so the rest sit in the overflow drawer — `Alerts` is one
+     * of them, deliberately: it is a considered change, not something tapped on the way
+     * out of the hall on a Friday. In Airport Seva there are only three items, so it is
+     * docked there. Asserting the dock in both places would fail for the right reason
+     * in the wrong test.
+     */
+    const sidebarLabels = () => within(sidebar()).getAllByRole('button')
+        .map(b => (b.textContent ?? '').trim()).filter(Boolean);
+
+    it('is offered to a manager in Sabha Seva', () => {
+        profile = { ...MANAGER };
+        renderShell('manager');
+        expect(sidebarLabels()).toContain('Alerts');
+    });
+
+    it('STAYS PUT when a manager taps it, rather than bouncing back', async () => {
+        // The reset effect runs on every render. If `tabBelongsTo` were asked without
+        // the role it would judge this tab illegal and send them home instantly.
+        profile = { ...MANAGER };
+        renderShell('manager');
+        await userEvent.click(within(sidebar()).getByRole('button', { name: /alerts/i }));
+
+        expect(screen.getByTestId('tab')).toHaveTextContent('notifications');
+    });
+
+    it('survives the switch INTO Airport Seva, because the tab exists there too', async () => {
+        profile = { ...MANAGER };
+        renderShell('manager');
+        await userEvent.click(within(sidebar()).getByRole('button', { name: /alerts/i }));
+        await userEvent.click(
+            within(header()).getByRole('button', { name: /switch to airport seva/i }));
+
+        // Not reset to 'arrivals': `notifications` belongs in both services for a
+        // manager, so there is nothing for the invariant to correct.
+        expect(screen.getByTestId('service')).toHaveTextContent('airport');
+        expect(screen.getByTestId('tab')).toHaveTextContent('notifications');
+    });
+
+    it('is offered to nobody else', () => {
+        profile = { ...SARTHI };
+        renderShell('driver');
+        expect(sidebarLabels()).not.toContain('Alerts');
+
+        cleanup();
+        profile = { ...LOCAL_STUDENT };
+        renderShell('student');
+        expect(sidebarLabels()).not.toContain('Alerts');
+    });
+
+    it('is not offered to a manager wearing the Sarthi hat', () => {
+        // Consistent with People, Setup, Fleet and Records, which the hat also hides.
+        // That is what the hat is for.
+        profile = { ...MANAGER };
+        renderShell('driver');
+        expect(sidebarLabels()).not.toContain('Alerts');
     });
 });

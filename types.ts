@@ -430,6 +430,13 @@ export interface AssignmentResult {
  */
 export type TabView =
     | 'home' | 'rides' | 'profile' | 'history' | 'people' | 'setup' | 'fleet' | 'notices' | 'records'
+    // Which notifications the app sends. A DESTINATION IN BOTH SERVICES, and the only
+    // tab that is — a manager gets it in Sabha Seva for the sabha notifications and in
+    // Airport Seva for the airport ones, because each set belongs where that work
+    // happens. It began as an accordion section inside Setup and a disclosure stapled to
+    // the bottom of the Arrivals board; the board version pushed settings into the
+    // middle of a scrolling list of arrivals, which is not where a setting goes.
+    | 'notifications'
     // The arrivals board. AN AIRPORT TAB, and only that — for Sarthis and managers
     // alike, both of whom reach it by switching service.
     //

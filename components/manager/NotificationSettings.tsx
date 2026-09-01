@@ -381,3 +381,29 @@ function BandPicker({ bands, disabled, onChange }: {
         </fieldset>
     );
 }
+
+/**
+ * The same panel as a full screen, with the heading a destination needs.
+ *
+ * TWO SERVICES, ONE SCREEN. A manager reaches this from the left panel in Sabha Seva
+ * and again in Airport Seva, and gets the notifications belonging to whichever one they
+ * are in. `service` comes from the router, not from a prop somebody could pass wrongly.
+ *
+ * It was a section in Setup's accordion and a disclosure under the arrivals list. The
+ * second was the worse of the two: settings in the middle of a scrolling board, below
+ * the pickups and the push prompt, so a manager scrolling for tomorrow's arrivals ran
+ * into a wall of switches. Both are gone.
+ */
+export const NotificationSettingsPage: React.FC<Props> = ({ service }) => (
+    <div className="px-4 pt-6 pb-6 space-y-4 max-w-3xl mx-auto animate-in fade-in duration-300">
+        <header>
+            <h1 className="text-2xl font-header font-bold text-coffee">Notifications</h1>
+            <p className="text-sm text-coffee-500">
+                {service === 'airport'
+                    ? 'Which airport messages go out, and how often.'
+                    : 'Which sabha messages go out, and how often.'}
+            </p>
+        </header>
+        <NotificationSettings service={service} />
+    </div>
+);
