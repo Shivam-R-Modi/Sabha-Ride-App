@@ -3,11 +3,15 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-31**.
 
-## BUILT, NOT DEPLOYED — manager notification controls, 2026-08-31 (last)
+## DEPLOYED — manager notification controls, 2026-08-31 (last)
 
-On branch `claude/airport-pickup-workflow-89afab`. Client **1862**, functions **1021**,
-rules **242**. Full six-step sweep clean. **Nothing is deployed and `main` does not have
-it.**
+`2a57b5f`, live, `main` matches and is pushed. Client **1862**, functions **1021**, rules
+**242**. Full six-step sweep clean.
+
+Rules were unchanged in substance and reported "already up to date". Functions: **two
+created** — `updateNotificationSettings` and `remindUnrequestedRiders` — and every other
+function updated. Hosting verified by matching the live bundle to `dist/assets/index-*.js`
+(`index-BsBptVuH.js`) and grepping five of the new strings out of it.
 
 ### What a manager can now change
 
@@ -81,12 +85,17 @@ session. The colours above were measured with `getComputedStyle` and alpha compo
 instead, which is a stronger check than eyeballing anyway — but nobody has LOOKED at this
 panel. Do that before or right after deploying.
 
-### To deploy
+### What to watch now that it is live
 
-`firestore:rules` → `functions` → `hosting`, then fast-forward `main`. Rules are
-unchanged in substance (`settings/notifications` inherits `settings/{settingId}`), but
-run the step anyway. Two new functions ship: `updateNotificationSettings` and
-`remindUnrequestedRiders`.
+- **The first reminder fires at 10am** Boston time, to every approved Bhulku with a push
+  token who has not requested a ride, while the window is open. That is the first
+  unsolicited notification this app has ever sent, so it is the one worth watching. Turn
+  it off in Setup → Notifications if the wording or timing is wrong.
+- **The request window now opens at 10am, not midnight.** The next window to open will do
+  so ten hours later than the last one did. Nothing is lost — riders simply cannot book
+  in the small hours of the lead day — but it is a visible change to when the "Ride
+  requests are open" push lands.
+- **Nobody has looked at the panel yet.** See the note above about blank screenshots.
 
 ## DEPLOYED — a day of owner-reported UI fixes, 2026-08-28
 
