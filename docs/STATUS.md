@@ -3,7 +3,29 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-08-31**.
 
-## DEPLOYED — manager notification controls, 2026-08-31 (last)
+## DEPLOYED — Alerts moved into the panel, 2026-08-31 (last)
+
+`b972592`, hosting only — no functions or rules changed, so the usual three-step order
+did not apply. Client **1875**, functions 1021, rules 242. Live bundle
+`index-CKGbekuX.js`, verified.
+
+The settings shipped an hour earlier as a slab under the Arrivals board and an accordion
+row in Setup. The owner's call, looking at it in production: it belongs **in the left
+panel**, not in the middle of a scrolling list of the thing it configures.
+`notifications` is now its own tab in BOTH services — the only tab that is — labelled
+`Alerts` because NOTIFICATIONS truncates in the 375px bottom dock.
+
+`role` is back on `tabBelongsTo` and `airportTabs`. It was removed when the board got one
+home and there was nothing left for it to decide; whether a tab EXISTS for someone is
+something it must decide. Active role, so the Sarthi hat hides it like it hides Setup.
+
+**A mutation exposed a real hole here.** Relaxing the sabha branch of `tabBelongsTo` to
+`return true` left all 72 nav and routing cases green — a nav that never offers the tab
+to a Sarthi cannot detect a `tabBelongsTo` that would allow it. `AirportShell` performs no
+role check of its own by design, so that function is the ONLY thing between a Sarthi and
+a settings page whose every save the callable refuses. The gate is now asserted directly.
+
+## DEPLOYED — manager notification controls, 2026-08-31
 
 `2a57b5f`, live, `main` matches and is pushed. Client **1862**, functions **1021**, rules
 **242**. Full six-step sweep clean.
