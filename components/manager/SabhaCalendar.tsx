@@ -8,6 +8,8 @@ import { AGENDA_MAX_CHARS, agendaSummary, describeAgendaProblem } from '../../sr
 import { RecurringSabha } from './RecurringSabha';
 import { previewDeleteSabhaEvent, deleteSabhaEvent } from '../../src/utils/cloudFunctions';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
+import { useLocations } from '../../hooks/useLocations';
+import type { SabhaLocationRecord } from '../../src/utils/locations';
 import { useSettings } from '../../hooks/useSettings';
 import { AddressAutocomplete } from '../auth/AddressAutocomplete';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
@@ -120,7 +122,19 @@ const EventDetail: React.FC<{
     /** Genuinely the next gathering of any kind — governs the "Rides open" pill. */
     isNext: boolean;
     ridesOpen: boolean;
-}> = ({ event, label, isNext, ridesOpen }) => {
+    /**
+     * The halls open for business, from the parent's ONE subscription.
+     *
+     * Passed down rather than read per row: the calendar draws up to eight of these,
+     * and eight listeners on a two-document collection is eight for nothing.
+     *
+     * FEWER THAN TWO AND THIS ROW IS UNCHANGED — one "Cancel this week" button, no
+     * hall names, nothing new to read. That is production today, and it is why a
+     * single-hall project cannot see this feature at all. A choice with one option is
+     * not a choice, and a hall name on a screen that has never carried one is noise.
+     */
+    halls: SabhaLocationRecord[];
+}> = ({ event, label, isNext, ridesOpen, halls }) => {
     const { currentUser } = useAuth();
     const [editing, setEditing] = useState(false);
     const [start, setStart] = useState(event.startTime);
@@ -176,7 +190,15 @@ const EventDetail: React.FC<{
         }
     };
 
-    const remove = async () => {
+    /**
+     * Cancel this gathering — at ONE hall, or the whole evening.
+     *
+     * `locationId` null means the evening. The scope is decided by which button was
+     * pressed, never inferred here, and it is named in the dialog: a confirmation that
+     * says "Cancel the sabha on the 21st" when the manager picked one room is how
+     * somebody cancels both by accident.
+     */
+    const remove = async (locationId: string | null) => {
         if (!currentUser) return;
 
         setBusy(true);
@@ -184,7 +206,7 @@ const EventDetail: React.FC<{
         try {
             // Ask the server what this would affect BEFORE showing the dialog, so
             // the manager sees real numbers rather than a generic warning.
-            const preview = await previewDeleteSabhaEvent(event.id);
+            const preview = await previewDeleteSabhaEvent(event.id, locationId);
 
             const affected: string[] = [];
             if (preview.responseCount > 0) {
@@ -194,12 +216,19 @@ const EventDetail: React.FC<{
                 affected.push(`${preview.requestedRideCount} ride ${preview.requestedRideCount === 1 ? 'request' : 'requests'} will be cancelled`);
             }
 
+            // The server echoes the hall's NAME back, so the dialog names what the
+            // manager actually picked rather than what this component believes it sent.
+            const scope = preview.locationName
+                ? `the sabha at ${preview.locationName}`
+                : 'the whole evening';
+
             const ok = await ask({
-                title: `Delete ${formatDate(event.date)}?`,
-                message: affected.length > 0
-                    ? `${affected.join(' and ')}. They will be notified.\n\nThis cannot be undone.`
-                    : 'Nobody has responded or requested a ride yet.\n\nThis cannot be undone.',
-                confirmLabel: 'Delete sabha',
+                title: `Cancel ${formatDate(event.date)}?`,
+                message: `This cancels ${scope}.\n\n`
+                    + (affected.length > 0
+                        ? `${affected.join(' and ')}. They will be notified.\n\nThis cannot be undone.`
+                        : 'Nobody has responded or requested a ride yet.\n\nThis cannot be undone.'),
+                confirmLabel: preview.locationName ? 'Cancel this sabha' : 'Cancel the evening',
                 cancelLabel: 'Keep it',
                 destructive: true,
             });
@@ -208,7 +237,7 @@ const EventDetail: React.FC<{
                 return;
             }
 
-            await deleteSabhaEvent(event.id, true);
+            await deleteSabhaEvent(event.id, true, locationId);
             // The row disappears on its own — useUpcomingEvents is a live listener.
         } catch (err: unknown) {
             // Surfaced, not swallowed. The server refuses for good reasons (today's
@@ -264,16 +293,50 @@ const EventDetail: React.FC<{
                         >
                             Edit this week
                         </button>
-                        <button
-                            onClick={remove}
-                            disabled={busy}
-                            className="min-h-11 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 text-[rgb(var(--danger-text))] border border-[rgb(var(--danger))]/35 hover:bg-[rgb(var(--danger-bg))] disabled:opacity-50"
-                        >
-                            {busy
-                                ? <Loader2 size={14} className="animate-spin" />
-                                : <Trash2 size={14} />}
-                            Cancel this week
-                        </button>
+                        {/* ONE BUTTON PER SCOPE, and each one says which sabha it
+                            cancels. A single button plus a picker would mean the
+                            destructive action and the thing it acts on live in two
+                            places, and the manager reading the label would not be
+                            reading the scope. With one hall open there is only one
+                            scope, so this is the button it has always been. */}
+                        {halls.length < 2 ? (
+                            <button
+                                onClick={() => remove(null)}
+                                disabled={busy}
+                                className="min-h-11 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 text-[rgb(var(--danger-text))] border border-[rgb(var(--danger))]/35 hover:bg-[rgb(var(--danger-bg))] disabled:opacity-50"
+                            >
+                                {busy
+                                    ? <Loader2 size={14} className="animate-spin" />
+                                    : <Trash2 size={14} />}
+                                Cancel this week
+                            </button>
+                        ) : (
+                            <>
+                                {halls.map(h => (
+                                    <button
+                                        key={h.id}
+                                        onClick={() => remove(h.id)}
+                                        disabled={busy}
+                                        className="min-h-11 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 text-[rgb(var(--danger-text))] border border-[rgb(var(--danger))]/35 hover:bg-[rgb(var(--danger-bg))] disabled:opacity-50"
+                                    >
+                                        {busy
+                                            ? <Loader2 size={14} className="animate-spin" />
+                                            : <Trash2 size={14} />}
+                                        Cancel {h.name}
+                                    </button>
+                                ))}
+                                <button
+                                    onClick={() => remove(null)}
+                                    disabled={busy}
+                                    className="min-h-11 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 text-[rgb(var(--danger-text))] border border-[rgb(var(--danger))]/35 hover:bg-[rgb(var(--danger-bg))] disabled:opacity-50"
+                                >
+                                    {busy
+                                        ? <Loader2 size={14} className="animate-spin" />
+                                        : <Trash2 size={14} />}
+                                    Cancel the whole evening
+                                </button>
+                            </>
+                        )}
                     </div>
                 </>
             )}
@@ -364,6 +427,17 @@ export const SabhaCalendar: React.FC = () => {
     const { currentUser } = useAuth();
     const { events, loading, error, rule } = useUpcomingEvents();
     const { calendarStatus } = useCurrentEvent();
+    /**
+     * ONE subscription for the whole calendar, handed to every row.
+     *
+     * `active` and not `locations`: a retired hall has no gathering to cancel, and a
+     * button for one would be a control that cannot work.
+     *
+     * Passed through as-is. Whether to draw per-hall buttons is `EventDetail`'s
+     * decision and it makes it from the length — filtering here as well was a second
+     * copy of the same rule, and mutation proved it changed nothing.
+     */
+    const { active: halls } = useLocations();
 
     const { sabhaLocation, sabhaStartTime, sabhaEndTime } = useSettings();
 
@@ -515,6 +589,7 @@ export const SabhaCalendar: React.FC = () => {
                         // is the kind of quietly-wrong screen this app keeps fixing.
                         label={nextWeekly.id === nextScheduled?.id ? 'Next sabha' : 'Next weekly sabha'}
                         isNext={nextWeekly.id === nextScheduled?.id}
+                        halls={halls}
                         ridesOpen={calendarStatus === 'ok'}
                     />
                 </>
@@ -558,6 +633,7 @@ export const SabhaCalendar: React.FC = () => {
                         label={event.id === nextScheduled?.id ? 'Next sabha' : 'Extra sabha'}
                         isNext={event.id === nextScheduled?.id}
                         ridesOpen={calendarStatus === 'ok'}
+                        halls={halls}
                     />
                 </div>
             ))}

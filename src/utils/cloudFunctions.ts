@@ -535,6 +535,16 @@ export async function manuallyUpdateRideContext(params?: ManuallyUpdateRideConte
  */
 export interface DeleteSabhaEventPreview {
     date: string;
+    /** The hall this would cancel, or null for the whole evening. */
+    locationId: string | null;
+    /**
+     * The hall's name, echoed back by the server.
+     *
+     * The dialog names the scope from THIS rather than from what the caller believes
+     * it sent, so a confirmation cannot say "the sabha at Elm Street" over a request
+     * the server read as the whole evening.
+     */
+    locationName: string | null;
     responseCount: number;
     requestedRideCount: number;
     isCurrentEvent: boolean;
@@ -549,16 +559,30 @@ export interface DeleteSabhaEventPreview {
  * them, and `system/rideContext` has to be rewritten so it never names a deleted
  * document. Only the Admin SDK can do all of that, in one commit.
  */
-export async function previewDeleteSabhaEvent(date: string): Promise<DeleteSabhaEventPreview> {
-    return callFunction<DeleteSabhaEventPreview>('deleteSabhaEvent', { date, dryRun: true });
+export async function previewDeleteSabhaEvent(
+    date: string,
+    /** One hall, or null for the whole evening. */
+    locationId: string | null = null,
+): Promise<DeleteSabhaEventPreview> {
+    return callFunction<DeleteSabhaEventPreview>('deleteSabhaEvent', {
+        date, locationId, dryRun: true,
+    });
 }
 
 export async function deleteSabhaEvent(
     date: string,
     acknowledge: boolean,
+    /**
+     * One hall, or null for the whole evening.
+     *
+     * DEFAULTS TO THE WHOLE EVENING, which is what this function always did — a caller
+     * that has not been taught about halls keeps its old behaviour rather than
+     * cancelling an arbitrary one.
+     */
+    locationId: string | null = null,
 ): Promise<DeleteSabhaEventPreview & { deleted: boolean }> {
     return callFunction<DeleteSabhaEventPreview & { deleted: boolean }>(
-        'deleteSabhaEvent', { date, acknowledge });
+        'deleteSabhaEvent', { date, acknowledge, locationId });
 }
 
 // ============================================

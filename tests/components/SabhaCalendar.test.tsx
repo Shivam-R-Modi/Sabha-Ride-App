@@ -28,10 +28,23 @@ import userEvent from '@testing-library/user-event';
 
 const editOccurrence = vi.fn(
     async (_date: string, _fields: unknown, _uid: string, _source: string) => undefined);
-const previewDeleteSabhaEvent = vi.fn(async () => ({ responseCount: 0, requestedRideCount: 0 }));
-const deleteSabhaEvent = vi.fn(async () => ({ success: true }));
+const previewDeleteSabhaEvent = vi.fn(async (..._a: any[]) => ({
+    responseCount: 0, requestedRideCount: 0, locationId: null as string | null,
+    locationName: null as string | null,
+}));
+const deleteSabhaEvent = vi.fn(async (..._a: any[]) => ({ success: true }));
+/**
+ * The confirmation, hoisted rather than created per render.
+ *
+ * The dialog's markup is useConfirm's own business and has its own tests. What belongs
+ * here is the TEXT this screen composes, because that text is what a manager reads
+ * before cancelling something — so it is asserted against the options handed to `ask`.
+ */
+const ask = vi.fn(async (_options: any) => true);
 
 let calendarStatus: 'ok' | 'no-scheduled-event' = 'ok';
+/** The halls open for business. One is production today; two is the feature. */
+let openHalls: Array<{ id: string; name: string }> = [];
 let upcoming: any[] = [];
 
 vi.mock('../../firebase/config', () => ({ db: {} }));
@@ -49,6 +62,14 @@ vi.mock('../../hooks/useEvents', () => ({
 }));
 vi.mock('../../hooks/useCurrentEvent', () => ({
     useCurrentEvent: () => ({ calendarStatus }),
+}));
+// Left unmocked this runs a real Firestore subscription against the stub `db: {}`,
+// which throws inside collection() and fails every test in the file.
+vi.mock('../../hooks/useLocations', () => ({
+    useLocations: () => ({
+        locations: openHalls, active: openHalls, loading: false, error: null,
+        updateLocationVenue: vi.fn(),
+    }),
 }));
 vi.mock('../../src/utils/cloudFunctions', () => ({
     previewDeleteSabhaEvent: (...a: unknown[]) => previewDeleteSabhaEvent(...(a as [])),
@@ -80,7 +101,7 @@ vi.mock('../../hooks/useSettings', async (importOriginal) => {
 // Auto-confirms. What the delete tests assert is which DATE was sent, not the
 // dialog — useConfirm has its own tests.
 vi.mock('../../components/shared/useConfirm', () => ({
-    useConfirm: () => ({ ask: vi.fn(async () => true), confirmDialog: null }),
+    useConfirm: () => ({ ask: (o: any) => ask(o), confirmDialog: null }),
 }));
 
 import { SabhaCalendar } from '../../components/manager/SabhaCalendar';
@@ -94,6 +115,11 @@ const week = (date: string, over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
     vi.clearAllMocks();
     calendarStatus = 'ok';
+    openHalls = [];
+    ask.mockResolvedValue(true);
+    previewDeleteSabhaEvent.mockResolvedValue({
+        responseCount: 0, requestedRideCount: 0, locationId: null, locationName: null,
+    });
     upcoming = [
         week('2026-08-28'),
         week('2026-09-04'),
@@ -267,7 +293,7 @@ describe('editing and cancelling act on the card they sit in', () => {
 
         await userEvent.click(screen.getByRole('button', { name: /cancel this week/i }));
 
-        await waitFor(() => expect(previewDeleteSabhaEvent).toHaveBeenCalledWith('2026-08-28'));
+        await waitFor(() => expect(previewDeleteSabhaEvent).toHaveBeenCalledWith('2026-08-28', null));
     });
 
     it('cancels an extra sabha from its own card', async () => {
@@ -277,7 +303,7 @@ describe('editing and cancelling act on the card they sit in', () => {
         const extra = within(screen.getByRole('region', { name: 'Extra sabhas' }));
         await userEvent.click(extra.getByRole('button', { name: /cancel this week/i }));
 
-        await waitFor(() => expect(previewDeleteSabhaEvent).toHaveBeenCalledWith('2026-08-29'));
+        await waitFor(() => expect(previewDeleteSabhaEvent).toHaveBeenCalledWith('2026-08-29', null));
     });
 });
 
@@ -302,5 +328,123 @@ describe('the message worth never losing', () => {
         render(<SabhaCalendar />);
 
         expect(screen.getByText(/Every Friday/)).toBeTruthy();
+    });
+});
+
+/**
+ * Cancelling ONE HALL of an evening.
+ *
+ * The dangerous mistake is not failing to offer the choice — it is offering a button
+ * whose label does not match what it cancels. So each case here pins the label to the
+ * argument, and the single-hall case pins that nothing changed at all.
+ */
+describe('SabhaCalendar — cancelling one hall', () => {
+    const TWO = [
+        { id: 'boston-huntington', name: 'Huntington Ave' },
+        { id: 'somerville', name: 'Elm Street' },
+    ];
+
+    it('draws the one button it always drew when a single hall is open', async () => {
+        // Production today. A per-hall button here would be a choice with one option,
+        // and a hall name on a screen that has never had one.
+        openHalls = [{ id: 'boston-huntington', name: 'Huntington Ave' }];
+        render(<SabhaCalendar />);
+
+        expect(await screen.findAllByRole('button', { name: /Cancel this week/ }))
+            .not.toHaveLength(0);
+        expect(screen.queryByRole('button', { name: /Cancel Huntington/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /whole evening/ })).toBeNull();
+    });
+
+    it('offers one button per hall plus the whole evening', async () => {
+        openHalls = TWO;
+        render(<SabhaCalendar />);
+
+        expect(await screen.findAllByRole('button', { name: /Cancel Huntington Ave/ }))
+            .not.toHaveLength(0);
+        expect(screen.getAllByRole('button', { name: /Cancel Elm Street/ })).not.toHaveLength(0);
+        expect(screen.getAllByRole('button', { name: /Cancel the whole evening/ })).not.toHaveLength(0);
+        // And the ambiguous one is gone, because with two halls "this week" does not
+        // say which room.
+        expect(screen.queryByRole('button', { name: /Cancel this week/ })).toBeNull();
+    });
+
+    it('sends the HALL the button names, not the first one', async () => {
+        openHalls = TWO;
+        render(<SabhaCalendar />);
+
+        const button = (await screen.findAllByRole('button', { name: /Cancel Elm Street/ }))[0];
+        await userEvent.click(button);
+
+        await waitFor(() => expect(previewDeleteSabhaEvent).toHaveBeenCalled());
+        expect(previewDeleteSabhaEvent.mock.calls[0][1]).toBe('somerville');
+    });
+
+    it('sends null for the whole evening', async () => {
+        openHalls = TWO;
+        render(<SabhaCalendar />);
+
+        const button = (await screen.findAllByRole('button', { name: /Cancel the whole evening/ }))[0];
+        await userEvent.click(button);
+
+        await waitFor(() => expect(previewDeleteSabhaEvent).toHaveBeenCalled());
+        expect(previewDeleteSabhaEvent.mock.calls[0][1]).toBeNull();
+    });
+
+    it('NAMES THE HALL in the confirmation, from the server\'s answer', async () => {
+        // From the preview, not from this component's own idea of what it sent. A
+        // dialog that says "the sabha at Elm Street" over a request the server read as
+        // the whole evening is how somebody cancels both rooms believing they cancelled
+        // one.
+        openHalls = TWO;
+        previewDeleteSabhaEvent.mockResolvedValue({
+            responseCount: 0, requestedRideCount: 0,
+            locationId: 'somerville', locationName: 'Elm Street',
+        });
+        render(<SabhaCalendar />);
+
+        await userEvent.click((await screen.findAllByRole('button', { name: /Cancel Elm Street/ }))[0]);
+
+        await waitFor(() => expect(ask).toHaveBeenCalled());
+        expect(ask.mock.calls[0][0].message).toContain('This cancels the sabha at Elm Street');
+        expect(ask.mock.calls[0][0].confirmLabel).toBe('Cancel this sabha');
+    });
+
+    it('says the whole evening when that is what it is', async () => {
+        openHalls = TWO;
+        render(<SabhaCalendar />);
+
+        await userEvent.click((await screen.findAllByRole('button', { name: /Cancel the whole evening/ }))[0]);
+
+        await waitFor(() => expect(ask).toHaveBeenCalled());
+        expect(ask.mock.calls[0][0].message).toContain('This cancels the whole evening');
+        expect(ask.mock.calls[0][0].confirmLabel).toBe('Cancel the evening');
+    });
+
+    it('passes the hall through to the real deletion, not just the preview', async () => {
+        // The preview taking the hall and the deletion not is a silent widening: the
+        // manager reads "the sabha at Elm Street" and both rooms get cancelled.
+        openHalls = TWO;
+        previewDeleteSabhaEvent.mockResolvedValue({
+            responseCount: 0, requestedRideCount: 0,
+            locationId: 'somerville', locationName: 'Elm Street',
+        });
+        render(<SabhaCalendar />);
+
+        await userEvent.click((await screen.findAllByRole('button', { name: /Cancel Elm Street/ }))[0]);
+
+        await waitFor(() => expect(deleteSabhaEvent).toHaveBeenCalled());
+        expect(deleteSabhaEvent.mock.calls[0][2]).toBe('somerville');
+    });
+
+    it('cancels nothing when the manager backs out', async () => {
+        openHalls = TWO;
+        ask.mockResolvedValue(false);
+        render(<SabhaCalendar />);
+
+        await userEvent.click((await screen.findAllByRole('button', { name: /Cancel Elm Street/ }))[0]);
+
+        await waitFor(() => expect(ask).toHaveBeenCalled());
+        expect(deleteSabhaEvent).not.toHaveBeenCalled();
     });
 });

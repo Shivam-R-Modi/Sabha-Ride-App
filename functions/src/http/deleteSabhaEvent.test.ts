@@ -68,7 +68,19 @@ interface Fixture {
     rides?: Array<{ id: string; data: Record<string, unknown> }>;
     responses?: string[];
     contextEventId?: string | null;
+    /** Per-hall slices of system/rideContext. Absent means only the aggregate exists. */
+    contextByLocation?: Record<string, { eventId?: string | null }>;
     users?: Record<string, any>;
+    /**
+     * The `locations` collection.
+     *
+     * Defaults to the founding hall alone, which is production today. Before this
+     * existed the fake had no `collection('locations').get()` at all, so
+     * `getActiveLocations` threw, was caught, returned [] and fell through to
+     * `locationsOrFoundingFallback` — every test in this file passed through an error
+     * path, and none of them could have noticed a hall being read wrongly.
+     */
+    locations?: Record<string, any>;
 }
 
 interface Recorder {
@@ -86,12 +98,25 @@ function makeDb(f: Fixture) {
     const events = f.events ?? { '2026-08-14': { date: '2026-08-14', status: 'scheduled', startTime: '19:00', endTime: '22:00' } };
     const rides = f.rides ?? [];
     const users: Record<string, any> = { caller: f.caller ?? MANAGER, ...(f.users ?? {}) };
+    const locations = f.locations ?? {
+        'boston-huntington': {
+            name: 'Huntington Ave',
+            venue: { lat: 42.339925, lng: -71.088182, address: '360 Huntington Ave' },
+            active: true, order: 0,
+        },
+    };
 
     const snap = (exists: boolean, data?: any) => ({ exists, data: () => data });
 
     const ref = (path: string) => ({ path });
 
     const collection = (name: string): any => ({
+        // A whole-collection read. `getActiveLocations` uses it; nothing else does.
+        get: async () => ({
+            docs: name === 'locations'
+                ? Object.entries(locations).map(([id, data]) => ({ id, data: () => data }))
+                : [],
+        }),
         doc: (id: string) => ({
             path: `${name}/${id}`,
             get: async () => {
@@ -110,17 +135,43 @@ function makeDb(f: Fixture) {
                 }),
             }),
         }),
-        where: () => ({
-            get: async () => ({
-                docs: rides.map(r => ({
-                    id: r.id,
-                    ref: ref(`rides/${r.id}`),
-                    data: () => r.data,
-                })),
-            }),
-            where: () => ({ get: async () => ({ docs: [] }) }),
-            orderBy: () => ({ get: async () => ({ docs: [] }) }),
-        }),
+        /**
+         * TWO QUERY SHAPES, and the events one has to be real.
+         *
+         * `rides` is a single `where('eventDate', ...)`. `events` is
+         * `.where(id >= from).where(id <= to).orderBy(id)`, which `resolveCurrentEvent`
+         * uses to rebuild the ride context. This fake used to return `{ docs: [] }` for
+         * anything past the first `where` and had no `orderBy` on the second one at
+         * all — so that read threw, was swallowed by the catch in `findCurrentEvent`,
+         * and 'rewrites rideContext immediately' asserted an empty answer produced by a
+         * TypeError. Honouring BOTH bounds is what makes it able to fail.
+         */
+        where: (field: string, op: string, value: any) => {
+            if (name !== 'events') {
+                return {
+                    get: async () => ({
+                        docs: rides.map(r => ({
+                            id: r.id,
+                            ref: ref(`rides/${r.id}`),
+                            data: () => r.data,
+                        })),
+                    }),
+                };
+            }
+            const bounds: Array<[string, any]> = [[op, value]];
+            const chain: any = {
+                where: (_f: string, o: string, v: any) => { bounds.push([o, v]); return chain; },
+                orderBy: () => chain,
+                get: async () => ({
+                    docs: Object.keys(events)
+                        .filter(id => bounds.every(([o, v]) =>
+                            (o === '>=' ? id >= v : o === '<=' ? id <= v : true)))
+                        .sort()
+                        .map(id => ({ id, ref: ref(`events/${id}`), data: () => events[id] })),
+                }),
+            };
+            return chain;
+        },
     });
 
     db = {
@@ -129,7 +180,10 @@ function makeDb(f: Fixture) {
             path,
             get: async () => {
                 if (path === 'system/rideContext') {
-                    return snap(true, { eventId: f.contextEventId ?? null });
+                    return snap(true, {
+                        eventId: f.contextEventId ?? null,
+                        ...(f.contextByLocation ? { byLocation: f.contextByLocation } : {}),
+                    });
                 }
                 // The weekly rule. Without it every stored document reads as an
                 // override with nothing to override, and is therefore inert — so
@@ -438,5 +492,287 @@ describe('deleteSabhaEvent — what actually gets written', () => {
         expect(typeof first.data.timestamp).toBe('string');
         expect(first.data.action).toBe('event.delete');
         expect(first.data.summary).toMatch(/Deleted the sabha on 2026-08-14/);
+    });
+});
+
+/**
+ * Cancelling ONE HALL, not the whole evening.
+ *
+ * "in rare case scenario there might be independent changes." The dangerous direction
+ * is not failing to cancel a hall — it is cancelling more than the manager asked for,
+ * because everything that hangs off a gathering is keyed by event id and every one of
+ * those keys had to be changed at once. A single miss deletes the founding hall's
+ * attendance, or cancels the other room's riders, and neither throws.
+ */
+describe('deleteSabhaEvent — one hall of an evening', () => {
+    const TWO_HALLS = {
+        'boston-huntington': {
+            name: 'Huntington Ave',
+            venue: { lat: 42.339925, lng: -71.088182, address: '360 Huntington Ave' },
+            active: true, order: 0,
+        },
+        somerville: {
+            name: 'Elm Street',
+            venue: { lat: 42.387, lng: -71.099, address: '5 Elm Street' },
+            active: true, order: 1,
+        },
+    };
+
+    it('writes the HALL\'s document, leaving the evening\'s alone', async () => {
+        const rec = makeDb({ locations: TWO_HALLS });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+
+        const write = rec.sets.find(s => s.path === 'events/2026-08-14__somerville')!;
+        expect(write.data.status).toBe('cancelled');
+        expect(write.data.locationId).toBe('somerville');
+        expect(rec.sets.find(s => s.path === 'events/2026-08-14')).toBeUndefined();
+    });
+
+    it('PARKS THE HALL\'S ATTENDANCE KEY, not the bare date', async () => {
+        /**
+         * The one that would be unrecoverable. `weeklyAttendance` is keyed by event id,
+         * so parking `2026-08-14` here has the sweeper recursively delete the FOUNDING
+         * hall's responses when the manager cancelled Somerville — children's names,
+         * phone numbers and home addresses, for a sabha that is still happening, with
+         * no screen that could ever show them again.
+         */
+        const rec = makeDb({ locations: TWO_HALLS });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+
+        const parked = rec.sets.find(s => s.path === 'system/eventGenerator')!;
+        expect(parked.data.pendingAttendanceDeletes).toEqual(
+            { __arrayUnion: ['2026-08-14__somerville'] },
+        );
+        expect(rec.recursiveDeletes).toEqual(['weeklyAttendance/2026-08-14__somerville']);
+    });
+
+    it('cancels only the rides bound for that hall', async () => {
+        const rec = makeDb({
+            locations: TWO_HALLS,
+            rides: [
+                { id: 'r1', data: { status: 'requested', studentId: 'a', eventDate: '2026-08-14', locationId: 'somerville' } },
+                { id: 'r2', data: { status: 'requested', studentId: 'b', eventDate: '2026-08-14', locationId: 'boston-huntington' } },
+            ],
+        });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+
+        expect(rec.updates.map(u => u.path)).toEqual(['rides/r1']);
+    });
+
+    it('cancels a ride that names NO hall, rather than leaving it stranded', async () => {
+        // It cannot be dispatched — isValidPendingRide refuses a ride with no hall —
+        // but it is somebody's request, and a missing field must not be the reason it
+        // outlives the gathering it was made for.
+        const rec = makeDb({
+            locations: TWO_HALLS,
+            rides: [
+                { id: 'r1', data: { status: 'requested', studentId: 'a', eventDate: '2026-08-14' } },
+            ],
+        });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+
+        expect(rec.updates.map(u => u.path)).toEqual(['rides/r1']);
+    });
+
+    it('REFUSES when a driver is on the road for that hall', async () => {
+        const rec = makeDb({
+            locations: TWO_HALLS,
+            rides: [
+                { id: 'r1', data: { status: 'assigned', eventDate: '2026-08-14', locationId: 'somerville' } },
+            ],
+        });
+
+        await expect(call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true }))
+            .rejects.toThrow(/already assigned/);
+        expect(rec.committed).toBe(false);
+    });
+
+    it('is NOT blocked by a driver on the road for the other hall', async () => {
+        // The mirror of the case above, and the reason the filter is in memory rather
+        // than a `where`: an equality filter on `locationId` returns EMPTY for rides
+        // that predate the field, so this guard would read "nobody is mid-route" and
+        // let the cancellation through under a driver already carrying children.
+        const rec = makeDb({
+            locations: TWO_HALLS,
+            rides: [
+                { id: 'r1', data: { status: 'assigned', eventDate: '2026-08-14', locationId: 'boston-huntington' } },
+            ],
+        });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+        expect(rec.committed).toBe(true);
+    });
+
+    it('refuses a hall that is not open', async () => {
+        // Loud, not a silent widening to the whole evening: a stale tab whose hall a
+        // manager has since retired must not turn one tap into cancelling both rooms.
+        const rec = makeDb({ locations: TWO_HALLS });
+
+        await expect(call({ date: '2026-08-14', locationId: 'brookline', acknowledge: true }))
+            .rejects.toThrow(/not open/);
+        expect(rec.committed).toBe(false);
+    });
+
+    it('refuses a hall id that could not be a document id', async () => {
+        const rec = makeDb({ locations: TWO_HALLS });
+
+        await expect(call({ date: '2026-08-14', locationId: '../system', acknowledge: true }))
+            .rejects.toThrow(/not valid/);
+        expect(rec.committed).toBe(false);
+    });
+
+    it('cancels a hall running purely on the rule, with no document of its own', async () => {
+        // Almost every evening. Reading only the hall's own document would report "not
+        // on the calendar" for a hall that is plainly listed on it — the dead-control
+        // failure this file already carries one scar from.
+        const rec = makeDb({ locations: TWO_HALLS, events: {} });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+        expect(rec.committed).toBe(true);
+    });
+
+    it('refuses a hall whose evening is already cancelled date-wide', async () => {
+        const rec = makeDb({
+            locations: TWO_HALLS,
+            events: { '2026-08-14': { date: '2026-08-14', kind: 'override', status: 'cancelled' } },
+        });
+
+        await expect(call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true }))
+            .rejects.toThrow(/not on the calendar|already cancelled/);
+        expect(rec.committed).toBe(false);
+    });
+
+    it('names the hall in the notification, so a rider knows which sabha is off', async () => {
+        // Without it this push tells a rider the sabha is cancelled while the other
+        // room is still meeting, and the correction is a phone call somebody has to
+        // make.
+        makeDb({
+            locations: TWO_HALLS,
+            responses: ['stu-a'],
+            users: { 'stu-a': { fcmToken: 'tok-a' } },
+        });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+
+        expect(sendMulticast).toHaveBeenCalled();
+        const [, , body] = sendMulticast.mock.calls[0] as any[];
+        expect(body).toContain('Elm Street');
+    });
+
+    it('does not name a hall when the whole evening is cancelled', async () => {
+        makeDb({
+            locations: TWO_HALLS,
+            responses: ['stu-a'],
+            users: { 'stu-a': { fcmToken: 'tok-a' } },
+        });
+
+        await call({ date: '2026-08-14', acknowledge: true });
+
+        const [, , body] = sendMulticast.mock.calls[0] as any[];
+        expect(body).not.toContain('Elm Street');
+    });
+
+    it('echoes the hall back in the preview, so the dialog can name it', async () => {
+        makeDb({ locations: TWO_HALLS });
+
+        const preview: any = await call({
+            date: '2026-08-14', locationId: 'somerville', dryRun: true,
+        });
+
+        expect(preview.locationId).toBe('somerville');
+        expect(preview.locationName).toBe('Elm Street');
+    });
+
+    it('reads isCurrentEvent from THAT HALL\'S slice', async () => {
+        // Against the top level this says false for a second hall's gathering — and
+        // isCurrentEvent is what decides whether rideContext is rewritten in the same
+        // commit. A false leaves the document naming a sabha that was just cancelled,
+        // with its request window still open, until the next minute tick.
+        makeDb({
+            locations: TWO_HALLS,
+            contextEventId: '2026-08-14',
+            contextByLocation: {
+                'boston-huntington': { eventId: '2026-08-14' },
+                somerville: { eventId: '2026-08-14__somerville' },
+            },
+        });
+
+        const preview: any = await call({
+            date: '2026-08-14', locationId: 'somerville', dryRun: true,
+        });
+
+        expect(preview.isCurrentEvent).toBe(true);
+    });
+
+    it('rewrites the WHOLE context document, keeping byLocation and locationIds', async () => {
+        /**
+         * This was a partial `set` of the top-level fields, which erased `byLocation`
+         * and `locationIds` until the next minute tick. A client reading its own hall's
+         * slice then fell back to the aggregate, so for up to a minute every hall showed
+         * the founding hall's window — and a client that had learned to expect
+         * `locationIds` could no longer tell "my hall is closed" from "my hall is not
+         * described here", which is the distinction that field exists for.
+         */
+        const rec = makeDb({
+            locations: TWO_HALLS,
+            // Today (the 7th) is cancelled, so the 14th really is the current
+            // gathering. Without that the resolver answers for the 7th and the pending
+            // cancellation lands on a different evening — which is how this test first
+            // failed, and the failure was right.
+            events: { '2026-08-07': { date: '2026-08-07', kind: 'override', status: 'cancelled' } },
+            contextEventId: '2026-08-14',
+            contextByLocation: {
+                'boston-huntington': { eventId: '2026-08-14' },
+                somerville: { eventId: '2026-08-14__somerville' },
+            },
+        });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+
+        const ctx = rec.sets.find(s => s.path === 'system/rideContext')!;
+        expect(Object.keys(ctx.data.byLocation).sort())
+            .toEqual(['boston-huntington', 'somerville']);
+        expect(ctx.data.locationIds.sort()).toEqual(['boston-huntington', 'somerville']);
+
+        // Somerville is the hall just cancelled, so its slice goes quiet — while the
+        // evening itself, and the other hall, carry on untouched.
+        expect(ctx.data.byLocation.somerville.calendarStatus).toBe('no-scheduled-event');
+        expect(ctx.data.byLocation['boston-huntington'].eventId).toBe('2026-08-14');
+    });
+
+it('rolls EVERY hall forward when the whole evening is cancelled', async () => {
+        // The other direction. Cancelling the evening leaves no hall on that date, so
+        // both slices move to the next one — and both must name their own event id.
+        const rec = makeDb({
+            locations: TWO_HALLS,
+            events: { '2026-08-07': { date: '2026-08-07', kind: 'override', status: 'cancelled' } },
+            contextEventId: '2026-08-14',
+            contextByLocation: {
+                'boston-huntington': { eventId: '2026-08-14' },
+                somerville: { eventId: '2026-08-14__somerville' },
+            },
+        });
+
+        await call({ date: '2026-08-14', acknowledge: true });
+
+        const ctx = rec.sets.find(s => s.path === 'system/rideContext')!;
+        expect(ctx.data.byLocation['boston-huntington'].eventId).toBe('2026-08-21');
+        expect(ctx.data.byLocation.somerville.eventId).toBe('2026-08-21__somerville');
+    });
+
+    it('names the hall on the audit row', async () => {
+        const rec = makeDb({ locations: TWO_HALLS });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+
+        const audit = rec.sets.find(s => s.path.startsWith('auditLogs/'))
+            ?? rec.sets.find(s => s.data?.action === 'event.delete');
+        expect(audit?.data.summary).toContain('Elm Street');
+        expect(audit?.data.details.locationId).toBe('somerville');
+        expect(audit?.data.targetDocumentId).toBe('2026-08-14__somerville');
     });
 });

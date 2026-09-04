@@ -156,6 +156,12 @@ export interface CurrentEventResolution {
  *   this, a manager who cancelled both halls of an evening separately — rather than
  *   cancelling the date — would leave the app announcing a sabha that no hall is
  *   holding: reminders sent, window opened, and every rider told their hall is closed.
+ * @param pendingCancellation an event id to resolve AS IF it were already cancelled.
+ *   `deleteSabhaEvent` needs the answer before its batch commits, and the document it
+ *   is cancelling is still there to be read. Passing it here rather than searching
+ *   again afterwards is what makes a per-hall cancellation work: the same evening may
+ *   still be on for another hall, so "the next gathering" is not a question about the
+ *   date at all, and the old find-then-look-after-it approach could not express that.
  */
 export async function resolveCurrentEvent(
     db: admin.firestore.Firestore,
@@ -163,6 +169,7 @@ export async function resolveCurrentEvent(
     timeZone: string,
     rule: RecurrenceRule | null = null,
     locationIds: readonly string[] | null = null,
+    pendingCancellation: string | null = null,
 ): Promise<CurrentEventResolution> {
     const closed: CurrentEventResolution = { event: null, hallExceptions: new Map() };
     const today = zonedDateKey(now, timeZone);
@@ -217,6 +224,26 @@ export async function resolveCurrentEvent(
             const forDate = byDateAndHall.get(parsed.dateKey) ?? new Map();
             forDate.set(parsed.locationId, exception);
             byDateAndHall.set(parsed.dateKey, forDate);
+        }
+
+        if (pendingCancellation) {
+            // A full EventException, because `effectiveEvent` reads `status` first and
+            // short-circuits — but a half-built record here would be a trap for the
+            // next person to add a field to that type.
+            const cancelled: EventException = {
+                kind: 'override', status: 'cancelled',
+                startTime: '', endTime: '', venue: null, agenda: '',
+            };
+            if (isDateKey(pendingCancellation)) {
+                exceptions.set(pendingCancellation, cancelled);
+            } else {
+                const parsed = parseEventId(pendingCancellation);
+                if (parsed) {
+                    const forDate = byDateAndHall.get(parsed.dateKey) ?? new Map();
+                    forDate.set(parsed.locationId, cancelled);
+                    byDateAndHall.set(parsed.dateKey, forDate);
+                }
+            }
         }
 
         // One occurrence is all this needs when no halls were named; the manager's

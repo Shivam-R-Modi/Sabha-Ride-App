@@ -23,16 +23,20 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { DEFAULT_TIME_ZONE, zonedDateKey } from '../utils/time';
-import { findCurrentEvent, EVENTS_COLLECTION, SEED_MARKER_DOC } from '../utils/events';
-import { buildCurrentEvent, resolveScheduleWindow } from '../utils/schedule';
-import { getRequestsOpenTime } from '../utils/settings';
+import { resolveCurrentEvent, EVENTS_COLLECTION, SEED_MARKER_DOC } from '../utils/events';
+import { getRequestsOpenTime, locationsOrFoundingFallback } from '../utils/settings';
+import { buildRideContextDoc, hallContexts } from '../utils/rideContext';
+import {
+    eventIdFor, locationOfRide, LOCATION_ID_PATTERN, type SabhaLocationRecord,
+} from '../utils/locations';
 import { sendNotification, tokensOf } from '../utils/notifications';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { assertApprovedManager } from '../utils/authz';
+import { FOUNDING_LOCATION_ID } from '../constants/tenancy';
 import { writeAuditLog } from '../utils/audit';
 // No cycle: sabhaRecurrence imports only pure helpers and authz/audit.
 import { readRecurrence } from './sabhaRecurrence';
-import { effectiveEvent, normaliseException } from '../utils/recurrence';
+import { effectiveEventFor, normaliseException } from '../utils/recurrence';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -41,12 +45,42 @@ const IN_FLIGHT_STATUSES = ['assigned', 'driver_en_route', 'arriving', 'in_progr
 
 interface DeletePreview {
     date: string;
+    /**
+     * The hall this cancels, or null for the whole evening.
+     *
+     * Echoed back so the confirmation dialog can name what it is about to do. A dialog
+     * that says "cancel the sabha on the 21st" when the manager picked one room is how
+     * somebody cancels both by accident.
+     */
+    locationId: string | null;
+    /** The hall's name, for the same reason. Null for the whole evening. */
+    locationName: string | null;
     /** People who said yes or no for this gathering. */
     responseCount: number;
     /** Ride requests that would be cancelled. */
     requestedRideCount: number;
     /** True when this is the gathering the app is currently pointing at. */
     isCurrentEvent: boolean;
+}
+
+/**
+ * The event id `system/rideContext` currently names FOR ONE HALL.
+ *
+ * Reads that hall's own slice, falling back to the top level when `byLocation` is
+ * absent — the first minute after the per-hall context deploys, and the founding hall
+ * only. A second hall has no honest answer from the aggregate, so it gets null.
+ */
+function eventIdOfSlice(
+    published: Record<string, unknown> | undefined,
+    locationId: string | null,
+): string | null {
+    if (!published) return null;
+    const byLocation = published.byLocation as Record<string, { eventId?: unknown }> | undefined;
+    const key = locationId ?? FOUNDING_LOCATION_ID;
+    const slice = byLocation?.[key];
+    if (slice) return typeof slice.eventId === 'string' ? slice.eventId : null;
+    if (key !== FOUNDING_LOCATION_ID) return null;
+    return typeof published.eventId === 'string' ? published.eventId : null;
 }
 
 export const deleteSabhaEvent = functions.https.onCall(async (data, context) => {
@@ -63,6 +97,22 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         throw new functions.https.HttpsError('invalid-argument', 'A sabha date is required.');
     }
+
+    /**
+     * WHICH HALL, or the whole evening.
+     *
+     * The client sends a hall id, never a composed event id: the id shape is this
+     * function's business and validating a bare date plus a bare hall is a tighter
+     * boundary than parsing a suffixed string back apart. `eventIdFor` composes it,
+     * and it returns null for a hall id that does not match the pattern — so a bad
+     * one cannot reach a document path.
+     */
+    const rawLocation: unknown = data?.locationId;
+    if (rawLocation !== undefined && rawLocation !== null
+        && (typeof rawLocation !== 'string' || !LOCATION_ID_PATTERN.test(rawLocation))) {
+        throw new functions.https.HttpsError('invalid-argument', 'That sabha location is not valid.');
+    }
+    const locationId: string | null = typeof rawLocation === 'string' ? rawLocation : null;
 
     const dryRun = data?.dryRun === true;
 
@@ -95,12 +145,50 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     // `effectiveEvent` is the single answer to "is there a gathering here", and it
     // already handles all three ways there can be none: cancelled, inert
     // off-pattern override, or simply not covered by the rule.
-    const eventRef = db.collection(EVENTS_COLLECTION).doc(date);
-    const eventSnap = await eventRef.get();
-    const existing = normaliseException(eventSnap.data());
+    // The halls come first: the hall named has to exist and be open before anything
+    // else is read, and the whole-evening path needs them to rebuild the context.
+    const halls = await locationsOrFoundingFallback(db);
+    const hall: SabhaLocationRecord | null = locationId
+        ? halls.find(h => h.id === locationId) ?? null
+        : null;
+    if (locationId && !hall) {
+        // Loud, not a silent widening to the whole evening. A stale tab whose hall a
+        // manager has since retired must not turn one tap into cancelling both rooms.
+        throw new functions.https.HttpsError('not-found', 'That sabha location is not open.');
+    }
+
+    /**
+     * The document being cancelled. `events/{date}` for the whole evening,
+     * `events/{date}__{hall}` for one room — and the bare date for the FOUNDING hall
+     * either way, which is the migration: its history never moves.
+     *
+     * So naming the founding hall explicitly and naming no hall write the same
+     * document. That is correct rather than a collision — with one hall open there is
+     * no difference between "cancel this hall" and "cancel the evening", and the
+     * client only offers the choice when there is more than one.
+     */
+    const eventId = eventIdFor(date, locationId ?? FOUNDING_LOCATION_ID);
+    if (!eventId) {
+        throw new functions.https.HttpsError('invalid-argument', 'That sabha location is not valid.');
+    }
+
+    const eventRef = db.collection(EVENTS_COLLECTION).doc(eventId);
     const rule = await readRecurrence(db);
 
-    if (!effectiveEvent(date, rule, existing)) {
+    // TWO DOCUMENTS, TWO LAYERS. A hall's own exception does not replace the evening's
+    // — it sits on top of it — so cancelling one hall has to read both to know whether
+    // there is anything there to cancel. Reading only the hall's document would report
+    // "not on the calendar" for a hall running on the rule with no document of its own,
+    // which is every hall on almost every evening.
+    const [eventSnap, dateSnap] = await Promise.all([
+        eventRef.get(),
+        eventId === date ? Promise.resolve(null) : db.collection(EVENTS_COLLECTION).doc(date).get(),
+    ]);
+    const existing = normaliseException(eventSnap.data());
+    const dateException = dateSnap ? normaliseException(dateSnap.data()) : existing;
+    const hallException = eventId === date ? null : existing;
+
+    if (!effectiveEventFor(date, rule, dateException, hallException)) {
         throw new functions.https.HttpsError(
             'not-found',
             existing?.status === 'cancelled'
@@ -123,11 +211,27 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     }
 
     // ── Guard: nobody is mid-route ──────────────────────────────────────
+    //
+    // ONE `where`, on a field every ride carries, then the hall filtered IN MEMORY.
+    // Adding `where('locationId', '==', …)` would be the shorter query and the wrong
+    // one: no index carries that field, and an equality filter on a field a document
+    // may not have returns EMPTY rather than erroring — so a hall with rides in flight
+    // would read as "nobody is mid-route" and the cancellation would go through under
+    // a driver already on the road.
     const ridesForDate = await db.collection('rides')
         .where('eventDate', '==', date)
         .get();
 
-    const inFlight = ridesForDate.docs.filter(d =>
+    // A ride that names no hall at all counts for BOTH scopes. It cannot be dispatched
+    // (isValidPendingRide refuses it), but it is somebody's request and it must not
+    // survive the evening being cancelled just because a field is missing.
+    const inScope = ridesForDate.docs.filter(d => {
+        if (!locationId) return true;
+        const of = locationOfRide(d.data());
+        return of === null || of === locationId;
+    });
+
+    const inFlight = inScope.filter(d =>
         IN_FLIGHT_STATUSES.includes(d.data()?.status));
 
     if (inFlight.length > 0) {
@@ -137,18 +241,26 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
         );
     }
 
-    const requestedRides = ridesForDate.docs.filter(d => d.data()?.status === 'requested');
+    const requestedRides = inScope.filter(d => d.data()?.status === 'requested');
 
+    // Attendance is keyed by EVENT id, so this is already per hall.
     const responsesSnap = await db
-        .collection('weeklyAttendance').doc(date)
+        .collection('weeklyAttendance').doc(eventId)
         .collection('responses').get();
 
     const currentContext = (await db.doc(CONTEXT_DOC).get()).data();
     const preview: DeletePreview = {
         date,
+        locationId,
+        locationName: hall?.name ?? null,
         responseCount: responsesSnap.size,
         requestedRideCount: requestedRides.length,
-        isCurrentEvent: currentContext?.eventId === date,
+        // PER HALL, read from that hall's own slice. Against the top level this would
+        // say false for a second hall's gathering — and `isCurrentEvent` is what
+        // decides whether rideContext gets rewritten in the same commit, so a false
+        // here leaves the document naming a sabha that was just cancelled until the
+        // next minute tick, with the request window still open.
+        isCurrentEvent: eventIdOfSlice(currentContext, locationId) === eventId,
     };
 
     if (dryRun) return preview;
@@ -183,12 +295,14 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
         actorUid: uid,
         actorName: String(caller.name || 'Manager'),
         targetCollection: EVENTS_COLLECTION,
-        targetDocumentId: date,
+        targetDocumentId: eventId,
         summary: `Deleted the sabha on ${date}`
+            + (hall ? ` at ${hall.name}` : '')
             + (preview.responseCount || preview.requestedRideCount
                 ? ` — ${preview.responseCount} attending, ${preview.requestedRideCount} ride request(s) cancelled`
                 : ' — nobody had responded'),
         details: {
+            locationId,
             responseCount: preview.responseCount,
             requestedRideIds: requestedRides.map(d => d.id),
             wasCurrentEvent: preview.isCurrentEvent,
@@ -210,6 +324,9 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     // "remember not to regenerate".
     batch.set(eventRef, {
         date,
+        // Stamped so `events` is readable without parsing document ids, and so the
+        // backfill in scripts/locations.cjs has something to verify against.
+        locationId: locationId ?? FOUNDING_LOCATION_ID,
         // Preserved where there was one. It makes little difference — a
         // cancellation short-circuits `effectiveEvent` before `kind` is consulted —
         // but a one-off that comes back via "Add a sabha" then reads consistently.
@@ -232,39 +349,51 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
 
     // recursiveDelete cannot join a batch, so park the date and let the
     // per-minute job finish the job if this process dies before step two.
+    // THE EVENT ID, not the date — `weeklyAttendance` is keyed by event id, so parking
+    // the bare date would have the sweeper recursively delete the FOUNDING hall's
+    // attendance when the manager cancelled a different room.
     batch.set(db.doc(SEED_MARKER_DOC), {
-        pendingAttendanceDeletes: admin.firestore.FieldValue.arrayUnion(date),
+        pendingAttendanceDeletes: admin.firestore.FieldValue.arrayUnion(eventId),
     }, { merge: true });
 
     // Recompute the window in the same commit when this was the current
     // gathering, so rideContext never names a document that no longer exists.
     if (preview.isCurrentEvent) {
-        const nextEvent = await findNextEventExcluding(db, now, timeZone, date);
-        const built = nextEvent
-            ? buildCurrentEvent(nextEvent.date, nextEvent.startTime, nextEvent.endTime, timeZone, {
-                venue: nextEvent.venue,
-                agenda: nextEvent.agenda,
-                requestsOpenTime: await getRequestsOpenTime(),
-            })
-            : null;
-        const window = resolveScheduleWindow(now, built, timeZone);
+        /**
+         * THE WHOLE DOCUMENT, through the same builder the scheduler uses.
+         *
+         * This used to be a partial `set` of the top-level fields, which erased
+         * `byLocation` and `locationIds` until the next minute tick. A client reading
+         * its own hall's slice then fell back to the aggregate — so for up to a minute
+         * every hall showed the founding hall's window, and a client that had learned
+         * to expect `locationIds` could no longer tell "my hall is closed" from "my
+         * hall is not described here".
+         *
+         * `pendingCancellation` is what makes this correct for one hall: the batch has
+         * not committed, so the resolver would otherwise still read this evening as
+         * open. Telling it what is about to be cancelled also answers the per-hall case
+         * the old find-then-look-after-it helper could not — the evening may still be
+         * on for another room, in which case nothing rolls forward and only this hall's
+         * slice goes quiet.
+         */
+        const { event: nextEvent, hallExceptions } = await resolveCurrentEvent(
+            db, now, timeZone, rule, halls.map(h => h.id), eventId,
+        );
+        const contexts = hallContexts(
+            nextEvent, halls.map(h => ({ id: h.id, venue: h.venue })),
+            now, timeZone, await getRequestsOpenTime(), hallExceptions,
+        );
 
-        batch.set(db.doc(CONTEXT_DOC), {
-            ...window,
-            ...(built ?? { eventId: null }),
-            calendarStatus: built ? 'ok' : 'no-scheduled-event',
-            overrideUntil: null,
-            lastUpdated: now.toISOString(),
-        });
+        batch.set(db.doc(CONTEXT_DOC), buildRideContextDoc(contexts, now));
     }
 
     await batch.commit();
 
     // ── Step two: the cascade, then tell people ─────────────────────────
-    await drainAttendanceDelete(db, date);
+    await drainAttendanceDelete(db, eventId);
 
     if (affectedUids.size > 0) {
-        await notifyAffected(db, Array.from(affectedUids), date);
+        await notifyAffected(db, Array.from(affectedUids), date, hall?.name ?? null);
     }
 
     // writeAuditLog swallows its own failures and returns null, so the close is
@@ -277,50 +406,30 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
 });
 
 /**
- * The gathering that becomes current once `excluded` is gone.
+ * Delete `weeklyAttendance/{eventId}` and its responses, then clear the pending mark.
  *
- * findCurrentEvent still sees the doc being deleted — it is deleted in the batch
- * we are building — so it has to be skipped explicitly.
- */
-async function findNextEventExcluding(
-    db: admin.firestore.Firestore,
-    now: Date,
-    timeZone: string,
-    excluded: string,
-) {
-    // The rule has to come along. Without it this reads the exceptions alone,
-    // which under the rule model is almost always empty — so it would report "no
-    // sabha scheduled" to a manager cancelling one week out of a standing weekly
-    // schedule.
-    const rule = await readRecurrence(db);
-
-    const found = await findCurrentEvent(db, now, timeZone, rule);
-    if (found && found.date !== excluded) return found;
-
-    // The excluded one was first. Look again from the day after it.
-    const after = new Date(new Date(`${excluded}T12:00:00Z`).getTime() + 24 * 3600 * 1000);
-    return findCurrentEvent(db, after, timeZone, rule);
-}
-
-/**
- * Delete `weeklyAttendance/{date}` and its responses, then clear the pending mark.
+ * AN EVENT ID, NOT A DATE, and the parameter is named for it. `weeklyAttendance` is
+ * keyed by event id — a bare date for the founding hall, `{date}__{hall}` for any
+ * other — so passing a date here would recursively delete the FOUNDING hall's
+ * attendance records when a manager had cancelled a different room. Children's names,
+ * phone numbers and addresses, for the wrong sabha, unrecoverable.
  *
  * Exported so the per-minute job can finish a cascade this process did not.
  */
 export async function drainAttendanceDelete(
     db: admin.firestore.Firestore,
-    date: string,
+    eventId: string,
 ): Promise<void> {
     try {
-        await db.recursiveDelete(db.collection('weeklyAttendance').doc(date));
+        await db.recursiveDelete(db.collection('weeklyAttendance').doc(eventId));
         await db.doc(SEED_MARKER_DOC).set({
-            pendingAttendanceDeletes: admin.firestore.FieldValue.arrayRemove(date),
+            pendingAttendanceDeletes: admin.firestore.FieldValue.arrayRemove(eventId),
         }, { merge: true });
     } catch (error) {
-        // Leave the date parked; the sweeper retries. Do NOT rethrow — the event
+        // Leave it parked; the sweeper retries. Do NOT rethrow — the event
         // is already gone and the caller must not see a failure for work that will
         // complete on its own.
-        console.error(`[deleteSabhaEvent] Attendance cascade for ${date} failed, left pending:`, error);
+        console.error(`[deleteSabhaEvent] Attendance cascade for ${eventId} failed, left pending:`, error);
     }
 }
 
@@ -329,6 +438,8 @@ async function notifyAffected(
     db: admin.firestore.Firestore,
     uids: string[],
     date: string,
+    /** Named when one hall was cancelled, so a rider knows which sabha is off. */
+    locationName: string | null,
 ): Promise<void> {
     try {
         const recipients = [];
@@ -347,7 +458,13 @@ async function notifyAffected(
         await sendNotification(
             recipients,
             'Sabha cancelled',
-            `The sabha on ${label} is no longer scheduled. Your ride request has been cancelled.`,
+            // NAMES THE HALL when only one was cancelled, because otherwise this push
+            // tells a rider the sabha is off when the other room is still meeting —
+            // and the correction is a phone call somebody has to make.
+            locationName
+                ? `The sabha at ${locationName} on ${label} is no longer scheduled. `
+                    + 'Your ride request has been cancelled.'
+                : `The sabha on ${label} is no longer scheduled. Your ride request has been cancelled.`,
             // Tagged so the manager panel can name it. Muting it is behind a
             // confirmation: people who are not told wait outside for a ride.
             { type: 'sabha-deleted', reason: 'sabha-deleted', eventId: date },
