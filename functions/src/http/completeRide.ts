@@ -234,6 +234,26 @@ export const completeRide = functions.https.onCall(async (data, context) => {
         const noShowStatus = ride?.rideType === 'home-to-sabha' ? 'missed_pickup' : 'at_sabha';
 
         /**
+         * WHICH HALL THE RIDER IS STANDING IN, recorded beside `at_sabha`.
+         *
+         * `at_sabha` has always been a bare string. With one venue that was enough;
+         * with two it answers "they are at a sabha" and cannot say which — and the
+         * return leg is the one place that has to know, because a drop-off request
+         * carries the rider's HOME coordinates and nothing about where they are being
+         * collected FROM. Without this, a Sarthi leaving Hall A could be handed riders
+         * standing at Hall B and no field on the request would catch it.
+         *
+         * Written on BOTH branches. A rider who missed their car home is correctly left
+         * `at_sabha` — they are still standing there — and losing their hall would
+         * strand exactly the person who most needs another lift.
+         *
+         * `null` rather than omitted when the ride does not say, so the field is
+         * cleared rather than left holding last week's hall. Cleared for real by
+         * `clearEndOfEveningStatuses`, alongside the status it belongs to.
+         */
+        const atLocationId = typeof ride?.locationId === 'string' ? ride.locationId : null;
+
+        /**
          * Has this rider got another leg still running?
          *
          * A group too large for one car is split across cars, so a rider can
@@ -262,6 +282,9 @@ export const completeRide = functions.https.onCall(async (data, context) => {
             console.log(`[completeRide] ${student.id} recorded as a no-show`);
             batch.update(db.collection('users').doc(student.id), {
                 status: noShowStatus,
+                // Only meaningful when the status says they are at a sabha. Cleared
+                // otherwise so a missed pickup does not leave a hall behind.
+                atLocationId: noShowStatus === 'at_sabha' ? atLocationId : null,
                 currentRideId: null
             });
         }
@@ -275,6 +298,7 @@ export const completeRide = functions.https.onCall(async (data, context) => {
 
             batch.update(db.collection('users').doc(student.id), {
                 status: newStudentStatus,
+                atLocationId: newStudentStatus === 'at_sabha' ? atLocationId : null,
                 currentRideId: null
             });
 

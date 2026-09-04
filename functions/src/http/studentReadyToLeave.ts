@@ -10,7 +10,9 @@ import { assertApprovedStudent } from '../utils/authz';
 // for itself whether the window is open.
 import { zonedDateKey, DEFAULT_TIME_ZONE } from '../utils/time';
 import { resolveHomeCoords } from '../utils/coords';
-import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../constants/tenancy';
+import { FOUNDING_CITY_ID } from '../constants/tenancy';
+import { dateKeyOfEventId } from '../utils/locations';
+import { locationsOrFoundingFallback } from '../utils/settings';
 import { seatsOf, MAX_SEATS, DEFAULT_SEATS } from '../constants/seats';
 
 /** How a rider's presence at the sabha was established. */
@@ -135,7 +137,46 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
         const now = new Date();
 
         const rideContextDoc = await db.collection('system').doc('rideContext').get();
-        const rideContext = rideContextDoc.data();
+        const published = rideContextDoc.data();
+
+        /**
+         * WHICH HALL IS THIS RIDER LEAVING FROM?
+         *
+         * The hardest question in the multi-hall change, because a drop-off request
+         * carries the rider's HOME coordinates and says nothing about where they are
+         * being collected from. Get it wrong and a Sarthi leaving one hall is handed
+         * somebody standing at the other, with no field on the request that could
+         * catch it.
+         *
+         * `atLocationId` is written beside `at_sabha` when their outbound ride
+         * completes, so anybody who was driven here has it. Somebody who walked in,
+         * drove themselves or got a lift from a friend does NOT — `normalisePresence`
+         * exists precisely for that population.
+         *
+         * SO IT REFUSES RATHER THAN GUESSING, once there is more than one hall. A
+         * plausible answer here sends a car to the wrong building and nothing surfaces;
+         * a refusal is a message on the rider's own screen, which the release that adds
+         * the hall picker turns into a question. `isValidPendingRide`'s own note
+         * settles the direction: the first failure is visible, the second sends a car
+         * to the wrong place.
+         */
+        const openHalls = await locationsOrFoundingFallback(db);
+        const standingAt = typeof student?.atLocationId === 'string' ? student.atLocationId : null;
+        const hall = (standingAt && openHalls.find(h => h.id === standingAt))
+            ?? (openHalls.length === 1 ? openHalls[0] : undefined);
+
+        if (!hall) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'We are not sure which sabha you are at. Please ask a Sarthi or a manager for a lift home.',
+            );
+        }
+
+        // THIS HALL'S window, not the document's top-level aggregate — a rider at one
+        // hall must not be gated on another's drop-off time. Falls back to the top
+        // level for the first minute after the per-hall context deploys.
+        const rideContext = (published?.byLocation as Record<string, Record<string, unknown>> | undefined)
+            ?.[hall.id] ?? published;
 
         if (rideContext?.rideType !== 'sabha-to-home') {
             throw new functions.https.HttpsError(
@@ -149,7 +190,13 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
         // The gathering this return leg belongs to. Was `zonedDateKey(now)` —
         // today's date — which is wrong whenever the sabha is not today, and sits
         // on a knife edge at midnight while drop-off runs are still going.
-        const eventDate: string = rideContext.eventId || zonedDateKey(now, DEFAULT_TIME_ZONE);
+        //
+        // The DATE, extracted: a non-founding hall's `eventId` is
+        // `2026-08-07__somerville`, and a ride's own `eventDate` is always the bare
+        // date. Written raw, this request would match no gathering and the rider would
+        // never be dispatched.
+        const eventDate: string = dateKeyOfEventId(rideContext.eventId)
+            ?? zonedDateKey(now, DEFAULT_TIME_ZONE);
 
         // ── Create the return-leg ride request ──────────────────────
         //
@@ -240,7 +287,9 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
                 // The return leg is the SECOND place a ride is created, and easy
                 // to miss: the rider never sees this form.
                 cityId: FOUNDING_CITY_ID,
-                locationId: FOUNDING_LOCATION_ID,
+                // The hall they are actually leaving from, not the founding constant.
+                // This is what lets the return pool be partitioned at all.
+                locationId: hall.id,
                 createdAt: nowIso,
                 peers: [],
                 isReadyToLeave: true,

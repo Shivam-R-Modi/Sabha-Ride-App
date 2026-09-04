@@ -52,8 +52,18 @@ vi.mock('../utils/notifications', () => ({
 
 const SABHA = { lat: 42.339925, lng: -71.088182, address: 'Sabha' };
 
+/**
+ * Which halls are open, per case.
+ *
+ * Defaults to ONE — the founding hall — because that is the configuration every
+ * existing case in this file was written against, and the guarantee that matters most
+ * about the multi-hall change is that one hall behaves exactly as it did.
+ */
+let openHalls: Array<{ id: string; name: string; venue: any; active: boolean; order: number }>;
+
 vi.mock('../utils/settings', () => ({
     getSabhaLocation: async () => ({ lat: 42.339925, lng: -71.088182, address: 'Sabha' }),
+    locationsOrFoundingFallback: async () => openHalls,
     // Real behaviour, not a stub: the venue fallback chain is what these tests
     // are asserting on.
     resolveVenue: (candidate: any, fallback: any) => {
@@ -67,6 +77,14 @@ vi.mock('../utils/settings', () => ({
 }));
 
 import { globalAssignDriver, isAssignableTo, isValidPendingRide } from './globalAssignDriver';
+import { FOUNDING_LOCATION_ID } from '../constants/tenancy';
+
+const FOUNDING_HALL = {
+    id: FOUNDING_LOCATION_ID, name: 'Sabha', active: true, order: 0,
+    venue: { lat: 42.339925, lng: -71.088182, address: 'Sabha' },
+};
+
+beforeEach(() => { openHalls = [FOUNDING_HALL]; });
 
 // ── fake Firestore ─────────────────────────────────────────
 
@@ -78,6 +96,10 @@ interface Fixture {
     /** Per-event venue override published on system/rideContext. */
     venue?: { lat: number; lng: number; address: string } | null;
     eventId?: string;
+    /** Per-hall slices published on system/rideContext.byLocation. */
+    byLocation?: Record<string, Record<string, unknown>>;
+    /** The halls that document claims to describe. */
+    locationIds?: string[];
     /**
      * The whole fleet, which decides whether an oversized group waits for a
      * bigger vehicle or gets split across several. Absent means the vehicles
@@ -91,12 +113,16 @@ interface Recorder {
     updates: Array<{ path: string; data: any }>;
     sets: Array<{ path: string; data: any }>;
     committed: boolean;
+    /** Documents written outside the batch — the dispatch lock is the only one. */
+    docSets: Array<{ path: string; data: any }>;
     /** Every where() chain built, so query filters can be asserted on. */
     queries: Array<{ collection: string; clauses: Array<[string, string, unknown]> }>;
 }
 
 function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
-    const recorder: Recorder = { updates: [], sets: [], committed: false, queries: [] };
+    const recorder: Recorder = {
+        updates: [], sets: [], committed: false, queries: [], docSets: [],
+    };
 
     const snap = (exists: boolean, data?: any) => ({
         exists,
@@ -110,6 +136,8 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
                     rideType: fixture.rideType,
                     venue: fixture.venue ?? null,
                     eventId: fixture.eventId ?? '2026-08-07',
+                    ...(fixture.byLocation ? { byLocation: fixture.byLocation } : {}),
+                    ...(fixture.locationIds ? { locationIds: fixture.locationIds } : {}),
                 });
             case `users/${'driver-1'}`:
                 return snap(true, fixture.driver);
@@ -190,8 +218,10 @@ function makeDb(fixture: Fixture): { db: any; recorder: Recorder } {
     const db = {
         doc: (path: string) => ({
             path,
-            get: async () => snap(false),
-            set: async () => undefined,
+            get: async () => (path === 'system/rideContext'
+                ? docFor('system', 'rideContext')
+                : snap(false)),
+            set: async (data: any) => { recorder.docSets.push({ path, data }); },
             delete: async () => undefined,
         }),
         collection,
@@ -1105,5 +1135,230 @@ describe('isAssignableTo — the pool filter, including the caller', () => {
         expect(isAssignableTo(
             { ...good, rideType: 'sabha-to-home' }, 'driver-1', '2026-08-14', 'home-to-sabha',
         )).toBe(false);
+    });
+});
+
+/**
+ * TWO SABHA LOCATIONS ON ONE EVENING.
+ *
+ * THE HEADLINE INVARIANT: a car is never offered riders bound for a different hall.
+ * Everything else in this block exists to stop that invariant being broken quietly,
+ * because every way of breaking it looks like ordinary code:
+ *
+ *   - stamping the split remainder with the founding constant (it read like correct
+ *     tenancy stamping, and would put half a family in the other hall's car)
+ *   - reading the top-level ride window instead of the hall's own slice (wrong
+ *     direction, wrong gathering key, wrong venue)
+ *   - comparing a suffixed context `eventId` against a ride's bare date (matches
+ *     nothing, so every rider reads as "another gathering" and a driver is told nobody
+ *     is waiting)
+ *
+ * The 64 cases above all run with ONE hall open, which is the configuration they were
+ * written against and the one that will hold every evening until a manager adds a
+ * second. That they still pass unchanged is the equivalence guarantee.
+ */
+describe('globalAssignDriver — two sabha locations', () => {
+    const SOMERVILLE = {
+        id: 'somerville', name: 'Somerville', active: true, order: 1,
+        venue: { lat: 42.387, lng: -71.099, address: '5 Elm Street' },
+    };
+    const DATE = '2026-08-07';
+
+    /** Both halls open, each with its own published window. */
+    const twoHalls = (rideType = 'home-to-sabha'): Fixture => ({
+        ...baseFixture(rideType),
+        locationIds: [FOUNDING_LOCATION_ID, 'somerville'],
+        byLocation: {
+            [FOUNDING_LOCATION_ID]: {
+                rideType, eventId: DATE, venue: FOUNDING_HALL.venue, calendarStatus: 'ok',
+            },
+            somerville: {
+                rideType, eventId: `${DATE}__somerville`,
+                venue: SOMERVILLE.venue, calendarStatus: 'ok',
+            },
+        },
+        rides: [
+            { id: 'ride-here', data: { studentId: 'stu-a', studentName: 'A', pickupLat: 42.35, pickupLng: -71.07, pickupAddress: '1 St', status: 'requested', locationId: FOUNDING_LOCATION_ID } },
+            { id: 'ride-there', data: { studentId: 'stu-b', studentName: 'B', pickupLat: 42.37, pickupLng: -71.05, pickupAddress: '2 St', status: 'requested', locationId: 'somerville' } },
+        ],
+    });
+
+    const runFor = async (locationId: string | undefined, fixture: Fixture) => {
+        const made = makeDb(fixture);
+        db = made.db;
+        const result: any = await (globalAssignDriver as any)(
+            { driverId: 'driver-1', carId: 'car-1', ...(locationId ? { locationId } : {}) },
+            { auth: { uid: 'driver-1' } },
+        );
+        return { result, recorder: made.recorder };
+    };
+
+    beforeEach(() => { openHalls = [FOUNDING_HALL, SOMERVILLE]; });
+
+    /** Which ride documents this run actually assigned. Exact, off the batch. */
+    const assignedRides = (recorder: Recorder) => recorder.updates
+        .filter(u => u.path.startsWith('rides/') && u.data.status === 'assigned')
+        .map(u => u.path);
+
+    it('NEVER offers a car riders bound for the other hall', async () => {
+        const { recorder } = await runFor(FOUNDING_LOCATION_ID, twoHalls());
+        expect(assignedRides(recorder)).toEqual(['rides/ride-here']);
+    });
+
+    it('and the same run the other way round', async () => {
+        const { recorder } = await runFor('somerville', twoHalls());
+        expect(assignedRides(recorder)).toEqual(['rides/ride-there']);
+    });
+
+    it('routes to the hall it is driving for, not to the founding one', async () => {
+        const { recorder } = await runFor('somerville', twoHalls());
+        const write = recorder.updates.find(u => u.path === 'rides/ride-there')!;
+
+        expect(write.data.venue).toEqual(SOMERVILLE.venue);
+        expect(write.data.locationId).toBe('somerville');
+    });
+
+    it('reads the HALL\'S window, not the document top level', async () => {
+        /**
+         * The top level is the founding hall's window — a compatibility aggregate for
+         * bundles too old to know about halls. A Sarthi driving for Somerville who read
+         * it would get the founding hall's gathering key, and match no rider at all.
+         */
+        const fixture = twoHalls();
+        // Top level says drop-off; Somerville's own slice still says pickup.
+        fixture.rideType = 'sabha-to-home';
+        fixture.byLocation![FOUNDING_LOCATION_ID].rideType = 'sabha-to-home';
+        // Stamped explicitly, because the db stub derives a ride's direction from the
+        // TOP-LEVEL fixture value — which is the thing this case is deliberately
+        // disagreeing with. Left bare, the rider would be a drop-off request and the
+        // case would fail for the wrong reason.
+        fixture.rides = fixture.rides.map(r => ({
+            ...r, data: { ...r.data, rideType: 'home-to-sabha' },
+        }));
+
+        const { recorder } = await runFor('somerville', fixture);
+        expect(assignedRides(recorder)).toEqual(['rides/ride-there']);
+    });
+
+    it('extracts the DATE from a suffixed gathering key', async () => {
+        // `byLocation.somerville.eventId` is `2026-08-07__somerville`, while the ride
+        // carries the bare date. Compared raw, nothing matches and the driver is told
+        // nobody is waiting.
+        const { result } = await runFor('somerville', twoHalls());
+        expect(result.status).not.toBe('no_students');
+    });
+
+    it('tells a Sarthi at a quiet hall that people are waiting at the OTHER one', async () => {
+        // Not "nobody is waiting". That is true and leads to the wrong conclusion —
+        // the shape that sent a manager hunting for a dispatch fault on 2026-08-14.
+        const fixture = twoHalls();
+        fixture.rides = [fixture.rides[1]]; // only the Somerville rider
+        const { result } = await runFor(FOUNDING_LOCATION_ID, fixture);
+
+        expect(result.status).toBe('no_students');
+        expect(result.waiting).toEqual([{ reason: 'other-location', groups: 1, seats: 1 }]);
+    });
+
+    it('names no rider in that count, only how many', async () => {
+        const fixture = twoHalls();
+        fixture.rides = [fixture.rides[1]];
+        const { result } = await runFor(FOUNDING_LOCATION_ID, fixture);
+
+        expect(JSON.stringify(result.waiting)).not.toMatch(/stu-b|"B"/);
+    });
+
+    it('takes a per-hall lock, so one hall cannot block the other', async () => {
+        const { recorder } = await runFor('somerville', twoHalls());
+        const lock = recorder.docSets.find(d => d.path.includes('assignmentLock'))!;
+
+        expect(lock.path).toBe('system/assignmentLock__somerville');
+    });
+
+    it('refuses when more than one hall is open and none was named', async () => {
+        // Guessing here is a car at the wrong building.
+        await expect(runFor(undefined, twoHalls()))
+            .rejects.toThrow(/choose which sabha/i);
+    });
+
+    it('refuses a hall that is not running tonight', async () => {
+        await expect(runFor('cambridge', twoHalls()))
+            .rejects.toThrow(/not running tonight/i);
+    });
+
+    it('refuses a hall the published window does not describe', async () => {
+        // A server fault, said plainly. Rendering it as "no rides available" would make
+        // a broken scheduler indistinguishable from a quiet evening.
+        const fixture = twoHalls();
+        delete fixture.byLocation!.somerville;
+        await expect(runFor('somerville', fixture))
+            .rejects.toThrow(/no ride window published/i);
+    });
+
+    it('REFUSES a request that names no hall, once two are open', async () => {
+        const fixture = twoHalls();
+        fixture.rides = [{
+            id: 'ride-nowhere',
+            data: { studentId: 'stu-c', studentName: 'C', pickupLat: 42.35, pickupLng: -71.07, pickupAddress: '3 St', status: 'requested' },
+        }];
+        const { result } = await runFor(FOUNDING_LOCATION_ID, fixture);
+
+        expect(result.status).toBe('no_students');
+        expect(result.waiting).toEqual([{ reason: 'no-location', groups: 1, seats: 0 }]);
+    });
+
+    it('gives a split remainder the RIDER\'S hall, not the founding constant', async () => {
+        /**
+         * The line that would have broken the headline invariant while looking like
+         * correct tenancy stamping: `locationId: FOUNDING_LOCATION_ID` on the
+         * remainder. Half a Somerville family would join a Huntington car on the next
+         * tap, with no race and no bad actor.
+         */
+        const fixture = twoHalls();
+        fixture.rides = [{
+            id: 'ride-big',
+            data: {
+                studentId: 'stu-b', studentName: 'B', pickupLat: 42.37, pickupLng: -71.05,
+                pickupAddress: '2 St', status: 'requested',
+                locationId: 'somerville', seatsRequested: 5,
+            },
+        }];
+        fixture.vehicles = [{ capacity: 4 }];
+
+        const { recorder } = await runFor('somerville', fixture);
+        const remainder = recorder.sets.find(x => x.data.status === 'requested')!;
+
+        expect(remainder.data.locationId).toBe('somerville');
+        expect(remainder.data.seatsRequested).toBe(2);
+    });
+});
+
+describe('globalAssignDriver — one hall, which is every evening so far', () => {
+    it('needs no hall argument at all', async () => {
+        // With one hall there is nothing to choose, so the client sends nothing and the
+        // server does not ask. A picker offering one option would be a control that
+        // cannot do anything.
+        openHalls = [FOUNDING_HALL];
+        const { result } = await run(baseFixture('home-to-sabha'));
+        expect(result.status).toBe('success');
+    });
+
+    it('dispatches an unstamped request, because it cannot be ambiguous', async () => {
+        // `locationId` is optional in firestore.rules for one release so a cached
+        // client predating the picker can still file a ride. Refusing such a request
+        // would strand a rider over a field they had no way to send.
+        openHalls = [FOUNDING_HALL];
+        const { result } = await run(baseFixture('home-to-sabha'));
+        expect(result.students.length).toBeGreaterThan(0);
+    });
+
+    it('still takes a named lock, so the two-hall case is not a special path', async () => {
+        openHalls = [FOUNDING_HALL];
+        const made = makeDb(baseFixture('home-to-sabha'));
+        db = made.db;
+        await (globalAssignDriver as any)(
+            { driverId: 'driver-1', carId: 'car-1' }, { auth: { uid: 'driver-1' } },
+        );
+        expect(made.recorder.docSets.find(d => d.path.includes('assignmentLock'))!.path)
+            .toBe(`system/assignmentLock__${FOUNDING_LOCATION_ID}`);
     });
 });

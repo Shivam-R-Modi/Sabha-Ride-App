@@ -148,6 +148,11 @@ export async function clearEndOfEveningStatuses(
         // this whole sweep exists to remove.
         batch.update(doc.ref, {
             status: admin.firestore.FieldValue.delete(),
+            // The hall goes with the status it belongs to. This file's own header
+            // records what a stale `at_sabha` cost — "a week-old flag would wave a
+            // rider straight past this week's check" — and a week-old HALL is the same
+            // bug with a car sent to the wrong building.
+            atLocationId: admin.firestore.FieldValue.delete(),
             currentRideId: null,
         });
         cleared++;

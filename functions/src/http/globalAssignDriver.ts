@@ -10,17 +10,46 @@ import { RideType, RideStudent } from '../types';
 import { orderForCarload, LightPoint } from '../utils/carload';
 import { fillBySeats, remaindersFirst, maxPassengerSeats } from '../utils/seats';
 import { seatsOf } from '../constants/seats';
-import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../constants/tenancy';
+import { FOUNDING_CITY_ID } from '../constants/tenancy';
 import { optimizeRoute, buildGoogleMapsNavigationUrl } from '../utils/routing';
 import { resolveHomeCoords } from '../utils/coords';
 import { writeVehicleState, resolveVehicleHolder } from '../utils/fleet';
 import { assertApprovedDriver } from '../utils/authz';
 import { notifyStudentDriverAssigned, notifyDriverStudentsAssigned, tokensOf } from '../utils/notifications';
-import { getSabhaLocation, resolveVenue } from '../utils/settings';
+import { getSabhaLocation, resolveVenue, locationsOrFoundingFallback } from '../utils/settings';
+import { dateKeyOfEventId } from '../utils/locations';
 import { checkRateLimit } from '../utils/rateLimiter';
 
 // ── constants ──────────────────────────────────────────────
-const LOCK_DOC = 'system/assignmentLock';
+
+/**
+ * The dispatch mutex, ONE DOCUMENT PER HALL.
+ *
+ * It was `system/assignmentLock`, one document for the whole platform. With two halls
+ * running the same evening that serialises every Sarthi at both of them through a
+ * single 10-second lock, and worse, one hall's stale lock blocks the other — the
+ * routing note in utils/routing.ts records a held lock blocking every driver at once.
+ *
+ * A MAP INSIDE ONE DOCUMENT WAS THE OTHER CANDIDATE AND IT IS NOT A MUTEX. Acquisition
+ * here is read-then-`set()` (a full overwrite), released with `batch.delete`. Two halls
+ * dispatching in the same second would read-modify-write one document: Hall B's write
+ * can erase Hall A's live entry, and the `finally` "delete it if it is mine" becomes
+ * "delete the other hall's lock too". A 10-second mutex whose failure mode is silently
+ * not being a mutex is worse than no mutex at all.
+ *
+ * FLAT ids, not a subcollection: `match /system/{docId}` is a single-segment wildcard,
+ * so `system/assignmentLock/locations/{id}` would fall outside it and be denied by
+ * default — safe, but silently, and this file already carries a scar about a
+ * `match /system/auditLogs/{logId}` block that could never match anything.
+ *
+ * ponytail: a functions rollout is not instantaneous, so for a few seconds two
+ * revisions could hold two different lock documents and both dispatch. Bounded by
+ * deploying outside the ride window, which is a known weekly slot. The upgrade path is
+ * acquiring both the old and the new document for one release.
+ */
+function lockDocFor(locationId: string): string {
+    return `system/assignmentLock__${locationId}`;
+}
 const LOCK_TTL_MS = 10_000;          // 10 seconds
 const GEO_FENCE_MILES = 15;          // ignore students > 15 mi away
 
@@ -54,7 +83,7 @@ function haversineDistanceMiles(
  * Re-exported here so every call site and the whole of globalAssignDriver.test.ts keep
  * importing them from where they always did.
  */
-import { isValidPendingRide, isAssignableTo } from '../utils/ridePool';
+import { isValidPendingRide, isAssignableTo, rejectionFor } from '../utils/ridePool';
 export { isValidPendingRide, isAssignableTo };
 
 // ── main function ──────────────────────────────────────────
@@ -101,9 +130,49 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
 
     const db = admin.firestore();
 
+    /**
+     * ── Step 0: which sabha location is this run for? ───────────────────────────
+     *
+     * BEFORE THE LOCK, because the hall is what names the lock document. The context
+     * is read-only and moves at most once a minute, so reading it outside the mutex
+     * costs nothing — the mutex protects the pool read and the assignment write, which
+     * are still both inside it.
+     *
+     * A Sarthi is NOT tied to a hall: they pick per run, so they can finish a load to
+     * one and take the next to the other. With one hall open there is nothing to pick
+     * and the argument is omitted, which is every evening until a manager adds a
+     * second. With more than one open and no hall named, this REFUSES rather than
+     * guessing — a guess here is a car at the wrong building.
+     */
+    const openHalls = await locationsOrFoundingFallback(db);
+    if (openHalls.length === 0) {
+        // `locationsOrFoundingFallback` should make this unreachable; if it happens,
+        // say so rather than dispatching to nowhere.
+        throw new functions.https.HttpsError(
+            'failed-precondition',
+            'No sabha location is set up. Please contact a manager.',
+        );
+    }
+
+    const asked = typeof data?.locationId === 'string' ? data.locationId : null;
+    const chosen = asked
+        ? openHalls.find(h => h.id === asked)
+        : (openHalls.length === 1 ? openHalls[0] : undefined);
+
+    if (!chosen) {
+        throw new functions.https.HttpsError(
+            'invalid-argument',
+            asked
+                ? 'That sabha location is not running tonight.'
+                : 'Please choose which sabha you are driving for.',
+        );
+    }
+    const locationId = chosen.id;
+    const singleActiveLocation = openHalls.length === 1;
+
     // ── Step 1: Acquire lock ────────────────────────────────
     // Define lockRef at function scope so it's accessible in error handler
-    const lockRef = db.doc(LOCK_DOC);
+    const lockRef = db.doc(lockDocFor(locationId));
 
     try {
         const lockSnap = await lockRef.get();
@@ -127,21 +196,62 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         if (!rideContextDoc.exists) {
             throw new functions.https.HttpsError('failed-precondition', 'Ride context not available. Please contact a manager.');
         }
-        const rideContext = rideContextDoc.data();
+        const published = rideContextDoc.data();
+
+        /**
+         * THIS HALL'S WINDOW, not the document's top-level aggregate.
+         *
+         * The top level describes the founding hall (see `buildRideContextDoc`), so a
+         * Sarthi driving for another hall must read their own slice or they would get
+         * the wrong direction, the wrong gathering key and the wrong venue.
+         *
+         * Falls back to the top level when `byLocation` is absent, which is true for
+         * the first minute after this deploys and for nothing else. If the slice is
+         * missing while the list exists, that is a SERVER FAULT and is said plainly —
+         * rendering it as "no rides available" would make a broken scheduler
+         * indistinguishable from a quiet evening.
+         */
+        const byLocation = published?.byLocation as Record<string, Record<string, unknown>> | undefined;
+        const slice = byLocation?.[locationId];
+
+        // ONCE `byLocation` EXISTS, EVERY OPEN HALL MUST HAVE A SLICE. A missing one is
+        // an inconsistent document, whether the hall is listed in `locationIds` or not
+        // — either way the scheduler and the hall list disagree, and that is a server
+        // fault rather than a quiet evening.
+        if (byLocation && !slice) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'This sabha location has no ride window published yet. Please contact a manager.',
+            );
+        }
+        // Absent entirely: the first minute after this deploys, and nothing else.
+        const rideContext = slice ?? published;
+
         if (!rideContext?.rideType) {
             throw new functions.https.HttpsError('failed-precondition', 'No rides are available at this time.');
         }
         const rideType = rideContext.rideType as RideType;
 
-        // The venue for THIS gathering. Taken from the same rideContext document
-        // that produced the rideType above, so the two can never disagree — a
-        // separate read of events/{id} would leave a window where the route's
-        // venue and the window's venue came from different resolutions.
-        // Falls back to settings/main, which is what ran before events had venues.
-        const SABHA_LOCATION = resolveVenue(rideContext.venue, await getSabhaLocation());
-        const eventId: string | null = rideContext.eventId ?? null;
+        // The venue for THIS gathering at THIS hall. Taken from the same rideContext
+        // document that produced the rideType above, so the two can never disagree — a
+        // separate read of events/{id} would leave a window where the route's venue and
+        // the window's venue came from different resolutions. Then the hall's standing
+        // venue, then settings/main, which is what ran before events had venues.
+        const SABHA_LOCATION = resolveVenue(
+            rideContext.venue,
+            resolveVenue(chosen.venue, await getSabhaLocation()),
+        );
+        /**
+         * The gathering's DATE, extracted rather than used raw.
+         *
+         * `rideContext.eventId` is now `2026-08-07__somerville` for a non-founding
+         * hall, while a ride's own `eventId`/`eventDate` is always the bare date — two
+         * fields, two facts. Comparing the raw id against a ride would match nothing
+         * and every rider would read as "another gathering".
+         */
+        const eventId: string | null = dateKeyOfEventId(rideContext.eventId) ?? null;
 
-        console.log(`[globalAssign] rideType=${rideType}, venue=${SABHA_LOCATION.address}`);
+        console.log(`[globalAssign] hall=${locationId}, rideType=${rideType}, venue=${SABHA_LOCATION.address}`);
 
         // ── Step 3: Tapping driver + car ────────────────────
         const driverDoc = await db.collection('users').doc(driverId).get();
@@ -238,18 +348,47 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
             groupSeatsTotal: number | null;
             date: string;
             timeSlot: string;
+            locationId: string | null;
             // When the rider asked. Feeds the wait-escalation valve in
             // utils/carload.ts; without it that valve is dead code.
             createdAt?: string;
         }>();
 
+        /**
+         * Requests turned away because they belong to a DIFFERENT hall.
+         *
+         * Counted rather than silently skipped. Without this a Sarthi at a quiet hall
+         * is told "nobody is waiting" while eight people wait at the other one, and
+         * that exact shape — a true statement that leads to a wrong conclusion — is
+         * what sent a manager hunting for a dispatch fault on 2026-08-14.
+         *
+         * COUNTS AND SEATS ONLY, never names. Same privacy rule the rest of this
+         * response follows: it tells a volunteer that somebody else is needed
+         * somewhere, not who they are.
+         */
+        let otherHallGroups = 0;
+        let otherHallSeats = 0;
+        let unlocatedGroups = 0;
+
         for (const doc of ridesSnap.docs) {
             const d = doc.data();
-            // Both come from the same system/rideContext read, so the gathering
-            // and the direction can never disagree with the window being served:
-            // a leftover request from a previous sabha, or one asking for the
-            // opposite direction, cannot enter this pool.
-            if (!isAssignableTo(d, driverId, eventId, rideType)) continue;
+            // Every dimension comes from the same system/rideContext read, so the
+            // gathering, the direction and the hall can never disagree with the window
+            // being served: a leftover request from a previous sabha, one asking for
+            // the opposite direction, or one bound for the other hall cannot enter this
+            // pool.
+            const reason = rejectionFor(d, {
+                eventKey: eventId, rideType, locationId, singleActiveLocation, driverId,
+            });
+            if (reason) {
+                if (reason === 'other-location') {
+                    otherHallGroups++;
+                    otherHallSeats += seatsOf(d);
+                } else if (reason === 'no-location') {
+                    unlocatedGroups++;
+                }
+                continue;
+            }
             requestMap.set(doc.id, {
                 id: doc.id,
                 rideRequestId: doc.id,
@@ -268,14 +407,41 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
                 // as the request it came from, rather than being re-derived.
                 date: d.date ?? d.eventDate ?? '',
                 timeSlot: d.timeSlot ?? '',
+                // CARRIED, not re-derived. The remainder used to be stamped with the
+                // hardcoded FOUNDING_LOCATION_ID, which would put half a Somerville
+                // family into a Huntington car — the one invariant this whole change
+                // exists to protect, broken by a line that reads like correct tenancy
+                // stamping. Same reasoning as `date` above.
+                locationId: typeof d.locationId === 'string' ? d.locationId : null,
                 createdAt: typeof d.createdAt === 'string' ? d.createdAt : undefined,
             });
         }
 
         const allStudentPoints = Array.from(requestMap.values());
 
+        /**
+         * "Nobody is waiting HERE" is a different fact from "nobody is waiting".
+         *
+         * Reported in the same `waiting` array `fillBySeats` fills, so the driver's
+         * screen already knows how to render it — the reasons are just strings it
+         * groups by. Without this a Sarthi at a quiet hall is told nobody is waiting
+         * while eight people wait at the other one.
+         */
+        const elsewhere: Array<{ reason: string; groups: number; seats: number }> = [];
+        if (otherHallGroups > 0) {
+            elsewhere.push({
+                reason: 'other-location', groups: otherHallGroups, seats: otherHallSeats,
+            });
+        }
+        if (unlocatedGroups > 0) {
+            // A request naming no hall while more than one is open. Refused rather
+            // than guessed, and said out loud so a manager can fix the request instead
+            // of wondering why somebody never gets collected.
+            elsewhere.push({ reason: 'no-location', groups: unlocatedGroups, seats: 0 });
+        }
+
         if (allStudentPoints.length === 0) {
-            return { status: 'no_students' };
+            return { status: 'no_students', waiting: elsewhere };
         }
 
         console.log(`[globalAssign] ${allStudentPoints.length} unassigned students`);
@@ -340,14 +506,20 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         // Aggregated by reason, with no names or ids: a driver needs to know THAT
         // a larger group is waiting, not who they are. The per-rider detail
         // belongs on the manager's queue, which reads the ride documents directly.
-        const waiting = Object.values(
-            skipped.reduce((acc: Record<string, { reason: string; groups: number; seats: number }>, s) => {
-                const row = acc[s.reason] ?? (acc[s.reason] = { reason: s.reason, groups: 0, seats: 0 });
-                row.groups += 1;
-                row.seats += s.seats;
-                return acc;
-            }, {}),
-        );
+        // Seat-based skips from this hall's own pool, PLUS the requests turned away
+        // for belonging to another hall. One array, one set of reasons, so the
+        // driver's screen needs no new shape to render either.
+        const waiting = [
+            ...Object.values(
+                skipped.reduce((acc: Record<string, { reason: string; groups: number; seats: number }>, s) => {
+                    const row = acc[s.reason] ?? (acc[s.reason] = { reason: s.reason, groups: 0, seats: 0 });
+                    row.groups += 1;
+                    row.seats += s.seats;
+                    return acc;
+                }, {}),
+            ),
+            ...elsewhere,
+        ];
 
         if (assignedStudents.length === 0) {
             // Not always "nobody is waiting" any more: it can mean everyone waiting
@@ -454,6 +626,20 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
                 // releaseAssignment stay consistent for free.
                 venue: SABHA_LOCATION,
                 eventId,
+                /**
+                 * WHICH HALL THIS RUN IS FOR, stamped on the assignment.
+                 *
+                 * The MAIN assignment write did not carry `locationId` at all — only
+                 * the split remainder did, and that one had it hardcoded. So the
+                 * document a driver, a manager and `completeRide` all read had no
+                 * record of which hall it was going to, while its `venue` snapshot had
+                 * the coordinates and no way to name them.
+                 *
+                 * Writing it here is also what lets `completeRide` record which hall a
+                 * rider is standing in, which is the only thing that can partition the
+                 * return leg.
+                 */
+                locationId,
                 peers: otherPeers,
                 // The full roster. startRide, releaseAssignment and
                 // manualAssignStudent all iterate `ride.students`; until this
@@ -517,7 +703,25 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
                         groupSeatsTotal: s.groupSeatsTotal ?? s.groupTotalSeats,
                         splitFromRideId: s.rideRequestId,
                         cityId: FOUNDING_CITY_ID,
-                        locationId: FOUNDING_LOCATION_ID,
+                        /**
+                         * THE RIDER'S OWN HALL, not the founding constant.
+                         *
+                         * This line said `FOUNDING_LOCATION_ID`, which reads like
+                         * correct tenancy stamping and would have put half a Somerville
+                         * family into a Huntington car on the next tap — the one
+                         * invariant this whole change exists to protect, broken with no
+                         * race and no bad actor.
+                         *
+                         * `s.locationId` and `locationId` cannot actually disagree
+                         * today: `rejectionFor` has already refused every request for
+                         * another hall, so anything still in this pool either names the
+                         * hall being dispatched or names none. Reading the rider's own
+                         * value anyway means this line stays correct on its own terms
+                         * rather than depending on the pool filter above it — and the
+                         * fallback covers the one reachable gap, an unstamped request
+                         * while a single hall is open.
+                         */
+                        locationId: s.locationId ?? locationId,
                         createdAt: new Date().toISOString(),
                         peers: [],
                         isReadyToLeave: false,

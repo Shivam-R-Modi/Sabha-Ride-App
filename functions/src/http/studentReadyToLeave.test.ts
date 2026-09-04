@@ -30,8 +30,26 @@ vi.mock('firebase-functions', () => {
     return { https: { onCall: (h: any) => h, HttpsError: FakeHttpsError } };
 });
 vi.mock('firebase-admin', () => ({ firestore: () => db }));
+vi.mock('../utils/settings', () => ({
+    locationsOrFoundingFallback: async () => openHalls,
+}));
 
 import { studentReadyToLeave, normalisePresence } from './studentReadyToLeave';
+import { FOUNDING_LOCATION_ID } from '../constants/tenancy';
+
+/**
+ * Which halls are open, per case. ONE by default — the configuration every case in
+ * this file was written against, and the one that holds until a manager adds a second.
+ */
+const FOUNDING_HALL = {
+    id: FOUNDING_LOCATION_ID, name: 'Sabha', active: true, order: 0,
+    venue: { lat: 42.339925, lng: -71.088182, address: '360 Huntington Ave' },
+};
+const SOMERVILLE_HALL = {
+    id: 'somerville', name: 'Somerville', active: true, order: 1,
+    venue: { lat: 42.387, lng: -71.099, address: '5 Elm Street' },
+};
+let openHalls: Array<typeof FOUNDING_HALL> = [FOUNDING_HALL];
 
 const HOME = { lat: 42.3339, lng: -71.0311 };
 
@@ -92,7 +110,10 @@ const call = (data: any = {}) =>
 const rideWrite = (w: Array<{ path: string; data: any }>) =>
     w.find(x => x.path.startsWith('rides/'))?.data;
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+    vi.clearAllMocks();
+    openHalls = [FOUNDING_HALL];
+});
 
 describe('normalisePresence', () => {
     it('keeps a genuine pickup claim when the record agrees', () => {
@@ -232,5 +253,147 @@ describe('studentReadyToLeave — the presence claim is recorded', () => {
         await call({ presence: { method: 'auto', lat: 42.1, lng: -71.2, distanceMeters: 30 } });
 
         expect(JSON.stringify(rideWrite(writes).presence)).not.toMatch(/42\.1|-71\.2/);
+    });
+});
+
+/**
+ * WHICH HALL IS THIS RIDER LEAVING FROM?
+ *
+ * The sharpest problem in the multi-hall change. A drop-off request carries the
+ * rider's HOME coordinates — `pickupLat`/`pickupLng` are where they are going, not
+ * where they are being collected — so nothing on the request itself says which
+ * building to start from. Get it wrong and a Sarthi leaving one hall is handed
+ * somebody standing at the other, and no field anywhere could catch it.
+ */
+describe('studentReadyToLeave — which hall they are leaving from', () => {
+    it('stamps the hall on the return ride', async () => {
+        const writes = makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'at_sabha',
+                atLocationId: FOUNDING_LOCATION_ID,
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+        });
+        await call({ presence: { method: 'pickup' } });
+
+        expect(rideWrite(writes).locationId).toBe(FOUNDING_LOCATION_ID);
+    });
+
+    it('reads it from where their outbound ride left them', async () => {
+        openHalls = [FOUNDING_HALL, SOMERVILLE_HALL];
+        const writes = makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'at_sabha',
+                atLocationId: 'somerville',
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+            context: {
+                rideType: 'home-to-sabha',
+                byLocation: {
+                    [FOUNDING_LOCATION_ID]: { rideType: 'home-to-sabha', eventId: '2026-08-14' },
+                    somerville: { rideType: 'sabha-to-home', eventId: '2026-08-14__somerville' },
+                },
+            },
+        });
+        await call({ presence: { method: 'pickup' } });
+
+        expect(rideWrite(writes).locationId).toBe('somerville');
+    });
+
+    it('gates on THAT hall\'s window, not the document top level', async () => {
+        // The top level is the founding hall's window. A rider at Somerville must not
+        // be told drop-off is closed because Huntington's sabha is still running.
+        openHalls = [FOUNDING_HALL, SOMERVILLE_HALL];
+        makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'at_sabha',
+                atLocationId: 'somerville',
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+            context: {
+                rideType: 'home-to-sabha',
+                timeContext: 'Sabha is in progress',
+                byLocation: {
+                    [FOUNDING_LOCATION_ID]: { rideType: 'home-to-sabha' },
+                    somerville: { rideType: 'home-to-sabha' },
+                },
+            },
+        });
+
+        // Somerville's own slice says pickup, so drop-off really is closed there.
+        await expect(call({ presence: { method: 'pickup' } }))
+            .rejects.toThrow(/not open yet/i);
+    });
+
+    it('writes the DATE on the return ride, not a suffixed gathering key', async () => {
+        // `eventId` for a non-founding hall is `2026-08-14__somerville`, while a ride's
+        // own `eventDate` is always the bare date. Written raw, this request would
+        // match no gathering and the rider would never be dispatched.
+        openHalls = [FOUNDING_HALL, SOMERVILLE_HALL];
+        const writes = makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'at_sabha',
+                atLocationId: 'somerville',
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+            context: {
+                rideType: 'sabha-to-home',
+                byLocation: {
+                    somerville: { rideType: 'sabha-to-home', eventId: '2026-08-14__somerville' },
+                },
+            },
+        });
+        await call({ presence: { method: 'pickup' } });
+
+        expect(rideWrite(writes).eventDate).toBe('2026-08-14');
+        expect(rideWrite(writes).date).toBe('2026-08-14');
+    });
+
+    it('falls back to the only hall when they walked in and there is just one', async () => {
+        // Somebody who walked, drove themselves or got a lift from a friend has no
+        // outbound ride and therefore no `atLocationId`. With one hall that cannot be
+        // ambiguous, and refusing them would strand the population
+        // `normalisePresence` exists for.
+        const writes = makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'home_safe',
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+        });
+        await call({ presence: { method: 'manual' } });
+
+        expect(rideWrite(writes).locationId).toBe(FOUNDING_LOCATION_ID);
+    });
+
+    it('REFUSES rather than guessing when they walked in and two halls are open', async () => {
+        // A plausible answer here sends a car to the wrong building and nothing
+        // surfaces. A refusal is a message on the rider's own screen — which the
+        // release that adds the hall picker turns into a question.
+        openHalls = [FOUNDING_HALL, SOMERVILLE_HALL];
+        makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'home_safe',
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+        });
+
+        await expect(call({ presence: { method: 'manual' } }))
+            .rejects.toThrow(/not sure which sabha/i);
+    });
+
+    it('refuses a stale hall that is no longer open', async () => {
+        // A week-old `atLocationId` for a hall a manager has since retired. Same class
+        // as the stale `at_sabha` that `clearEndOfEveningStatuses` exists to sweep.
+        openHalls = [SOMERVILLE_HALL, FOUNDING_HALL];
+        makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'at_sabha',
+                atLocationId: 'cambridge',
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+        });
+
+        await expect(call({ presence: { method: 'pickup' } }))
+            .rejects.toThrow(/not sure which sabha/i);
     });
 });

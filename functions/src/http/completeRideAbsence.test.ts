@@ -301,6 +301,83 @@ describe('the return leg', () => {
         expect(write(rec, 'users/stu_b').status).toBe('at_sabha');
         expect(write(rec, 'users/stu_b').status).not.toBe('home_safe');
     });
+
+    /**
+     * WHICH SABHA THEY ARE STANDING AT, and the no-show branch is the one that has to
+     * carry it.
+     *
+     * `at_sabha` alone says "they are at a sabha" and, with two halls, cannot say
+     * which. That matters because a drop-off request holds the rider's HOME
+     * coordinates — nothing on it records where they are being collected FROM — so
+     * `atLocationId` is the only thing that can partition the return pool.
+     *
+     * The no-show path is the case most easily forgotten and the worst to lose: a
+     * rider who missed their car home is exactly the person who needs another lift,
+     * and without their hall the next Sarthi cannot be matched to them at all. Found
+     * by mutation — deleting the field from this branch left every other test green.
+     */
+    it('records which hall a no-show is standing at, not just that they are at one', async () => {
+        const AT_SOMERVILLE = RETURN.map(g => ({
+            ...g, data: { ...g.data, locationId: 'somerville' },
+        }));
+        const rec = makeDb(AT_SOMERVILLE);
+
+        await call(['stu_b']);
+
+        expect(write(rec, 'users/stu_b').status).toBe('at_sabha');
+        expect(write(rec, 'users/stu_b').atLocationId).toBe('somerville');
+    });
+
+    it('records it for everyone who travelled home too, cleared rather than stale', async () => {
+        // They are home, so they are at no hall. Left holding last week's value it
+        // would be read as "standing at Somerville" the following Friday.
+        const rec = makeDb(RETURN.map(g => ({
+            ...g, data: { ...g.data, locationId: 'somerville' },
+        })));
+
+        await call();
+
+        expect(write(rec, 'users/stu_a').status).toBe('home_safe');
+        expect(write(rec, 'users/stu_a').atLocationId).toBeNull();
+    });
+});
+
+describe('arriving at a sabha, and which one', () => {
+    it('records the hall when an outbound ride completes', async () => {
+        // The write the whole return leg depends on. Without it nobody knows which
+        // building a rider is standing outside.
+        const rec = makeDb(CARLOAD.map(g => ({
+            ...g, data: { ...g.data, locationId: 'somerville' },
+        })));
+
+        await call();
+
+        expect(write(rec, 'users/stu_a').status).toBe('at_sabha');
+        expect(write(rec, 'users/stu_a').atLocationId).toBe('somerville');
+    });
+
+    it('leaves it null when the ride never said, rather than inventing one', async () => {
+        // An unstamped ride can only exist while a single hall is open, where the
+        // return leg falls back to that hall. Inventing a value here would make the
+        // fallback unreachable and hide the real state.
+        const rec = makeDb(CARLOAD);
+
+        await call();
+
+        expect(write(rec, 'users/stu_a').atLocationId).toBeNull();
+    });
+
+    it('does NOT record a hall for somebody who never left home', async () => {
+        // `missed_pickup` — they are at home, not at a sabha.
+        const rec = makeDb(CARLOAD.map(g => ({
+            ...g, data: { ...g.data, locationId: 'somerville' },
+        })));
+
+        await call(['stu_b']);
+
+        expect(write(rec, 'users/stu_b').status).toBe('missed_pickup');
+        expect(write(rec, 'users/stu_b').atLocationId).toBeNull();
+    });
 });
 
 describe('the argument itself', () => {
