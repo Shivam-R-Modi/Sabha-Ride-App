@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapPin, Save, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../hooks/useSettings';
+import { useLocations } from '../../hooks/useLocations';
 import { AddressAutocomplete } from '../auth/AddressAutocomplete';
 import { PlaceDetails } from '../../hooks/useGooglePlaces';
 import {
@@ -15,6 +16,18 @@ export const LocationSettings: React.FC = () => {
         sabhaLocation, sabhaStartTime, sabhaEndTime, loading,
         updateSabhaLocation, updateSabhaTimes,
     } = useSettings();
+    /**
+     * The hall this screen is editing.
+     *
+     * ONE HALL TODAY, so there is nothing to disambiguate and no picker to offer — a
+     * control with one option is a control that cannot do anything. A manager cannot
+     * create a second hall from the UI yet, so `active[0]` is unambiguous by
+     * construction; the per-hall version arrives with the release that adds the
+     * picker, and `active.length` is asserted in the test so this cannot quietly start
+     * editing an arbitrary hall.
+     */
+    const { active: openHalls, updateLocationVenue } = useLocations();
+    const editingHall = openHalls.length === 1 ? openHalls[0] : null;
 
     const [address, setAddress] = useState('');
     const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
@@ -76,14 +89,34 @@ export const LocationSettings: React.FC = () => {
 
         try {
             if (selectedPlace) {
-                await updateSabhaLocation(
-                    {
-                        lat: selectedPlace.latitude,
-                        lng: selectedPlace.longitude,
-                        address: selectedPlace.formattedAddress,
-                    },
-                    currentUser.uid
-                );
+                const venue = {
+                    lat: selectedPlace.latitude,
+                    lng: selectedPlace.longitude,
+                    address: selectedPlace.formattedAddress,
+                };
+
+                /**
+                 * WRITTEN TO BOTH PLACES, and that is the point of this release.
+                 *
+                 * Dispatch now resolves a venue as
+                 * `event.venue → locations/{id}.venue → settings/main.sabhaLocation`.
+                 * Writing only `settings/main` would leave this Save button reporting
+                 * "Location updated successfully!" while changing nothing a driver is
+                 * routed by — the dead control this codebase keeps removing, shipped
+                 * by the change that introduced the new authority.
+                 *
+                 * Writing only the hall would be worse in the other direction: an
+                 * un-refreshed phone still reads `settings/main` for the address it
+                 * shows a rider, so the two would disagree about where sabha is.
+                 *
+                 * The hall FIRST, so a failure there aborts before the two can
+                 * diverge. Keeping `settings/main` in step also means this release is
+                 * revertible by redeploying functions alone.
+                 */
+                if (editingHall) {
+                    await updateLocationVenue(editingHall.id, venue, currentUser.uid);
+                }
+                await updateSabhaLocation(venue, currentUser.uid);
             }
             if (timesChanged) {
                 await updateSabhaTimes(startInput, endInput, currentUser.uid);
@@ -171,10 +204,18 @@ export const LocationSettings: React.FC = () => {
                         past the card edge. Measured as a no-op where it already
                         fits, so it costs nothing where it is not needed. */}
                     <div className="min-w-0">
-                        <label className="block text-xs font-medium text-coffee-700 mb-1">
+                        {/* `htmlFor` / `id`, which neither of these had. Two adjacent
+                            unlabelled time fields are announced as "time" and "time",
+                            so a screen reader user cannot tell start from end — and
+                            tapping the visible text did not focus the input either. */}
+                        <label
+                            htmlFor="sabha-default-start"
+                            className="block text-xs font-medium text-coffee-700 mb-1"
+                        >
                             Default Start
                         </label>
                         <input
+                            id="sabha-default-start"
                             type="time"
                             value={startInput}
                             onChange={(e) => {
@@ -187,10 +228,14 @@ export const LocationSettings: React.FC = () => {
                         />
                     </div>
                     <div className="min-w-0">
-                        <label className="block text-xs font-medium text-coffee-700 mb-1">
+                        <label
+                            htmlFor="sabha-default-end"
+                            className="block text-xs font-medium text-coffee-700 mb-1"
+                        >
                             Default End
                         </label>
                         <input
+                            id="sabha-default-end"
                             type="time"
                             value={endInput}
                             onChange={(e) => {

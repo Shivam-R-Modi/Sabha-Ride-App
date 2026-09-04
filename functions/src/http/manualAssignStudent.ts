@@ -8,7 +8,7 @@ import * as admin from 'firebase-admin';
 import { Student, Driver, Ride, RideStudent } from '../types';
 import { optimizeRoute, calculateRouteStats } from '../utils/routing';
 import { notifyStudentDriverAssigned, tokensOf } from '../utils/notifications';
-import { getSabhaLocation, resolveVenue } from '../utils/settings';
+import { getSabhaLocation, resolveVenue, getLocation } from '../utils/settings';
 import { assertApprovedManager } from '../utils/authz';
 import { seatsOf } from '../constants/seats';
 
@@ -134,7 +134,23 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         // it live would re-point every passenger already on this run at whatever
         // the current gathering's venue is, which is wrong when the ride belongs
         // to an earlier gathering.
-        const sabhaLocation = resolveVenue(ride.venue, await getSabhaLocation());
+        /**
+         * The ride's own snapshot first, then ITS HALL, then settings/main.
+         *
+         * The snapshot is still preferred for the reason above. The fallback is now the
+         * ride's own hall rather than the global default: a ride with no snapshot —
+         * written before venues existed, or hand-made in the Raw records console —
+         * would otherwise be routed to whichever venue `settings/main` currently
+         * names, which is the wrong building as soon as the ride belongs to another
+         * hall.
+         */
+        const hall = typeof ride.locationId === 'string'
+            ? await getLocation(ride.locationId, db)
+            : null;
+        const sabhaLocation = resolveVenue(
+            ride.venue,
+            resolveVenue(hall?.venue, await getSabhaLocation()),
+        );
         const startPoint = ride.rideType === 'home-to-sabha'
             ? (driver.currentLocation || sabhaLocation)
             : sabhaLocation;

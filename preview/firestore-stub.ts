@@ -101,6 +101,33 @@ const DONE = {
 };
 
 const COLLECTIONS: Record<string, Array<{ id: string; data: () => unknown }>> = {
+    /**
+     * The halls sabha runs at.
+     *
+     * ONE ACTIVE, which is production, plus one RETIRED — because a screen that lists
+     * halls has to draw the retired state too, and an all-active fixture renders only
+     * the happy half. The active one's id and venue match the seeded founding hall, so
+     * the harness shows the same address the app actually routes to.
+     */
+    locations: [
+        {
+            id: 'boston-huntington',
+            data: () => ({
+                name: 'Sabha', active: true, order: 0,
+                venue: {
+                    lat: 42.339362, lng: -71.0878001,
+                    address: '346 Huntington Ave, Boston, MA 02115',
+                },
+            }),
+        },
+        {
+            id: 'old-hall',
+            data: () => ({
+                name: 'Old Hall', active: false, order: 1,
+                venue: { lat: 42.4, lng: -71.1, address: '1 Old Street, Boston, MA' },
+            }),
+        },
+    ],
     // Deliberately one of each thing the grid has to draw differently: a day needing
     // somebody, a day fully covered, a day with a mix, a busy day whose count is
     // two digits, a landed-but-unclaimed day in the past, and — added 2026-08-25 —
