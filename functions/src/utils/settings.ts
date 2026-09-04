@@ -5,6 +5,10 @@
 import * as admin from 'firebase-admin';
 import { DEFAULT_TIME_ZONE, isValidTimeZone } from './time';
 import { DEFAULT_REQUESTS_OPEN_TIME, parseTimeToMinutes } from './schedule';
+import { FOUNDING_LOCATION_ID } from '../constants/tenancy';
+import {
+    activeLocations, normaliseLocation, type SabhaLocationRecord,
+} from './locations';
 
 export interface SabhaLocation {
     lat: number;
@@ -127,5 +131,90 @@ export async function getRequestsOpenTime(): Promise<string> {
     } catch (err) {
         console.error('[getRequestsOpenTime] Error fetching settings:', err);
         return DEFAULT_REQUESTS_OPEN_TIME;
+    }
+}
+
+export const LOCATIONS_COLLECTION = 'locations';
+
+/**
+ * Every hall currently open for business, in display order.
+ *
+ * RETURNS WHAT IS THERE, INCLUDING NOTHING. An empty list means the seed has not run
+ * or every document is malformed, and that is a fault the caller must handle rather
+ * than something this function papers over — see `locationsOrFoundingFallback`, which
+ * is the one place the bridge lives.
+ *
+ * Reads the whole collection. There are two or three of these documents, not two
+ * thousand, so there is nothing to page and no index to miss.
+ */
+export async function getActiveLocations(
+    db?: admin.firestore.Firestore,
+): Promise<SabhaLocationRecord[]> {
+    try {
+        const snap = await (db ?? admin.firestore()).collection(LOCATIONS_COLLECTION).get();
+        const records = snap.docs
+            .map(d => normaliseLocation(d.id, d.data()))
+            .filter((r): r is SabhaLocationRecord => r !== null);
+        return activeLocations(records);
+    } catch (err) {
+        console.error('[getActiveLocations] Error reading locations:', err);
+        return [];
+    }
+}
+
+/**
+ * The halls to work with, with a bridge for the release before the seed lands.
+ *
+ * THE BRIDGE IS DELIBERATE AND TIME-BOXED. This ships in the same deploy as the code
+ * that reads `locations`, and the collection is seeded by `scripts/locations.cjs` — two
+ * separate acts, in an order that cannot be guaranteed. Between them, an empty
+ * collection would mean no hall, which would mean no gathering and no rides on a Friday
+ * evening. So an empty collection synthesises the founding hall from
+ * `settings/main.sabhaLocation`, which is exactly where the venue came from before
+ * locations existed.
+ *
+ * IT LOGS AS AN ERROR, not a debug line, because after the seed has run this branch
+ * means somebody deleted or deactivated every hall — and the plausible-looking
+ * behaviour that follows would otherwise be the only symptom.
+ */
+export async function locationsOrFoundingFallback(
+    db?: admin.firestore.Firestore,
+): Promise<SabhaLocationRecord[]> {
+    const halls = await getActiveLocations(db);
+    if (halls.length > 0) return halls;
+
+    const venue = await getSabhaLocation();
+    console.error(
+        '[locations] NO ACTIVE SABHA LOCATION. Falling back to the founding hall from '
+        + 'settings/main. Run `node scripts/locations.cjs seed` — after that has run, '
+        + 'this line means every hall has been deleted or deactivated.',
+    );
+    return [{
+        id: FOUNDING_LOCATION_ID,
+        name: 'Sabha',
+        venue,
+        active: true,
+        order: 0,
+    }];
+}
+
+/**
+ * One hall by id, or null.
+ *
+ * Null rather than the founding hall: a caller asking for a specific hall has an id
+ * from somewhere — a ride, a driver's tap — and quietly answering with a different
+ * hall's coordinates is how a car ends up at the wrong building.
+ */
+export async function getLocation(
+    locationId: string,
+    db?: admin.firestore.Firestore,
+): Promise<SabhaLocationRecord | null> {
+    try {
+        const snap = await (db ?? admin.firestore())
+            .collection(LOCATIONS_COLLECTION).doc(locationId).get();
+        return snap.exists ? normaliseLocation(snap.id, snap.data()) : null;
+    } catch (err) {
+        console.error(`[getLocation] Error reading ${locationId}:`, err);
+        return null;
     }
 }

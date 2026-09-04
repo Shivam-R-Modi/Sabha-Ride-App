@@ -16,6 +16,9 @@ import { drainAttendanceDelete } from '../http/deleteSabhaEvent';
 import { SEED_MARKER_DOC } from '../utils/events';
 import { assertApprovedManager } from '../utils/authz';
 import { readRecurrence } from '../http/sabhaRecurrence';
+import { FOUNDING_LOCATION_ID } from '../constants/tenancy';
+import { eventIdFor } from '../utils/locations';
+import { locationsOrFoundingFallback, resolveVenue } from '../utils/settings';
 
 const CONTEXT_DOC = 'system/rideContext';
 
@@ -63,6 +66,114 @@ export function attendanceHeaderChanged(
     if (before && after && (before.lat !== after.lat || before.lng !== after.lng)) return true;
 
     return false;
+}
+
+/** One hall's published window. */
+export interface HallContext {
+    locationId: string;
+    event: CurrentEvent | null;
+    window: ScheduleWindow;
+}
+
+/**
+ * The `system/rideContext` document, per hall, as ONE pure function.
+ *
+ * Extracted so the shape can be asserted directly. This scheduler had no test file at
+ * all, and the property that matters most about this change is *"with one hall the
+ * published document is identical to what it published before"* — which is a statement
+ * about a value, not about a Firestore write.
+ *
+ * ── WHY THE TOP-LEVEL FIELDS SURVIVE ────────────────────────────────────────────────
+ *
+ * Every client reads `rideType`, `venue` and `eventId` from the TOP LEVEL of this
+ * document. This is an installed PWA — `src/utils/swUpdate.ts` warns that a driver can
+ * keep a tab alive for weeks — so moving those fields under `byLocation` would leave
+ * every un-refreshed phone reading `undefined`, which resolves to "no sabha scheduled"
+ * and a refusal to dispatch. Silent, and only for the people who never tap the update
+ * banner.
+ *
+ * So the top level stays, as a COMPATIBILITY AGGREGATE with a stated meaning: it is the
+ * FOUNDING hall's window, falling back to the first active hall. Not the widest window
+ * across halls, which was the other candidate — a stale client reading "open" when the
+ * rider's own hall is closed would let them file a request nothing can serve, whereas
+ * reading "closed" when another hall is open merely makes them wait and update. The
+ * conservative direction is the right one for a field nobody can see the age of.
+ *
+ * With exactly one hall — every day until a manager adds a second — the aggregate IS
+ * that hall, so the document is byte-identical to the single-hall shape.
+ */
+export function buildRideContextDoc(
+    halls: ReadonlyArray<HallContext>,
+    now: Date,
+    extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+    const primary = halls.find(h => h.locationId === FOUNDING_LOCATION_ID) ?? halls[0];
+
+    const byLocation: Record<string, unknown> = {};
+    for (const hall of halls) {
+        byLocation[hall.locationId] = {
+            ...hall.window,
+            ...(hall.event ?? { eventId: null }),
+            // Lets a screen say "you cancelled everything" instead of leaving
+            // "No rides available" looking like a malfunction.
+            calendarStatus: hall.event ? 'ok' : 'no-scheduled-event',
+        };
+    }
+
+    return {
+        ...(primary?.window ?? { rideType: null, displayText: 'No rides available', timeContext: '' }),
+        ...(primary?.event ?? { eventId: null }),
+        calendarStatus: primary?.event ? 'ok' : 'no-scheduled-event',
+        byLocation,
+        /**
+         * The halls this document actually describes.
+         *
+         * Published so a client can tell "my hall is closed" from "my hall is not in
+         * here at all". The second is a server fault and must render as one — without
+         * this list a missing `byLocation` key is indistinguishable from a closed
+         * window, which is the ambiguity `calendarStatus` was invented to remove.
+         */
+        locationIds: halls.map(h => h.locationId),
+        overrideUntil: null,
+        lastUpdated: now.toISOString(),
+        ...extra,
+    };
+}
+
+/**
+ * Build one gathering per open hall.
+ *
+ * ONE SHARED DATE AND ONE SHARED PAIR OF TIMES, and only the VENUE differs per hall.
+ * That is the whole of the multi-hall model for now, and it is what the owner asked
+ * for: both halls on the same evening at the same time, with per-hall times reserved
+ * for the rare case. So the recurrence resolver is untouched — `findCurrentEvent` still
+ * answers once, for the evening, and the fan-out happens here.
+ *
+ * The gathering's KEY differs per hall (`eventIdFor`), because two halls cannot share
+ * one `events/{date}` document, and that key is also the attendance key.
+ */
+export function hallContexts(
+    scheduled: { date: string; startTime: string; endTime: string; venue: unknown; agenda: string } | null,
+    halls: ReadonlyArray<{ id: string; venue: unknown }>,
+    now: Date,
+    timeZone: string,
+    requestsOpenTime: unknown,
+): HallContext[] {
+    return halls.map(hall => {
+        const event = scheduled
+            ? buildCurrentEvent(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
+                // The gathering's own override wins over the hall's standing venue,
+                // which wins over settings/main — the existing precedence, one link
+                // longer. `resolveVenue` still does the choosing.
+                venue: resolveVenue(scheduled.venue, hall.venue as never) as never,
+                agenda: scheduled.agenda,
+                requestsOpenTime,
+                eventId: eventIdFor(scheduled.date, hall.id) ?? scheduled.date,
+                locationId: hall.id,
+            })
+            : null;
+        return { locationId: hall.id, event, window: resolveScheduleWindow(now, event, timeZone) };
+    });
 }
 
 /**
@@ -230,35 +341,40 @@ export const updateRideTypeContext = functions.pubsub
             const rule = await readRecurrence(db);
             const scheduled = await findCurrentEvent(db, now, timeZone, rule);
 
-            const event = scheduled
-                ? buildCurrentEvent(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
-                    venue: scheduled.venue,
-                    agenda: scheduled.agenda,
-                    requestsOpenTime,
-                })
-                : null;
-            const window = resolveScheduleWindow(now, event, timeZone);
+            // ONE gathering for the evening, then one context per open hall. Only the
+            // venue differs; see `hallContexts`.
+            const halls = await locationsOrFoundingFallback(db);
+            const contexts = hallContexts(
+                scheduled, halls.map(h => ({ id: h.id, venue: h.venue })),
+                now, timeZone, requestsOpenTime,
+            );
 
-            await db.doc(CONTEXT_DOC).set({
-                ...window,
-                ...(event ?? { eventId: null }),
-                // Lets the manager UI say "you cancelled everything" instead of
-                // leaving "No rides available" looking like a malfunction.
-                calendarStatus: event ? 'ok' : 'no-scheduled-event',
-                overrideUntil: null,
-                lastUpdated: now.toISOString(),
-            });
+            await db.doc(CONTEXT_DOC).set(buildRideContextDoc(contexts, now));
 
             // When the gathering changes OR when its details do — see
             // attendanceHeaderChanged. Comparing eventId alone left the attendance
             // record showing a 4:00 AM start for an 11:00 PM sabha.
-            if (event && attendanceHeaderChanged(current, event)) {
-                await recordEventDetails(db, event, event.venue ?? venue);
+            //
+            // PER HALL, and the previous value is read from that hall's own slice. The
+            // founding hall falls back to the TOP LEVEL, because on the first tick
+            // after this deploys `byLocation` does not exist yet — without that
+            // fallback every attendance header would be rewritten once for nothing.
+            for (const hall of contexts) {
+                if (!hall.event) continue;
+                const before = (current?.byLocation as Record<string, never> | undefined)?.[hall.locationId]
+                    ?? (hall.locationId === FOUNDING_LOCATION_ID ? current : undefined);
+                if (!attendanceHeaderChanged(before, hall.event)) continue;
+                await recordEventDetails(db, hall.event, hall.event.venue ?? venue);
             }
 
-            await announceIfWindowJustOpened(current?.rideType, window);
+            // ONE ANNOUNCEMENT FOR THE EVENING, deliberately not one per hall. Both
+            // halls share a window today, so a per-hall broadcast would send the same
+            // congregation the same news twice. It becomes per-hall in the release that
+            // makes per-hall times possible, and not before.
+            const primary = contexts.find(h => h.locationId === FOUNDING_LOCATION_ID) ?? contexts[0];
+            await announceIfWindowJustOpened(current?.rideType, primary.window);
 
-            console.log('[rideContext] Updated:', window);
+            console.log(`[rideContext] Updated ${contexts.length} hall(s):`, primary.window);
             return null;
         } catch (error) {
             console.error('[rideContext] Error updating ride context:', error);
@@ -290,25 +406,18 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
     const { timeZone, requestsOpenTime } = await readSabhaTimes(db);
     const rule = await readRecurrence(db);
     const scheduled = await findCurrentEvent(db, now, timeZone, rule);
-    const event = scheduled
-        ? buildCurrentEvent(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
-            venue: scheduled.venue,
-            agenda: scheduled.agenda,
-            requestsOpenTime,
-        })
-        : null;
+    const halls = await locationsOrFoundingFallback(db);
+    const contexts = hallContexts(
+        scheduled, halls.map(h => ({ id: h.id, venue: h.venue })),
+        now, timeZone, requestsOpenTime,
+    );
+    const primary = contexts.find(h => h.locationId === FOUNDING_LOCATION_ID) ?? contexts[0];
+    const event = primary?.event ?? null;
 
     // Reset — hand control straight back to the schedule.
     if (data?.reset) {
-        const window = resolveScheduleWindow(now, event, timeZone);
-        await db.doc(CONTEXT_DOC).set({
-            ...window,
-            ...(event ?? { eventId: null }),
-            calendarStatus: event ? 'ok' : 'no-scheduled-event',
-            overrideUntil: null,
-            lastUpdated: now.toISOString(),
-        });
-        return window;
+        await db.doc(CONTEXT_DOC).set(buildRideContextDoc(contexts, now));
+        return primary.window;
     }
 
     const rideType = data?.rideType as RideType | undefined;
@@ -334,14 +443,22 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
         );
     }
 
-    await db.doc(CONTEXT_DOC).set({
-        ...window,
-        ...event,
-        calendarStatus: 'ok',
-        overrideUntil: endOfLocalDay(now, timeZone),
-        openedBy: context.auth.uid,
-        lastUpdated: now.toISOString(),
-    });
+    /**
+     * AN OVERRIDE OPENS EVERY HALL, and that is the honest reading of the control.
+     *
+     * The button says "Open ride requests now" with no hall on it, and it is reached
+     * from a screen that has never had one. Opening only the founding hall would leave
+     * the other one closed with nothing on screen saying so; opening all of them does
+     * what the label promises. Per-hall overrides arrive with per-hall times.
+     */
+    await db.doc(CONTEXT_DOC).set(buildRideContextDoc(
+        contexts.map(h => ({ ...h, window })),
+        now,
+        {
+            overrideUntil: endOfLocalDay(now, timeZone),
+            openedBy: context.auth.uid,
+        },
+    ));
 
     // Same one-shot rule as the scheduler: announce only a real change, so
     // re-tapping the button does not notify the congregation twice.

@@ -89,8 +89,16 @@ export interface ScheduleWindow {
  * gathering's record than the one their manager was reading.
  */
 export interface CurrentEvent {
-    /** "YYYY-MM-DD" of the gathering, in Sabha local time. The attendance key. */
+    /**
+     * The gathering's key, and the attendance key with it.
+     *
+     * The DATE for the founding hall — which is every record written so far — and
+     * `${date}__${locationId}` for any other hall. `dateKeyOfEventId` extracts the date
+     * half; four callers compare this against a date and must not do it directly.
+     */
     eventId: string;
+    /** Which hall. Absent on a gathering built before locations existed. */
+    locationId?: string;
     /** Ride requests open here — PICKUP_LEAD_DAYS before, at midnight. */
     requestsOpenAt: string;
     startsAt: string;
@@ -124,6 +132,17 @@ export function buildCurrentEvent(
         agenda?: string;
         /** "HH:MM" local. Anything unparseable falls back rather than becoming 00:00. */
         requestsOpenTime?: unknown;
+        /**
+         * The gathering's document id, when it is not simply the date.
+         *
+         * Two halls on one evening cannot share `events/{YYYY-MM-DD}`, so a non-founding
+         * hall's gathering is keyed `${date}__${locationId}` — see utils/locations.ts.
+         * Absent keeps the bare date, which is what the founding hall uses and what
+         * every record already written is filed under.
+         */
+        eventId?: string;
+        /** Which hall this gathering is at. Absent means the founding one. */
+        locationId?: string;
     },
 ): CurrentEvent {
     const startMinutes = parseTimeToMinutes(startTime)
@@ -148,7 +167,8 @@ export function buildCurrentEvent(
     );
 
     return {
-        eventId: eventDate,
+        eventId: extras?.eventId ?? eventDate,
+        locationId: extras?.locationId,
         requestsOpenAt: zonedTimeToInstant(
             addDaysToDateKey(eventDate, -PICKUP_LEAD_DAYS),
             // NOT `?? '00:00'`. A malformed setting must not silently become midnight,
