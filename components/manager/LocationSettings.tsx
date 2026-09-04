@@ -165,10 +165,12 @@ export const LocationSettings: React.FC = () => {
             {/* Edit Form */}
             <div className="px-4 py-4 space-y-3">
                 <div>
-                    <label className="block text-xs font-medium text-coffee-700 mb-1">
+                    <label
+                        htmlFor="sabha-new-address" className="block text-xs font-medium text-coffee-700 mb-1">
                         New Address
                     </label>
                     <AddressAutocomplete
+                        id="sabha-new-address"
                         value={address}
                         onChange={(val) => {
                             setAddress(val);

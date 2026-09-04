@@ -71,8 +71,14 @@ vi.mock('../../hooks/useLocations', () => ({
  * to that place afterwards.
  */
 vi.mock('../../components/auth/AddressAutocomplete', () => ({
-    AddressAutocomplete: ({ onSelect }: { onSelect: (d: unknown) => void }) => (
-        <button type="button" onClick={() => onSelect(NEW_PLACE)}>pick an address</button>
+    AddressAutocomplete: ({ onSelect, id }: { onSelect: (d: unknown) => void; id?: string }) => (
+        <>
+            {/* Carries `id` through, so the caller's own label really does resolve.
+                A stub that dropped it would let the label test pass against an
+                unlabelled field. */}
+            <input id={id} readOnly value="" />
+            <button type="button" onClick={() => onSelect(NEW_PLACE)}>pick an address</button>
+        </>
     ),
 }));
 
@@ -161,6 +167,26 @@ describe('which hall it edits', () => {
 
         await waitFor(() => expect(updateSabhaLocation).toHaveBeenCalled());
         expect(updateLocationVenue).not.toHaveBeenCalled();
+    });
+});
+
+describe('every field is labelled', () => {
+    it('associates all three labels with their inputs', () => {
+        /**
+         * The time fields had labels with no `htmlFor` and inputs with no `id`, so two
+         * adjacent time boxes were both announced as "time" and a screen reader user
+         * could not tell start from end. The ADDRESS field had the same defect and I
+         * only found it by rendering the screen in the preview harness — which is the
+         * argument for looking at a page rather than trusting a component test.
+         *
+         * `getByLabelText` fails outright on an unassociated label, so this asserts the
+         * association rather than the text.
+         */
+        render(<LocationSettings />);
+
+        expect(screen.getByLabelText(/New Address/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/Default Start/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/Default End/i)).toBeInTheDocument();
     });
 });
 

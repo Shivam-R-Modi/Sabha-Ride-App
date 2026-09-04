@@ -10,6 +10,7 @@ import { ManagerPeople } from '../components/manager/ManagerPeople';
 import { SabhaCalendar } from '../components/manager/SabhaCalendar';
 import { ManagerReports } from '../components/manager/ManagerReports';
 import { NotificationSettings } from '../components/manager/NotificationSettings';
+import { LocationSettings } from '../components/manager/LocationSettings';
 import { ToastProvider } from '../contexts/ToastContext';
 import type { Driver } from '../types';
 
@@ -40,6 +41,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <div>
       <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Sabha calendar — one card, twelve weeks behind it</p>
       <ToastProvider><SabhaCalendar /></ToastProvider>
+    </div>
+    <div>
+      {/* Added with the locations change: this screen now writes to TWO places — the
+          hall dispatch routes by, and settings/main which an un-refreshed phone still
+          reads for the address it shows a rider. It had never been rendered outside a
+          sign-in, and the fixture in firestore-stub.ts was unused until it appeared
+          here. */}
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Venue — one hall, and it is the one dispatch uses</p>
+      <ToastProvider><LocationSettings /></ToastProvider>
     </div>
     <div>
       {/* Both halves side by side, which is the one thing the real app deliberately

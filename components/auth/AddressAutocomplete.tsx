@@ -36,6 +36,16 @@ interface AddressAutocompleteProps {
     onSelect: (details: PlaceDetails) => void;
     disabled?: boolean;
     placeholder?: string;
+    /**
+     * So a caller's own `<label htmlFor>` can reach the input.
+     *
+     * Six call sites render a visible label above this component and none of them
+     * could associate it, because the input had no id to point at — a screen reader
+     * announced every address field as an unlabelled text box, and tapping the visible
+     * text focused nothing. Optional, so the five that have not been given one yet are
+     * unchanged.
+     */
+    id?: string;
 }
 
 export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
@@ -44,6 +54,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     onSelect,
     disabled = false,
     placeholder = 'Start typing your address…',
+    id,
 }) => {
     const {
         predictions,
@@ -191,6 +202,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
         <div ref={wrapperRef} style={{ position: 'relative' }}>
             {/* Input */}
             <input
+                id={id}
                 type="text"
                 value={value}
                 onChange={handleInputChange}
