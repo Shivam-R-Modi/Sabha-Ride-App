@@ -5,10 +5,12 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { Student, Driver, Ride, RideStudent } from '../types';
+import { Student, Driver, Ride, RideStudent, RideType } from '../types';
 import { optimizeRoute, calculateRouteStats } from '../utils/routing';
 import { notifyStudentDriverAssigned, tokensOf } from '../utils/notifications';
 import { getSabhaLocation, resolveVenue, getLocation } from '../utils/settings';
+import { rejectionFor } from '../utils/ridePool';
+import { eventKeyFromRide } from '../utils/events';
 import { assertApprovedManager } from '../utils/authz';
 import { seatsOf } from '../constants/seats';
 
@@ -73,6 +75,31 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
                 'Sarthi does not have an active ride'
             );
         }
+        /**
+         * ONE CARLOAD, ONE HALL — checked rather than assumed.
+         *
+         * `docs[0]` was taken arbitrarily, and that was harmless while every active
+         * ride a Sarthi holds belongs to the same carload: `globalAssignDriver` writes
+         * one document per rider and they all share the car, the route and the venue.
+         *
+         * With two halls that assumption is worth verifying rather than trusting,
+         * because if it ever fails the consequence is a rider added to a run going to
+         * the wrong building. A Sarthi holding active rides for two halls is already a
+         * broken state; saying so is more use than silently picking one.
+         */
+        const activeHalls = new Set(
+            activeRideSnap.docs
+                .map(d => d.data()?.locationId)
+                .filter((id): id is string => typeof id === 'string'),
+        );
+        if (activeHalls.size > 1) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'That Sarthi is holding runs for more than one sabha location. '
+                + 'Please complete or release one before adding anybody.',
+            );
+        }
+
         const rideDoc = activeRideSnap.docs[0];
         const ride = { id: rideDoc.id, ...rideDoc.data() } as Ride;
 
@@ -93,9 +120,44 @@ export const manualAssignStudent = functions.https.onCall(async (data, context) 
         const myRidesSnap = await db.collection('rides')
             .where('studentId', '==', studentId)
             .get();
+
+        /**
+         * THE RIDER'S REQUEST FOR *THIS* RUN, not just any request they happen to hold.
+         *
+         * This used to be `.find(r => r.status === 'requested')` — no gathering, no
+         * direction, no hall. So a leftover request from a previous sabha, or a pickup
+         * request while a drop-off run was being built, or (once there are two halls)
+         * a request for the OTHER hall would all satisfy it, and the rider would be
+         * added to this car anyway with that request's seat count.
+         *
+         * Today the visible cost is a wrong seat count. With two halls a manager
+         * tapping a button that already exists puts a Hall B rider into a Hall A car —
+         * no race, no bad actor, and the one invariant the whole multi-hall design
+         * exists to protect. It is the only path that breaks it through ordinary use.
+         *
+         * `rejectionFor` is the same predicate dispatch uses, so the manual path and
+         * the automatic one cannot disagree about who belongs in a car.
+         */
+        const expectation = {
+            eventKey: eventKeyFromRide(ride),
+            rideType: (ride.rideType ?? 'home-to-sabha') as RideType,
+            locationId: typeof ride.locationId === 'string' ? ride.locationId : null,
+            // The car already exists and names its hall, so an unstamped request can be
+            // taken at its word here regardless of how many halls are open — it is
+            // being added to a specific run, not matched against an ambiguous pool.
+            singleActiveLocation: true,
+        };
         const waitingRequest = myRidesSnap.docs
             .map(d => d.data())
-            .find(r => r.status === 'requested');
+            .find(r => r.status === 'requested' && rejectionFor(r, expectation) === null);
+
+        if (!waitingRequest) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'That Bhulku has no waiting request for this run. They may have asked '
+                + 'for a different sabha, a different direction, or another evening.',
+            );
+        }
         const seatsNeeded = seatsOf(waitingRequest);
 
         // Check capacity (capacity - 1 for driver seat).

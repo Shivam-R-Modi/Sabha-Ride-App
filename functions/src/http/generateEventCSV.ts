@@ -7,6 +7,9 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { assertApprovedManager } from '../utils/authz';
 import { checkRateLimit } from '../utils/rateLimiter';
+import { locationsOrFoundingFallback } from '../utils/settings';
+import { eventKeyFromRide } from '../utils/events';
+import { locationOfRide } from '../utils/locations';
 
 /**
  * HTTP Callable: Generate CSV export for an event
@@ -19,7 +22,7 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
         throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
 
-    const { eventDate } = data || {};
+    const { eventDate, locationId } = data || {};
 
     // Use today's date if no date provided
     const targetDate = eventDate || new Date().toISOString().split('T')[0];
@@ -55,25 +58,82 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
             functionName: 'generateEventCSV',
         });
 
+        /**
+         * WHICH SABHA LOCATION, and refused rather than ignored if it is not a real one.
+         *
+         * Absent means EVERY hall, which is what this has always done and is a
+         * legitimate thing for a manager to want. Named, it must name a hall that
+         * exists and is open — a typo would otherwise produce an empty export that
+         * looks like "nobody is waiting", which for a PII export is the wrong kind of
+         * quiet.
+         */
+        const openHalls = await locationsOrFoundingFallback(db);
+        const scopeHall = typeof locationId === 'string' && locationId
+            ? openHalls.find(h => h.id === locationId)
+            : null;
+        if (typeof locationId === 'string' && locationId && !scopeHall) {
+            throw new functions.https.HttpsError(
+                'invalid-argument', 'That sabha location is not running.',
+            );
+        }
+
         const rows: string[] = [];
 
-        // Header
+        /**
+         * The scope is IN THE FILE, not only in the filename.
+         *
+         * A spreadsheet of children's names, phone numbers and home addresses that does
+         * not say which evening and which hall it covers is a document nobody can
+         * safely file or delete later. Two halls make that worse: two exports from the
+         * same evening are otherwise indistinguishable.
+         */
+        rows.push(`# Sabha ${targetDate} — ${scopeHall ? scopeHall.name : 'all locations'}`);
         rows.push('Bhulku Name,Phone,Pickup Address,Status,Request Date');
 
         // Maximum rows to prevent timeout (can be increased if needed)
         const MAX_ROWS = 500;
         let hitLimit = false;
 
-        // Get pending ride requests with limit to prevent timeout
+        /**
+         * ONE `where`, and the scoping is done in memory. Adding `eventDate` or
+         * `locationId` beside `status` would need a composite index this project does
+         * not have, and — worse — an equality filter on a field some documents lack
+         * returns SILENTLY EMPTY. An empty PII export reads as "nobody is waiting".
+         */
         const pendingQuery = db.collection('rides')
             .where('status', '==', 'requested')
             .limit(MAX_ROWS);
 
         const pendingSnapshot = await pendingQuery.get();
-        const pendingRequests: any[] = pendingSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+
+        /**
+         * DISPATCH REFUSES THE AMBIGUOUS; AN EXPORT SHOWS IT AND SAYS SO.
+         *
+         * That distinction is the whole shape of this filter and it is deliberate. In
+         * `rejectionFor`, a request that names no gathering or no hall is refused,
+         * because including it would send a car somewhere. Here, dropping it would make
+         * a person disappear from the one document a manager uses to check who is
+         * waiting — so an unkeyed or unlocated request is INCLUDED, with the gap named
+         * in its Status cell.
+         *
+         * The alternative — silently narrowing a PII export — is how somebody gets
+         * left off a list and nobody finds out.
+         */
+        const pendingRequests: any[] = [];
+        for (const doc of pendingSnapshot.docs) {
+            const d: any = { id: doc.id, ...doc.data() };
+            const key = eventKeyFromRide(d);
+            const hall = locationOfRide(d);
+
+            if (key !== null && key !== targetDate) continue;
+            if (scopeHall && hall !== null && hall !== scopeHall.id) continue;
+
+            const gaps: string[] = [];
+            if (key === null) gaps.push('no sabha date');
+            if (hall === null) gaps.push('no location');
+            d.__scopeNote = gaps.length ? ` (${gaps.join(', ')})` : '';
+            pendingRequests.push(d);
+        }
 
         if (pendingSnapshot.size >= MAX_ROWS) {
             hitLimit = true;
@@ -103,7 +163,7 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
                     escapeCsvField(request.studentName || 'Unknown'),
                     escapeCsvField(request.studentPhone || request.phone || ''),
                     escapeCsvField(request.pickupAddress || ''),
-                    'Pending Request',
+                    `Pending Request${request.__scopeNote ?? ''}`,
                     escapeCsvField(request.createdAt ? new Date(request.createdAt).toLocaleDateString() : targetDate)
                 ].join(','));
             }
