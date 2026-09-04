@@ -378,7 +378,64 @@ describe('studentReadyToLeave — which hall they are leaving from', () => {
         });
 
         await expect(call({ presence: { method: 'manual' } }))
-            .rejects.toThrow(/not sure which sabha/i);
+            .rejects.toThrow(/which sabha you are at/i);
+    });
+
+    it('takes the rider\'s ANSWER when the app has no record of them', async () => {
+        // The walk-ins, the drive-themselves and the got-a-lift crowd. Before this they
+        // met a refusal with no way to answer it.
+        openHalls = [FOUNDING_HALL, SOMERVILLE_HALL];
+        const writes = makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'home_safe',
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+            context: {
+                rideType: 'sabha-to-home',
+                byLocation: { somerville: { rideType: 'sabha-to-home', eventId: '2026-08-14__somerville' } },
+            },
+        });
+        await call({ presence: { method: 'manual' }, locationId: 'somerville' });
+
+        expect(rideWrite(writes).locationId).toBe('somerville');
+    });
+
+    it('lets the RECORDED hall beat a conflicting answer', async () => {
+        /**
+         * THE SECURITY-RELEVANT HALF, and it needs saying explicitly: mutating the
+         * priority the other way round left every other case in this file green,
+         * because none of them sends a claim that disagrees with the record.
+         *
+         * `atLocationId` is written when their outbound ride completes, so for anybody
+         * who was DRIVEN here it is hard evidence from this evening. A rider taken to
+         * one hall who claims the other is either mistaken or has walked between
+         * buildings — and trusting the claim would let somebody summon a car from a
+         * hall they are not standing at.
+         */
+        openHalls = [FOUNDING_HALL, SOMERVILLE_HALL];
+        const writes = makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'at_sabha',
+                atLocationId: FOUNDING_LOCATION_ID,
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+        });
+        await call({ presence: { method: 'pickup' }, locationId: 'somerville' });
+
+        expect(rideWrite(writes).locationId).toBe(FOUNDING_LOCATION_ID);
+    });
+
+    it('refuses an answer naming a hall that is not open', async () => {
+        openHalls = [FOUNDING_HALL, SOMERVILLE_HALL];
+        makeDb({
+            student: {
+                name: 'Rebo', address: '15 Central Sq', status: 'home_safe',
+                location: { latitude: HOME.lat, longitude: HOME.lng },
+            },
+        });
+
+        await expect(call({ presence: { method: 'manual' }, locationId: 'cambridge' }))
+            .rejects.toThrow(/which sabha you are at/i);
     });
 
     it('refuses a stale hall that is no longer open', async () => {
@@ -394,6 +451,6 @@ describe('studentReadyToLeave — which hall they are leaving from', () => {
         });
 
         await expect(call({ presence: { method: 'pickup' } }))
-            .rejects.toThrow(/not sure which sabha/i);
+            .rejects.toThrow(/which sabha you are at/i);
     });
 });

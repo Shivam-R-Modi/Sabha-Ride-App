@@ -4,7 +4,21 @@
  *
  *   node scripts/locations.cjs seed             # dry run
  *   node scripts/locations.cjs seed --apply
+ *   node scripts/locations.cjs add <id> "<name>" <lat> <lng> "<address>"
+ *   node scripts/locations.cjs add <id> ... --apply --active
  *   node scripts/locations.cjs verify           # EXITS NON-ZERO on any problem
+ *
+ * ## Why adding a hall is a script and not a screen
+ *
+ * The owner's call: a hall is not something that changes, and riders already know
+ * which one they attend. A management screen would be a control touched once a year,
+ * on a page a manager visits every week — and the act it performs is the most
+ * consequential in the whole feature, because switching a hall on means riders can
+ * book it and Sarthis can be sent to it.
+ *
+ * So it lives here, where it is deliberate, auditable in a shell history, and gated
+ * behind a dry run. `--active` is a separate flag from the rest for the same reason:
+ * creating a hall and OPENING it are two decisions.
  *
  * ## Why the seed is a script and not a screen
  *
@@ -141,6 +155,81 @@ async function seed() {
     return 0;
 }
 
+/**
+ * Add a hall.
+ *
+ * INACTIVE UNLESS `--active` IS PASSED, matching firestore.rules, which refuses to let
+ * any client create an active one. Switching a hall on is what lets riders book it and
+ * Sarthis be dispatched to it; a half-entered hall going live the moment it is saved
+ * would strand whoever booked it.
+ *
+ * Refuses to overwrite an existing hall. Moving one is `LocationSettings` in the app;
+ * this is only for creation, so a re-run cannot silently relocate a live hall.
+ */
+async function add() {
+    const [, , , id, name, lat, lng, address] = process.argv;
+    const ACTIVE = process.argv.includes('--active');
+
+    if (!id || !name || !lat || !lng || !address) {
+        console.error('Usage: node scripts/locations.cjs add <id> "<name>" <lat> <lng> "<address>" [--active] [--apply]');
+        return 1;
+    }
+    if (!LOCATION_ID_PATTERN.test(id)) {
+        console.error(`Bad id "${id}". Lower case, digits and hyphens only — it becomes`);
+        console.error('part of an event key, so a slash or a dot would change which');
+        console.error('document that key points at.');
+        return 1;
+    }
+    if (id === FOUNDING_LOCATION_ID) {
+        console.error(`"${id}" is the founding hall. Use \`seed\` for that one.`);
+        return 1;
+    }
+
+    const latN = Number(lat);
+    const lngN = Number(lng);
+    if (!Number.isFinite(latN) || !Number.isFinite(lngN) || (latN === 0 && lngN === 0)) {
+        console.error('Coordinates must be real numbers and not 0,0 — that pair is the');
+        console.error('"address never geocoded" placeholder, and a hall there would be the');
+        console.error('farthest point from every rider and would seed every carload.');
+        return 1;
+    }
+
+    const ref = db.collection('locations').doc(id);
+    if ((await ref.get()).exists) {
+        console.error(`locations/${id} already exists. Refusing to overwrite it — move a`);
+        console.error('hall from the Venue screen in the app instead.');
+        return 1;
+    }
+
+    const doc = {
+        name,
+        venue: { lat: latN, lng: lngN, address },
+        active: ACTIVE,
+        order: 1,
+        createdAt: new Date().toISOString(),
+        createdBy: 'script:locations.cjs',
+    };
+
+    console.log(`Will create locations/${id}:`);
+    console.log(JSON.stringify(doc, null, 2));
+    if (!ACTIVE) {
+        console.log('\nINACTIVE. Riders cannot book it and Sarthis cannot be sent to it');
+        console.log('until you re-run with --active, or flip the flag deliberately.');
+    } else {
+        console.log('\nACTIVE IMMEDIATELY. Riders will be asked which sabha they are going');
+        console.log('to, and Sarthis will be asked which one they are driving for.');
+    }
+
+    if (!process.argv.includes('--apply')) {
+        console.log('\nDry run. Re-run with --apply to write it.');
+        return 0;
+    }
+
+    await ref.set(doc);
+    console.log('\nCreated. Run `verify` to check nothing points at a hall that does not exist.');
+    return 0;
+}
+
 async function verify() {
     console.log('Verifying sabha locations.\n');
     let problems = 0;
@@ -244,8 +333,11 @@ async function verify() {
 
 (async () => {
     if (mode === 'seed') process.exit(await seed());
+    if (mode === 'add') process.exit(await add());
     if (mode === 'verify') process.exit(await verify());
-    console.error('Usage: node scripts/locations.cjs seed [--apply] | verify');
+    console.error('Usage: node scripts/locations.cjs seed [--apply]');
+    console.error('       node scripts/locations.cjs add <id> "<name>" <lat> <lng> "<address>" [--active] [--apply]');
+    console.error('       node scripts/locations.cjs verify');
     process.exit(1);
 })().catch(err => {
     console.error(err);

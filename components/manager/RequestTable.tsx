@@ -233,6 +233,17 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                               {describePresence(req.presence)}
                             </p>
                           )}
+                          {/* WHICH SABHA, and only when more than one is open — with
+                              one hall this is absent and the row is unchanged.
+                              Without it a manager cannot tell a Somerville rider from
+                              a Huntington one, and `manualAssignStudent` refuses to
+                              put them in the wrong Sarthi's car: an error the screen
+                              could have prevented. */}
+                          {req.locationName && (
+                            <p className="text-[11px] font-semibold text-[rgb(var(--accent-text))] leading-tight">
+                              {req.locationName}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -283,6 +294,11 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                             <p className="text-xs text-coffee-500 flex items-center gap-2">
                                 <MapPin size={12} className="text-saffron" /> {req.address}
                             </p>
+                            {req.locationName && (
+                              <p className="text-xs font-semibold text-[rgb(var(--accent-text))] mt-1">
+                                Going to {req.locationName}
+                              </p>
+                            )}
                         </td>
                     </tr>
                   )}
@@ -409,6 +425,13 @@ const SwipeableCard: React.FC<{
                         </span>
                     </div>
                     <p className="text-xs text-coffee-500 truncate mb-1">{request.address}</p>
+                    {/* The phone card too: a manager triaging on a phone on a Friday
+                        evening is exactly who is about to tap Assign. */}
+                    {request.locationName && (
+                      <p className="text-xs font-semibold text-[rgb(var(--accent-text))] truncate mb-1">
+                        {request.locationName}
+                      </p>
+                    )}
                     <div className="flex items-center gap-3 flex-wrap">
                          <div className="flex items-center gap-1 text-[10px] text-coffee-500 font-bold uppercase">
                             <Clock size={12} /> {request.requestedTimeSlot}

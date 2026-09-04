@@ -48,6 +48,18 @@ vi.mock('../../hooks/useCurrentEvent', () => ({ useCurrentEvent: () => useCurren
 let notices: any[] = [];
 vi.mock('../../hooks/useNotices', () => ({ useNotices: () => ({ notices, loading: false }) }));
 vi.mock('../../hooks/useSettings', () => ({ useSettings: () => useSettings() }));
+
+/**
+ * ONE HALL by default — production, and what every case in this file was written
+ * against. With one hall the rider is never asked which sabha they are at, because
+ * there is nothing to ask.
+ */
+const HUNTINGTON = { id: 'boston-huntington', name: 'Huntington', active: true, order: 0, venue: { lat: 42.3, lng: -71.0, address: '360 Huntington Ave' } };
+const SOMERVILLE = { id: 'somerville', name: 'Somerville', active: true, order: 1, venue: { lat: 42.4, lng: -71.1, address: '5 Elm Street' } };
+let openHalls: Array<typeof HUNTINGTON>;
+vi.mock('../../hooks/useLocations', () => ({
+    useLocations: () => ({ locations: openHalls, active: openHalls, loading: false, error: null }),
+}));
 vi.mock('../../src/utils/cloudFunctions', () => ({
     studentReadyToLeave: (...a: unknown[]) => studentReadyToLeave(...a),
 }));
@@ -107,6 +119,7 @@ const primaryActions = () =>
 
 beforeEach(() => {
     notices = [];
+    openHalls = [HUNTINGTON];
     window.localStorage.clear();
     useCurrentEvent.mockReturnValue({
         eventId: '2026-08-14', hasEvent: true, canWithdraw: true, venue: VENUE,
@@ -356,7 +369,7 @@ describe('RiderHome — going home', () => {
         await user.click(await screen.findByRole('button', { name: /Yes, I am here/i }));
 
         await waitFor(() => expect(studentReadyToLeave)
-            .toHaveBeenCalledWith('rider-1', { method: 'manual' }));
+            .toHaveBeenCalledWith('rider-1', { method: 'manual' }, 'boston-huntington'));
     });
 
     it('never sends coordinates', async () => {
@@ -439,7 +452,7 @@ describe('RiderHome — establishing presence without asking', () => {
 
         await user.click(screen.getByRole('button', { name: /Yes, tell them/i }));
         await waitFor(() => expect(studentReadyToLeave)
-            .toHaveBeenCalledWith('rider-1', { method: 'pickup' }));
+            .toHaveBeenCalledWith('rider-1', { method: 'pickup' }, 'boston-huntington'));
     });
 
     it('confirms automatically from a sharp fix at the venue', async () => {
@@ -451,7 +464,7 @@ describe('RiderHome — establishing presence without asking', () => {
         await user.click(await screen.findByRole('button', { name: /Yes, tell them/i }));
 
         await waitFor(() => expect(studentReadyToLeave)
-            .toHaveBeenCalledWith('rider-1', { method: 'auto', distanceMeters: 0 }));
+            .toHaveBeenCalledWith('rider-1', { method: 'auto', distanceMeters: 0 }, 'boston-huntington'));
     });
 
     it('asks anyway when the fix is too vague to judge', async () => {
@@ -618,5 +631,103 @@ describe('the notice board sits below the action', () => {
         // primary action, and the state card still offers exactly one.
         show({ kind: 'can-request' });
         expect(screen.getAllByRole('button', { name: /request a ride/i })).toHaveLength(1);
+    });
+});
+
+/**
+ * WHICH SABHA THEY ARE STANDING AT, when the app has no record of it.
+ *
+ * A drop-off request carries the rider's HOME coordinates and says nothing about the
+ * building they are being collected from, so this answer is the only thing that can
+ * send a Sarthi to the right place.
+ *
+ * ASKED ONLY OF PEOPLE THE APP CANNOT PLACE. `atLocationId` is written on their user
+ * document when an outbound ride completes, so anybody who was DRIVEN here is never
+ * asked. What is left is the group `normalisePresence` exists for — walked in, drove
+ * themselves, got a lift from a friend — who before this met a refusal with no way to
+ * answer it. That is a dead end, not a safeguard.
+ */
+describe('RiderHome — which sabha are you at', () => {
+    const readyButton = () => screen.getByRole('button', { name: /ready to leave|which sabha first/i });
+
+    it('asks nothing when there is one hall', () => {
+        show({ kind: 'ready-to-leave' });
+
+        expect(screen.queryByRole('group', { name: /which sabha are you at/i }))
+            .not.toBeInTheDocument();
+        expect(readyButton()).toBeEnabled();
+    });
+
+    it('asks nothing of somebody the app already placed', () => {
+        // Driven here, so their hall was recorded when the ride completed.
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        show({ kind: 'ready-to-leave' }, null, { atLocationId: 'somerville' });
+
+        expect(screen.queryByRole('group', { name: /which sabha are you at/i }))
+            .not.toBeInTheDocument();
+        expect(readyButton()).toBeEnabled();
+    });
+
+    it('sends that RECORDED hall, not a guess', async () => {
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        show({ kind: 'ready-to-leave' }, null, { atLocationId: 'somerville', status: 'at_sabha' });
+
+        await userEvent.click(readyButton());
+        // `at_sabha` skips the "are you here" question and lands on the confirmation,
+        // exactly as the presence tests above describe.
+        await userEvent.click(await screen.findByRole('button', { name: /Yes, tell them/i }));
+
+        await waitFor(() => expect(studentReadyToLeave)
+            .toHaveBeenCalledWith('rider-1', { method: 'pickup' }, 'somerville'));
+    });
+
+    it('ASKS the rider it cannot place, once two halls are open', () => {
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        show({ kind: 'ready-to-leave' });
+
+        expect(screen.getByRole('group', { name: /which sabha are you at/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Huntington' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Somerville' })).toBeInTheDocument();
+    });
+
+    it('will not send until they answer, and the button says what is missing', () => {
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        show({ kind: 'ready-to-leave' });
+
+        expect(readyButton()).toBeDisabled();
+        expect(readyButton()).toHaveTextContent(/which sabha first/i);
+    });
+
+    it('sends the hall they answered', async () => {
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        show({ kind: 'ready-to-leave' }, null, { status: 'at_sabha' });
+
+        await userEvent.click(screen.getByRole('button', { name: 'Somerville' }));
+        expect(readyButton()).toBeEnabled();
+        await userEvent.click(readyButton());
+        await userEvent.click(await screen.findByRole('button', { name: /Yes, tell them/i }));
+
+        await waitFor(() => expect(studentReadyToLeave)
+            .toHaveBeenCalledWith('rider-1', { method: 'pickup' }, 'somerville'));
+    });
+
+    it('marks the answer as pressed, for a screen reader', async () => {
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        show({ kind: 'ready-to-leave' });
+
+        await userEvent.click(screen.getByRole('button', { name: 'Huntington' }));
+        expect(screen.getByRole('button', { name: 'Huntington' }))
+            .toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Somerville' }))
+            .toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('asks when the recorded hall is one a manager has since retired', () => {
+        // A stale `atLocationId`. Better to ask than to send a car to a closed hall.
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        show({ kind: 'ready-to-leave' }, null, { atLocationId: 'cambridge' });
+
+        expect(screen.getByRole('group', { name: /which sabha are you at/i })).toBeInTheDocument();
+        expect(readyButton()).toBeDisabled();
     });
 });

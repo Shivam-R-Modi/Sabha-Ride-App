@@ -402,8 +402,19 @@ export interface ReadyToLeaveResult {
 export async function studentReadyToLeave(
     studentId: string,
     presence?: PresenceClaim,
+    /**
+     * Which hall they are standing at, when the app has no record of it.
+     *
+     * Only used server-side where `atLocationId` is absent — anybody who was DRIVEN
+     * here had it written when their ride completed, and that record wins over a
+     * claim. This is for the walk-ins, the drive-themselves and the got-a-lift crowd,
+     * who otherwise met a refusal with no way to answer it.
+     */
+    locationId?: string | null,
 ): Promise<ReadyToLeaveResult> {
-    return callFunction<ReadyToLeaveResult>('studentReadyToLeave', { studentId, presence });
+    return callFunction<ReadyToLeaveResult>('studentReadyToLeave', {
+        studentId, presence, ...(locationId ? { locationId } : {}),
+    });
 }
 
 // ============================================

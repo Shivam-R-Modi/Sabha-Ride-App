@@ -7,6 +7,8 @@ import { Driver, StudentRequest, User } from '../types';
 import { handleSnapshotError } from '../src/utils/firestoreErrors';
 import { seatsOf } from '../src/constants/seats';
 import { isDispatchable } from '../src/utils/ridePool';
+import { locationOfRide } from '../src/utils/locations';
+import { useLocations } from './useLocations';
 import { useCurrentEvent } from './useCurrentEvent';
 
 /** Same generated avatar the assignment function builds for ride peers. */
@@ -227,6 +229,20 @@ export const usePendingRequests = () => {
     const [requests, setRequests] = useState<StudentRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const { eventId, rideType } = useCurrentEvent();
+    /**
+     * The halls, so a row can NAME the one it is for.
+     *
+     * Not to filter by — every hall's riders belong in this queue, because a manager
+     * oversees both. What a manager cannot currently see is WHICH, and the consequence
+     * is a wasted tap: `manualAssignStudent` refuses to add a rider to a Sarthi's car
+     * when the halls differ, so a manager assigning by hand gets an error the screen
+     * could have prevented.
+     *
+     * `hallNames` rather than the records, so a re-render of the list does not depend
+     * on the identity of the array.
+     */
+    const { active: openHalls } = useLocations();
+    const hallNames = openHalls.map(h => `${h.id}:${h.name}`).join('|');
 
     useEffect(() => {
         const q = query(collection(db, 'rides'), where('status', '==', 'requested'));
@@ -268,6 +284,20 @@ export const usePendingRequests = () => {
                     // silent. Absent on pickups and on anything an older client
                     // created.
                     presence: data.presence ?? undefined,
+                    /**
+                     * Which sabha this rider is going to, NAMED rather than as an id —
+                     * the queue is read by a person, and `boston-huntington` is not a
+                     * place anybody calls it.
+                     *
+                     * Only when more than one hall is open, so nothing changes on the
+                     * screen until it means something. Absent when the request names a
+                     * hall that is no longer open, which the row should not silently
+                     * relabel — `verify` in scripts/locations.cjs is what finds those.
+                     */
+                    locationId: locationOfRide(data) ?? undefined,
+                    locationName: openHalls.length > 1
+                        ? openHalls.find(h => h.id === locationOfRide(data))?.name
+                        : undefined,
                     // pickupLat/pickupLng were carried here for the dashboard
                     // map to plot. The map is gone and RequestTable never read
                     // them, so they were being copied onto every request row for
@@ -282,7 +312,10 @@ export const usePendingRequests = () => {
         // Re-subscribes when the window flips. With [] the filter would close over
         // the first eventId and rideType it ever saw, so the queue would freeze on
         // the gathering the manager happened to load the page during.
-    }, [eventId, rideType]);
+        // `hallNames` rather than the array: the hook returns a fresh array on every
+        // snapshot, and depending on it would resubscribe the rides listener whenever
+        // any hall document was touched.
+    }, [eventId, rideType, hallNames]);
 
     return { requests, loading };
 };

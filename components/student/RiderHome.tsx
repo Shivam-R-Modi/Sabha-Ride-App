@@ -9,6 +9,7 @@ import { Sheet } from '../shared/Sheet';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../shared/useConfirm';
 import { useCurrentEvent } from '../../hooks/useCurrentEvent';
+import { useLocations } from '../../hooks/useLocations';
 import { submitWeeklyAttendance, updateAttendanceResponse } from '../../hooks/useFirestore';
 import { studentReadyToLeave } from '../../src/utils/cloudFunctions';
 import { useSettings } from '../../hooks/useSettings';
@@ -151,6 +152,30 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
      * wasted stop. What GPS said is recorded either way, so an implausible claim
      * is visible to a manager without anyone having been blocked.
      */
+    /**
+     * WHICH HALL THEY ARE LEAVING FROM.
+     *
+     * A drop-off request carries the rider's HOME coordinates and says nothing about
+     * where they are being collected FROM, so this is the only thing that can send a
+     * Sarthi to the right building.
+     *
+     * ASKED ONLY WHEN THE APP HAS NO RECORD. `atLocationId` is written on their user
+     * document when an outbound ride completes, so anybody who was DRIVEN here already
+     * has it and sees no question. What is left is the population
+     * `normalisePresence` exists for — walked in, drove themselves, got a lift from a
+     * friend — who before this met a refusal they had no way to answer.
+     */
+    const { active: openHalls } = useLocations();
+    const recordedHall = (user as { atLocationId?: string }).atLocationId;
+    const knownHall = recordedHall
+        ? openHalls.find(h => h.id === recordedHall)
+        : undefined;
+    const [claimedHall, setClaimedHall] = useState<string | null>(null);
+    const leavingFrom = knownHall?.id
+        ?? claimedHall
+        ?? (openHalls.length === 1 ? openHalls[0].id : null);
+    const mustSayWhichHall = openHalls.length > 1 && !leavingFrom;
+
     const establishPresence = async (): Promise<PresenceClaim | null> => {
         // Widened deliberately: the prop is `User | Driver`, and Driver's status
         // union has no overlap with the rider statuses. The value on the wire is
@@ -238,7 +263,7 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
                 if (!ok) return;
             }
 
-            await studentReadyToLeave(user.id, presence);
+            await studentReadyToLeave(user.id, presence, leavingFrom);
         } catch (error) {
             // The server's own words, not a generic retry prompt.
             //
@@ -429,12 +454,49 @@ export const RiderHome: React.FC<RiderHomeProps> = ({
                             title="Ready to go home?"
                             detail="Tell your sevak and they will come to the pickup point."
                         />
+                        {/*
+                          * Only for somebody the app has no record of. Anybody who was
+                          * driven here skips this entirely, and with one hall it never
+                          * appears at all.
+                          */}
+                        {openHalls.length > 1 && !knownHall && (
+                            <fieldset className="mt-4">
+                                <legend className="text-sm font-semibold text-coffee">
+                                    Which sabha are you at?
+                                </legend>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    {openHalls.map(hall => {
+                                        const picked = leavingFrom === hall.id;
+                                        return (
+                                            <button
+                                                key={hall.id}
+                                                type="button"
+                                                aria-pressed={picked}
+                                                onClick={() => setClaimedHall(hall.id)}
+                                                disabled={busy}
+                                                className={`rounded-full px-3 py-1.5 text-sm font-semibold
+                                                    transition-colors disabled:opacity-50
+                                                    ${picked
+                                                        ? 'bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))]'
+                                                        : 'bg-cream-400 text-coffee'}`}
+                                            >
+                                                {hall.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </fieldset>
+                        )}
                         <button
                             onClick={askToLeave}
-                            disabled={busy}
+                            disabled={busy || mustSayWhichHall}
                             className="clay-button-primary w-full mt-5 disabled:opacity-50"
                         >
-                            {busy ? 'Telling them…' : "I'm ready to leave"}
+                            {busy
+                                ? 'Telling them…'
+                                : mustSayWhichHall
+                                    ? 'Tell us which sabha first'
+                                    : "I'm ready to leave"}
                         </button>
                     </StateCard>
                 );

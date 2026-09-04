@@ -162,13 +162,30 @@ export const studentReadyToLeave = functions.https.onCall(async (data, context) 
          */
         const openHalls = await locationsOrFoundingFallback(db);
         const standingAt = typeof student?.atLocationId === 'string' ? student.atLocationId : null;
+        const claimed = typeof data?.locationId === 'string' ? data.locationId : null;
+
+        /**
+         * PRIORITY: what the app RECORDED, then what the rider SAYS, then the only hall.
+         *
+         * `atLocationId` is written when their outbound ride completes, so for anybody
+         * who was driven here it is hard evidence from this evening and it WINS. A
+         * rider who was taken to one hall and claims the other is either mistaken or
+         * has walked between buildings, and trusting the claim over the record would
+         * let somebody summon a car from a hall they are not at.
+         *
+         * The rider's own answer is used only where there is no record — the walk-ins,
+         * the drive-themselves and the got-a-lift-from-a-friend crowd that
+         * `normalisePresence` exists for. That is not a rare group, and before this
+         * they hit a refusal with no way to answer it.
+         */
         const hall = (standingAt && openHalls.find(h => h.id === standingAt))
+            ?? (claimed && openHalls.find(h => h.id === claimed))
             ?? (openHalls.length === 1 ? openHalls[0] : undefined);
 
         if (!hall) {
             throw new functions.https.HttpsError(
                 'failed-precondition',
-                'We are not sure which sabha you are at. Please ask a Sarthi or a manager for a lift home.',
+                'Please tell us which sabha you are at, so a Sarthi comes to the right place.',
             );
         }
 

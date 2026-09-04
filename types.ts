@@ -534,6 +534,18 @@ export interface StudentRequest {
    * implausible claim visible instead of silent. Never carries coordinates.
    */
   presence?: PresenceClaim;
+  /** Which sabha location this rider asked for. */
+  locationId?: string;
+  /**
+   * That hall's NAME, and only when more than one is open.
+   *
+   * The queue is read by a person, and `boston-huntington` is not what anybody calls
+   * the place. Absent with one hall so nothing appears on screen until it means
+   * something — and absent when the request names a hall that is no longer open, which
+   * the row must not silently relabel. `scripts/locations.cjs verify` is what finds
+   * those.
+   */
+  locationName?: string;
   // pickupLat/pickupLng were here for the dashboard map. Nothing renders a
   // request's coordinates now that it is gone. The same field names stay live on
   // the ride document, which is what the driver's route is built from.
