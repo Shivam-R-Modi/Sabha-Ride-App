@@ -277,3 +277,81 @@ describe('the afterShift slot', () => {
         expect(screen.getByRole('button', { name: /find my next riders/i })).toBeInTheDocument();
     });
 });
+
+/**
+ * WHICH SABHA THIS RUN IS FOR.
+ *
+ * A Sarthi picks per RUN rather than being tied to a hall for the evening, so the
+ * choice lives beside the button that starts a run.
+ *
+ * THE FIRST TWO CASES ARE THAT NOTHING APPEARS. One hall is every evening until a
+ * manager opens a second, and a picker with one option is exactly the dead control the
+ * first describe block in this file exists to police.
+ */
+describe('DriverShift — which sabha', () => {
+    const HALLS = [
+        { id: 'boston-huntington', name: 'Huntington' },
+        { id: 'somerville', name: 'Somerville' },
+    ];
+    const primary = () => screen.getByRole('button', { name: /Find|Choose a sabha|Pick a car/i });
+
+    it('shows no picker with one hall', () => {
+        show({ halls: [HALLS[0]], hallId: 'boston-huntington' });
+        expect(screen.queryByRole('group', { name: /driving for/i })).not.toBeInTheDocument();
+    });
+
+    it('shows no picker with none passed, which is what every existing caller does', () => {
+        show();
+        expect(screen.queryByRole('group', { name: /driving for/i })).not.toBeInTheDocument();
+        expect(primary()).toHaveTextContent(/Find my next riders/i);
+    });
+
+    it('offers both once a second hall is open', () => {
+        show({ halls: HALLS, hallId: null });
+        expect(screen.getByRole('group', { name: /driving for/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Huntington' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Somerville' })).toBeInTheDocument();
+    });
+
+    it('marks the chosen one as pressed, for a screen reader', () => {
+        show({ halls: HALLS, hallId: 'somerville' });
+        expect(screen.getByRole('button', { name: 'Somerville' }))
+            .toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Huntington' }))
+            .toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('reports a pick', async () => {
+        const onPickHall = vi.fn();
+        show({ halls: HALLS, hallId: null, onPickHall });
+
+        await userEvent.click(screen.getByRole('button', { name: 'Somerville' }));
+        expect(onPickHall).toHaveBeenCalledWith('somerville');
+    });
+
+    it('NAMES THE HALL on the button, so a carried-forward choice is visible', () => {
+        /**
+         * "Find my next riders" after a completed run keeps the previous hall. That is
+         * the right behaviour and it is invisible unless the button says so — a Sarthi
+         * should not have to remember which hall they were driving for.
+         */
+        show({ halls: HALLS, hallId: 'somerville' });
+        expect(primary()).toHaveTextContent(/Find riders for Somerville/i);
+    });
+
+    it('will not start a run until a hall is picked, and says which is missing', () => {
+        show({ halls: HALLS, hallId: null });
+
+        expect(primary()).toBeDisabled();
+        expect(primary()).toHaveTextContent(/Choose a sabha above/i);
+    });
+
+    it('still says "Pick a car to start" when there is no car, hall or no hall', () => {
+        // The rule the first describe block polices: never a disabled primary button
+        // for want of a CAR. A missing hall must not take that over.
+        show({ halls: HALLS, hallId: null, vehicleName: undefined, vehiclePlate: undefined });
+
+        expect(primary()).toBeEnabled();
+        expect(primary()).toHaveTextContent(/Pick a car to start/i);
+    });
+});

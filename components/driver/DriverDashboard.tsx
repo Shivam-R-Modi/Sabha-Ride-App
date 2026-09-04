@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { RideStudent, Waypoint } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { AssignmentPreview } from './AssignmentPreview';
@@ -10,7 +10,9 @@ import { CompletionScreen } from './CompletionScreen';
 import { handBackVehicle, setDriverAvailability, useAvailableVehicles, assignVehicleToDriver } from '../../hooks/useFirestore';
 import { collection, doc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { globalAssignDriver, driverDoneForToday, AssignStudentsResult, GlobalAssignResult } from '../../src/utils/cloudFunctions';
+import { globalAssignDriver, driverDoneForToday, reasonForWaiting, AssignStudentsResult, GlobalAssignResult } from '../../src/utils/cloudFunctions';
+import { useLocations } from '../../hooks/useLocations';
+import { windowForLocation } from '../../src/utils/locations';
 import { buildGoogleMapsNavigationUrl } from '../../src/utils/googleMaps';
 import { endShiftWithWarning } from '../../src/utils/endShift';
 import { useConfirm } from '../shared/useConfirm';
@@ -26,7 +28,49 @@ type DriverViewState =
 export const DriverDashboard: React.FC = () => {
     const { userProfile, currentUser, refreshProfile } = useAuth();
     const [isAssigning, setIsAssigning] = useState(false);
-    const [rideContext, setRideContext] = useState<{ rideType: 'home-to-sabha' | 'sabha-to-home' | null; displayText: string } | null>(null);
+    /** Everything the scheduler published, so a hall's own slice can be read out of it. */
+    const [publishedContext, setPublishedContext] = useState<Record<string, unknown> | null>(null);
+
+    /**
+     * WHICH SABHA THIS RUN IS FOR.
+     *
+     * A Sarthi is NOT tied to a hall — they pick per run, so finishing a load to one
+     * and taking the next to the other is the ordinary case rather than an exception.
+     *
+     * No picker when one hall is open, which is every evening until a manager opens a
+     * second. `chosenHall` then resolves to that hall on its own and nothing about this
+     * screen changes.
+     */
+    const { active: openHalls } = useLocations();
+    const [hallId, setHallId] = useState<string | null>(null);
+    const chosenHall = openHalls.find(h => h.id === hallId)
+        ?? (openHalls.length === 1 ? openHalls[0] : null);
+    const mustChooseHall = openHalls.length > 1 && !chosenHall;
+
+    /**
+     * THIS HALL'S window, DERIVED rather than stored.
+     *
+     * It used to be state written inside the snapshot callback. That cannot work once
+     * the hall is a variable: the callback closes over `chosenHall`, its effect has an
+     * empty dependency list, and switching hall would leave a Sarthi reading the
+     * previous hall's direction until the next tick rewrote it.
+     *
+     * Memoised on the two PRIMITIVES rather than the slice object, which preserves the
+     * thing the old code was careful about: the scheduler rewrites this document every
+     * minute changing only `lastUpdated`, and a new object each time would re-render
+     * every driver holding the screen open.
+     */
+    const contextSlice = windowForLocation(publishedContext, chosenHall?.id ?? null).slice as
+        Record<string, any> | null;
+    const sliceRideType = (contextSlice?.rideType ?? null) as 'home-to-sabha' | 'sabha-to-home' | null;
+    const sliceDisplayText = (contextSlice?.displayText ?? '') as string;
+    const hasPublishedContext = publishedContext !== null;
+    const rideContext = useMemo(
+        () => (hasPublishedContext
+            ? { rideType: sliceRideType, displayText: sliceDisplayText }
+            : null),
+        [hasPublishedContext, sliceRideType, sliceDisplayText],
+    );
     const [viewState, setViewState] = useState<DriverViewState>('dashboard');
     const [pendingAssignment, setPendingAssignment] = useState<AssignStudentsResult | null>(null);
     const [activeRide, setActiveRide] = useState<{
@@ -150,26 +194,7 @@ export const DriverDashboard: React.FC = () => {
     useEffect(() => {
         const unsubscribe = onSnapshot(
             doc(db, 'system', 'rideContext'),
-            (snap) => {
-                if (!snap.exists()) {
-                    setRideContext(null);
-                    return;
-                }
-                const data = snap.data();
-                const next = {
-                    rideType: (data.rideType ?? null) as 'home-to-sabha' | 'sabha-to-home' | null,
-                    displayText: data.displayText ?? ''
-                };
-                // The scheduler rewrites this document every minute, changing
-                // only lastUpdated. Keep the previous object when nothing we
-                // render has changed, so drivers holding the screen open don't
-                // re-render once a minute.
-                setRideContext((prev) =>
-                    prev && prev.rideType === next.rideType && prev.displayText === next.displayText
-                        ? prev
-                        : next
-                );
-            },
+            (snap) => setPublishedContext(snap.exists() ? snap.data() : null),
             (error) => console.error('Error subscribing to ride context:', error)
         );
         return unsubscribe;
@@ -273,7 +298,8 @@ export const DriverDashboard: React.FC = () => {
             try {
                 const result: GlobalAssignResult = await globalAssignDriver(
                     currentUser.uid,
-                    userProfile.currentVehicleId
+                    userProfile.currentVehicleId,
+                    chosenHall?.id ?? null,
                 );
                 console.log(`[Assign attempt ${attempt}] result:`, result);
 
@@ -289,9 +315,25 @@ export const DriverDashboard: React.FC = () => {
                 }
 
                 if (result.status === 'no_students') {
-                    // Information, not a failure — everyone waiting already has
-                    // a car. The button stays available for when that changes.
-                    toast.info('Nobody is waiting right now. Check back in a few minutes.');
+                    /**
+                     * Information, not a failure — but SAY WHICH information.
+                     *
+                     * "Nobody is waiting right now" is true and leads to the wrong
+                     * conclusion, and that exact shape sent a manager hunting for a
+                     * dispatch fault on 2026-08-14. The server has always returned a
+                     * `waiting` breakdown by reason and nothing rendered it, so every
+                     * refusal collapsed into one sentence: a Sarthi at a quiet hall
+                     * was told nobody was waiting while eight people waited at the
+                     * other one, and one whose car was too small was told the same.
+                     *
+                     * Counts and seats only, never names.
+                     */
+                    const why = (result.waiting ?? [])
+                        .map(reasonForWaiting)
+                        .filter((line): line is string => !!line);
+                    toast.info(why.length
+                        ? `Nobody is waiting here. ${why.join(' ')}`
+                        : 'Nobody is waiting right now. Check back in a few minutes.');
                     setIsAssigning(false);
                     return;
                 }
@@ -446,6 +488,9 @@ export const DriverDashboard: React.FC = () => {
             vehicleName={isAvailable ? userProfile?.currentVehicleName : undefined}
             vehiclePlate={isAvailable ? userProfile?.currentVehiclePlate : undefined}
             rideContextText={rideContext?.displayText}
+            halls={openHalls.map(h => ({ id: h.id, name: h.name }))}
+            hallId={chosenHall?.id ?? null}
+            onPickHall={setHallId}
             ridesToday={(userProfile as any)?.ridesCompletedToday || 0}
             peopleToday={(userProfile as any)?.totalStudentsToday || 0}
             milesToday={(userProfile as any)?.totalDistanceToday || 0}

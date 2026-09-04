@@ -38,6 +38,17 @@ export interface DriverShiftProps {
     vehiclePlate?: string;
     /** Server-published label for the current leg, e.g. "Home → Sabha". */
     rideContextText?: string;
+    /**
+     * The sabha locations open tonight, and which one this run is for.
+     *
+     * A Sarthi picks PER RUN rather than being tied to a hall for the evening. Passed
+     * empty or with one entry, nothing renders — which is every evening until a manager
+     * opens a second hall, and a control with one option is a control that cannot do
+     * anything.
+     */
+    halls?: Array<{ id: string; name: string }>;
+    hallId?: string | null;
+    onPickHall?: (id: string) => void;
     ridesToday: number;
     peopleToday: number;
     milesToday: number;
@@ -76,6 +87,7 @@ export interface DriverShiftProps {
 
 export const DriverShift: React.FC<DriverShiftProps> = ({
     driverName, avatarUrl, onShift, vehicleName, vehiclePlate, rideContextText,
+    halls = [], hallId = null, onPickHall,
     ridesToday, peopleToday, milesToday,
     isAssigning, isStartingShift,
     vehicles, vehiclesLoading, vehiclePickerOpen, selectingVehicle,
@@ -84,6 +96,9 @@ export const DriverShift: React.FC<DriverShiftProps> = ({
     afterShift,
 }) => {
     const hasCar = Boolean(vehicleName);
+    const choosing = halls.length > 1;
+    const chosenHall = halls.find(h => h.id === hallId) ?? (halls.length === 1 ? halls[0] : null);
+    const mustChooseHall = choosing && !chosenHall;
 
     return (
         <div className="px-4 pt-6 pb-6 space-y-5 animate-in fade-in duration-300">
@@ -141,19 +156,65 @@ export const DriverShift: React.FC<DriverShiftProps> = ({
                         </span>
                     </button>
 
-                    {/* Never disabled. When there is no car this is what to do
-                        next, and pressing it does that thing. */}
+                    {/*
+                      * WHICH SABHA THIS RUN IS FOR.
+                      *
+                      * Only when there is more than one, and always visible rather than
+                      * behind a tap: a Sarthi about to drive somewhere should be able to
+                      * see where without opening anything.
+                      */}
+                    {choosing && (
+                        <fieldset className="mt-4">
+                            <legend className="text-xs font-semibold text-coffee-500">
+                                Driving for
+                            </legend>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                                {halls.map(hall => {
+                                    const picked = chosenHall?.id === hall.id;
+                                    return (
+                                        <button
+                                            key={hall.id}
+                                            type="button"
+                                            aria-pressed={picked}
+                                            onClick={() => onPickHall?.(hall.id)}
+                                            disabled={isAssigning}
+                                            className={`rounded-full px-3 py-1.5 text-sm font-semibold
+                                                transition-colors disabled:opacity-50
+                                                ${picked
+                                                    ? 'bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))]'
+                                                    : 'bg-cream-400 text-coffee'}`}
+                                        >
+                                            {hall.name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </fieldset>
+                    )}
+
+                    {/* Never disabled for want of a CAR. When there is no car this is
+                        what to do next, and pressing it does that thing.
+
+                        It IS disabled for want of a hall, because there is nothing
+                        sensible for it to do — and the label names which hall it will
+                        drive for, so a Sarthi tapping "Find my next riders" after a
+                        completed run can see that the previous hall carried forward
+                        rather than having to remember. */}
                     <button
                         onClick={hasCar ? onFindRiders : onOpenVehiclePicker}
-                        disabled={isAssigning}
+                        disabled={isAssigning || (hasCar && mustChooseHall)}
                         className="clay-button-primary w-full mt-4 disabled:opacity-60"
                     >
                         {isAssigning ? (
                             <><Loader2 className="animate-spin" size={18} /> Finding riders…</>
-                        ) : hasCar ? (
-                            <><Navigation size={18} /> Find my next riders</>
-                        ) : (
+                        ) : !hasCar ? (
                             <><Car size={18} /> Pick a car to start</>
+                        ) : mustChooseHall ? (
+                            <><Navigation size={18} /> Choose a sabha above</>
+                        ) : choosing ? (
+                            <><Navigation size={18} /> Find riders for {chosenHall!.name}</>
+                        ) : (
+                            <><Navigation size={18} /> Find my next riders</>
                         )}
                     </button>
 

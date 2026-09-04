@@ -89,10 +89,62 @@ export interface GlobalAssignResult {
     googleMapsUrl?: string;
     car?: AssignStudentsResult['car'];
     remainingUnassigned?: number;
+    /**
+     * WHY ANYONE NEARER WAS PASSED OVER. Counts and seats only, never names — the same
+     * privacy rule the rest of this screen follows.
+     *
+     * It was returned by the server and rendered by nothing, so every refusal collapsed
+     * into "Nobody is waiting right now" whatever the cause. `reasonForWaiting` below
+     * turns each into a sentence a volunteer can act on.
+     */
+    waiting?: Array<{ reason: string; groups: number; seats: number }>;
 }
 
-export async function globalAssignDriver(driverId: string, carId: string): Promise<GlobalAssignResult> {
-    return callFunction<GlobalAssignResult>('globalAssignDriver', { driverId, carId });
+/**
+ * One waiting bucket, as a sentence.
+ *
+ * "Nobody is waiting" is true and leads to the wrong conclusion, which is exactly the
+ * shape that sent a manager hunting for a dispatch fault on 2026-08-14. A Sarthi at a
+ * quiet hall needs to know that people are waiting at the other one; one whose car is
+ * too small needs to know a bigger one is the fix.
+ *
+ * Returns null for a reason worth no words — a stale request from another evening is
+ * not this driver's problem and saying so would be noise.
+ */
+export function reasonForWaiting(
+    row: { reason: string; groups: number; seats: number },
+): string | null {
+    const people = row.groups === 1 ? '1 group' : `${row.groups} groups`;
+    switch (row.reason) {
+        case 'other-location':
+            return `${people} are waiting for the other sabha.`;
+        case 'no-location':
+            return `${people} did not say which sabha — a manager needs to check.`;
+        case 'waiting-for-bigger-vehicle':
+            return `${people} need a bigger car than yours (${row.seats} seats).`;
+        case 'too-large-to-keep-together':
+            return `${people} asked to stay together and no car is big enough.`;
+        case 'no-seats-left':
+            return null;
+        default:
+            return null;
+    }
+}
+
+/**
+ * `locationId` names which sabha this RUN is for.
+ *
+ * A Sarthi is not tied to a hall — they pick per run, so they can finish a load to one
+ * and take the next to the other. Omitted when only one hall is open, which is every
+ * evening until a manager opens a second; the server refuses rather than guessing once
+ * there is a real choice.
+ */
+export async function globalAssignDriver(
+    driverId: string, carId: string, locationId?: string | null,
+): Promise<GlobalAssignResult> {
+    return callFunction<GlobalAssignResult>('globalAssignDriver', {
+        driverId, carId, ...(locationId ? { locationId } : {}),
+    });
 }
 
 export interface StartRideResult {
