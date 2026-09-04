@@ -18,7 +18,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildRideContextDoc, hallContexts, type HallContext } from './updateRideTypeContext';
+import {
+    buildRideContextDoc, hallContexts, announcementFor, type HallContext,
+} from './updateRideTypeContext';
+import { normaliseException, type EventException } from '../utils/recurrence';
 import { buildCurrentEvent, resolveScheduleWindow } from '../utils/schedule';
 import { FOUNDING_LOCATION_ID } from '../constants/tenancy';
 
@@ -201,8 +204,8 @@ describe('building one gathering per hall', () => {
     ];
 
     it('shares the date and the times, and differs only in the venue', () => {
-        // The owner's model: both halls the same evening at the same time. Per-hall
-        // times are the rare case and arrive later.
+        // The owner's model, and the default: both halls the same evening at the same
+        // time. Divergence needs a document per hall, and the block below covers it.
         const [a, b] = hallContexts(SCHEDULED, halls, NOW, ZONE, '10:00');
 
         expect(a.event!.startsAt).toBe(b.event!.startsAt);
@@ -266,5 +269,182 @@ describe('building one gathering per hall', () => {
         const contexts = hallContexts(null, halls, NOW, ZONE, '10:00');
         expect(contexts.map(c => c.event)).toEqual([null, null]);
         expect(contexts.every(c => c.window.rideType === null)).toBe(true);
+    });
+});
+
+/**
+ * The rare case the owner asked for: one hall diverging for one evening.
+ *
+ * "same eve same timing, but individual setting control for manager, in rare case
+ * scenario there might be independent changes." The mechanism is an ordinary exception
+ * document at `events/{date}__{hall}`, so nothing new stores this.
+ */
+describe('one hall diverging for one evening', () => {
+    const halls = [
+        { id: FOUNDING_LOCATION_ID, venue: HUNTINGTON },
+        { id: 'somerville', venue: SOMERVILLE },
+    ];
+    /** Through normaliseException, because that is how a stored document arrives. */
+    const ex = (raw: Record<string, unknown>): EventException => {
+        const out = normaliseException(raw);
+        // Guards the fixture, not the code: normaliseException returns null for a
+        // scheduled exception missing a time, and a null here would silently make
+        // every case below assert the no-divergence behaviour instead.
+        expect(out, JSON.stringify(raw)).not.toBeNull();
+        return out!;
+    };
+
+    it('gives one hall its own times and leaves the other on the evening\'s', () => {
+        const contexts = hallContexts(
+            SCHEDULED, halls, NOW, ZONE, '10:00',
+            new Map([['somerville', ex({ startTime: '17:00', endTime: '20:00' })]]),
+        );
+        const [a, b] = contexts;
+
+        expect(a.event!.startsAt).toBe(
+            hallContexts(SCHEDULED, halls, NOW, ZONE, '10:00')[0].event!.startsAt,
+        );
+        expect(b.event!.startsAt).not.toBe(a.event!.startsAt);
+        expect(new Date(b.event!.endsAt).getTime())
+            .toBeLessThan(new Date(a.event!.endsAt).getTime());
+    });
+
+    it('CLOSES only the cancelled hall, and says so as a calendar status', () => {
+        // The invariant a rider outside the other hall depends on. A cancelled hall
+        // must read as no-scheduled-event, not as an absent key — an absent key is a
+        // server fault and has to stay distinguishable from one.
+        const contexts = hallContexts(
+            SCHEDULED, halls, NOW, ZONE, '10:00',
+            new Map([['somerville', ex({ status: 'cancelled' })]]),
+        );
+        const doc = buildRideContextDoc(contexts, NOW) as any;
+
+        expect(doc.byLocation[FOUNDING_LOCATION_ID].calendarStatus).toBe('ok');
+        expect(doc.byLocation.somerville.calendarStatus).toBe('no-scheduled-event');
+        expect(doc.byLocation.somerville.rideType).toBeNull();
+        // Still LISTED, which is what separates "closed" from "not described".
+        expect(doc.locationIds).toContain('somerville');
+    });
+
+    it('keeps the founding hall\'s cancellation off the top-level aggregate\'s hall', () => {
+        // The aggregate is deliberately the founding hall's own window, so cancelling
+        // that hall closes the top level while the other hall stays open in its slice.
+        // A stale client reading only the top level therefore sees "closed" — the
+        // conservative direction, and the reason the aggregate is not "widest open".
+        const contexts = hallContexts(
+            SCHEDULED, halls, NOW, ZONE, '10:00',
+            new Map([[FOUNDING_LOCATION_ID, ex({ status: 'cancelled' })]]),
+        );
+        const doc = buildRideContextDoc(contexts, NOW) as any;
+
+        expect(doc.calendarStatus).toBe('no-scheduled-event');
+        expect(doc.byLocation.somerville.calendarStatus).toBe('ok');
+    });
+
+    it('lets a hall override its venue for one evening, above its standing one', () => {
+        const church = { lat: 42.5, lng: -71.2, address: 'Church Hall' };
+        const contexts = hallContexts(
+            SCHEDULED, halls, NOW, ZONE, '10:00',
+            new Map([['somerville', ex({
+                startTime: '19:00', endTime: '22:00', venue: church,
+            })]]),
+        );
+
+        expect(contexts[1].event!.venue).toEqual(church);
+        expect(contexts[0].event!.venue).toEqual(HUNTINGTON);
+    });
+
+    it('inherits the evening\'s agenda when the hall does not restate it', () => {
+        const contexts = hallContexts(
+            SCHEDULED, halls, NOW, ZONE, '10:00',
+            new Map([['somerville', ex({ startTime: '17:00', endTime: '20:00' })]]),
+        );
+        expect(contexts[1].event!.agenda).toBe('Kirtan');
+    });
+});
+
+/**
+ * Who gets told the window opened, and how many times.
+ *
+ * One push, per phase, per evening — sent to everyone, because the text names no hall.
+ * The cases that matter are the two ways this went wrong once halls could diverge.
+ */
+describe('announcementFor', () => {
+    const halls = [
+        { id: FOUNDING_LOCATION_ID, venue: HUNTINGTON },
+        { id: 'somerville', venue: SOMERVILLE },
+    ];
+    /** 10:30 AM Boston on sabha day — requests open at 10:00, so pickup is live. */
+    const OPEN = new Date('2026-08-07T14:30:00Z');
+    const open = (hallExceptions?: Map<string, EventException>) =>
+        hallContexts(SCHEDULED, halls, OPEN, ZONE, '10:00', hallExceptions);
+
+    const sliceOf = (contexts: readonly HallContext[]) => ({
+        rideType: contexts[0].window.rideType,
+        byLocation: Object.fromEntries(
+            contexts.map(c => [c.locationId, { rideType: c.window.rideType }]),
+        ),
+    });
+
+    it('announces on the first tick the window is open', () => {
+        expect(announcementFor(null, open())?.rideType).toBe('home-to-sabha');
+    });
+
+    it('does NOT announce again once every hall has been published as open', () => {
+        const contexts = open();
+        expect(announcementFor(sliceOf(contexts), contexts)).toBeNull();
+    });
+
+    it('announces for a hall-only evening, when the founding hall is cancelled', () => {
+        /**
+         * The bug this function replaced. The announcement used to fire on the founding
+         * hall's window against the TOP-LEVEL previous rideType. With that hall
+         * cancelled its window is null, so nothing was ever announced — an evening held
+         * entirely at the other hall opened in silence, and a rider with no other
+         * prompt never learned they could ask for a ride.
+         */
+        const cancelled = new Map([[FOUNDING_LOCATION_ID,
+            normaliseException({ status: 'cancelled' })!]]);
+        const contexts = open(cancelled);
+
+        expect(contexts[0].window.rideType).toBeNull();
+        expect(announcementFor(null, contexts)?.rideType).toBe('home-to-sabha');
+    });
+
+    it('does not re-announce every minute on a hall-only evening', () => {
+        // The other half of the same bug, and the worse one for a rider: keyed on the
+        // founding hall, the top-level rideType never advances past null, so the open
+        // hall re-announces on every tick — a push a minute, for hours.
+        const cancelled = new Map([[FOUNDING_LOCATION_ID,
+            normaliseException({ status: 'cancelled' })!]]);
+        const contexts = open(cancelled);
+
+        expect(announcementFor(sliceOf(contexts), contexts)).toBeNull();
+    });
+
+    it('announces ONCE when a second hall opens hours later', () => {
+        // Divergent windows: Somerville opened at 10:00 and was announced. Huntington
+        // opening later is the same news to the same congregation, so it stays quiet.
+        const contexts = open();
+        const previous = {
+            rideType: null,
+            byLocation: {
+                [FOUNDING_LOCATION_ID]: { rideType: null },
+                somerville: { rideType: 'home-to-sabha' },
+            },
+        };
+        expect(announcementFor(previous, contexts)).toBeNull();
+    });
+
+    it('reads the founding hall from the TOP LEVEL when byLocation is absent', () => {
+        // The first tick after this deploys. Without the fallback it reads "nobody was
+        // open" and re-announces a window that has been open for two days.
+        const contexts = open();
+        expect(announcementFor({ rideType: 'home-to-sabha' }, contexts)).toBeNull();
+    });
+
+    it('says nothing at all when every hall is closed', () => {
+        expect(announcementFor(null, hallContexts(null, halls, OPEN, ZONE, '10:00')))
+            .toBeNull();
     });
 });

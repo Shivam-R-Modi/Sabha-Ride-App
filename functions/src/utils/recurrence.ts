@@ -91,11 +91,37 @@ export interface Occurrence {
     venue: Venue | null;
     agenda: string;
     /** Where this came from — for the calendar to label, and for debugging. */
-    source: 'rule' | 'override' | 'one-off';
+    /**
+     * `hall-override` means one hall's own document changed this date's times or
+     * venue. See `effectiveEventFor`.
+     */
+    source: 'rule' | 'override' | 'one-off' | 'hall-override';
 }
 
-/** Day-of-week for a `YYYY-MM-DD` key, read at UTC noon so no DST edge shifts it. */
+/**
+ * A bare `YYYY-MM-DD` key, as opposed to a suffixed multi-hall event id.
+ *
+ * One predicate, because both users of it are load-bearing: `dayOfWeekForKey` and the
+ * candidate walk in `upcomingOccurrences`.
+ */
+export function isDateKey(value: string): boolean {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/**
+ * Day-of-week for a `YYYY-MM-DD` key, read at UTC noon so no DST edge shifts it.
+ *
+ * RETURNS -1 FOR ANYTHING THAT IS NOT A BARE DATE KEY. An event id can now be
+ * `2026-08-07__somerville`, and `.split('-').map(Number)` on that yields
+ * `[2026, 8, NaN]` → an Invalid Date → NaN, which `daysOfWeek.includes` reads as
+ * false. That makes the date look like it is LOSING ITS SABHA, and `reconcileDate`
+ * in sabhaRecurrence.ts then CANCELS ITS RIDES — a hall's whole evening of Bhulka
+ * dropped by a scheduler, with nothing in the logs saying why. -1 matches no
+ * weekday, so the answer is unchanged for a real date; the difference is that it is
+ * false for a stated reason rather than by accident.
+ */
 export function dayOfWeekForKey(dateKey: string): number {
+    if (!isDateKey(dateKey)) return -1;
     const [year, month, day] = dateKey.split('-').map(Number);
     return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
 }
@@ -274,6 +300,77 @@ export function effectiveEvent(
 }
 
 /**
+ * What ONE HALL says on top of an evening that is already resolved.
+ *
+ * Split out of `effectiveEventFor` because the ride-context scheduler needs exactly
+ * this half: it has already resolved the evening once, for everyone, and only needs to
+ * lay each hall's own document over it. Two implementations of a merge this quiet would
+ * drift, and the drift would be one hall running at the other hall's time.
+ *
+ * Generic over the shape so it works on an `Occurrence` and on the scheduler's own
+ * event record without either of them having to become the other.
+ */
+export function applyHallException<T extends {
+    startTime: string; endTime: string; venue: Venue | null; agenda: string;
+}>(
+    base: T | null,
+    hallException: EventException | null,
+): T | null {
+    // "Not this hall tonight" — and a cancelled evening is already a null base, so
+    // cancelling the whole date beating one hall's own plans falls out for free.
+    if (hallException?.status === 'cancelled' || !base) return null;
+    if (!hallException) return base;
+
+    return {
+        ...base,
+        // Each field falls back to the evening's own value, so a hall that only moves
+        // its time does not have to restate the venue and the agenda — which is what a
+        // manager changing one hall's start time actually does.
+        //
+        // The two time fallbacks are unreachable through `normaliseException`, which
+        // refuses a scheduled exception without BOTH times; they are here for a
+        // hand-built record, and because an event at startTime `''` is the worse of
+        // the two failures. `venue` uses `??` not `||` because null means "no
+        // override" and must reach `resolveVenue` — that is what picks the hall's own
+        // standing venue, and `||` would turn a deliberate null into the same thing
+        // by accident while also swallowing a future empty-object venue.
+        startTime: hallException.startTime || base.startTime,
+        endTime: hallException.endTime || base.endTime,
+        venue: hallException.venue ?? base.venue,
+        agenda: hallException.agenda || base.agenda,
+    };
+}
+
+/**
+ * What is happening AT ONE HALL on a given date.
+ *
+ * THREE LAYERS, extending the two the date already had:
+ * `hall exception → date exception → rule`. The date layer is unchanged and still
+ * resolved by `effectiveEvent`; this only adds what one hall says on top.
+ *
+ * A HALL EXCEPTION IS ALWAYS AN OVERRIDE, never a one-off. Both halls run the same
+ * evening — that is the arrangement this was built for — so a hall document says one
+ * of two things: "not this hall tonight", or "this hall at a different time". It never
+ * says "this hall meets on a day the congregation does not", which is why a hall
+ * exception on a date with no gathering is INERT rather than conjuring one. Same
+ * principle as an override on a date the rule does not cover, and for the same reason:
+ * turning the rule off must make exceptions stop applying, not become phantoms.
+ */
+export function effectiveEventFor(
+    dateKey: string,
+    rule: RecurrenceRule | null,
+    dateException: EventException | null,
+    hallException: EventException | null,
+): Occurrence | null {
+    const out = applyHallException(
+        effectiveEvent(dateKey, rule, dateException), hallException,
+    );
+    // `source` says why a calendar row looks the way it does, so it names the hall
+    // layer when the hall layer changed something — and does not when it did not.
+    return out && hallException ? { ...out, source: 'hall-override' } : out;
+}
+
+/**
  * Of the dates that already hold bookings, the ones where nothing happens now.
  *
  * Moving the sabha day strands whoever booked the old one. Production, 2026-08-24:
@@ -320,6 +417,14 @@ export function upcomingOccurrences(
     // would never see it.
     const candidates = new Set(occurrencesBetween(rule, fromKey, toKey));
     for (const [date, exception] of exceptions) {
+        // A SUFFIXED ID IS NOT A DATE, and this loop is the one place it could pass
+        // for one. `exceptions` is keyed by document id, and a hall's document id is
+        // `${dateKey}__${locationId}`; add that to the candidate set and
+        // `effectiveEvent` hands back an Occurrence whose `date` IS the suffixed
+        // string, which then travels out as `rideContext.eventId` and becomes the
+        // attendance key. Sorting puts it directly after its own bare date, so it
+        // would be picked first on any evening the date itself was cancelled.
+        if (!isDateKey(date)) continue;
         if (date >= fromKey && date <= toKey && exception.kind === 'one-off') {
             candidates.add(date);
         }

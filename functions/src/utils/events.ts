@@ -22,7 +22,9 @@ import * as admin from 'firebase-admin';
 import { zonedDateKey, addDaysToDateKey } from './time';
 import {
     RecurrenceRule, EventException, normaliseException, upcomingOccurrences,
+    effectiveEventFor, isDateKey,
 } from './recurrence';
+import { parseEventId, LOOKAHEAD_NEEDS_SLACK } from './locations';
 
 export const EVENTS_COLLECTION = 'events';
 
@@ -111,6 +113,58 @@ export async function findCurrentEvent(
     timeZone: string,
     rule: RecurrenceRule | null = null,
 ): Promise<SabhaEvent | null> {
+    return (await resolveCurrentEvent(db, now, timeZone, rule)).event;
+}
+
+/**
+ * How many candidate evenings to look past when every hall on one is closed.
+ *
+ * Only reachable with `locationIds` given, and only when a manager has cancelled each
+ * hall of an evening one at a time instead of cancelling the date. Eight is about two
+ * months of Fridays.
+ *
+ * ponytail: a fixed ceiling, not a walk to the horizon. Cancel every hall on eight
+ * consecutive sabha dates and the ninth is missed, reported as closed. Raise the
+ * number if that ever stops being absurd; the real upgrade path is a per-hall
+ * recurrence rule, at which point this whole function resolves per hall from the start.
+ */
+const CLOSED_EVENING_LOOKAHEAD = 8;
+
+export interface CurrentEventResolution {
+    /** The evening being worked towards, resolved at the DATE level. Null = closed. */
+    event: SabhaEvent | null;
+
+    /**
+     * That evening's per-hall exception documents, keyed by location id.
+     *
+     * Handed back rather than left to a second query, because this function already
+     * reads every document in the range — the hall slice is free here and a round trip
+     * anywhere else. Empty when no hall has one, which is the ordinary case.
+     */
+    hallExceptions: Map<string, EventException>;
+}
+
+/**
+ * `findCurrentEvent`, plus the per-hall exceptions for the evening it picked.
+ *
+ * Split out so `updateRideTypeContext` can resolve each hall's own times without a
+ * second read of the same documents, while the six existing callers keep the narrow
+ * signature they had.
+ *
+ * @param locationIds when given, AN EVENING ONLY COUNTS IF AT LEAST ONE OF THESE HALLS
+ *   IS OPEN ON IT. Pass null (the default) for the date-level answer alone. Without
+ *   this, a manager who cancelled both halls of an evening separately — rather than
+ *   cancelling the date — would leave the app announcing a sabha that no hall is
+ *   holding: reminders sent, window opened, and every rider told their hall is closed.
+ */
+export async function resolveCurrentEvent(
+    db: admin.firestore.Firestore,
+    now: Date,
+    timeZone: string,
+    rule: RecurrenceRule | null = null,
+    locationIds: readonly string[] | null = null,
+): Promise<CurrentEventResolution> {
+    const closed: CurrentEventResolution = { event: null, hallExceptions: new Map() };
     const today = zonedDateKey(now, timeZone);
     const horizon = addDaysToDateKey(today, LOOKAHEAD_DAYS);
 
@@ -128,23 +182,59 @@ export async function findCurrentEvent(
         // `effectiveEvent` decide what each document means anyway.
         const snapshot = await db.collection(EVENTS_COLLECTION)
             .where(admin.firestore.FieldPath.documentId(), '>=', today)
-            .where(admin.firestore.FieldPath.documentId(), '<=', horizon)
+            // A DAY OF SLACK, because a hall's document id is `${date}__${hall}` and
+            // '2026-11-05__somerville' <= '2026-11-05' is false. Without it, a second
+            // hall's gathering on the exact horizon day is invisible. Reading one extra
+            // day of exception documents costs nothing; the resolver's own horizon
+            // below is unchanged, so no date past it can be returned.
+            .where(admin.firestore.FieldPath.documentId(), '<=',
+                addDaysToDateKey(horizon, LOOKAHEAD_NEEDS_SLACK))
             .orderBy(admin.firestore.FieldPath.documentId())
             .get();
 
+        // TWO MAPS, because one document id means two different things now. A bare id
+        // is the whole evening's exception; a suffixed one speaks for a single hall.
+        // Keyed together they would collide in meaning — `upcomingOccurrences` guards
+        // itself against a suffixed key, but a hall's cancellation read as the date's
+        // would close a sabha the other hall is still holding.
         const exceptions = new Map<string, EventException>();
+        const byDateAndHall = new Map<string, Map<string, EventException>>();
         for (const doc of snapshot.docs) {
             const exception = normaliseException(doc.data());
-            if (exception) exceptions.set(doc.id, exception);
+            if (!exception) continue;
+
+            // THE ID SHAPE IS THE DISCRIMINATOR, not `parseEventId`'s answer.
+            // `parseEventId` resolves a bare date to the FOUNDING hall, which is right
+            // for a ride but wrong here: a bare document is the whole evening's
+            // exception, older than the idea of halls, and filing it as one hall's
+            // leaves the other hall reading the rule as if nothing had been edited.
+            if (isDateKey(doc.id)) {
+                exceptions.set(doc.id, exception);
+                continue;
+            }
+            const parsed = parseEventId(doc.id);
+            if (!parsed) continue;
+            const forDate = byDateAndHall.get(parsed.dateKey) ?? new Map();
+            forDate.set(parsed.locationId, exception);
+            byDateAndHall.set(parsed.dateKey, forDate);
         }
 
-        // One occurrence is all this needs; the manager's calendar asks the same
-        // function for more. Sharing it is what keeps the scheduler and the
-        // calendar from disagreeing about what the schedule says.
-        const [occurrence] = upcomingOccurrences(rule, exceptions, today, horizon, 1);
-        if (!occurrence) return null;
+        // One occurrence is all this needs when no halls were named; the manager's
+        // calendar asks the same function for more. Sharing it is what keeps the
+        // scheduler and the calendar from disagreeing about what the schedule says.
+        const wanted = locationIds ? CLOSED_EVENING_LOOKAHEAD : 1;
+        const candidates = upcomingOccurrences(rule, exceptions, today, horizon, wanted);
 
-        return {
+        const occurrence = locationIds
+            ? candidates.find(c => locationIds.some(id => effectiveEventFor(
+                c.date, rule, exceptions.get(c.date) ?? null,
+                byDateAndHall.get(c.date)?.get(id) ?? null,
+            )))
+            : candidates[0];
+        if (!occurrence) return closed;
+
+        const hallExceptions = byDateAndHall.get(occurrence.date) ?? new Map();
+        return { hallExceptions, event: {
             date: occurrence.date,
             startTime: occurrence.startTime,
             endTime: occurrence.endTime,
@@ -154,10 +244,10 @@ export async function findCurrentEvent(
             // "Not created by hand" now means "came from the rule", which is the
             // same distinction under a different mechanism.
             autoCreated: occurrence.source === 'rule',
-        };
+        } };
     } catch (error) {
         console.error('[events] Could not read events:', error);
-        return null;
+        return closed;
     }
 }
 

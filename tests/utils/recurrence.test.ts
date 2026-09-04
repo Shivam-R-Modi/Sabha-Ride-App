@@ -17,7 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
-    dayOfWeekForKey, occurrencesBetween, upcomingOccurrences, normaliseException, effectiveEvent,
+    dayOfWeekForKey, occurrencesBetween, upcomingOccurrences, normaliseException, effectiveEvent, effectiveEventFor,
     normaliseRecurrence, describeRule, labelForSource, addDaysToDateKey,
     RecurrenceRule, EventException,
 } from '../../src/utils/recurrence';
@@ -70,6 +70,34 @@ describe('shared vectors — effectiveEvent', () => {
     });
 });
 
+describe('shared vectors — effectiveEventFor', () => {
+    it.each(vectors.effectiveEventFor)('$name', (v: any) => {
+        const out = effectiveEventFor(
+            v.date,
+            asRule(v.rule),
+            v.dateException ? normaliseException(v.dateException) : null,
+            v.hallException ? normaliseException(v.hallException) : null,
+        );
+
+        if (v.expected === null) {
+            expect(out).toBeNull();
+        } else {
+            expect(out).toMatchObject(v.expected);
+        }
+    });
+
+    it('every scheduled hall exception in the fixture actually normalises', () => {
+        // The trap this suite would otherwise fall into: normaliseException returns
+        // null for a scheduled exception missing a time, so a one-field snapshot
+        // silently becomes "no hall exception" and the case passes while asserting
+        // the date layer's own answer. Check the inputs, not just the outputs.
+        for (const v of vectors.effectiveEventFor) {
+            if (!v.hallException || v.hallException.status === 'cancelled') continue;
+            expect(normaliseException(v.hallException), v.name).not.toBeNull();
+        }
+    });
+});
+
 describe('shared vectors — upcomingOccurrences', () => {
     it.each(vectors.upcomingOccurrences)('$name', (v: any) => {
         const out = upcomingOccurrences(
@@ -83,6 +111,20 @@ describe('shared vectors — upcomingOccurrences', () => {
 });
 
 // ── client-only helpers, not part of the shared contract ─────────
+
+describe('the fixture itself', () => {
+    it('is actually loaded, so a bad path cannot make this suite vacuous', () => {
+        // Every block above is an it.each. Over an empty array that reports zero
+        // tests and a green tick, so a broken relative path would delete the client
+        // half of the mirror guard without failing anything. The server copy has
+        // carried this check since it was written; this one had not.
+        expect(vectors.dayOfWeek.length).toBeGreaterThan(3);
+        expect(vectors.occurrencesBetween.length).toBeGreaterThan(3);
+        expect(vectors.upcomingOccurrences.length).toBeGreaterThan(3);
+        expect(vectors.effectiveEvent.length).toBeGreaterThan(3);
+        expect(vectors.effectiveEventFor.length).toBeGreaterThan(3);
+    });
+});
 
 describe('addDaysToDateKey', () => {
     it('crosses months and years', () => {

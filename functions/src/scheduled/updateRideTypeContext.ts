@@ -10,7 +10,8 @@ import { DEFAULT_TIME_ZONE } from '../utils/time';
 import {
     resolveScheduleWindow, buildCurrentEvent, ScheduleWindow, CurrentEvent,
 } from '../utils/schedule';
-import { findCurrentEvent } from '../utils/events';
+import { resolveCurrentEvent } from '../utils/events';
+import { applyHallException, toVenue, type EventException } from '../utils/recurrence';
 import { notifyEveryone } from '../utils/notifications';
 import { drainAttendanceDelete } from '../http/deleteSabhaEvent';
 import { SEED_MARKER_DOC } from '../utils/events';
@@ -143,11 +144,19 @@ export function buildRideContextDoc(
 /**
  * Build one gathering per open hall.
  *
- * ONE SHARED DATE AND ONE SHARED PAIR OF TIMES, and only the VENUE differs per hall.
- * That is the whole of the multi-hall model for now, and it is what the owner asked
- * for: both halls on the same evening at the same time, with per-hall times reserved
- * for the rare case. So the recurrence resolver is untouched — `findCurrentEvent` still
- * answers once, for the evening, and the fan-out happens here.
+ * ONE SHARED DATE, and by default one shared pair of times — both halls on the same
+ * evening at the same time is what the owner asked for, so `resolveCurrentEvent`
+ * answers ONCE for the evening and the fan-out happens here.
+ *
+ * A HALL MAY DIVERGE, for the rare case the owner also asked for. `hallExceptions`
+ * holds that hall's own `events/{date}__{hall}` document, and `applyHallException`
+ * lays it over the evening: different times, a different venue, or not this hall
+ * tonight at all. A hall with no document is the ordinary case and takes the evening
+ * unchanged, so the common path is identical to before.
+ *
+ * A closed hall gets `event: null`, which its `byLocation` slice then publishes as
+ * `calendarStatus: 'no-scheduled-event'` — the same shape a closed evening produces,
+ * because to a rider standing outside that hall it means the same thing.
  *
  * The gathering's KEY differs per hall (`eventIdFor`), because two halls cannot share
  * one `events/{date}` document, and that key is also the attendance key.
@@ -158,17 +167,26 @@ export function hallContexts(
     now: Date,
     timeZone: string,
     requestsOpenTime: unknown,
+    hallExceptions: ReadonlyMap<string, EventException> = new Map(),
 ): HallContext[] {
     return halls.map(hall => {
-        const event = scheduled
-            ? buildCurrentEvent(scheduled.date, scheduled.startTime, scheduled.endTime, timeZone, {
-                // The gathering's own override wins over the hall's standing venue,
-                // which wins over settings/main — the existing precedence, one link
-                // longer. `resolveVenue` still does the choosing.
-                venue: resolveVenue(scheduled.venue, hall.venue as never) as never,
+        // Venue is resolved AFTER the hall layer, so a hall that overrides its venue
+        // for one evening still beats its own standing venue, and both still beat
+        // settings/main. `resolveVenue` does the choosing, as it always has.
+        const forHall = applyHallException(
+            scheduled && {
+                ...scheduled,
+                venue: toVenue(scheduled.venue),
                 agenda: scheduled.agenda,
+            },
+            hallExceptions.get(hall.id) ?? null,
+        );
+        const event = forHall
+            ? buildCurrentEvent(scheduled!.date, forHall.startTime, forHall.endTime, timeZone, {
+                venue: resolveVenue(forHall.venue, hall.venue as never) as never,
+                agenda: forHall.agenda,
                 requestsOpenTime,
-                eventId: eventIdFor(scheduled.date, hall.id) ?? scheduled.date,
+                eventId: eventIdFor(scheduled!.date, hall.id) ?? scheduled!.date,
                 locationId: hall.id,
             })
             : null;
@@ -238,18 +256,64 @@ async function readSabhaTimes(db: admin.firestore.Firestore) {
 }
 
 /**
- * Announce that ride requests have opened — once.
+ * Which window, if any, should be announced this tick.
  *
- * This function runs every minute, so notifying whenever pickup is open would
- * send roughly 60 pushes an hour for three days. It fires only on the
- * transition INTO a ride type, which is why the previous rideType has to be
- * read before the new one is written.
+ * ONE ANNOUNCEMENT PER PHASE PER EVENING, however many halls are open. The text names
+ * no time and no hall — "Ride requests are open" — so it is one piece of news for the
+ * whole congregation, and sending it twice because two rooms opened two hours apart
+ * would be spam to whoever was already served.
+ *
+ * The rule: announce when SOME hall now has this ride type and NO hall had it before.
+ * That is the first hall to open, and it needs no new stored state — every hall's
+ * previous `rideType` is already published in `byLocation` each tick.
+ *
+ * Reading all the halls rather than the founding one is the whole point. The previous
+ * version announced on the founding hall's transition against the TOP-LEVEL previous
+ * rideType, and both halves of that break the moment halls can diverge:
+ *
+ *   - A founding hall cancelled for one evening leaves the top-level rideType null all
+ *     night, so an evening held entirely at the other hall announced NOTHING. Riders
+ *     with no other prompt simply never heard the window had opened.
+ *   - Read against per-hall state instead but still keyed on one hall, and the top-level
+ *     null never advances, so the other hall's open window re-announces EVERY MINUTE.
+ *
+ * @param previous the `system/rideContext` document as it was before this tick.
  */
-async function announceIfWindowJustOpened(
-    previousRideType: RideType | null | undefined,
-    next: ScheduleWindow,
-): Promise<void> {
-    if (!next.rideType || previousRideType === next.rideType) return;
+export function announcementFor(
+    previous: Record<string, unknown> | null | undefined,
+    contexts: readonly HallContext[],
+): ScheduleWindow | null {
+    const byLocation = previous?.byLocation as Record<string, { rideType?: unknown }> | undefined;
+
+    const previousFor = (locationId: string): unknown => {
+        const slice = byLocation?.[locationId];
+        // THE FOUNDING HALL FALLS BACK TO THE TOP LEVEL, because on the first tick
+        // after this deploys `byLocation` does not exist yet. Without the fallback that
+        // tick reads "nobody was open" and re-announces a window that has been open for
+        // two days. Same reason the attendance header comparison carries this fallback.
+        if (slice) return slice.rideType ?? null;
+        if (locationId === FOUNDING_LOCATION_ID) return previous?.rideType ?? null;
+        return null;
+    };
+
+    for (const hall of contexts) {
+        const rideType = hall.window.rideType;
+        if (!rideType) continue;
+        if (contexts.some(other => previousFor(other.locationId) === rideType)) continue;
+        return hall.window;
+    }
+    return null;
+}
+
+/**
+ * Send the announcement `announcementFor` selected.
+ *
+ * This job runs every minute, so notifying whenever pickup is open would send roughly
+ * 60 pushes an hour for three days. The transition test lives in `announcementFor`,
+ * which is why the previous document has to be read before the new one is written.
+ */
+async function announceWindowOpened(next: ScheduleWindow): Promise<void> {
+    if (!next.rideType) return;
 
     const isPickup = next.rideType === 'home-to-sabha';
 
@@ -339,14 +403,21 @@ export const updateRideTypeContext = functions.pubsub
             // gathering is visible on the manager's calendar, a wrongly-placed one
             // sends drivers out.
             const rule = await readRecurrence(db);
-            const scheduled = await findCurrentEvent(db, now, timeZone, rule);
 
-            // ONE gathering for the evening, then one context per open hall. Only the
-            // venue differs; see `hallContexts`.
+            // HALLS FIRST, because the evening is resolved against them: an evening
+            // every hall has cancelled separately is not an evening, and naming the
+            // halls is what lets `resolveCurrentEvent` roll past it instead of opening
+            // a window for a sabha nobody is holding.
             const halls = await locationsOrFoundingFallback(db);
+            const { event: scheduled, hallExceptions } = await resolveCurrentEvent(
+                db, now, timeZone, rule, halls.map(h => h.id),
+            );
+
+            // ONE gathering for the evening, then one context per open hall — with that
+            // hall's own document laid over it. See `hallContexts`.
             const contexts = hallContexts(
                 scheduled, halls.map(h => ({ id: h.id, venue: h.venue })),
-                now, timeZone, requestsOpenTime,
+                now, timeZone, requestsOpenTime, hallExceptions,
             );
 
             await db.doc(CONTEXT_DOC).set(buildRideContextDoc(contexts, now));
@@ -367,12 +438,12 @@ export const updateRideTypeContext = functions.pubsub
                 await recordEventDetails(db, hall.event, hall.event.venue ?? venue);
             }
 
-            // ONE ANNOUNCEMENT FOR THE EVENING, deliberately not one per hall. Both
-            // halls share a window today, so a per-hall broadcast would send the same
-            // congregation the same news twice. It becomes per-hall in the release that
-            // makes per-hall times possible, and not before.
+            // ONE ANNOUNCEMENT FOR THE EVENING, from whichever hall opens first — see
+            // `announcementFor`. Still not one per hall: the news is hall-agnostic, so
+            // two sends would tell half the congregation something it already acted on.
             const primary = contexts.find(h => h.locationId === FOUNDING_LOCATION_ID) ?? contexts[0];
-            await announceIfWindowJustOpened(current?.rideType, primary.window);
+            const announce = announcementFor(current, contexts);
+            if (announce) await announceWindowOpened(announce);
 
             console.log(`[rideContext] Updated ${contexts.length} hall(s):`, primary.window);
             return null;
@@ -405,11 +476,13 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
 
     const { timeZone, requestsOpenTime } = await readSabhaTimes(db);
     const rule = await readRecurrence(db);
-    const scheduled = await findCurrentEvent(db, now, timeZone, rule);
     const halls = await locationsOrFoundingFallback(db);
+    const { event: scheduled, hallExceptions } = await resolveCurrentEvent(
+        db, now, timeZone, rule, halls.map(h => h.id),
+    );
     const contexts = hallContexts(
         scheduled, halls.map(h => ({ id: h.id, venue: h.venue })),
-        now, timeZone, requestsOpenTime,
+        now, timeZone, requestsOpenTime, hallExceptions,
     );
     const primary = contexts.find(h => h.locationId === FOUNDING_LOCATION_ID) ?? contexts[0];
     const event = primary?.event ?? null;
@@ -449,7 +522,9 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
      * The button says "Open ride requests now" with no hall on it, and it is reached
      * from a screen that has never had one. Opening only the founding hall would leave
      * the other one closed with nothing on screen saying so; opening all of them does
-     * what the label promises. Per-hall overrides arrive with per-hall times.
+     * what the label promises. It stays hall-blind now that per-hall TIMES exist: a
+     * manager reaching for this is reacting to something happening in the moment, and
+     * making them pick a room first is friction on the wrong control.
      */
     await db.doc(CONTEXT_DOC).set(buildRideContextDoc(
         contexts.map(h => ({ ...h, window })),
@@ -460,9 +535,11 @@ export const manuallyUpdateRideContext = functions.https.onCall(async (data, con
         },
     ));
 
-    // Same one-shot rule as the scheduler: announce only a real change, so
-    // re-tapping the button does not notify the congregation twice.
-    await announceIfWindowJustOpened(previous?.rideType, window);
+    // Same one-shot rule as the scheduler, through the same function — so re-tapping
+    // the button does not notify the congregation twice, and a founding hall that was
+    // closed does not make the check read "nobody was open" and send anyway.
+    const announce = announcementFor(previous, contexts.map(h => ({ ...h, window })));
+    if (announce) await announceWindowOpened(announce);
 
     return window;
 });

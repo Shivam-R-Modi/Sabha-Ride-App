@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
-    dayOfWeekForKey, occurrencesBetween, upcomingOccurrences, normaliseException, effectiveEvent,
+    dayOfWeekForKey, occurrencesBetween, upcomingOccurrences, normaliseException, effectiveEvent, effectiveEventFor,
     RecurrenceRule, EventException,
 } from './recurrence';
 
@@ -66,6 +66,34 @@ describe('shared vectors — effectiveEvent', () => {
     });
 });
 
+describe('shared vectors — effectiveEventFor', () => {
+    it.each(vectors.effectiveEventFor)('$name', (v: any) => {
+        const out = effectiveEventFor(
+            v.date,
+            asRule(v.rule),
+            v.dateException ? normaliseException(v.dateException) : null,
+            v.hallException ? normaliseException(v.hallException) : null,
+        );
+
+        if (v.expected === null) {
+            expect(out).toBeNull();
+        } else {
+            expect(out).toMatchObject(v.expected);
+        }
+    });
+
+    it('every scheduled hall exception in the fixture actually normalises', () => {
+        // The trap this suite would otherwise fall into: normaliseException returns
+        // null for a scheduled exception missing a time, so a one-field snapshot
+        // silently becomes "no hall exception" and the case passes while asserting
+        // the date layer's own answer. Check the inputs, not just the outputs.
+        for (const v of vectors.effectiveEventFor) {
+            if (!v.hallException || v.hallException.status === 'cancelled') continue;
+            expect(normaliseException(v.hallException), v.name).not.toBeNull();
+        }
+    });
+});
+
 describe('shared vectors — upcomingOccurrences', () => {
     it.each(vectors.upcomingOccurrences)('$name', (v: any) => {
         const out = upcomingOccurrences(
@@ -85,5 +113,6 @@ describe('the fixture itself', () => {
         expect(vectors.occurrencesBetween.length).toBeGreaterThan(3);
         expect(vectors.upcomingOccurrences.length).toBeGreaterThan(3);
         expect(vectors.effectiveEvent.length).toBeGreaterThan(3);
+        expect(vectors.effectiveEventFor.length).toBeGreaterThan(3);
     });
 });

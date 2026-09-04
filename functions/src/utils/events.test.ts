@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { findCurrentEvent, eventKeyFromRide } from './events';
+import { findCurrentEvent, resolveCurrentEvent, eventKeyFromRide } from './events';
 import type { RecurrenceRule } from './recurrence';
 
 vi.mock('firebase-admin', () => ({
@@ -252,6 +252,118 @@ describe('findCurrentEvent — rule plus exceptions', () => {
         });
         const event = await findCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays);
         expect(event?.venue).toBeNull();
+    });
+});
+
+/**
+ * The date layer and the hall layer are separate, and a bare document belongs to the
+ * date.
+ *
+ * Two halls run the same evening, so `events` now holds two shapes of document id:
+ * `2026-08-07` for the whole evening, `2026-08-07__somerville` for one hall of it. The
+ * consequences of confusing them are not symmetrical, so both directions are here.
+ */
+describe('resolveCurrentEvent — the hall layer', () => {
+    const db1 = (events: Record<string, any>) => fakeDb(events).db;
+    const fridays: RecurrenceRule = {
+        enabled: true, daysOfWeek: [5], startTime: '19:00', endTime: '22:00',
+        venue: null, agenda: '',
+    };
+    const HALLS = ['boston-huntington', 'somerville'];
+    const evening = { kind: 'override', status: 'scheduled', startTime: '18:00', endTime: '20:00' };
+
+    it('hands back one hall\'s exception, keyed by the hall', async () => {
+        const { db } = fakeDb({ '2026-08-07__somerville': evening });
+        const out = await resolveCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays, HALLS);
+
+        expect(out.event?.date).toBe('2026-08-07');
+        expect(out.hallExceptions.get('somerville')).toMatchObject({ startTime: '18:00' });
+        expect(out.hallExceptions.has('boston-huntington')).toBe(false);
+    });
+
+    it('does not read one hall\'s cancellation as the whole evening\'s', async () => {
+        // The headline of this describe block. Somerville is off; Huntington still
+        // meets, so the evening is still on and its date-level times are untouched.
+        const { db } = fakeDb({ '2026-08-07__somerville': { status: 'cancelled' } });
+        const out = await resolveCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays, HALLS);
+
+        expect(out.event).toMatchObject({ date: '2026-08-07', startTime: '19:00' });
+    });
+
+    it('does not read the evening\'s exception as the founding hall\'s', async () => {
+        // The other direction, and the one a plausible implementation gets wrong:
+        // parseEventId resolves a bare date to the founding hall, so filing a bare
+        // document by its parsed hall leaves the OTHER hall reading the rule as if the
+        // evening had never been edited.
+        const { db } = fakeDb({ '2026-08-07': evening });
+        const out = await resolveCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays, HALLS);
+
+        expect(out.event).toMatchObject({ startTime: '18:00', endTime: '20:00' });
+        expect(out.hallExceptions.size).toBe(0);
+    });
+
+    it('rolls past an evening every hall has cancelled one at a time', async () => {
+        // Not the same as cancelling the date, and a manager may well do it this way.
+        // Without the hall check the app announces a sabha no hall is holding: window
+        // open, reminders sent, and every rider told their own hall is closed.
+        const { db } = fakeDb({
+            '2026-08-07': { status: 'cancelled', kind: 'override' },
+            '2026-08-07__somerville': { status: 'cancelled' },
+        });
+        const out = await resolveCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays, HALLS);
+
+        expect(out.event?.date).toBe('2026-08-14');
+        // And the exceptions handed back are the ones for the date it actually chose.
+        expect(out.hallExceptions.size).toBe(0);
+    });
+
+    it('rolls past an evening whose only hall is cancelled', async () => {
+        const { db } = fakeDb({ '2026-08-07__somerville': { status: 'cancelled' } });
+        const out = await resolveCurrentEvent(
+            db, boston(FRI, '10:00'), ZONE, fridays, ['somerville'],
+        );
+
+        expect(out.event?.date).toBe('2026-08-14');
+    });
+
+    it('answers at the date level when no halls are named, exactly as before', async () => {
+        // The six existing callers pass no halls, so a hall cancellation must not move
+        // their answer. Their aggregate is the evening, not any one room.
+        const { db } = fakeDb({ '2026-08-07__somerville': { status: 'cancelled' } });
+        const out = await resolveCurrentEvent(db, boston(FRI, '10:00'), ZONE, fridays);
+
+        expect(out.event?.date).toBe('2026-08-07');
+    });
+
+    it('sees a hall document on the exact horizon day', async () => {
+        // '2026-11-05__somerville' <= '2026-11-05' is FALSE, so a suffixed id on the
+        // last day of the lookahead falls outside an unwidened upper bound and is
+        // invisible. The fake db honours both range bounds, which is what lets this
+        // fail.
+        //
+        // Getting the resolver to look AT the horizon day takes some staging: the rule
+        // runs on Thursdays and every Thursday before it is cancelled at the date
+        // level, which removes those candidates outright rather than spending the
+        // closed-evening budget. So Nov 5 is the only date left, and the only thing
+        // that can close it is the hall document on the bound.
+        const horizon = '2026-11-05';
+        const thursdays: Record<string, any> = {};
+        for (const date of ['2026-08-13', '2026-08-20', '2026-08-27', '2026-09-03', '2026-09-10', '2026-09-17', '2026-09-24', '2026-10-01', '2026-10-08', '2026-10-15', '2026-10-22', '2026-10-29']) {
+            thursdays[date] = { kind: 'override', status: 'cancelled' };
+        }
+        const rule: RecurrenceRule = { ...fridays, daysOfWeek: [4] };
+
+        const open = await resolveCurrentEvent(
+            db1({ ...thursdays }), boston(FRI, '10:00'), ZONE, rule, ['somerville'],
+        );
+        expect(open.event?.date).toBe(horizon);   // the staging itself holds
+
+        const closed = await resolveCurrentEvent(
+            db1({ ...thursdays, [`${horizon}__somerville`]: { status: 'cancelled' } }),
+            boston(FRI, '10:00'), ZONE, rule, ['somerville'],
+        );
+        // Somerville is the only hall and it is shut, so there is nothing in range.
+        expect(closed.event).toBeNull();
     });
 });
 
