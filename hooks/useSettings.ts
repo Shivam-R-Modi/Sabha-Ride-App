@@ -76,6 +76,15 @@ export function useSettings() {
                         sabhaLocation: data.sabhaLocation ?? DEFAULT_SABHA_LOCATION,
                         sabhaStartTime: data.sabhaStartTime || DEFAULT_SABHA_START,
                         sabhaEndTime: data.sabhaEndTime || DEFAULT_SABHA_END,
+                        // CARRIED THROUGH, and it was not. `AppSettings` declared this
+                        // field and the hook returned it, but the state object built
+                        // here never copied it off the snapshot — so
+                        // `settings.requestsOpenTime` was permanently undefined,
+                        // RideWindowControl's seeding effect never fired, and the
+                        // manager's "Requests open at" input rendered blank while the
+                        // server was reading the stored value perfectly well. A saved
+                        // setting that displays as empty reads as "it reset itself".
+                        requestsOpenTime: data.requestsOpenTime,
                         lastUpdated: data.lastUpdated,
                         updatedBy: data.updatedBy,
                     });

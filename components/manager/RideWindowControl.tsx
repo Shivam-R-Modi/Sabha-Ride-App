@@ -34,15 +34,27 @@ export const RideWindowControl: React.FC = () => {
     const [done, setDone] = useState<string | null>(null);
     const { ask, confirmDialog } = useConfirm();
     const { currentUser } = useAuth();
-    const { requestsOpenTime, updateRequestsOpenTime } = useSettings();
+    const { requestsOpenTime, updateRequestsOpenTime, loading: settingsLoading } = useSettings();
     const [openTime, setOpenTime] = useState('');
     const [savingTime, setSavingTime] = useState(false);
 
-    // Seeded from the setting once it has loaded, not on every render — otherwise a
-    // manager's half-typed time is overwritten by the snapshot mid-edit.
+    /**
+     * Seeded ONCE THE SETTINGS HAVE LOADED, keyed on `loading` rather than on the value.
+     *
+     * This used to be `if (requestsOpenTime !== undefined)`, which looks like the
+     * careful version and is the bug: `undefined` means BOTH "the snapshot has not
+     * arrived yet" and "no time has ever been saved". So a congregation that had never
+     * set one saw a permanently blank box — and so did everyone else, because
+     * `useSettings` was not copying the field off the snapshot at all.
+     *
+     * `loading` separates the two, and the fallback is the shipped 10:00 rather than
+     * '' or midnight. Not keyed on every render either: the context listener fires once
+     * a minute, and re-seeding on each tick would wipe a half-typed time.
+     */
     useEffect(() => {
-        if (requestsOpenTime !== undefined) setOpenTime(requestsOpenTime || DEFAULT_REQUESTS_OPEN_TIME);
-    }, [requestsOpenTime]);
+        if (settingsLoading) return;
+        setOpenTime(requestsOpenTime || DEFAULT_REQUESTS_OPEN_TIME);
+    }, [settingsLoading, requestsOpenTime]);
 
     useEffect(() => {
         const unsub = onSnapshot(
