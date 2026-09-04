@@ -62,7 +62,7 @@ export const submitWeeklyAttendance = async (
     userId: string,
     response: 'yes' | 'no',
     userProfile: { name: string; phone?: string; address?: string },
-    eventId: string
+    eventId: string,
 ): Promise<void> => {
     if (!eventId) throw new Error('No gathering is scheduled right now.');
     const docRef = doc(db, 'weeklyAttendance', eventId, 'responses', userId);

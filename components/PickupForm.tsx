@@ -5,6 +5,7 @@ import { createRideRequest } from '../hooks/useRides';
 import { MIN_SEATS, MAX_SEATS, DEFAULT_SEATS } from '../src/constants/seats';
 import { useSettings, formatTime } from '../hooks/useSettings';
 import { useCurrentEvent } from '../hooks/useCurrentEvent';
+import { useLocations } from '../hooks/useLocations';
 import { LotusLoader, DiyaIcon } from '../constants';
 
 interface PickupFormProps {
@@ -28,7 +29,29 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
   // "next Friday" from the DEVICE clock — so a rider requesting a ride for a
   // Thursday sabha filed it against the following Friday.
   const { sabhaStartTime, sabhaLocation } = useSettings();
-  const { event, eventId, hasEvent } = useCurrentEvent();
+
+  /**
+   * WHICH SABHA THEY ARE GOING TO.
+   *
+   * NO PICKER WHEN THERE IS ONE HALL, which is every evening until a manager opens a
+   * second. A control with one option is a control that cannot do anything, and this
+   * form is already the longest thing a rider fills in.
+   *
+   * ASKED ONCE, HERE. Attendance answers "am I coming"; this answers "to which hall".
+   * Seeding it from the attendance record was tried and removed: nothing wrote that
+   * field, so the seed was dead, and writing it would have meant asking the same
+   * question twice for a per-hall head count nothing needs — room capacity is managed
+   * outside this app by the owner's decision.
+   */
+  const { active: openHalls } = useLocations();
+  const [hallId, setHallId] = useState<string | null>(null);
+  const chosenHall = openHalls.find(h => h.id === hallId)
+    ?? (openHalls.length === 1 ? openHalls[0] : null);
+  const mustChooseHall = openHalls.length > 1 && !chosenHall;
+
+  // The window, the times and the venue all belong to the hall they picked. Before
+  // they pick, the aggregate — which is the founding hall — is what they see.
+  const { event, eventId, hasEvent } = useCurrentEvent(chosenHall?.id ?? null);
 
   const arrivalTime = formatTime(
     event?.startsAt
@@ -36,7 +59,18 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
           .format(new Date(event.startsAt))
       : sabhaStartTime
   );
-  const venueAddress = event?.venue?.address || sabhaLocation.address;
+  /**
+   * `event.venue → hall.venue → settings/main`, and the ORDER is the whole point.
+   *
+   * I had the first two the other way round and an existing test caught it: a manager
+   * who moves ONE sabha to a church hall writes that on the gathering, and the hall's
+   * standing venue must not override it. Same precedence the server uses in
+   * `hallContexts` — the gathering's own override beats the hall, which beats the
+   * global default.
+   */
+  const venueAddress = event?.venue?.address
+    || chosenHall?.venue.address
+    || sabhaLocation.address;
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -60,6 +94,18 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
     }).format(new Date(Date.UTC(y, m - 1, d, 12)));
   };
 
+  /**
+   * NO `mustChooseHall` GUARD HERE, deliberately.
+   *
+   * The button is disabled while a hall is unpicked and says "Choose a sabha above",
+   * so this function cannot be reached in that state — a guard here was unreachable,
+   * which a mutation check proved by deleting it and breaking nothing. The button gate
+   * is the control; the server is the boundary, and `globalAssignDriver` refuses an
+   * unplaced request rather than guessing.
+   *
+   * The `!eventId` check above stays, because that one IS reachable: the event can
+   * disappear from under the form when a manager cancels a sabha mid-session.
+   */
   const handleConfirm = async () => {
     if (!eventId) {
       setError('No sabha is scheduled yet. Please check back soon.');
@@ -79,7 +125,10 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
         studentName: user.name,
         seats,
         allowSplit: !keepTogether,
-        notes: ''
+        notes: '',
+        // Which hall. Dispatch refuses a request it cannot place once more than one
+        // is open, so this is not decoration — see `rejectionFor`.
+        locationId: chosenHall?.id ?? null,
       };
 
       await createRideRequest(user.id, formData);
@@ -154,6 +203,51 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
             </p>
           )}
         </div>
+
+        {/*
+          * WHICH SABHA. Rendered only when there is genuinely a choice — one hall means
+          * no picker, which is every evening until a manager opens a second. A control
+          * with one option is a control that cannot do anything, and this form is
+          * already the longest thing a rider fills in.
+          *
+          * Radios rather than a <select>: two or three options, all worth seeing at
+          * once, and the addresses matter — a rider is choosing between buildings, not
+          * picking a value from a list.
+          */}
+        {hasEvent && openHalls.length > 1 && (
+          <fieldset className="bg-cream/50 rounded-2xl p-5 border border-hairline/10">
+            <legend className="text-sm font-semibold text-coffee px-1">
+              Which sabha are you going to?
+            </legend>
+            <div className="mt-2 space-y-2">
+              {openHalls.map(hall => (
+                <label
+                  key={hall.id}
+                  className="flex cursor-pointer items-start gap-3 rounded-xl bg-surface p-3
+                    border border-hairline/10 has-[:checked]:border-[rgb(var(--cta))]"
+                >
+                  <input
+                    type="radio"
+                    name="sabha-location"
+                    value={hall.id}
+                    checked={chosenHall?.id === hall.id}
+                    onChange={() => { setHallId(hall.id); setError(null); }}
+                    className="mt-1 accent-[rgb(var(--cta))]"
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-coffee">{hall.name}</span>
+                    <span className="block text-xs text-coffee-500">{hall.venue.address}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {mustChooseHall && (
+              <p className="mt-2 text-xs text-[rgb(var(--warning-text))]">
+                Please pick one so a Sarthi can be sent to the right place.
+              </p>
+            )}
+          </fieldset>
+        )}
 
         <div className="bg-cream/50 rounded-2xl p-5 border border-hairline/10 space-y-3">
           <div className="flex items-start gap-3">
@@ -232,17 +326,25 @@ export const PickupForm: React.FC<PickupFormProps> = ({ user, onClose, onSubmit,
         </div>
 
         <div className="pt-4">
+          {/*
+            * DISABLED UNTIL A HALL IS PICKED, and the label says which is missing.
+            * A live button that comes back "please choose which sabha" is worse than
+            * one that says what it wants — the rider has no idea the question exists
+            * otherwise, because the picker is above the fold on a long form.
+            */}
           <button
             onClick={handleConfirm}
-            disabled={isLoading || !hasEvent}
+            disabled={isLoading || !hasEvent || mustChooseHall}
             className="clay-button-primary w-full disabled:opacity-50"
           >
             {isLoading ? (
               <LotusLoader size={24} />
-            ) : hasEvent ? (
-              <>I want a ride to this sabha</>
-            ) : (
+            ) : !hasEvent ? (
               <>No sabha scheduled yet</>
+            ) : mustChooseHall ? (
+              <>Choose a sabha above</>
+            ) : (
+              <>I want a ride to this sabha</>
             )}
           </button>
           <p className="text-center text-[10px] text-coffee-500 mt-4 px-4 italic">

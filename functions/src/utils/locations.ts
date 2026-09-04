@@ -225,3 +225,35 @@ export function activeLocations(
             || a.name.localeCompare(b.name)
             || a.id.localeCompare(b.id));
 }
+
+/**
+ * One hall's slice of `system/rideContext`, or the document's own top level.
+ *
+ * THE SHARED READ, so every client surface resolves a hall's window the same way and
+ * the server's `globalAssignDriver` and `studentReadyToLeave` do the same thing.
+ *
+ * `locationId` null asks for the AGGREGATE — the founding hall's window, published at
+ * the top level for bundles that predate halls. That is what a rider who has not
+ * chosen a hall yet should see.
+ *
+ * A missing slice while `byLocation` EXISTS is a fault, not a closed window, and the
+ * caller is told which: `{ slice: null, fault: true }`. Rendering that as "no sabha
+ * tonight" would make a broken scheduler indistinguishable from a quiet evening —
+ * which is the ambiguity `calendarStatus: 'no-scheduled-event'` was invented to remove.
+ */
+export function windowForLocation(
+    published: Record<string, unknown> | null | undefined,
+    locationId: string | null,
+): { slice: Record<string, unknown> | null; fault: boolean } {
+    if (!published) return { slice: null, fault: false };
+
+    const byLocation = published.byLocation as Record<string, Record<string, unknown>> | undefined;
+    if (!locationId) return { slice: published, fault: false };
+
+    // Absent entirely: the first minute after the per-hall context deploys, and a
+    // bundle running against an older server. The aggregate is the right answer then.
+    if (!byLocation) return { slice: published, fault: false };
+
+    const slice = byLocation[locationId];
+    return slice ? { slice, fault: false } : { slice: null, fault: true };
+}

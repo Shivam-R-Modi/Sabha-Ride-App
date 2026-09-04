@@ -156,7 +156,17 @@ export const createRideRequest = async (userId: string, details: any) => {
             // on an unstamped document does not error, it simply returns nothing,
             // and no handler anywhere would ever fire.
             cityId: FOUNDING_CITY_ID,
-            locationId: FOUNDING_LOCATION_ID,
+            /**
+             * WHICH HALL THE RIDER CHOSE. This was the founding constant, which was
+             * correct while there was one hall and silently wrong the moment there are
+             * two — dispatch reads this field to decide whose car they join.
+             *
+             * Falls back to the founding hall when the form did not supply one, which
+             * is the single-hall case where the form shows no picker. `rejectionFor`
+             * refuses an unlocated request as soon as a second hall opens, so this
+             * cannot quietly place somebody once the choice actually matters.
+             */
+            locationId: details.locationId ?? FOUNDING_LOCATION_ID,
         });
         return true;
     } catch (error) {

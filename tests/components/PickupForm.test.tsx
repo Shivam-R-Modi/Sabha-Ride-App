@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -21,8 +21,27 @@ const createRideRequest = vi.fn().mockResolvedValue(undefined);
 const useCurrentEvent = vi.fn();
 const useSettings = vi.fn();
 
+/**
+ * ONE HALL BY DEFAULT, which is production and the configuration every case in this
+ * file was written against. Stated rather than left to an unmocked hook so the
+ * single-hall behaviour is asserted rather than incidental.
+ */
+const HUNTINGTON = {
+    id: 'boston-huntington', name: 'Huntington', active: true, order: 0,
+    venue: { lat: 42.339925, lng: -71.088182, address: '360 Huntington Ave' },
+};
+const SOMERVILLE = {
+    id: 'somerville', name: 'Somerville', active: true, order: 1,
+    venue: { lat: 42.387, lng: -71.099, address: '5 Elm Street' },
+};
+let openHalls: Array<typeof HUNTINGTON>;
+
 vi.mock('../../hooks/useRides', () => ({ createRideRequest: (...a: unknown[]) => createRideRequest(...a) }));
 vi.mock('../../hooks/useCurrentEvent', () => ({ useCurrentEvent: () => useCurrentEvent() }));
+vi.mock('../../hooks/useLocations', () => ({
+    useLocations: () => ({ locations: openHalls, active: openHalls, loading: false, error: null }),
+}));
+
 vi.mock('../../hooks/useSettings', () => ({
     useSettings: () => useSettings(),
     // Real implementation, copied rather than imported: importing the module
@@ -62,6 +81,7 @@ const renderForm = (onClose = vi.fn(), onSubmit = vi.fn()) =>
     render(<PickupForm user={rider} onClose={onClose} onSubmit={onSubmit} />);
 
 beforeEach(() => {
+    openHalls = [HUNTINGTON];
     useSettings.mockReturnValue({
         sabhaStartTime: '19:00',
         sabhaEndTime: '22:00',
@@ -277,4 +297,98 @@ describe('PickupForm — confirmation', () => {
         expect(onClose).toHaveBeenCalled();
         expect(createRideRequest).not.toHaveBeenCalled();
     });
+});
+
+/**
+ * WHICH SABHA THEY ARE GOING TO.
+ *
+ * The picker is the rider's half of the never-mix invariant: dispatch refuses a request
+ * it cannot place, so a form that did not ask would file requests nobody can serve.
+ *
+ * THE FIRST ASSERTION IS THAT IT DOES NOT APPEAR. One hall is every evening until a
+ * manager opens a second, and a control with one option is a control that cannot do
+ * anything — on the longest form a rider fills in.
+ */
+describe('choosing which sabha', () => {
+    const submit = () => screen.getByRole('button', { name: /I want a ride|Choose a sabha/i });
+
+    it('shows NO picker when there is one hall', () => {
+        renderForm();
+        expect(screen.queryByRole('group', { name: /which sabha/i })).not.toBeInTheDocument();
+    });
+
+    it('files against the only hall without asking', async () => {
+        renderForm();
+        await userEvent.click(submit());
+
+        await waitFor(() => expect(createRideRequest).toHaveBeenCalled());
+        // The hall's real id, not null. Explicit beats relying on
+        // `createRideRequest`'s fallback — that default is there for a form that
+        // cannot name a hall at all, not for the ordinary single-hall case.
+        expect(createRideRequest.mock.calls[0][1].locationId).toBe('boston-huntington');
+    });
+
+    it('asks once a second hall is open, and names the buildings', () => {
+        // A rider is choosing between places, not picking a value from a list.
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        renderForm();
+
+        expect(screen.getByRole('group', { name: /which sabha/i })).toBeInTheDocument();
+        expect(screen.getByText('5 Elm Street')).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: /Huntington/ })).toBeInTheDocument();
+    });
+
+    it('WILL NOT SUBMIT until one is picked, and the button says why', async () => {
+        // A live button that comes back "please choose which sabha" is worse than one
+        // that says what it wants: the picker is above the fold on a long form, so the
+        // rider would not know the question existed.
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        renderForm();
+
+        expect(submit()).toBeDisabled();
+        expect(submit()).toHaveTextContent(/Choose a sabha/i);
+        expect(createRideRequest).not.toHaveBeenCalled();
+    });
+
+    it('files against the hall they picked', async () => {
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        renderForm();
+
+        await userEvent.click(screen.getByRole('radio', { name: /Somerville/ }));
+        expect(submit()).toBeEnabled();
+        await userEvent.click(submit());
+
+        await waitFor(() => expect(createRideRequest).toHaveBeenCalled());
+        expect(createRideRequest.mock.calls[0][1].locationId).toBe('somerville');
+    });
+
+    it('shows that hall\'s address once picked, when the gathering has no override', async () => {
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        // No per-event venue: the ordinary recurring sabha.
+        useCurrentEvent.mockReturnValue({
+            event: { startsAt: null, venue: null }, eventId: '2026-08-14', hasEvent: true,
+        });
+        renderForm();
+        await userEvent.click(screen.getByRole('radio', { name: /Somerville/ }));
+
+        // Twice: once in the picker row, once as the venue under "Next Sabha".
+        expect(screen.getAllByText('5 Elm Street').length).toBeGreaterThan(1);
+    });
+
+    it('but the GATHERING\'S venue still wins over the hall\'s standing one', async () => {
+        /**
+         * The precedence I had backwards, caught by an existing test rather than a new
+         * one. A manager who moves ONE sabha to a church hall writes that on the
+         * gathering, and the hall's standing address must not override it. Same order
+         * the server uses in `hallContexts`.
+         */
+        openHalls = [HUNTINGTON, SOMERVILLE];
+        renderForm();
+        await userEvent.click(screen.getByRole('radio', { name: /Somerville/ }));
+
+        expect(screen.getByText('BAPS Mandir, Edison NJ')).toBeInTheDocument();
+    });
+
+
+
 });

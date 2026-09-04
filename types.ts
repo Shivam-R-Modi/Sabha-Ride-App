@@ -567,6 +567,19 @@ export interface WeeklyAttendanceRecord {
    * needing its path.
    */
   eventId?: string;
+  /*
+   * NO `locationId` HERE, and that is a decision rather than an omission.
+   *
+   * Attendance answers "am I coming"; the RIDE REQUEST answers "to which hall". Adding
+   * it here would mean asking the same question twice, and nothing would read the
+   * answer: per-hall head counts would be the use, and room capacity is deliberately
+   * managed outside this app.
+   *
+   * It would also be the wrong field to trust if anything ever did read it. This
+   * subcollection is rider-writable with no field validation, so a hall stored here
+   * would hand a rider control over which car they join. `rides.locationId` is the one
+   * dispatch reads, and it is guarded by firestore.rules.
+   */
 }
 
 // --- Audit Logging Types ---

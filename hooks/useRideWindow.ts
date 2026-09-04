@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { windowForLocation } from '../src/utils/locations';
 
 /**
  * Which rides are open right now — one answer, shared by every screen.
@@ -31,12 +32,20 @@ export interface RideWindow {
     displayText: string;
     /** The reason, e.g. "Sabha starts at 7:00 PM" or why it is closed. */
     timeContext: string;
-    /** 'no-scheduled-event' means a manager cancelled everything — not a fault. */
-    calendarStatus: 'ok' | 'no-scheduled-event' | null;
+    /**
+     * 'no-scheduled-event' means a manager cancelled everything — not a fault.
+     * 'location-not-published' IS a fault: the server's hall list does not include the
+     * hall being asked about, which is different from that hall being closed.
+     */
+    calendarStatus: 'ok' | 'no-scheduled-event' | 'location-not-published' | null;
     loading: boolean;
 }
 
-export function useRideWindow(): RideWindow {
+/**
+ * `locationId` picks which hall's window. Omitted means the aggregate — the founding
+ * hall — which is what every existing caller wants and gets unchanged.
+ */
+export function useRideWindow(locationId: string | null = null): RideWindow {
     const [state, setState] = useState<Omit<RideWindow, 'loading'>>({
         rideType: null,
         pickupOpen: false,
@@ -51,8 +60,14 @@ export function useRideWindow(): RideWindow {
         const unsub = onSnapshot(
             doc(db, 'system', 'rideContext'),
             (snap) => {
-                const data = snap.exists() ? snap.data() : null;
+                const published = snap.exists() ? snap.data() : null;
+                const { slice, fault } = windowForLocation(published, locationId);
+                // Untyped Firestore data, as `snap.data()` was. Read defensively below.
+                const data = slice as Record<string, any> | null;
+                // A missing slice is a fault, not a closed window. Reported through
+                // `calendarStatus` so the one screen that renders it can say so.
                 const rideType = (data?.rideType ?? null) as RideWindow['rideType'];
+                if (fault) console.error(`[useRideWindow] no window published for ${locationId}`);
 
                 setState({
                     rideType,
@@ -60,7 +75,9 @@ export function useRideWindow(): RideWindow {
                     dropoffOpen: rideType === 'sabha-to-home',
                     displayText: data?.displayText ?? '',
                     timeContext: data?.timeContext ?? '',
-                    calendarStatus: data?.calendarStatus ?? null,
+                    calendarStatus: fault
+                        ? 'location-not-published'
+                        : ((data?.calendarStatus ?? null) as RideWindow['calendarStatus']),
                 });
                 setLoading(false);
             },
@@ -72,7 +89,7 @@ export function useRideWindow(): RideWindow {
             }
         );
         return unsub;
-    }, []);
+    }, [locationId]);
 
     return { ...state, loading };
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { windowForLocation } from '../src/utils/locations';
 
 /**
  * The gathering the app is currently working towards, as published by the
@@ -48,15 +49,28 @@ export interface CurrentEvent {
     agenda?: string;
 }
 
-export function useCurrentEvent() {
+/**
+ * `locationId` picks which hall's window to read.
+ *
+ * OMITTED MEANS THE AGGREGATE, which is the founding hall — the right answer for
+ * anybody who has not chosen a hall yet, and for every caller that predates halls. All
+ * of them pass nothing and are unchanged.
+ */
+export function useCurrentEvent(locationId: string | null = null) {
     const [event, setEvent] = useState<CurrentEvent | null>(null);
+    const [fault, setFault] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const unsub = onSnapshot(
             doc(db, 'system', 'rideContext'),
             (snap) => {
-                const data = snap.exists() ? snap.data() : null;
+                const published = snap.exists() ? snap.data() : null;
+                const { slice, fault: missing } = windowForLocation(published, locationId);
+                setFault(missing);
+                // Untyped Firestore data, exactly as `snap.data()` was before — every
+                // field below is read with a `??` fallback rather than trusted.
+                const data = slice as Record<string, any> | null;
                 setEvent({
                     eventId: data?.eventId ?? null,
                     rideType: data?.rideType ?? null,
@@ -79,7 +93,7 @@ export function useCurrentEvent() {
             }
         );
         return unsub;
-    }, []);
+    }, [locationId]);
 
     /**
      * Can a "yes" still be withdrawn? Past the lock, drivers are already planned
@@ -104,6 +118,13 @@ export function useCurrentEvent() {
         /** False when no sabha is scheduled — attendance and requests make no sense then. */
         hasEvent: !!event?.eventId,
         canWithdraw,
+        /**
+         * The server published a hall list that does not include this hall.
+         *
+         * A SERVER FAULT, and a caller must render it as one rather than as "no sabha
+         * tonight". Distinguishing the two is the whole reason `calendarStatus` exists.
+         */
+        locationFault: fault,
         loading,
     };
 }
