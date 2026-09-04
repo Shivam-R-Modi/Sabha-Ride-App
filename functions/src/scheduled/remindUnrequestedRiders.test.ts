@@ -25,6 +25,9 @@ let auditRows: any[];
 let sent: Array<{ recipients: any[] }>;
 let window: any;
 let scheduled: any;
+/** The halls this job says are open, and the ids it asked the resolver about. */
+let halls: Array<{ id: string }>;
+let askedAboutHalls: string[] | null;
 
 vi.mock('firebase-functions', () => ({
     pubsub: { schedule: () => ({ timeZone: () => ({ onRun: (h: any) => h }) }) },
@@ -48,9 +51,20 @@ vi.mock('../utils/notificationSettings', () => ({
 vi.mock('../utils/settings', () => ({
     getTimeZone: async () => 'America/New_York',
     getRequestsOpenTime: async () => '10:00',
+    locationsOrFoundingFallback: async () => halls,
 }));
 vi.mock('../http/sabhaRecurrence', () => ({ readRecurrence: async () => null }));
-vi.mock('../utils/events', () => ({ findCurrentEvent: async () => scheduled }));
+// `resolveCurrentEvent`, and it RECORDS THE HALLS IT WAS ASKED ABOUT. Passing them is
+// what stops an evening every hall cancelled separately from getting reminders, and
+// that argument is invisible in the output — so it is captured rather than assumed.
+vi.mock('../utils/events', () => ({
+    resolveCurrentEvent: async (
+        _db: unknown, _now: unknown, _tz: unknown, _rule: unknown, locationIds: string[],
+    ) => {
+        askedAboutHalls = locationIds;
+        return { event: scheduled, hallExceptions: new Map() };
+    },
+}));
 vi.mock('../utils/schedule', () => ({
     buildCurrentEvent: (date: string) => ({ eventId: date }),
     resolveScheduleWindow: () => window,
@@ -107,6 +121,8 @@ beforeEach(() => {
     };
     scheduled = { date: EVENT, startTime: '19:00', endTime: '22:00' };
     window = { rideType: 'home-to-sabha' };
+    halls = [{ id: 'boston-huntington' }];
+    askedAboutHalls = null;
     makeDb();
 });
 
@@ -295,5 +311,32 @@ describe('alreadyAsked, on its own', () => {
     it('ignores rides for another gathering', async () => {
         rides = [{ id: 'r1', eventDate: '2026-08-14', studentId: 'stu_1' }];
         expect(await alreadyAsked(db, EVENT)).toEqual(new Set());
+    });
+});
+
+/**
+ * An evening no room is holding gets no reminders.
+ *
+ * A manager who cancels each hall separately, rather than cancelling the date, leaves
+ * the date itself scheduled. Asked without the halls this job reads that as a sabha and
+ * nudges everyone who has not booked — towards a request the app will then refuse.
+ */
+describe('remindUnrequestedRiders — which halls it asks about', () => {
+    it('names every open hall to the resolver', async () => {
+        halls = [{ id: 'boston-huntington' }, { id: 'somerville' }];
+
+        await run();
+
+        expect(askedAboutHalls).toEqual(['boston-huntington', 'somerville']);
+    });
+
+    it('says nothing when the resolver reports no gathering', async () => {
+        // Which is what naming the halls buys: `resolveCurrentEvent` returns null for
+        // an evening where every named hall is closed.
+        scheduled = null;
+
+        await run();
+
+        expect(sent).toHaveLength(0);
     });
 });

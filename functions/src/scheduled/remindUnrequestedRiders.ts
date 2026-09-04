@@ -36,9 +36,11 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { DEFAULT_TIME_ZONE, getZonedParts, zonedDateKey, addDaysToDateKey } from '../utils/time';
 import { readRecurrence } from '../http/sabhaRecurrence';
-import { findCurrentEvent } from '../utils/events';
+import { resolveCurrentEvent } from '../utils/events';
 import { buildCurrentEvent, resolveScheduleWindow } from '../utils/schedule';
-import { getTimeZone, getRequestsOpenTime } from '../utils/settings';
+import {
+    getTimeZone, getRequestsOpenTime, locationsOrFoundingFallback,
+} from '../utils/settings';
 import { getNotificationSettings } from '../utils/notificationSettings';
 import { notifyRideReminder, tokensOf, Recipient } from '../utils/notifications';
 import { hasGrantedRole } from '../utils/roles';
@@ -137,7 +139,25 @@ export const remindUnrequestedRiders = functions.pubsub
         if (getZonedParts(now, timeZone).hour !== settings.reminderHour) return null;
 
         const rule = await readRecurrence(db);
-        const scheduled = await findCurrentEvent(db, now, timeZone, rule);
+
+        /**
+         * THE HALLS ARE NAMED, so an evening no room is holding does not get reminders.
+         *
+         * A manager who cancels each hall separately rather than cancelling the date
+         * leaves the date itself scheduled. Asked without the halls, this reads that as
+         * a sabha and nudges everyone who has not booked — towards a request the app
+         * will then refuse, which is the failure the window check below exists to
+         * prevent, arriving from the other direction.
+         *
+         * The reminder itself stays ONE PER EVENING, keyed on the evening's date. The
+         * text names no hall and a rider books a hall when they request, so a reminder
+         * per room would be the same nudge twice. Rides carry the bare date in
+         * `eventDate` whichever hall they are for, so `alreadyAsked` already spans both.
+         */
+        const halls = await locationsOrFoundingFallback(db);
+        const { event: scheduled } = await resolveCurrentEvent(
+            db, now, timeZone, rule, halls.map(h => h.id),
+        );
         if (!scheduled) return null;
 
         const event = buildCurrentEvent(

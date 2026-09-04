@@ -312,18 +312,73 @@ async function verify() {
     console.log(`  cars       ${byDriver.size} driver-evenings checked for mixed halls`);
 
     // ── events ────────────────────────────────────────────────────────────────
+    //
+    // An EXCEPTION id, which is not the same shape as a data key. A bare date is the
+    // whole EVENING'S exception — the shape every document written before halls
+    // existed has — and every hall's own exception is suffixed, founding included.
+    // `exceptionIdFor` in src/utils/locations.ts is the authority; this mirrors it.
     const events = await db.collection('events').get();
     let badKey = 0;
+    let badStamp = 0;
+    let badDate = 0;
     for (const doc of events.docs) {
         const at = doc.id.indexOf(EVENT_ID_SEPARATOR);
-        if (at === -1) continue;                    // bare date: the founding hall
-        const hall = doc.id.slice(at + EVENT_ID_SEPARATOR.length);
-        if (!known.has(hall)) {
+        const hall = at === -1 ? null : doc.id.slice(at + EVENT_ID_SEPARATOR.length);
+        const dateKey = at === -1 ? doc.id : doc.id.slice(0, at);
+
+        if (hall !== null && !known.has(hall)) {
             badKey++;
             fail(`events/${doc.id} names hall "${hall}", which does not exist`);
         }
+
+        // `date` is what `reconcileDate` and the manager's calendar read a document by
+        // when they are not reading its id. A mismatch means one gathering claiming to
+        // be another, which nothing would report.
+        const storedDate = doc.data().date;
+        if (typeof storedDate === 'string' && storedDate !== dateKey) {
+            badDate++;
+            fail(`events/${doc.id} carries date "${storedDate}", which is not its own`);
+        }
+
+        // The stamp is for readers of this collection, so it has to agree with the id.
+        // A suffixed document stamped with a different hall — or the founding hall's
+        // exception stamped as the evening's — reads plausibly and is wrong.
+        const stamped = doc.data().locationId;
+        if (stamped !== undefined && stamped !== hall) {
+            badStamp++;
+            fail(hall === null
+                ? `events/${doc.id} is the whole evening's exception but is stamped `
+                  + `locationId "${stamped}". A hall's own exception must be suffixed.`
+                : `events/${doc.id} is stamped locationId "${stamped}", not "${hall}"`);
+        }
     }
-    console.log(`  events     ${events.size} documents, ${badKey} naming an unknown hall`);
+    console.log(`  events     ${events.size} documents, ${badKey} naming an unknown hall, `
+        + `${badStamp} mis-stamped, ${badDate} carrying the wrong date`);
+
+    // ── attendance and statistics ─────────────────────────────────────────────
+    //
+    // These ARE data keys, so the founding hall keeps the bare date and every other
+    // hall is suffixed. A record under a key no reader composes is not an error
+    // anywhere — the read simply returns empty, and a manager sees an evening with no
+    // attendance and no history.
+    for (const collection of ['weeklyAttendance', 'statistics']) {
+        const snap = await db.collection(collection).get();
+        let orphaned = 0;
+        for (const doc of snap.docs) {
+            const at = doc.id.indexOf(EVENT_ID_SEPARATOR);
+            if (at === -1) continue;               // bare date: the founding hall
+            const hall = doc.id.slice(at + EVENT_ID_SEPARATOR.length);
+            if (hall === FOUNDING_LOCATION_ID) {
+                orphaned++;
+                fail(`${collection}/${doc.id} suffixes the FOUNDING hall. Its records `
+                    + 'keep the bare date, so nothing reads this key.');
+            } else if (!known.has(hall)) {
+                orphaned++;
+                fail(`${collection}/${doc.id} names hall "${hall}", which does not exist`);
+            }
+        }
+        console.log(`  ${collection.padEnd(10)} ${snap.size} documents, ${orphaned} unreadable`);
+    }
 
     console.log(problems === 0
         ? '\nOK — nothing points at a hall that does not exist.'

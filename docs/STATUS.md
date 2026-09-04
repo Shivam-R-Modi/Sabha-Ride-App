@@ -3,9 +3,9 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-04**.
 
-## IN PROGRESS — two sabha locations, stages A–D deployed, 2026-09-04 (last)
+## IN PROGRESS — two sabha locations, A–D deployed, E written not deployed, 2026-09-04
 
-Branch `claude/airport-pickup-workflow-89afab`. Client **2025**, functions **1089**,
+Branch `claude/airport-pickup-workflow-89afab`. Client **2071**, functions **1158**,
 rules **266**. Full sweep clean. **One hall is still the only active one, so nothing a
 user can see has changed yet.** The plan is
 `~/.claude/plans/i-want-to-brainstorm-frolicking-crescent.md` — five stages, A–E.
@@ -141,8 +141,47 @@ Measured before and after the deploy, top-level fields:
 re-run with `--active`, then `node scripts/locations.cjs verify`. Every picker appears
 on its own the moment a second hall is active — nothing else to deploy.
 
-**Stage E** — per-hall times and independent cancellation, per-hall statistics,
-per-hall broadcasts, and dropping the aggregate fields.
+**Stage E is WRITTEN AND COMMITTED BUT NOT DEPLOYED** (`8aad404`, `34287a6`,
+`cc72084`, `563ef95`, `9bca4ce`, and the reminder commit after them). It needs the usual
+`firestore:rules` → `functions` → `hosting`, though the rules are unchanged in it.
+
+What it does: a hall can diverge for one evening — its own times, its own venue, or
+closed while the other room meets. The mechanism is an ordinary exception document, so
+nothing new stores it. The manager's calendar lists each open hall with its own times, a
+"Changed" badge where that room has a document, "Cancelled" where it is shut, and per-hall
+Edit and Cancel buttons. Statistics are per hall. **With fewer than two active halls none
+of it renders and none of it changes anything**, which is why it is safe to sit undeployed
+or to deploy quietly.
+
+Six defects fixed along the way, all silent, none of which would have thrown:
+
+- `dayOfWeekForKey` NaN'd on a suffixed id, so `coversDate` said false and the date read
+  as LOSING ITS SABHA — `reconcileDate` then cancels its rides. The client copy had the
+  guard; the server copy did not, and the shared vector fixture caught it.
+- `upcomingOccurrences` added a suffixed one-off to its candidate DATES, so an Occurrence
+  came back with `date: '2026-08-07__somerville'` — travelling out as `rideContext.eventId`
+  and becoming the attendance key.
+- `occurrencesBetween` walked until `cursor <= toKey`, and `addDaysToDateKey` returns
+  'NaN-NaN-NaN' for a malformed key, which every real date sorts before. A horizon derived
+  from a suffixed id made it loop forever — a frozen manager tab. It walks a day COUNT now.
+- The window announcement fired on the founding hall against the top-level rideType.
+  Cancel that hall and an evening held entirely at the other announced NOTHING.
+- `deleteSabhaEvent` rewrote `system/rideContext` with a partial `set`, erasing
+  `byLocation` and `locationIds` for up to a minute.
+- **`eventIdFor(date, foundingHall)` returns the BARE DATE**, so the first version of
+  per-hall cancellation wrote the WHOLE EVENING'S exception from a button labelled with
+  one hall's name. Exception ids now have their own convention (`exceptionIdFor`): a bare
+  id is the evening's, every hall including the founding one is suffixed. And a
+  whole-evening cancellation parks one attendance key PER HALL — it used to park only the
+  founding hall's, leaving the other rooms' names, phones and addresses behind.
+
+Still deferred on purpose: **dropping the aggregate `rideContext` fields.** Not until no
+old bundle can be live.
+
+`node scripts/locations.cjs verify` now also checks the `events` stamp and date against
+the document id, and that no `weeklyAttendance` or `statistics` record sits under a key
+nothing composes. Ran clean against production on 2026-09-04: 1 hall, 13 rides, 3 events,
+6 attendance, 2 statistics, no car spanning two halls.
 
 ### Still not done
 
