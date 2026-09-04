@@ -1,9 +1,102 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-08-31**.
+at the end. Last updated **2026-09-04**.
 
-## DEPLOYED — Alerts moved into the panel, 2026-08-31 (last)
+## IN PROGRESS — two sabha locations, stages A and B deployed, 2026-09-04 (last)
+
+Branch `claude/airport-pickup-workflow-89afab`. Client **1979**, functions **1066**,
+rules **266**. Full sweep clean. The plan is
+`~/.claude/plans/i-want-to-brainstorm-frolicking-crescent.md` — five stages, A–E.
+
+**Why:** sabha will run at two nearby halls the same evening, because one room cannot
+hold everyone. A rider picks their hall per request; a Sarthi picks per RUN, so they can
+finish a load to one and take the next to the other. A car must never mix halls. Room
+capacity is explicitly OUT of scope — the manager judges that outside the app.
+
+### Deployed
+
+**Stage A — rules only (`302ca4b`).** Closed two holes that predated locations:
+`eventId` was not in `touchesRideServerFields()`, and `eventKeyFromRide` PREFERS it, so
+a rider could move their own request into another gathering's pool. `venue` was not
+either, and `manualAssignStudent` reads it as the ROUTE ORIGIN — a rider could point a
+Sarthi's navigation anywhere. New `locations/{id}` rules: readable and listable by
+anyone signed in, `active` not client-writable in either direction, delete denied.
+
+**Stage B — functions only (`55b001f`, `e8488b3`, `633c9cc`, `b90c05d`, `0d85ef0`).**
+
+### What the published `system/rideContext` actually did
+
+Measured before and after the deploy, top-level fields:
+
+- **13 unchanged**, including `eventId` still the BARE DATE — the founding hall keeps
+  its key, which is what makes every existing `events`, `weeklyAttendance` and
+  `statistics` record readable with no backfill.
+- **1 added**: `locationId`.
+- **1 changed**: `venue` went `null` → the hall's venue. Intended — precedence is now
+  `event.venue → locations/{id}.venue → settings/main`, and the recurring sabha carries
+  no per-event override so clients used to fall through themselves. **The address a
+  rider sees is unchanged**, because the seed copied it from `settings/main`. What
+  changed is that the hall is now the authority. Pinned by a test.
+- Plus `byLocation` and `locationIds` beside them.
+
+### Decisions worth not relitigating
+
+- **Event ids are suffixed, not an override map.** `events/{date}` for the founding
+  hall, `${date}__${locationId}` for any other. The map looked cheaper and is not: the
+  resolver fan-out is required either way, `recursiveDelete` has no partial form so
+  per-hall attendance cancellation would orphan children's records, and rules cannot cap
+  an agenda inside a map on a browser-written document.
+- **NO "absent locationId means the founding hall".** That is this repo's usual
+  migration idiom and it is wrong here — `tenancy.cjs verify` says the population is
+  empty (confirmed 2026-09-04: 25 documents, 0 unstamped), so the default would be
+  load-bearing for a set that does not exist and would absorb a bug that drops the
+  field. `locationOfRide` returns null and dispatch refuses it.
+- **An unstamped request is dispatchable only while ONE hall is open.** Derived from the
+  data, not a feature flag, so there is nothing to forget to flip.
+- **The lock is one document PER HALL**, flat ids. A map inside one document is not a
+  mutex: acquisition is read-then-set, so one hall's write erases the other's entry and
+  the cleanup deletes a lock it does not own.
+- **The top-level context fields survive as a compatibility aggregate** — the founding
+  hall's window, not the widest across halls. This is an installed PWA; a stale bundle
+  reading "open" because another hall is open would file a request nothing can serve.
+
+### Bugs found and fixed along the way
+
+- `useSettings` never copied `requestsOpenTime` off the snapshot, so the manager's
+  "Requests open at" box rendered blank over a working setting (`bf1e908`). Two halves:
+  the input also only seeded when the value was not `undefined`, which meant both "not
+  loaded" and "never set".
+- The split remainder was stamped `FOUNDING_LOCATION_ID`. Reads like correct tenancy
+  stamping; would have put half a Somerville family into a Huntington car.
+- `expireStaleRequests` now clears `atLocationId` with `at_sabha` — a week-old hall is
+  the same bug as a week-old status, with a car sent to the wrong building.
+
+### What is left
+
+**Stage C** — the app reads through the location (functions + hosting, still one hall).
+`LocationSettings` must write BOTH `locations/{id}.venue` and `settings/main.sabhaLocation`
+for one release, or the manager's Save button reports success and changes nothing.
+Client mirrors of `ridePool.ts` and `locations.ts` are already committed and ship here.
+
+**Stage D** — the second hall goes live. Ships ATOMICALLY: rider picker, Sarthi per-run
+picker, `manualAssignStudent` hardening (its rider lookup has no event, direction or
+hall filter at all — a manager tapping an existing button would put a Hall B rider in a
+Hall A car), `generateEventCSV` scoping (unscoped today, so a manager exporting one hall
+would receive the other hall's children's names and addresses), and the walked-in rider
+must be ASKED which hall, never defaulted.
+
+**Stage E** — per-hall times and independent cancellation, per-hall statistics,
+per-hall broadcasts, and dropping the aggregate fields.
+
+### Still not done, and it matters
+
+`scripts/tenancy.cjs` `COLLECTIONS` is only `['users','rides']`. `auditLogs` and
+`feedback` are stamped but never verified, and `weeklyAttendance/*/responses/*` was never
+stamped at all — that last one needs a real backfill in Stage D, because otherwise the
+field becomes a rider-writable dispatch input.
+
+## DEPLOYED — Alerts moved into the panel, 2026-08-31
 
 `b972592`, hosting only — no functions or rules changed, so the usual three-step order
 did not apply. Client **1875**, functions 1021, rules 242. Live bundle
