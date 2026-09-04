@@ -61,6 +61,20 @@ beforeEach(async () => {
             accountStatus: 'approved',
         });
         await setDoc(doc(db, 'settings', 'main'), { sabhaLocation: { lat: 42, lng: -71 } });
+        // Two halls: one open for business, one retired. Ride creates now consult
+        // these, so every ride fixture below depends on the first one existing.
+        await setDoc(doc(db, 'locations', 'boston-huntington'), {
+            name: 'Huntington Ave', active: true, order: 0,
+            venue: { lat: 42.339925, lng: -71.088182, address: '360 Huntington Ave' },
+        });
+        await setDoc(doc(db, 'locations', 'somerville'), {
+            name: 'Somerville', active: true, order: 1,
+            venue: { lat: 42.387, lng: -71.099, address: '5 Elm Street' },
+        });
+        await setDoc(doc(db, 'locations', 'retired-hall'), {
+            name: 'Old Hall', active: false, order: 2,
+            venue: { lat: 42.4, lng: -71.1, address: '1 Old Street' },
+        });
         await setDoc(doc(db, 'rides', 'ride_alice'), {
             studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
         });
@@ -2128,5 +2142,222 @@ describe('Airport Seva — the arrivals board', () => {
                 airportCoordinator: true,
             }));
         });
+    });
+});
+
+/**
+ * WHICH SABHA LOCATION A RIDE IS FOR.
+ *
+ * Two halls run on the same evening and a car must never mix riders bound for
+ * different ones. `rides.locationId` is what decides that, so it is a trust boundary
+ * from the moment it means anything — and this block is the boundary, deployed ahead
+ * of any code that reads it.
+ *
+ * It also closes two holes that were live BEFORE locations existed, and they are the
+ * reason this went first rather than last:
+ *
+ *   `eventId` — `eventKeyFromRide` prefers it over `eventDate`, so a rider who could
+ *   write it moved their own request into another gathering's dispatch pool.
+ *
+ *   `venue` — `manualAssignStudent` reads `ride.venue` as the ROUTE ORIGIN. A rider
+ *   able to set it could point a Sarthi's navigation anywhere they liked.
+ */
+describe('which sabha location a ride is for', () => {
+    it('a rider may choose a hall when they file a request', async () => {
+        await assertSucceeds(addDoc(collection(asStudent(), 'rides'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+            locationId: 'boston-huntington',
+        }));
+    });
+
+    it('a rider may still file WITHOUT one, so an old bundle is not locked out', async () => {
+        // Optional for one release. A cached client that predates the picker must file
+        // a ride cleanly rather than getting permission-denied from a bundle it cannot
+        // update — service workers hold for weeks.
+        await assertSucceeds(addDoc(collection(asStudent(), 'rides'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+        }));
+    });
+
+    it('refuses a hall that does not exist', async () => {
+        // Accepted, such a request would be filed, never dispatched, and invisible to
+        // everybody — the failure this codebase keeps removing.
+        await assertFails(addDoc(collection(asStudent(), 'rides'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+            locationId: 'no-such-hall',
+        }));
+    });
+
+    it('refuses a hall a manager has retired', async () => {
+        await assertFails(addDoc(collection(asStudent(), 'rides'), {
+            studentId: STUDENT, status: 'requested', pickupLat: 42, pickupLng: -71,
+            locationId: 'retired-hall',
+        }));
+    });
+
+    it('lets a rider change halls while nobody has taken the request', async () => {
+        await assertSucceeds(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            locationId: 'boston-huntington',
+        }));
+    });
+
+    it('REFUSES a hall change once a Sarthi has it', async () => {
+        // Otherwise a rider moves themselves into another hall's car after the driver
+        // has planned a route around them.
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'rides', 'ride_alice'), {
+                studentId: STUDENT, status: 'assigned', driverId: DRIVER,
+                pickupLat: 42, pickupLng: -71, locationId: 'boston-huntington',
+            });
+        });
+
+        // Target is ACTIVE on purpose: if it were retired, `namesALiveLocation` would
+        // refuse this write and the case would pass without ever reaching the guard it
+        // is named after.
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            locationId: 'somerville',
+        }));
+    });
+
+    it('refuses it even when the same write also sets status back to requested', async () => {
+        /**
+         * THE CASE THE RULE IS SHAPED AROUND. `isStudentSettableStatus` is satisfied by
+         * a POST-image of 'requested', so a guard reading `request.resource.data.status`
+         * would be approved by the write itself. `isSettableLocationChange` reads
+         * `resource.data.status` — the STORED value — which is why this fails.
+         */
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'rides', 'ride_alice'), {
+                studentId: STUDENT, status: 'assigned', driverId: DRIVER,
+                pickupLat: 42, pickupLng: -71, locationId: 'boston-huntington',
+            });
+        });
+
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            status: 'requested', locationId: 'somerville',
+        }));
+    });
+
+    it('a rider can still CANCEL a ride at a hall that has since been retired', async () => {
+        // The hall is unchanged by a cancellation, so validating the whole post-image
+        // would trap them in a booking they cannot withdraw. Found while mutating the
+        // update arm — the first version of this rule did exactly that.
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await setDoc(doc(ctx.firestore(), 'rides', 'ride_alice'), {
+                studentId: STUDENT, status: 'requested',
+                pickupLat: 42, pickupLng: -71, locationId: 'retired-hall',
+            });
+        });
+
+        await assertSucceeds(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            status: 'cancelled', cancelledAt: new Date().toISOString(),
+        }));
+    });
+
+    it('but cannot MOVE a ride to a retired hall', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            locationId: 'retired-hall',
+        }));
+    });
+
+    it('a rider cannot forge eventId, which would move them to another gathering', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            eventId: '2026-08-07',
+        }));
+    });
+
+    it('a rider cannot forge venue, which is a Sarthi\'s route origin', async () => {
+        await assertFails(updateDoc(doc(asStudent(), 'rides', 'ride_alice'), {
+            venue: { lat: 0, lng: 0, address: 'anywhere' },
+        }));
+    });
+});
+
+describe('the locations a manager keeps', () => {
+    const HALL = {
+        name: 'Somerville Hall', order: 2,
+        venue: { lat: 42.387, lng: -71.099, address: '5 Elm Street, Somerville, MA' },
+    };
+
+    it('every signed-in user can read one, because they choose from the list', async () => {
+        await assertSucceeds(getDoc(doc(asStudent(), 'locations', 'boston-huntington')));
+        await assertSucceeds(getDoc(doc(asDriver(), 'locations', 'boston-huntington')));
+    });
+
+    it('and can LIST them, which is what the picker actually does', async () => {
+        // Scoped separately from `get`: a read rule narrowed on `resource.data.active`
+        // would pass the single-document case above and break this one.
+        await assertSucceeds(getDocs(collection(asStudent(), 'locations')));
+    });
+
+    it('an anonymous visitor cannot', async () => {
+        await assertFails(getDoc(doc(asAnon(), 'locations', 'boston-huntington')));
+    });
+
+    it('a rider cannot invent a hall, and neither can a Sarthi', async () => {
+        await assertFails(setDoc(doc(asStudent(), 'locations', 'forged'), HALL));
+        await assertFails(setDoc(doc(asDriver(), 'locations', 'forged'), HALL));
+    });
+
+    it('a manager can add one', async () => {
+        await assertSucceeds(setDoc(doc(asManager(), 'locations', 'cambridge'), HALL));
+    });
+
+    it('but it lands INACTIVE — a manager cannot switch a hall on from the client', async () => {
+        // Active means riders can book it and Sarthis can be sent to it. Saving a
+        // half-finished hall must not make that true instantly.
+        await assertFails(setDoc(doc(asManager(), 'locations', 'cambridge'), {
+            ...HALL, active: true,
+        }));
+    });
+
+    it('and cannot be switched on by an update either', async () => {
+        await assertFails(updateDoc(doc(asManager(), 'locations', 'retired-hall'), {
+            active: true,
+        }));
+    });
+
+    it('nor switched OFF, which would abandon whatever is booked there', async () => {
+        await assertFails(updateDoc(doc(asManager(), 'locations', 'boston-huntington'), {
+            active: false,
+        }));
+    });
+
+    it('a manager can rename one and move its address', async () => {
+        await assertSucceeds(updateDoc(doc(asManager(), 'locations', 'retired-hall'), {
+            name: 'Old Hall, renamed',
+            venue: { lat: 42.41, lng: -71.11, address: '2 Old Street' },
+        }));
+    });
+
+    it('refuses a hall with no coordinates, or the 0,0 placeholder', async () => {
+        // 0,0 is "the address never geocoded", not a point in the Atlantic. A hall
+        // there would be the farthest thing from every rider and seed every carload.
+        await assertFails(setDoc(doc(asManager(), 'locations', 'nowhere'), {
+            name: 'Nowhere', venue: { address: 'somewhere' },
+        }));
+        await assertFails(setDoc(doc(asManager(), 'locations', 'nowhere'), {
+            name: 'Nowhere', venue: { lat: 0, lng: 0, address: 'somewhere' },
+        }));
+    });
+
+    it('refuses a nameless hall', async () => {
+        await assertFails(setDoc(doc(asManager(), 'locations', 'nameless'), {
+            name: '', venue: HALL.venue,
+        }));
+    });
+
+    it('refuses an id that could change what an event key points at', async () => {
+        // The id becomes part of an event id — `2026-08-07__somerville`.
+        await assertFails(setDoc(doc(asManager(), 'locations', 'Hall B'), HALL));
+        await assertFails(setDoc(doc(asManager(), 'locations', 'hall.b'), HALL));
+    });
+
+    it('NOBODY deletes one, manager included', async () => {
+        // A removed hall orphans every ride, event, attendance row and audit row
+        // stamped with its id — records that name children, with no screen left that
+        // could ever show them.
+        await assertFails(deleteDoc(doc(asManager(), 'locations', 'retired-hall')));
+        await assertFails(deleteDoc(doc(asStudent(), 'locations', 'retired-hall')));
     });
 });

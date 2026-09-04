@@ -351,8 +351,91 @@ service cloud.firestore {
         // real leftovers get. Editing while still waiting is lost with this — the
         // rider cancels and re-requests, which is worth avoiding a rule with a
         // status-dependent branch to get wrong.
-        'seatsRequested', 'allowSplit', 'groupId', 'groupSeatsTotal', 'splitFromRideId'
+        'seatsRequested', 'allowSplit', 'groupId', 'groupSeatsTotal', 'splitFromRideId',
+        // `venue` and `eventId` WERE MISSING, and both were live holes.
+        //
+        // `eventKeyFromRide` PREFERS `eventId` over `eventDate`, so a rider who could
+        // write it moved their own request into another gathering's dispatch pool —
+        // including a gathering that has already happened, or one at another venue.
+        //
+        // `venue` is worse. `manualAssignStudent` reads `ride.venue` as the ROUTE
+        // ORIGIN, so a rider able to set it could send a Sarthi's navigation to
+        // coordinates of their choosing. Both are written only by the assignment
+        // pipeline on the Admin SDK, which bypasses these rules, so nothing legitimate
+        // loses anything here.
+        //
+        // `locationId` is deliberately NOT in this list. Which hall a rider is going
+        // to is THEIR choice, and they may change their mind while nobody has taken
+        // the request — see `isSettableLocationChange`, which gates it on the stored
+        // status rather than banning it.
+        'venue', 'eventId'
       ]);
+    }
+
+    /**
+     * May this update change which sabha location the ride is for?
+     *
+     * ONLY WHILE NOBODY HAS TAKEN IT. A rider changing halls after a Sarthi has claimed
+     * them would move themselves into another hall's car — the one invariant the
+     * multi-location design exists to protect — after the driver had already planned a
+     * route around them.
+     *
+     * READS `resource.data.status`, THE STORED VALUE, NOT `request.resource.data`.
+     * That distinction is the whole rule. `isStudentSettableStatus` below is satisfied
+     * by a POST-image of `'requested'`, so a rider on an assigned ride could otherwise
+     * set `status: 'requested'` AND a new `locationId` in a single write and have the
+     * guard approve it on the strength of the write itself.
+     */
+    function isSettableLocationChange() {
+      return !('locationId' in changedKeys())
+             || resource.data.status == 'requested';
+    }
+
+    /**
+     * A ride must name a sabha location that exists and is open for business.
+     *
+     * OPTIONAL FOR ONE RELEASE, so a client bundle that predates the hall picker still
+     * files a ride cleanly rather than getting permission-denied from a cache it cannot
+     * update. It becomes required once no old bundle can be live.
+     *
+     * The `get()` costs one document read per ride create, and it is worth it: this is
+     * the trust boundary for which car a child gets into. Without it a request naming a
+     * hall that does not exist, or one a manager has retired, is accepted and then
+     * simply never dispatched — invisible to everybody, which is the failure this
+     * codebase keeps removing.
+     */
+    function namesALiveLocation() {
+      return !('locationId' in request.resource.data)
+             || (request.resource.data.locationId is string
+                 && exists(/databases/$(database)/documents/locations/$(request.resource.data.locationId))
+                 && get(/databases/$(database)/documents/locations/$(request.resource.data.locationId)).data.get('active', false) == true);
+    }
+
+    /**
+     * A hall's own fields.
+     *
+     * `locationId` is a PARAMETER because a path wildcard is bound inside its own
+     * `match` block and an outer function cannot reach it — same shape as
+     * `isOwner(userId)`.
+     *
+     * The id becomes part of an event id (`2026-08-07__somerville`), so it is
+     * constrained here as well as in the seed script: a `/` or a `.` in it would
+     * change what document an event key points at, and Firestore itself forbids ids
+     * matching `__.*__`.
+     *
+     * Coordinates are required and `0,0` is refused, for the same reason
+     * `resolveVenue` refuses it — that pair is the "address never geocoded"
+     * placeholder, not a point in the Atlantic, and a hall at 0,0 would silently
+     * become the farthest thing from every rider and seed every carload.
+     */
+    function locationFieldsValid(locationId) {
+      let d = request.resource.data;
+      return locationId.matches('^[a-z0-9-]+$')
+             && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+             && d.venue.lat is number && d.venue.lng is number
+             && !(d.venue.lat == 0 && d.venue.lng == 0)
+             && d.venue.address is string && d.venue.address.size() > 0
+             && (!('order' in d) || d.order is int);
     }
 
     // Seats are optional, and absent means one — every ride written before seats
@@ -531,6 +614,7 @@ service cloud.firestore {
                         && request.resource.data.studentId == request.auth.uid
                         && request.resource.data.status == 'requested'
                         && hasValidSeats()
+                        && namesALiveLocation()
                         && !isHoldingAVehicle());
 
       // Students may cancel their own ride, but must not touch the fields the
@@ -542,7 +626,14 @@ service cloud.firestore {
                     || (isStudent()
                         && resource.data.studentId == request.auth.uid
                         && !touchesRideServerFields()
-                        && isStudentSettableStatus());
+                        && isStudentSettableStatus()
+                        && isSettableLocationChange()
+                        // Only when they are actually SETTING it. Checking the whole
+                        // post-image here would mean a rider whose hall a manager has
+                        // since retired could no longer cancel their own ride — the
+                        // hall is unchanged by that write, and holding somebody to a
+                        // booking they cannot withdraw is worse than a stale field.
+                        && (!('locationId' in changedKeys()) || namesALiveLocation()));
 
       // Only managers can delete rides
       allow delete: if isManager();
@@ -961,6 +1052,58 @@ service cloud.firestore {
       // Written only by requestAirportPickup, on the Admin SDK.
       allow create: if false;
       allow update: if false;
+      allow delete: if false;
+    }
+
+    // =====================================
+    // LOCATIONS — the halls sabha runs at
+    // =====================================
+    //
+    // One document per hall. `settings/main.sabhaLocation` held exactly one venue,
+    // which is why a second hall needed a collection rather than another field.
+    //
+    // NOT AN ACCESS BOUNDARY, and this is worth saying before somebody assumes
+    // otherwise: the CITY is the isolation boundary, the LOCATION is the operational
+    // unit. Every manager sees every hall, and `rides.locationId` decides which car a
+    // rider is offered — not who may read what. Nothing here should ever be used to
+    // scope permissions.
+    match /locations/{locationId} {
+      // A hall holds a building name and its coordinates. No personal data, and every
+      // signed-in user needs the list in order to choose one — the same class as
+      // `settings/{settingId}` and `events/{eventId}`.
+      //
+      // NOT narrowed to `resource.data.active == true`. A read rule that inspects
+      // `resource.data` breaks the collection QUERY, which is how the picker gets the
+      // list at all — the same trap called out on `notices` and `feedback`. Filter
+      // `active` on the client.
+      allow read: if isAuthenticated();
+
+      /**
+       * `active` IS NOT CLIENT-WRITABLE, on create or update.
+       *
+       * Turning a hall on is the same class of act as moving the sabha day: riders can
+       * request against it and Sarthis can be dispatched to it the moment it is true.
+       * A manager saving a half-filled new hall would make it live instantly, with no
+       * Sarthi able to serve it, and riders would strand silently. Turning one OFF is
+       * worse — it abandons whatever is already booked there, which is what
+       * `previewStranded` and `reconcileDate` exist to prevent for dates.
+       *
+       * So creation lands INACTIVE and the flip goes through a callable with a
+       * stranded-riders preview. One extra visible tick beats a silent stranding.
+       */
+      allow create: if isManager()
+                    && locationFieldsValid(locationId)
+                    && request.resource.data.get('active', false) == false;
+
+      allow update: if isManager()
+                    && locationFieldsValid(locationId)
+                    && !changedKeys().hasAny(['active']);
+
+      // Deleting a hall orphans every ride, event, attendance row and audit row
+      // stamped with its id — records that name children, with no screen left that
+      // could show them. Retire it by setting `active` false; never remove it.
+      // Also: allow rules are OR'd, so a permissive arm anywhere else could not have
+      // been walked back by a denial here.
       allow delete: if false;
     }
 
