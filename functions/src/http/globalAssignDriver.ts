@@ -14,7 +14,6 @@ import { FOUNDING_CITY_ID, FOUNDING_LOCATION_ID } from '../constants/tenancy';
 import { optimizeRoute, buildGoogleMapsNavigationUrl } from '../utils/routing';
 import { resolveHomeCoords } from '../utils/coords';
 import { writeVehicleState, resolveVehicleHolder } from '../utils/fleet';
-import { eventKeyFromRide } from '../utils/events';
 import { assertApprovedDriver } from '../utils/authz';
 import { notifyStudentDriverAssigned, notifyDriverStudentsAssigned, tokensOf } from '../utils/notifications';
 import { getSabhaLocation, resolveVenue } from '../utils/settings';
@@ -43,102 +42,20 @@ function haversineDistanceMiles(
     return R * c;
 }
 
-/**
- * Is this pending ride dispatchable for the gathering we are dispatching?
+/*
+ * `isValidPendingRide` and `isAssignableTo` MOVED to ../utils/ridePool.ts.
  *
- * The GPS checks were the whole of this function, and that was a real hole: a
- * `requested` ride is only ever filtered by `status`, so a request left over from
- * a PREVIOUS sabha stayed in the pool for ever and would be handed to the next
- * driver who tapped. Three of them were live in production on 2026-08-14, five
- * days after their gathering, and a tap would have routed a driver to collect
- * people for a sabha that had already happened.
+ * Not for tidiness: this file imports `firebase-functions`, so nothing could import the
+ * predicate to compare it against the client's hand-written copy in
+ * `src/utils/ridePool.ts` — the one that has carried "if the server's rule changes,
+ * change this too" since it was written, with no check. Moving it bought
+ * tests/quality/ride-pool-parity.test.ts.
  *
- * `expectedEventKey` is the gathering from `system/rideContext` — the same
- * document that decided the ride window, so the two cannot disagree.
- *
- * A ride with NO event key at all is rejected. That is the deliberate choice:
- * every client that creates a request stamps `date` and `eventDate`
- * (hooks/useRides.ts), and studentReadyToLeave stamps `eventDate` server-side, so
- * an unkeyed request is either pre-dating that or hand-written in the console.
- * Refusing it means such a ride is never dispatched; accepting it means it is
- * dispatched to every gathering for ever. The first failure is visible to a
- * manager in the Waiting queue, the second sends a car to the wrong place.
- *
- * `expectedRideType` closes the same hole in the other dimension. The pool was
- * filtered by status and event but never by DIRECTION, and the two kinds of
- * request do not look alike:
- *
- *   pickup    hooks/useRides.ts writes no `rideType` field at all
- *   drop-off  studentReadyToLeave stamps `rideType: 'sabha-to-home'`
- *
- * So once the window flipped, every unserved pickup request was swept into the
- * drop-off run. Reproduced in production on 2026-08-14: Rebo Fe asked to be
- * COLLECTED from home, and was assigned a driver routed from the venue to her
- * house — a sabha she had never reached. Unserved pickups always outlive the
- * pickup window, so this fired every week.
- *
- * An ABSENT rideType means `home-to-sabha`, and that default is load-bearing:
- * every pickup request ever written lacks the field, so treating absent as
- * "no match" would refuse every genuine request instead. Same reasoning as
- * `seatsOf` in constants/seats.ts — absent means the original behaviour, so
- * nothing needs backfilling and there is no window where a half-stamped
- * collection reports the wrong thing.
+ * Re-exported here so every call site and the whole of globalAssignDriver.test.ts keep
+ * importing them from where they always did.
  */
-export function isValidPendingRide(
-    docData: any,
-    expectedEventKey: string | null,
-    expectedRideType: RideType,
-): boolean {
-    const lat = docData.pickupLat ?? 0;
-    const lng = docData.pickupLng ?? 0;
-    if (typeof lat !== 'number' || typeof lng !== 'number') return false;
-    if (isNaN(lat) || isNaN(lng)) return false;
-    if (lat === 0 && lng === 0) return false;
-    if (!docData.studentId) return false;
-
-    // Reuses eventKeyFromRide so `eventId` and `eventDate` are read in the same
-    // priority order, and validated against the same YYYY-MM-DD shape, as
-    // everywhere else that has to work out which gathering a ride belongs to.
-    if (expectedEventKey && eventKeyFromRide(docData) !== expectedEventKey) return false;
-
-    // Anything that is not one of the two known directions is rejected rather
-    // than defaulted — a hand-edited 'sabha-to-Home' should strand one request
-    // visibly, not quietly join whichever run is open.
-    const direction = docData.rideType ?? 'home-to-sabha';
-    if (direction !== expectedRideType) return false;
-
-    return true;
-}
-
-/**
- * May this waiting request enter THIS driver's pool?
- *
- * `isValidPendingRide` answers "is this request real and for tonight" — a property
- * of the ride alone. This adds the one property that depends on who is asking:
- * A DRIVER IS NEVER THEIR OWN PASSENGER.
- *
- * The hierarchy in firestore.rules deliberately grants a driver the student role
- * and a manager both, so a Sarthi can see the rider screens. Nothing stopped them
- * requesting a ride there, and this pool was every waiting request with no
- * exclusion of the caller. A Sarthi could switch to Bhulku, request a ride, switch
- * back and be assigned themselves: a phantom passenger holding a real seat in
- * their own car, their own address on the manifest, and a served count that
- * includes somebody who was never collected.
- *
- * Kept as its own function rather than folded into `isValidPendingRide` because
- * the two ask different questions, and because `driverDoneForToday` counts who is
- * still waiting — a count that must exclude the caller's own request for the same
- * reason. Sharing this is what stops the two disagreeing.
- */
-export function isAssignableTo(
-    docData: any,
-    driverId: string,
-    expectedEventKey: string | null,
-    expectedRideType: RideType,
-): boolean {
-    if (docData.studentId === driverId) return false;
-    return isValidPendingRide(docData, expectedEventKey, expectedRideType);
-}
+import { isValidPendingRide, isAssignableTo } from '../utils/ridePool';
+export { isValidPendingRide, isAssignableTo };
 
 // ── main function ──────────────────────────────────────────
 

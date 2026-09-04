@@ -24,9 +24,17 @@
  * cannot import from each other: separate tsconfigs, no shared path. Same
  * arrangement as `src/constants/seats.ts` and its `functions/` twin.
  *
- * **If the server's rule changes, change this too.** `tests/utils/ridePool.test.ts`
- * states the shared rules so a drift is at least caught on one side.
+ * **If the server's rule changes, change this too.** That sentence stood alone for
+ * months; there is a check now — `tests/quality/ride-pool-parity.test.ts` runs both
+ * copies over the same table and compares the answers. The server half had to move out
+ * of `globalAssignDriver.ts` into `functions/src/utils/ridePool.ts` to make that
+ * possible, because that file imports `firebase-functions`.
+ *
+ * The GPS difference is the ONE deliberate divergence and the parity test knows about
+ * it by name, so it cannot quietly become a second one.
  */
+
+import { locationOfRide } from './locations';
 
 export type RideDirection = 'home-to-sabha' | 'sabha-to-home';
 
@@ -37,6 +45,7 @@ interface PoolCandidate {
     eventId?: unknown;
     eventDate?: unknown;
     rideType?: unknown;
+    locationId?: unknown;
 }
 
 /**
@@ -78,8 +87,30 @@ export function isDispatchable(
     ride: PoolCandidate | null | undefined,
     eventId: string | null,
     rideType: RideDirection | null,
+    locationId: string | null = null,
+    singleActiveLocation = true,
 ): boolean {
     if (!ride || !eventId || !rideType) return false;
     if (eventKeyOf(ride) !== eventId) return false;
-    return directionOf(ride) === rideType;
+    if (directionOf(ride) !== rideType) return false;
+
+    /**
+     * WHICH SABHA LOCATION, mirroring `rejectionFor` in
+     * functions/src/utils/ridePool.ts.
+     *
+     * `locationId` null skips the check, which is the state until the manager's queue
+     * learns to group by hall — an unused optional parameter rather than a second rule
+     * to keep in step later.
+     *
+     * A request naming NO hall is dispatchable only while one hall is open, where it
+     * cannot be ambiguous. `locationId` is optional in firestore.rules for one release
+     * so a cached client predating the picker can still file a ride, and such a request
+     * names none. With two halls open, guessing sends a car to the wrong building.
+     */
+    if (locationId) {
+        const hall = locationOfRide(ride);
+        if (hall === null) return singleActiveLocation;
+        if (hall !== locationId) return false;
+    }
+    return true;
 }
