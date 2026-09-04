@@ -3,9 +3,9 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-04**.
 
-## IN PROGRESS — two sabha locations, stages A and B deployed, 2026-09-04 (last)
+## IN PROGRESS — two sabha locations, stages A, B and C deployed, 2026-09-04 (last)
 
-Branch `claude/airport-pickup-workflow-89afab`. Client **1979**, functions **1066**,
+Branch `claude/airport-pickup-workflow-89afab`. Client **1988**, functions **1066**,
 rules **266**. Full sweep clean. The plan is
 `~/.claude/plans/i-want-to-brainstorm-frolicking-crescent.md` — five stages, A–E.
 
@@ -24,6 +24,30 @@ Sarthi's navigation anywhere. New `locations/{id}` rules: readable and listable 
 anyone signed in, `active` not client-writable in either direction, delete denied.
 
 **Stage B — functions only (`55b001f`, `e8488b3`, `633c9cc`, `b90c05d`, `0d85ef0`).**
+
+**Stage C — functions + hosting (`a8a60e5`, `a6d3ebd`).** The venue a manager edits is
+now the one dispatch uses. `LocationSettings` writes BOTH `locations/{id}.venue` and
+`settings/main.sabhaLocation`, hall first:
+
+- Writing only `settings/main` would leave Save reporting success and changing nothing a
+  driver is routed by — the dead control, shipped by the change that introduced the new
+  authority. Both writes succeed and nothing errors, so it needs a test, not a comment.
+- Writing only the hall would leave an un-refreshed phone showing a rider the OLD
+  address, because it still reads `settings/main`.
+- Keeping them in step is also what makes this release revertible by redeploying
+  functions alone.
+
+With two halls open it edits neither hall, only `settings/main` — no unambiguous target,
+and writing the wrong hall's venue would re-point every rider there to the wrong
+building. Unreachable today (no UI creates a second hall); asserted so it cannot start
+editing an arbitrary hall later.
+
+`manualAssignStudent`'s venue fallback is now the ride's own hall rather than the global
+default.
+
+**Departure from the plan:** the plan had clients reading `byLocation[myHall]` in stage
+C. There is no hall to key on until a rider picks one, so it would be dead code. Moved
+to stage D.
 
 ### What the published `system/rideContext` actually did
 
@@ -71,16 +95,19 @@ Measured before and after the deploy, top-level fields:
   stamping; would have put half a Somerville family into a Huntington car.
 - `expireStaleRequests` now clears `atLocationId` with `at_sabha` — a week-old hall is
   the same bug as a week-old status, with a car sent to the wrong building.
+- **Three unlabelled fields on the venue screen** (`a6d3ebd`): both time inputs and the
+  address input had visible labels with no `htmlFor` and no `id`, so two adjacent time
+  boxes were announced as "time" and "time" and tapping any label focused nothing.
+  `AddressAutocomplete` gained an optional `id`; five other call sites still render a
+  visible label above it with no association and could take the same treatment.
+  Worth recording HOW: the two time fields came from a failing test, the address one
+  only from rendering the screen in the preview harness. A component test asserts what
+  you thought to ask about.
 
 ### What is left
 
-**Stage C** — the app reads through the location (functions + hosting, still one hall).
-`LocationSettings` must write BOTH `locations/{id}.venue` and `settings/main.sabhaLocation`
-for one release, or the manager's Save button reports success and changes nothing.
-Client mirrors of `ridePool.ts` and `locations.ts` are already committed and ship here.
-
 **Stage D** — the second hall goes live. Ships ATOMICALLY: rider picker, Sarthi per-run
-picker, `manualAssignStudent` hardening (its rider lookup has no event, direction or
+picker, the client reads of `byLocation[myHall]` moved here from stage C, `manualAssignStudent` hardening (its rider lookup has no event, direction or
 hall filter at all — a manager tapping an existing button would put a Hall B rider in a
 Hall A car), `generateEventCSV` scoping (unscoped today, so a manager exporting one hall
 would receive the other hall's children's names and addresses), and the walked-in rider
