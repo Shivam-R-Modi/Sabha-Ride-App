@@ -12,6 +12,8 @@ import { assertApprovedDriver } from '../utils/authz';
 // driver update below.
 import { eventKeyFromRide } from '../utils/events';
 import { getTimeZone } from '../utils/settings';
+import { eventIdFor } from '../utils/locations';
+import { FOUNDING_LOCATION_ID } from '../constants/tenancy';
 import { zonedDateKey } from '../utils/time';
 import { seatsOf } from '../constants/seats';
 
@@ -334,8 +336,25 @@ export const completeRide = functions.https.onCall(async (data, context) => {
             carLicensePlate: ride?.carLicensePlate || ''
         }));
 
-        // Update statistics for the event using set + merge to prevent nested dot notation errors
-        const statsRef = db.collection('statistics').doc(eventDate);
+        /**
+         * Statistics are PER HALL, keyed the same way a gathering is.
+         *
+         * `statistics/{date}` merged both halls into one document: `pickup.totalStudents`
+         * pooled across buildings and `totalDrivers` counted each hall's Sarthis into
+         * the same total, so a manager's report for a two-hall evening was a blend with
+         * no way to split it. Nothing errored — the numbers were simply wrong.
+         *
+         * `eventIdFor` gives the FOUNDING hall the bare date, so every statistics
+         * document already written keeps its key and no history moves. A ride with no
+         * hall resolves to the founding one for the same reason: that is where it went.
+         */
+        const statsHall = typeof ride?.locationId === 'string'
+            ? ride.locationId
+            : FOUNDING_LOCATION_ID;
+        const statsKeyId = eventIdFor(eventDate, statsHall) ?? eventDate;
+
+        // set + merge, to prevent nested dot notation errors
+        const statsRef = db.collection('statistics').doc(statsKeyId);
         const statsDoc = await statsRef.get();
         const isPickup = ride?.rideType === 'home-to-sabha';
         const statsKey = isPickup ? 'pickup' : 'dropoff';

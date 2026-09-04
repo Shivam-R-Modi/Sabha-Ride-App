@@ -9,7 +9,7 @@ import { assertApprovedManager } from '../utils/authz';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { locationsOrFoundingFallback } from '../utils/settings';
 import { eventKeyFromRide } from '../utils/events';
-import { locationOfRide } from '../utils/locations';
+import { locationOfRide, eventIdFor } from '../utils/locations';
 
 /**
  * HTTP Callable: Generate CSV export for an event
@@ -142,9 +142,24 @@ export const generateEventCSV = functions.https.onCall(async (data, context) => 
         const completedPickups = new Map();
         const completedDropoffs = new Map();
 
-        // Get statistics for completed rides
-        const statsDoc = await db.collection('statistics').doc(targetDate).get();
-        if (statsDoc.exists && statsDoc.data()) {
+        /**
+         * Completed rides, from the statistics document of EACH HALL IN SCOPE.
+         *
+         * Statistics are keyed like a gathering — the founding hall on the bare date,
+         * every other hall suffixed — so a single read of `statistics/{date}` would
+         * silently return only the founding hall's completed rides. On a two-hall
+         * evening that is a manager's report quietly missing half the riders who
+         * travelled, which is the wrong direction for a document used to check that
+         * everybody got home.
+         *
+         * One document read per hall in scope: one when a hall is named, two or three
+         * when it is not.
+         */
+        const statsScope = scopeHall ? [scopeHall] : openHalls;
+        for (const hall of statsScope) {
+            const statsId = eventIdFor(targetDate, hall.id) ?? targetDate;
+            const statsDoc = await db.collection('statistics').doc(statsId).get();
+            if (!statsDoc.exists) continue;
             const stats = statsDoc.data();
 
             (stats?.pickup?.students || []).forEach((s: any) => {

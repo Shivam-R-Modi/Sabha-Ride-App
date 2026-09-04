@@ -342,6 +342,50 @@ describe('the return leg', () => {
     });
 });
 
+/**
+ * STATISTICS ARE PER HALL.
+ *
+ * `statistics/{date}` merged both halls into one document — `pickup.totalStudents`
+ * pooled across buildings and `totalDrivers` counted each hall's Sarthis into the same
+ * total. Nothing errored; a manager's report for a two-hall evening was simply a blend
+ * with no way to split it.
+ *
+ * The FOUNDING hall keeps the bare date, which is what stops every statistics document
+ * already written from being orphaned.
+ */
+describe('which statistics document a completed ride lands in', () => {
+    const statsWrite = (r: Recorder) => r.sets.find(w => w.path.startsWith('statistics/'))
+        ?? r.updates.find(w => w.path.startsWith('statistics/'));
+
+    it('files the founding hall on the BARE DATE, so history is not re-keyed', async () => {
+        const rec = makeDb(CARLOAD.map(g => ({
+            ...g, data: { ...g.data, locationId: 'boston-huntington' },
+        })));
+
+        await call();
+
+        expect(statsWrite(rec)!.path).toBe('statistics/2026-08-21');
+    });
+
+    it('files another hall under its own suffixed key', async () => {
+        const rec = makeDb(CARLOAD.map(g => ({
+            ...g, data: { ...g.data, locationId: 'somerville' },
+        })));
+
+        await call();
+
+        expect(statsWrite(rec)!.path).toBe('statistics/2026-08-21__somerville');
+    });
+
+    it('files a ride with no hall as the founding one, which is where it went', async () => {
+        const rec = makeDb(CARLOAD);
+
+        await call();
+
+        expect(statsWrite(rec)!.path).toBe('statistics/2026-08-21');
+    });
+});
+
 describe('arriving at a sabha, and which one', () => {
     it('records the hall when an outbound ride completes', async () => {
         // The write the whole return leg depends on. Without it nobody knows which

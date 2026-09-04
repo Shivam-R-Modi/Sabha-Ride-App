@@ -23,6 +23,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 let db: any;
 let rides: Array<Record<string, unknown>>;
+/** `statistics/{id}` documents, keyed by id, so a per-hall read can be asserted. */
+let stats: Record<string, unknown>;
 let openHalls: Array<{ id: string; name: string; venue: unknown; active: boolean; order: number }>;
 
 vi.mock('firebase-functions', () => {
@@ -61,7 +63,12 @@ function makeDb() {
                 size: rides.length,
                 docs: rides.map((r, i) => ({ id: `r${i}`, data: () => r })),
             }) }) }),
-            doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            doc: (id: string) => ({
+                get: async () => ({
+                    exists: stats[`${n}/${id}`] !== undefined,
+                    data: () => stats[`${n}/${id}`],
+                }),
+            }),
         }),
     };
 }
@@ -76,6 +83,7 @@ const names = (csv: string) => csv.split('\n')
 beforeEach(() => {
     vi.clearAllMocks();
     openHalls = [HUNTINGTON, SOMERVILLE];
+    stats = {};
     makeDb();
 });
 
@@ -156,5 +164,60 @@ describe('the ambiguous rows are SHOWN, not dropped', () => {
 
         expect(csvContent).toMatch(/Pending Request,/);
         expect(csvContent).not.toMatch(/no sabha date|no location/);
+    });
+});
+
+/**
+ * COMPLETED rides come from the statistics documents, and those are per hall.
+ *
+ * A single read of `statistics/{date}` returns only the FOUNDING hall's, because that
+ * is the one that keeps the bare date. On a two-hall evening a manager's report would
+ * be quietly missing half the people who travelled — the wrong direction entirely for
+ * a document used to check that everybody got home.
+ */
+describe('completed rides, across halls', () => {
+    const completed = (name: string) => ({
+        pickup: { students: [{ id: `stu_${name}`, name, driverName: 'Asha' }] },
+    });
+
+    it('reads BOTH halls when no hall is named', async () => {
+        rides = [];
+        stats[`statistics/${DATE}`] = completed('Huntington Rider');
+        stats[`statistics/${DATE}__somerville`] = completed('Somerville Rider');
+
+        const { csvContent } = await call();
+
+        expect(csvContent).toMatch(/Huntington Rider/);
+        expect(csvContent).toMatch(/Somerville Rider/);
+    });
+
+    it('reads only the named hall when one is given', async () => {
+        rides = [];
+        stats[`statistics/${DATE}`] = completed('Huntington Rider');
+        stats[`statistics/${DATE}__somerville`] = completed('Somerville Rider');
+
+        const { csvContent } = await call({ locationId: 'somerville' });
+
+        expect(csvContent).toMatch(/Somerville Rider/);
+        expect(csvContent).not.toMatch(/Huntington Rider/);
+    });
+
+    it('reads the founding hall from the BARE date, not a suffixed key', async () => {
+        // Every statistics document written before halls existed is filed there.
+        rides = [];
+        stats[`statistics/${DATE}`] = completed('Historic Rider');
+
+        const { csvContent } = await call({ locationId: 'boston-huntington' });
+
+        expect(csvContent).toMatch(/Historic Rider/);
+    });
+
+    it('copes with a hall that has no statistics yet', async () => {
+        rides = [];
+        stats[`statistics/${DATE}`] = completed('Huntington Rider');
+
+        const { csvContent } = await call();
+
+        expect(csvContent).toMatch(/Huntington Rider/);
     });
 });
