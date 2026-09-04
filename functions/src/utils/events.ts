@@ -22,9 +22,9 @@ import * as admin from 'firebase-admin';
 import { zonedDateKey, addDaysToDateKey } from './time';
 import {
     RecurrenceRule, EventException, normaliseException, upcomingOccurrences,
-    effectiveEventFor, isDateKey,
+    effectiveEventFor,
 } from './recurrence';
-import { parseEventId, LOOKAHEAD_NEEDS_SLACK } from './locations';
+import { parseExceptionId, LOOKAHEAD_NEEDS_SLACK } from './locations';
 
 export const EVENTS_COLLECTION = 'events';
 
@@ -210,17 +210,18 @@ export async function resolveCurrentEvent(
             const exception = normaliseException(doc.data());
             if (!exception) continue;
 
-            // THE ID SHAPE IS THE DISCRIMINATOR, not `parseEventId`'s answer.
-            // `parseEventId` resolves a bare date to the FOUNDING hall, which is right
-            // for a ride but wrong here: a bare document is the whole evening's
-            // exception, older than the idea of halls, and filing it as one hall's
-            // leaves the other hall reading the rule as if nothing had been edited.
-            if (isDateKey(doc.id)) {
-                exceptions.set(doc.id, exception);
+            // `parseExceptionId`, not `parseEventId`: a bare document is the WHOLE
+            // EVENING'S exception, older than the idea of halls, and `parseEventId`
+            // would resolve it to the founding hall — leaving every other hall reading
+            // the rule as if nothing had been edited. It also accepts a suffix naming
+            // the founding hall, which is a shape exceptions write and data keys never
+            // do.
+            const parsed = parseExceptionId(doc.id);
+            if (!parsed) continue;
+            if (parsed.locationId === null) {
+                exceptions.set(parsed.dateKey, exception);
                 continue;
             }
-            const parsed = parseEventId(doc.id);
-            if (!parsed) continue;
             const forDate = byDateAndHall.get(parsed.dateKey) ?? new Map();
             forDate.set(parsed.locationId, exception);
             byDateAndHall.set(parsed.dateKey, forDate);
@@ -234,15 +235,13 @@ export async function resolveCurrentEvent(
                 kind: 'override', status: 'cancelled',
                 startTime: '', endTime: '', venue: null, agenda: '',
             };
-            if (isDateKey(pendingCancellation)) {
-                exceptions.set(pendingCancellation, cancelled);
-            } else {
-                const parsed = parseEventId(pendingCancellation);
-                if (parsed) {
-                    const forDate = byDateAndHall.get(parsed.dateKey) ?? new Map();
-                    forDate.set(parsed.locationId, cancelled);
-                    byDateAndHall.set(parsed.dateKey, forDate);
-                }
+            const parsed = parseExceptionId(pendingCancellation);
+            if (parsed?.locationId === null) {
+                exceptions.set(parsed.dateKey, cancelled);
+            } else if (parsed) {
+                const forDate = byDateAndHall.get(parsed.dateKey) ?? new Map();
+                forDate.set(parsed.locationId, cancelled);
+                byDateAndHall.set(parsed.dateKey, forDate);
             }
         }
 

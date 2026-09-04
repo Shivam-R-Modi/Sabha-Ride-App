@@ -136,7 +136,18 @@ const EventDetail: React.FC<{
     halls: SabhaLocationRecord[];
 }> = ({ event, label, isNext, ridesOpen, halls }) => {
     const { currentUser } = useAuth();
-    const [editing, setEditing] = useState(false);
+    /**
+     * WHICH SCOPE IS OPEN IN THE EDITOR.
+     *
+     * `undefined` — not editing. `null` — the whole evening, which is what this row
+     * has always edited. A hall id — that one room's own times.
+     *
+     * A tri-state rather than a boolean plus a separate id, because those two can
+     * disagree: an open form with a stale hall id would save one hall's times over
+     * another's, and nothing on screen would say so.
+     */
+    const [editScope, setEditScope] = useState<string | null | undefined>(undefined);
+    const editing = editScope !== undefined;
     const [start, setStart] = useState(event.startTime);
     const [end, setEnd] = useState(event.endTime);
     const [agenda, setAgenda] = useState(event.agenda);
@@ -146,6 +157,37 @@ const EventDetail: React.FC<{
     const [error, setError] = useState<string | null>(null);
     const { sabhaLocation } = useSettings();
     const { ask, confirmDialog } = useConfirm();
+
+    /**
+     * What each open hall is doing this evening: its own document if it has one, the
+     * evening's answer if it does not, and `null` when that room is shut.
+     *
+     * Computed for DISPLAY as well as editing. A per-hall edit the row cannot show is
+     * a write-only control — the manager saves a time, the row keeps showing the
+     * evening's, and there is no way to tell whether it worked or how to undo it.
+     */
+    const perHall = halls.map(h => ({
+        hall: h,
+        // `hasOwn`, not a truthiness test: `null` is a real entry meaning cancelled,
+        // and `?? evening` would quietly reopen a room the manager had shut.
+        occurrence: Object.prototype.hasOwnProperty.call(event.hallOverrides, h.id)
+            ? event.hallOverrides[h.id]
+            : event,
+    }));
+
+    /** Seed the editor from the scope being opened, not from whatever it last held. */
+    const openEditor = (scope: string | null) => {
+        const from = scope === null
+            ? event
+            : perHall.find(p => p.hall.id === scope)?.occurrence ?? event;
+        setStart(from.startTime);
+        setEnd(from.endTime);
+        setAgenda(from.agenda);
+        setVenueText(from.venue?.address ?? '');
+        setVenuePlace(null);
+        setError(null);
+        setEditScope(scope);
+    };
 
     const valid = isUsableDuration(start, end);
 
@@ -180,8 +222,11 @@ const EventDetail: React.FC<{
                 // wrote `override` for every row, and an override off the weekly
                 // pattern is inert — which silently removed the gathering.
                 event.source,
+                // undefined cannot reach here: `save` is only callable from the open
+                // editor, and opening it sets a scope.
+                editScope ?? null,
             );
-            setEditing(false);
+            setEditScope(undefined);
             setVenuePlace(null);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Could not save.');
@@ -285,9 +330,51 @@ const EventDetail: React.FC<{
                     )}
                     <p className="text-[11px] text-coffee-500 mt-1.5">{windowSummary(event)}</p>
 
+                    {/* ONE LINE PER HALL, only when there is more than one. Shows what
+                        that room is actually doing, which is the half that makes a
+                        per-hall edit worth having: the times above are the EVENING'S,
+                        and a room that diverges would otherwise be invisible to the
+                        manager who moved it. */}
+                    {halls.length >= 2 && (
+                        <ul className="mt-3 space-y-1.5">
+                            {perHall.map(({ hall, occurrence }) => (
+                                <li key={hall.id} className="flex items-center gap-2 flex-wrap text-sm">
+                                    <span className="font-bold text-coffee">{hall.name}</span>
+                                    {occurrence === null ? (
+                                        <span className="text-[11px] font-bold uppercase tracking-wider bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))] px-2 py-0.5 rounded">
+                                            Cancelled
+                                        </span>
+                                    ) : (
+                                        <>
+                                            <span className="text-coffee-700">
+                                                {formatTime(occurrence.startTime)} – {formatTime(occurrence.endTime)}
+                                            </span>
+                                            {/* Only when this room has its own
+                                                document — `hallOverrides` stamps
+                                                `hall-override` on exactly those. A
+                                                badge on every row would say nothing. */}
+                                            {occurrence.source === 'hall-override' && (
+                                                <span className="text-[11px] font-bold uppercase tracking-wider bg-cream-300 text-coffee-700 px-2 py-0.5 rounded">
+                                                    Changed
+                                                </span>
+                                            )}
+                                            <button
+                                                onClick={() => openEditor(hall.id)}
+                                                disabled={busy}
+                                                className="min-h-11 px-3 rounded-lg text-xs font-bold text-saffron-800 border border-saffron-800/35 hover:bg-cream-300 disabled:opacity-50"
+                                            >
+                                                Edit {hall.name}
+                                            </button>
+                                        </>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+
                     <div className="flex gap-2 mt-3">
                         <button
-                            onClick={() => setEditing(true)}
+                            onClick={() => openEditor(null)}
                             disabled={busy}
                             className="min-h-11 px-3 rounded-lg text-xs font-bold text-saffron-800 border border-saffron-800/35 hover:bg-cream-300 disabled:opacity-50"
                         >
@@ -343,6 +430,18 @@ const EventDetail: React.FC<{
 
             {editing && (
                 <div className="space-y-2">
+                    {/* WHAT IS BEING EDITED, in words. Two identical-looking forms that
+                        write different documents is the situation a label has to
+                        resolve; without it the only difference between changing one
+                        room and changing every room is which button was pressed a
+                        moment ago. Absent with one hall, where there is no ambiguity. */}
+                    {halls.length >= 2 && (
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-coffee-500">
+                            {editScope === null
+                                ? 'Editing the whole evening'
+                                : `Editing ${halls.find(h => h.id === editScope)?.name ?? 'this sabha'}`}
+                        </p>
+                    )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input
                             type="time" value={start} onChange={(e) => { setStart(e.target.value); setError(null); }}
@@ -401,7 +500,10 @@ const EventDetail: React.FC<{
                         </button>
                         <button
                             onClick={() => {
-                                setEditing(false);
+                                // Reseeds from the EVENING, which is where the next
+                                // "Edit this week" starts from. Opening a hall's editor
+                                // reseeds from that hall — see `openEditor`.
+                                setEditScope(undefined);
                                 setStart(event.startTime); setEnd(event.endTime); setAgenda(event.agenda);
                                 setError(null);
                             }}

@@ -27,7 +27,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const editOccurrence = vi.fn(
-    async (_date: string, _fields: unknown, _uid: string, _source: string) => undefined);
+    async (..._a: any[]) => undefined);
 const previewDeleteSabhaEvent = vi.fn(async (..._a: any[]) => ({
     responseCount: 0, requestedRideCount: 0, locationId: null as string | null,
     locationName: null as string | null,
@@ -56,8 +56,7 @@ vi.mock('../../hooks/useEvents', () => ({
         events: upcoming, loading: false, error: null,
         rule: { enabled: true, daysOfWeek: [5], startTime: '20:30', endTime: '22:00', venue: null, agenda: '' },
     }),
-    editOccurrence: (...a: unknown[]) =>
-        editOccurrence(...(a as [string, unknown, string, string])),
+    editOccurrence: (...a: unknown[]) => editOccurrence(...a),
     createOneOff: vi.fn(async () => undefined),
 }));
 vi.mock('../../hooks/useCurrentEvent', () => ({
@@ -109,7 +108,13 @@ import { SabhaCalendar } from '../../components/manager/SabhaCalendar';
 /** A week as the rule produces it, unless a test says otherwise. */
 const week = (date: string, over: Record<string, unknown> = {}) => ({
     id: date, date, startTime: '20:30', endTime: '22:00',
-    venue: null, agenda: '', source: 'rule', ...over,
+    venue: null, agenda: '', source: 'rule',
+    // What each hall says on top of this evening. Empty is the ordinary case — every
+    // hall takes the evening as it stands — and it is what a single-hall project
+    // always has. `useUpcomingEvents` always sets this, so it is not optional here
+    // either: a fixture without it is a fixture of a shape the hook cannot produce.
+    hallOverrides: {},
+    ...over,
 });
 
 beforeEach(() => {
@@ -446,5 +451,141 @@ describe('SabhaCalendar — cancelling one hall', () => {
 
         await waitFor(() => expect(ask).toHaveBeenCalled());
         expect(deleteSabhaEvent).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * Changing ONE HALL's time, and seeing that it changed.
+ *
+ * These belong together because either half alone is a defect. An edit the row cannot
+ * show is a write-only control: the manager saves a time, the row keeps showing the
+ * evening's, and nothing says whether it worked or how to undo it. A row that shows a
+ * divergence with no way to edit it is the mirror.
+ */
+describe('SabhaCalendar — one hall diverging', () => {
+    const TWO = [
+        { id: 'boston-huntington', name: 'Huntington Ave' },
+        { id: 'somerville', name: 'Elm Street' },
+    ];
+    /** One evening, with Elm Street an hour and a half earlier. */
+    const diverged = () => [week('2026-08-28', {
+        hallOverrides: {
+            somerville: {
+                date: '2026-08-28', startTime: '19:00', endTime: '21:00',
+                venue: null, agenda: '', source: 'hall-override',
+            },
+        },
+    })];
+
+    it('lists every open hall with its own times', async () => {
+        openHalls = TWO;
+        upcoming = diverged();
+        render(<SabhaCalendar />);
+
+        // The evening's own times appear TWICE — once as the evening's, once as
+        // Huntington's, which is on them. Elm Street's appear once.
+        expect(await screen.findAllByText(/8:30 PM – 10:00 PM/)).toHaveLength(2);
+        expect(screen.getAllByText(/7:00 PM – 9:00 PM/)).toHaveLength(1);
+    });
+
+    it('shows a hall on the evening\'s times with no "Changed" badge', async () => {
+        openHalls = TWO;
+        upcoming = diverged();
+        render(<SabhaCalendar />);
+
+        await screen.findByText('Huntington Ave');
+        // One badge, for the one hall that has a document of its own.
+        expect(screen.getAllByText('Changed')).toHaveLength(1);
+    });
+
+    it('draws a CANCELLED hall as cancelled, with no Edit button', async () => {
+        // `null` is a real entry meaning "not this hall tonight". Falling back to the
+        // evening for it would quietly reopen a room the manager had shut.
+        openHalls = TWO;
+        upcoming = [week('2026-08-28', { hallOverrides: { somerville: null } })];
+        render(<SabhaCalendar />);
+
+        expect(await screen.findByText('Cancelled')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /Edit Elm Street/ })).toBeNull();
+        expect(screen.getByRole('button', { name: /Edit Huntington Ave/ })).toBeTruthy();
+    });
+
+    it('shows no hall list at all when one hall is open', async () => {
+        openHalls = [{ id: 'boston-huntington', name: 'Huntington Ave' }];
+        upcoming = [week('2026-08-28')];
+        render(<SabhaCalendar />);
+
+        await screen.findByRole('button', { name: /Edit this week/ });
+        expect(screen.queryByText('Huntington Ave')).toBeNull();
+    });
+
+    it('SEEDS the editor from the hall being edited, not the evening', async () => {
+        // Two identical-looking forms writing different documents. Seeded from the
+        // evening, saving Elm Street would silently move it back to 8:30.
+        openHalls = TWO;
+        upcoming = diverged();
+        render(<SabhaCalendar />);
+
+        await userEvent.click(await screen.findByRole('button', { name: /Edit Elm Street/ }));
+
+        const times = screen.getAllByDisplayValue('19:00');
+        expect(times).not.toHaveLength(0);
+    });
+
+    it('names the scope on the open editor', async () => {
+        openHalls = TWO;
+        upcoming = diverged();
+        render(<SabhaCalendar />);
+
+        await userEvent.click(await screen.findByRole('button', { name: /Edit Elm Street/ }));
+        expect(screen.getByText('Editing Elm Street')).toBeTruthy();
+    });
+
+    it('names the evening when that is the scope', async () => {
+        openHalls = TWO;
+        upcoming = diverged();
+        render(<SabhaCalendar />);
+
+        await userEvent.click(await screen.findByRole('button', { name: /Edit this week/ }));
+        expect(screen.getByText('Editing the whole evening')).toBeTruthy();
+    });
+
+    it('SAVES AGAINST THE HALL, not the evening', async () => {
+        openHalls = TWO;
+        upcoming = diverged();
+        render(<SabhaCalendar />);
+
+        await userEvent.click(await screen.findByRole('button', { name: /Edit Elm Street/ }));
+        await userEvent.click(screen.getByRole('button', { name: /Save/ }));
+
+        await waitFor(() => expect(editOccurrence).toHaveBeenCalled());
+        expect(editOccurrence.mock.calls[0][4]).toBe('somerville');
+    });
+
+    it('saves against the evening when that is the scope', async () => {
+        openHalls = TWO;
+        upcoming = diverged();
+        render(<SabhaCalendar />);
+
+        await userEvent.click(await screen.findByRole('button', { name: /Edit this week/ }));
+        await userEvent.click(screen.getByRole('button', { name: /Save/ }));
+
+        await waitFor(() => expect(editOccurrence).toHaveBeenCalled());
+        expect(editOccurrence.mock.calls[0][4]).toBeNull();
+    });
+
+    it('reseeds when the manager switches from a hall to the evening', async () => {
+        // The reason the scope is one tri-state and not a boolean plus an id: a form
+        // left holding the previous scope's values writes them to the new one.
+        openHalls = TWO;
+        upcoming = diverged();
+        render(<SabhaCalendar />);
+
+        await userEvent.click(await screen.findByRole('button', { name: /Edit Elm Street/ }));
+        await userEvent.click(screen.getByRole('button', { name: /Discard/ }));
+        await userEvent.click(await screen.findByRole('button', { name: /Edit this week/ }));
+
+        expect(screen.getAllByDisplayValue('20:30')).not.toHaveLength(0);
+        expect(screen.queryByDisplayValue('19:00')).toBeNull();
     });
 });

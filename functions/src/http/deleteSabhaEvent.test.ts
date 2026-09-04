@@ -529,6 +529,92 @@ describe('deleteSabhaEvent — one hall of an evening', () => {
         expect(rec.sets.find(s => s.path === 'events/2026-08-14')).toBeUndefined();
     });
 
+it('CANCELS THE FOUNDING HALL WITHOUT CANCELLING THE EVENING', async () => {
+        /**
+         * The case the first version of this feature got wrong, and it was not subtle.
+         * `eventIdFor(date, foundingHall)` returns the BARE DATE — that is the
+         * migration, and it is right for an attendance key. Used for the cancellation
+         * document it writes `events/{date}`, which is the whole evening's exception:
+         * every hall closed and every rider's request cancelled, from a button labelled
+         * with one hall's name.
+         *
+         * Exception ids therefore suffix EVERY hall, founding included.
+         */
+        const rec = makeDb({ locations: TWO_HALLS });
+
+        await call({ date: '2026-08-14', locationId: 'boston-huntington', acknowledge: true });
+
+        expect(rec.sets.find(s => s.path === 'events/2026-08-14__boston-huntington')?.data.status)
+            .toBe('cancelled');
+        expect(rec.sets.find(s => s.path === 'events/2026-08-14')).toBeUndefined();
+    });
+
+    it('purges the founding hall\'s attendance under its BARE key', async () => {
+        // The other side of the same split: the document recording the cancellation is
+        // suffixed, the attendance record it orphans is not. Getting this one wrong
+        // leaves the responses behind instead of deleting the wrong ones.
+        const rec = makeDb({ locations: TWO_HALLS });
+
+        await call({ date: '2026-08-14', locationId: 'boston-huntington', acknowledge: true });
+
+        expect(rec.recursiveDeletes).toEqual(['weeklyAttendance/2026-08-14']);
+    });
+
+    it('purges EVERY hall\'s attendance when the whole evening goes', async () => {
+        /**
+         * `weeklyAttendance/*` responses are a subcollection Firestore leaves behind,
+         * and the key is per hall. Parking only the founding hall's would leave the
+         * other rooms' names, phone numbers and home addresses in Firestore with no
+         * screen that could ever show them again — the first paragraph of this file's
+         * header, arriving by a route the header did not know about.
+         */
+        const rec = makeDb({ locations: TWO_HALLS });
+
+        await call({ date: '2026-08-14', acknowledge: true });
+
+        const parked = rec.sets.find(s => s.path === 'system/eventGenerator')!;
+        expect(parked.data.pendingAttendanceDeletes.__arrayUnion.sort())
+            .toEqual(['2026-08-14', '2026-08-14__somerville']);
+        expect(rec.recursiveDeletes.sort())
+            .toEqual(['weeklyAttendance/2026-08-14', 'weeklyAttendance/2026-08-14__somerville']);
+    });
+
+    it('reads the founding hall\'s own exception, not the evening\'s, when cancelling it', async () => {
+        // A hall already cancelled must be refused. Reading the evening's document here
+        // would report the hall as open, and the second tap would write a second
+        // cancellation over the first — harmless, but it would also mean the guard was
+        // reading the wrong document, which is not.
+        const rec = makeDb({
+            locations: TWO_HALLS,
+            events: {
+                '2026-08-14__boston-huntington': {
+                    date: '2026-08-14', kind: 'override', status: 'cancelled',
+                },
+            },
+        });
+
+        await expect(call({
+            date: '2026-08-14', locationId: 'boston-huntington', acknowledge: true,
+        })).rejects.toThrow(/already cancelled/);
+        expect(rec.committed).toBe(false);
+    });
+
+    it('leaves the evening open when only the founding hall is cancelled', async () => {
+        // And the mirror: with that hall's own document cancelled, the OTHER hall and
+        // the evening itself are untouched.
+        const rec = makeDb({
+            locations: TWO_HALLS,
+            events: {
+                '2026-08-14__boston-huntington': {
+                    date: '2026-08-14', kind: 'override', status: 'cancelled',
+                },
+            },
+        });
+
+        await call({ date: '2026-08-14', locationId: 'somerville', acknowledge: true });
+        expect(rec.committed).toBe(true);
+    });
+
     it('PARKS THE HALL\'S ATTENDANCE KEY, not the bare date', async () => {
         /**
          * The one that would be unrecoverable. `weeklyAttendance` is keyed by event id,

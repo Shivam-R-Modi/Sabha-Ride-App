@@ -27,7 +27,8 @@ import { resolveCurrentEvent, EVENTS_COLLECTION, SEED_MARKER_DOC } from '../util
 import { getRequestsOpenTime, locationsOrFoundingFallback } from '../utils/settings';
 import { buildRideContextDoc, hallContexts } from '../utils/rideContext';
 import {
-    eventIdFor, locationOfRide, LOCATION_ID_PATTERN, type SabhaLocationRecord,
+    eventIdFor, exceptionIdFor, locationOfRide, LOCATION_ID_PATTERN,
+    type SabhaLocationRecord,
 } from '../utils/locations';
 import { sendNotification, tokensOf } from '../utils/notifications';
 import { checkRateLimit } from '../utils/rateLimiter';
@@ -158,21 +159,39 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     }
 
     /**
-     * The document being cancelled. `events/{date}` for the whole evening,
-     * `events/{date}__{hall}` for one room — and the bare date for the FOUNDING hall
-     * either way, which is the migration: its history never moves.
+     * TWO IDS, AND THEY ARE NOT THE SAME ID.
      *
-     * So naming the founding hall explicitly and naming no hall write the same
-     * document. That is correct rather than a collision — with one hall open there is
-     * no difference between "cancel this hall" and "cancel the evening", and the
-     * client only offers the choice when there is more than one.
+     * `exceptionId` is the document that records the cancellation: `events/{date}` for
+     * the whole evening, `events/{date}__{hall}` for one room — INCLUDING the founding
+     * hall. `attendanceId` is the record being purged, where the founding hall keeps
+     * the bare date so its history never moves.
+     *
+     * Collapsing them is not a tidiness question. `eventIdFor(date, founding)` returns
+     * the bare date, so writing the cancellation there would cancel THE EVENING when
+     * the manager asked for one room — every hall closed, every rider's request
+     * cancelled, from a button labelled with one hall's name.
      */
-    const eventId = eventIdFor(date, locationId ?? FOUNDING_LOCATION_ID);
-    if (!eventId) {
+    const exceptionId = exceptionIdFor(date, locationId);
+    const attendanceId = eventIdFor(date, locationId ?? FOUNDING_LOCATION_ID);
+    if (!exceptionId || !attendanceId) {
         throw new functions.https.HttpsError('invalid-argument', 'That sabha location is not valid.');
     }
 
-    const eventRef = db.collection(EVENTS_COLLECTION).doc(eventId);
+    /**
+     * Every attendance record this cancellation orphans.
+     *
+     * ONE PER HALL when the whole evening goes, because attendance is keyed per hall
+     * and `weeklyAttendance/*` responses are a SUBCOLLECTION Firestore leaves behind.
+     * Purging only the founding hall's would leave the other rooms' names, phone
+     * numbers and home addresses in Firestore with no screen that could ever show them
+     * again — which is the first paragraph of this file's header, arriving by a route
+     * the header did not know about.
+     */
+    const attendanceIds = locationId
+        ? [attendanceId]
+        : halls.map(h => eventIdFor(date, h.id)).filter((id): id is string => !!id);
+
+    const eventRef = db.collection(EVENTS_COLLECTION).doc(exceptionId);
     const rule = await readRecurrence(db);
 
     // TWO DOCUMENTS, TWO LAYERS. A hall's own exception does not replace the evening's
@@ -182,11 +201,11 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     // which is every hall on almost every evening.
     const [eventSnap, dateSnap] = await Promise.all([
         eventRef.get(),
-        eventId === date ? Promise.resolve(null) : db.collection(EVENTS_COLLECTION).doc(date).get(),
+        locationId ? db.collection(EVENTS_COLLECTION).doc(date).get() : Promise.resolve(null),
     ]);
     const existing = normaliseException(eventSnap.data());
     const dateException = dateSnap ? normaliseException(dateSnap.data()) : existing;
-    const hallException = eventId === date ? null : existing;
+    const hallException = locationId ? existing : null;
 
     if (!effectiveEventFor(date, rule, dateException, hallException)) {
         throw new functions.https.HttpsError(
@@ -245,7 +264,7 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
 
     // Attendance is keyed by EVENT id, so this is already per hall.
     const responsesSnap = await db
-        .collection('weeklyAttendance').doc(eventId)
+        .collection('weeklyAttendance').doc(attendanceId)
         .collection('responses').get();
 
     const currentContext = (await db.doc(CONTEXT_DOC).get()).data();
@@ -260,7 +279,7 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
         // decides whether rideContext gets rewritten in the same commit, so a false
         // here leaves the document naming a sabha that was just cancelled until the
         // next minute tick, with the request window still open.
-        isCurrentEvent: eventIdOfSlice(currentContext, locationId) === eventId,
+        isCurrentEvent: eventIdOfSlice(currentContext, locationId) === attendanceId,
     };
 
     if (dryRun) return preview;
@@ -295,7 +314,7 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
         actorUid: uid,
         actorName: String(caller.name || 'Manager'),
         targetCollection: EVENTS_COLLECTION,
-        targetDocumentId: eventId,
+        targetDocumentId: exceptionId,
         summary: `Deleted the sabha on ${date}`
             + (hall ? ` at ${hall.name}` : '')
             + (preview.responseCount || preview.requestedRideCount
@@ -353,7 +372,7 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     // the bare date would have the sweeper recursively delete the FOUNDING hall's
     // attendance when the manager cancelled a different room.
     batch.set(db.doc(SEED_MARKER_DOC), {
-        pendingAttendanceDeletes: admin.firestore.FieldValue.arrayUnion(eventId),
+        pendingAttendanceDeletes: admin.firestore.FieldValue.arrayUnion(...attendanceIds),
     }, { merge: true });
 
     // Recompute the window in the same commit when this was the current
@@ -377,7 +396,7 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
          * slice goes quiet.
          */
         const { event: nextEvent, hallExceptions } = await resolveCurrentEvent(
-            db, now, timeZone, rule, halls.map(h => h.id), eventId,
+            db, now, timeZone, rule, halls.map(h => h.id), exceptionId,
         );
         const contexts = hallContexts(
             nextEvent, halls.map(h => ({ id: h.id, venue: h.venue })),
@@ -390,7 +409,7 @@ export const deleteSabhaEvent = functions.https.onCall(async (data, context) => 
     await batch.commit();
 
     // ── Step two: the cascade, then tell people ─────────────────────────
-    await drainAttendanceDelete(db, eventId);
+    for (const id of attendanceIds) await drainAttendanceDelete(db, id);
 
     if (affectedUids.size > 0) {
         await notifyAffected(db, Array.from(affectedUids), date, hall?.name ?? null);

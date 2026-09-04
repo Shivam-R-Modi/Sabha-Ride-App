@@ -7,8 +7,9 @@ import { useCurrentEvent } from './useCurrentEvent';
 import {
     EventException, Occurrence, RecurrenceRule,
     addDaysToDateKey, normaliseException, normaliseRecurrence, upcomingOccurrences,
+    applyHallException,
 } from '../src/utils/recurrence';
-import { dateKeyOfEventId } from '../src/utils/locations';
+import { dateKeyOfEventId, parseExceptionId, exceptionIdFor } from '../src/utils/locations';
 
 /**
  * The sabha calendar — a rule, plus the exceptions to it.
@@ -41,6 +42,21 @@ export interface SabhaEvent {
     agenda: string;
     /** Where this row came from, so the calendar can label what diverges. */
     source: Occurrence['source'];
+
+    /**
+     * What each hall says ON TOP of this evening, keyed by hall id.
+     *
+     * Only halls with a document of their own appear. A hall with none takes the
+     * evening unchanged, which is the ordinary case and needs no entry — so an empty
+     * object means every hall agrees, and that is what a single-hall project always
+     * has.
+     *
+     * `null` for a hall means NOT THIS HALL TONIGHT. It is a real answer and the
+     * calendar draws it: without it a manager who cancelled one room would see the
+     * evening's own times on the row and no sign the room was shut, which is the
+     * write-only control this codebase keeps deleting.
+     */
+    hallOverrides: Record<string, Occurrence | null>;
 }
 
 /**
@@ -78,6 +94,36 @@ export function useRecurrenceRule() {
     }, []);
 
     return { rule, loading };
+}
+
+/**
+ * Each hall's own answer for one evening, from documents already in hand.
+ *
+ * `useUpcomingEvents` reads every document in the date range, and a hall's exception
+ * is one of them — `events/{date}__{hall}`. Resolving them here costs no extra read,
+ * and it is the only way the manager's calendar can SHOW a hall that diverges. It
+ * used to ignore them, which was harmless while nothing could write one.
+ */
+function hallOverridesFor(
+    occurrence: Occurrence,
+    exceptions: ReadonlyMap<string, EventException>,
+): Record<string, Occurrence | null> {
+    const out: Record<string, Occurrence | null> = {};
+    for (const [id, exception] of exceptions) {
+        // A bare id is the EVENING's exception and `effectiveEvent` has already
+        // applied it — `parseExceptionId` returns a null hall for exactly that shape.
+        // `parseEventId` would resolve it to the founding hall instead, and file the
+        // evening's own edit as that one hall's.
+        const parsed = parseExceptionId(id);
+        if (!parsed?.locationId || parsed.dateKey !== occurrence.date) continue;
+        const applied = applyHallException(occurrence, exception);
+        // `source` set here for the same reason `effectiveEventFor` sets it: a row that
+        // came out of the hall layer has to SAY so, or the only way to tell a diverged
+        // hall from one on the evening's times is comparing object identity — which is
+        // true by accident and stops being true the moment anything copies the object.
+        out[parsed.locationId] = applied && { ...applied, source: 'hall-override' };
+    }
+    return out;
 }
 
 /**
@@ -145,6 +191,7 @@ export function useUpcomingEvents(limitTo = 12) {
             status: 'scheduled' as const,
             agenda: o.agenda,
             source: o.source,
+            hallOverrides: hallOverridesFor(o, exceptions),
         }));
     }, [rule, exceptions, from, limitTo]);
 
@@ -182,12 +229,30 @@ export async function editOccurrence(
     values: Pick<SabhaEvent, 'startTime' | 'endTime' | 'agenda' | 'venue'>,
     updatedByUid: string,
     source: SabhaEvent['source'],
+    /**
+     * ONE HALL, or null for the whole evening.
+     *
+     * A hall's document is always an OVERRIDE, never a one-off: both halls run the
+     * same evening, so a hall says "at a different time" and never "on a day the
+     * congregation is not meeting". `effectiveEventFor` relies on that — a one-off
+     * hall document would be inert there, so writing one would look saved and change
+     * nothing.
+     */
+    locationId: string | null = null,
 ): Promise<void> {
-    await setDoc(doc(db, 'events', date), {
+    // `exceptionIdFor`, not `eventIdFor`: for the FOUNDING hall the latter returns the
+    // bare date, which is the WHOLE EVENING'S document — so editing that one hall would
+    // move every hall's start time. See `exceptionIdFor`.
+    const eventId = exceptionIdFor(date, locationId);
+    if (!eventId) throw new Error('That sabha location is not valid.');
+
+    await setDoc(doc(db, 'events', eventId), {
         date,
+        // Stamped so `events` is readable without parsing document ids.
+        ...(locationId ? { locationId } : {}),
         // A one-off stays a one-off. Anything derived from the rule — or already an
-        // override — is an override.
-        kind: source === 'one-off' ? 'one-off' : 'override',
+        // override — is an override. A HALL is always an override; see above.
+        kind: !locationId && source === 'one-off' ? 'one-off' : 'override',
         status: 'scheduled',
         startTime: values.startTime,
         endTime: values.endTime,

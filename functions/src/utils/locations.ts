@@ -88,6 +88,54 @@ export function eventIdFor(dateKey: unknown, locationId: unknown): string | null
 }
 
 /**
+ * The document id for an EXCEPTION: what one date, or one hall of it, does differently.
+ *
+ * A DIFFERENT CONVENTION FROM `eventIdFor`, AND DELIBERATELY SO. `eventIdFor` answers
+ * "which attendance/statistics record", and there the founding hall keeps the bare date
+ * because its history must not move. Here the bare date means something else entirely:
+ * it is THE EVENING'S OWN exception, the shape every `events` document written before
+ * halls existed already has.
+ *
+ * So an exception for the founding hall is `{date}__{founding}`, not the bare date. One
+ * document says "the whole congregation meets an hour early", the other says "this room
+ * does" — and collapsing them makes "cancel this hall" cancel every hall, silently and
+ * on the manager's behalf. There is nothing to migrate: the evening's exceptions are
+ * still exactly what the old documents are, and a hall's own exception never existed.
+ *
+ * @param locationId null for the whole evening.
+ */
+export function exceptionIdFor(dateKey: unknown, locationId: string | null): string | null {
+    if (typeof dateKey !== 'string' || !DATE_KEY_PATTERN.test(dateKey)) return null;
+    if (locationId === null) return dateKey;
+    if (typeof locationId !== 'string' || !LOCATION_ID_PATTERN.test(locationId)) return null;
+    return `${dateKey}${EVENT_ID_SEPARATOR}${locationId}`;
+}
+
+/**
+ * Split an exception document id into its date and, if it has one, its hall.
+ *
+ * `locationId: null` means the whole evening — see `exceptionIdFor` for why that is not
+ * the same as the founding hall. Unlike `parseEventId` this ACCEPTS a suffix naming the
+ * founding hall, because that is a shape exceptions really do write.
+ */
+export function parseExceptionId(
+    eventId: unknown,
+): { dateKey: string; locationId: string | null } | null {
+    if (typeof eventId !== 'string' || !eventId) return null;
+
+    const at = eventId.indexOf(EVENT_ID_SEPARATOR);
+    if (at === -1) {
+        return DATE_KEY_PATTERN.test(eventId) ? { dateKey: eventId, locationId: null } : null;
+    }
+
+    const dateKey = eventId.slice(0, at);
+    const locationId = eventId.slice(at + EVENT_ID_SEPARATOR.length);
+    if (!DATE_KEY_PATTERN.test(dateKey)) return null;
+    if (!LOCATION_ID_PATTERN.test(locationId)) return null;
+    return { dateKey, locationId };
+}
+
+/**
  * Split an event id back into its date and its hall.
  *
  * A BARE DATE RESOLVES TO THE FOUNDING HALL, which is what makes every pre-existing

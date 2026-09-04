@@ -208,3 +208,79 @@ describe('useUpcomingEvents — anchored on a suffixed event id', () => {
         expect(lowerBound).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 });
+
+/**
+ * What each hall says on top of an evening.
+ *
+ * The hook already reads every document in the range, so a hall's exception is one it
+ * has in hand — resolving them costs no read and it is the only way the manager's
+ * calendar can SHOW a hall that diverges. It ignored them until something could write
+ * one.
+ */
+describe('useUpcomingEvents — hallOverrides', () => {
+    const EVE = { kind: 'override', status: 'scheduled', startTime: '18:00', endTime: '20:00' };
+
+    it('is empty when no hall has a document, which is the ordinary case', async () => {
+        const { result } = renderHook(() => useUpcomingEvents(4));
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.events[0].hallOverrides).toEqual({});
+    });
+
+    it('resolves a hall\'s own times, keyed by the hall', async () => {
+        eventDocs = [{ id: '2026-08-21__somerville', data: EVE }];
+
+        const { result } = renderHook(() => useUpcomingEvents(4));
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        const row = result.current.events.find(e => e.date === '2026-08-21')!;
+        expect(row.startTime).toBe('19:30');                       // the evening is untouched
+        expect(row.hallOverrides.somerville!.startTime).toBe('18:00');
+        expect(row.hallOverrides.somerville!.source).toBe('hall-override');
+    });
+
+    it('DOES NOT file the evening\'s own exception as the founding hall\'s', async () => {
+        /**
+         * `parseEventId` resolves a bare date to the founding hall — right for a ride,
+         * wrong here. The evening's edit would show up as that one room diverging, so
+         * the calendar would draw a "Changed" badge against Huntington on an evening
+         * where nothing about Huntington differs, and an Edit button that writes a
+         * document nobody asked for. `parseExceptionId` returns a null hall for a bare
+         * id, which is what this asserts.
+         */
+        eventDocs = [{ id: '2026-08-21', data: EVE }];
+
+        const { result } = renderHook(() => useUpcomingEvents(4));
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        const row = result.current.events.find(e => e.date === '2026-08-21')!;
+        expect(row.startTime).toBe('18:00');       // applied to the EVENING
+        expect(row.hallOverrides).toEqual({});     // and to no hall in particular
+    });
+
+    it('carries a hall CANCELLATION through as null', async () => {
+        // A real answer, not an absence. The calendar draws it as "Cancelled"; treating
+        // it as missing would fall back to the evening and reopen a room the manager
+        // had shut.
+        eventDocs = [{ id: '2026-08-21__somerville', data: { status: 'cancelled' } }];
+
+        const { result } = renderHook(() => useUpcomingEvents(4));
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        const row = result.current.events.find(e => e.date === '2026-08-21')!;
+        expect(row.hallOverrides).toHaveProperty('somerville');
+        expect(row.hallOverrides.somerville).toBeNull();
+    });
+
+    it('keeps one date\'s hall documents off another date\'s row', async () => {
+        eventDocs = [{ id: '2026-08-28__somerville', data: EVE }];
+
+        const { result } = renderHook(() => useUpcomingEvents(4));
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.events.find(e => e.date === '2026-08-21')!.hallOverrides)
+            .toEqual({});
+        expect(result.current.events.find(e => e.date === '2026-08-28')!.hallOverrides)
+            .toHaveProperty('somerville');
+    });
+});
