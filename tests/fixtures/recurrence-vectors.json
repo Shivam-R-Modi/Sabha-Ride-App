@@ -158,6 +158,30 @@
         "2026-03-08",
         "2026-03-15"
       ]
+    },
+    {
+      "name": "a suffixed lower bound yields nothing instead of looping forever",
+      "rule": {
+        "enabled": true,
+        "daysOfWeek": [
+          5
+        ]
+      },
+      "from": "2026-08-21__somerville",
+      "to": "2026-09-15",
+      "expected": []
+    },
+    {
+      "name": "a NaN upper bound yields nothing instead of looping forever",
+      "rule": {
+        "enabled": true,
+        "daysOfWeek": [
+          5
+        ]
+      },
+      "from": "2026-08-17",
+      "to": "NaN-NaN-NaN",
+      "expected": []
     }
   ],
   "_effectiveEventComment": [

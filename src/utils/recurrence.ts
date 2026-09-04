@@ -187,7 +187,23 @@ export function occurrencesBetween(
     const wanted = new Set(rule.daysOfWeek);
     const out: string[] = [];
 
-    for (let cursor = fromKey; cursor <= toKey; cursor = addDaysToDateKey(cursor, 1)) {
+    // WALKS A COUNT, NOT A SENTINEL, and that is a fix rather than a style.
+    //
+    // The obvious form is `for (cursor = fromKey; cursor <= toKey; cursor =
+    // next(cursor))`, whose exit depends on the string comparison staying meaningful.
+    // It does not: `addDaysToDateKey` returns 'NaN-NaN-NaN' for a malformed key, every
+    // real date sorts BEFORE that, so the loop never ends and the tab freezes
+    // allocating date strings. It is reachable from an event id — a caller anchoring on
+    // `2026-08-21__somerville` and deriving its horizon from it produces exactly that
+    // bound, and it hung two test runs before it was found.
+    //
+    // A count cannot do that. A finite span iterates finitely and a nonsense span
+    // iterates zero times, so no input makes this run away and no caller has to be
+    // trusted to have validated its bounds.
+    const span = (Date.parse(`${toKey}T00:00:00Z`) - Date.parse(`${fromKey}T00:00:00Z`))
+        / 86_400_000;
+    for (let i = 0; i <= span; i++) {
+        const cursor = addDaysToDateKey(fromKey, i);
         if (wanted.has(dayOfWeekForKey(cursor))) out.push(cursor);
     }
 

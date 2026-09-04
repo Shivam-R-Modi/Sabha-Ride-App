@@ -19,6 +19,8 @@ import { renderHook, waitFor } from '@testing-library/react';
 let eventDocs: Array<{ id: string; data: Record<string, unknown> }> = [];
 let ruleDoc: Record<string, unknown> | undefined;
 const useCurrentEvent = vi.fn();
+/** The lower bound the hook actually queried on, so the anchor is assertable. */
+let lowerBound: unknown = null;
 
 vi.mock('../../firebase/config', () => ({ db: {} }));
 vi.mock('../../hooks/useCurrentEvent', () => ({ useCurrentEvent: () => useCurrentEvent() }));
@@ -29,7 +31,10 @@ vi.mock('firebase/firestore', () => ({
     orderBy: () => ({}),
     query: () => ({ __events: true }),
     setDoc: vi.fn(),
-    where: () => ({}),
+    where: (_f: unknown, op: string, value: unknown) => {
+        if (op === '>=') lowerBound = value;
+        return {};
+    },
     // One listener factory for both subscriptions: the rule doc is a `doc()` ref,
     // the events list is a `query()`.
     onSnapshot: (ref: any, next: any) => {
@@ -47,6 +52,7 @@ const FROM = '2026-08-17';
 beforeEach(() => {
     vi.clearAllMocks();
     eventDocs = [];
+    lowerBound = null;
     ruleDoc = { enabled: true, daysOfWeek: [5], startTime: '19:30', endTime: '22:00' };
     useCurrentEvent.mockReturnValue({ eventId: FROM });
 });
@@ -158,5 +164,47 @@ describe('useUpcomingEvents', () => {
 
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current.events[0]!.date).toBe('2026-08-21');
+    });
+});
+
+/**
+ * The anchor is the event id's DATE, not the event id.
+ *
+ * With two halls a current gathering can be `2026-08-21__somerville`, and
+ * `'2026-08-21' >= '2026-08-21__somerville'` is false. Anchoring on the id itself
+ * therefore reproduces the defect this hook's header was written about — today's
+ * gathering vanishing from the calendar during the sabha — by a different route, and
+ * the row a manager would reach for to change it is the row that is gone.
+ */
+describe('useUpcomingEvents — anchored on a suffixed event id', () => {
+    const SUFFIXED = '2026-08-21__somerville';
+
+    it('still lists the gathering happening right now', async () => {
+        useCurrentEvent.mockReturnValue({ eventId: SUFFIXED });
+
+        const { result } = renderHook(() => useUpcomingEvents(4));
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(dates(result.current.events)).toContain('2026-08-21');
+    });
+
+    it('queries from the bare date, so the evening\'s own document is in range', async () => {
+        useCurrentEvent.mockReturnValue({ eventId: SUFFIXED });
+
+        const { result } = renderHook(() => useUpcomingEvents(4));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        expect(lowerBound).toBe('2026-08-21');
+    });
+
+    it('falls back to the device date when there is no current gathering', async () => {
+        // Not a suffixed-id case, but it shares the line: dateKeyOfEventId returns null
+        // for null, and a null lower bound would query the entire collection.
+        useCurrentEvent.mockReturnValue({ eventId: null });
+
+        const { result } = renderHook(() => useUpcomingEvents(4));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        expect(lowerBound).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 });

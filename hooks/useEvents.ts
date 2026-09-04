@@ -8,6 +8,7 @@ import {
     EventException, Occurrence, RecurrenceRule,
     addDaysToDateKey, normaliseException, normaliseRecurrence, upcomingOccurrences,
 } from '../src/utils/recurrence';
+import { dateKeyOfEventId } from '../src/utils/locations';
 
 /**
  * The sabha calendar — a rule, plus the exceptions to it.
@@ -90,6 +91,13 @@ export function useRecurrenceRule() {
  * The exception query is bounded by `documentId()`, matching the server, because
  * an earlier version filtered on the `date` FIELD while the server filtered on the
  * id — so a document missing `date` was invisible here and visible to the server.
+ *
+ * THE ANCHOR IS THE EVENT ID'S DATE, NOT THE EVENT ID. A second hall's gathering is
+ * `2026-08-07__somerville`, and `'2026-08-07' >= '2026-08-07__somerville'` is false —
+ * so anchoring on the id itself brings back the same defect the paragraph above
+ * describes, by a different route: today's founding-hall gathering disappears from the
+ * manager's calendar for the duration of the sabha, and the row a manager would reach
+ * for to cancel it is the row that is missing.
  */
 export function useUpcomingEvents(limitTo = 12) {
     const [exceptions, setExceptions] = useState<Map<string, EventException>>(new Map());
@@ -98,7 +106,7 @@ export function useUpcomingEvents(limitTo = 12) {
     const { eventId } = useCurrentEvent();
     const { rule, loading: ruleLoading } = useRecurrenceRule();
 
-    const from = eventId ?? new Date().toLocaleDateString('en-CA');
+    const from = dateKeyOfEventId(eventId) ?? new Date().toLocaleDateString('en-CA');
 
     useEffect(() => {
         const q = query(
