@@ -3,10 +3,11 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-04**.
 
-## IN PROGRESS — two sabha locations, stages A, B and C deployed, 2026-09-04 (last)
+## IN PROGRESS — two sabha locations, stages A–D deployed, 2026-09-04 (last)
 
-Branch `claude/airport-pickup-workflow-89afab`. Client **1988**, functions **1066**,
-rules **266**. Full sweep clean. The plan is
+Branch `claude/airport-pickup-workflow-89afab`. Client **2025**, functions **1089**,
+rules **266**. Full sweep clean. **One hall is still the only active one, so nothing a
+user can see has changed yet.** The plan is
 `~/.claude/plans/i-want-to-brainstorm-frolicking-crescent.md` — five stages, A–E.
 
 **Why:** sabha will run at two nearby halls the same evening, because one room cannot
@@ -48,6 +49,36 @@ default.
 **Departure from the plan:** the plan had clients reading `byLocation[myHall]` in stage
 C. There is no hall to key on until a rider picks one, so it would be dead code. Moved
 to stage D.
+
+**Stage D — functions + hosting (`217cdaf`, `1d9b529`, `8a197fa`, `184d236`).** The
+second hall is now buildable; **it is not switched on.**
+
+- Rider picks their hall on the request form. No picker with one hall.
+- Sarthi picks per RUN, on the shift card. The button NAMES the hall, because "Find my
+  next riders" carries the previous choice forward and that is invisible otherwise.
+- The return leg asks a rider the app cannot place — the walk-ins and
+  drive-themselves. **The RECORDED hall beats a conflicting answer**, which is the
+  security-relevant half: trusting the claim would let somebody summon a car from a
+  hall they are not at. Mutating that priority left every existing case green, so it
+  is asserted explicitly now.
+- The manager's queue NAMES the hall on all three renderings. Not a filter — a manager
+  oversees both, and hiding one hall's riders would be the 2026-08-14 defect again.
+- Two defects that were live BEFORE any of this: `manualAssignStudent` found the
+  rider's waiting request with no event, direction or hall filter at all, and
+  `generateEventCSV` had no scoping whatsoever. Both had zero tests; both now have
+  twenty between them.
+- The driver's "why nobody was assigned" breakdown finally reaches a human. The server
+  has returned it for months and NOTHING RENDERED IT, so every refusal collapsed into
+  "Nobody is waiting right now".
+
+**NO HALL MANAGEMENT SCREEN**, by the owner's call: a hall is not something that
+changes and riders already know which they attend. Adding one is
+`node scripts/locations.cjs add <id> "<name>" <lat> <lng> "<address>" [--active] [--apply]`.
+`--active` is a separate flag because creating a hall and OPENING it are two decisions.
+
+**Skipped, by the owner's call:** the `driverDoneForToday` wording. Its last-driver
+warning counts riders across all halls, so a Sarthi at one hall can be told riders are
+waiting when they are all at the other.
 
 ### What the published `system/rideContext` actually did
 
@@ -106,22 +137,24 @@ Measured before and after the deploy, top-level fields:
 
 ### What is left
 
-**Stage D** — the second hall goes live. Ships ATOMICALLY: rider picker, Sarthi per-run
-picker, the client reads of `byLocation[myHall]` moved here from stage C, `manualAssignStudent` hardening (its rider lookup has no event, direction or
-hall filter at all — a manager tapping an existing button would put a Hall B rider in a
-Hall A car), `generateEventCSV` scoping (unscoped today, so a manager exporting one hall
-would receive the other hall's children's names and addresses), and the walked-in rider
-must be ASKED which hall, never defaulted.
+**TO TURN THE SECOND HALL ON:** create it with the script above (dry run first), then
+re-run with `--active`, then `node scripts/locations.cjs verify`. Every picker appears
+on its own the moment a second hall is active — nothing else to deploy.
 
 **Stage E** — per-hall times and independent cancellation, per-hall statistics,
 per-hall broadcasts, and dropping the aggregate fields.
 
-### Still not done, and it matters
+### Still not done
 
 `scripts/tenancy.cjs` `COLLECTIONS` is only `['users','rides']`. `auditLogs` and
-`feedback` are stamped but never verified, and `weeklyAttendance/*/responses/*` was never
-stamped at all — that last one needs a real backfill in Stage D, because otherwise the
-field becomes a rider-writable dispatch input.
+`feedback` are stamped but never verified. **The attendance backfill is no longer
+needed** — attendance deliberately carries no hall (it answers "am I coming"; the ride
+request answers "to which hall"), which also keeps a rider-writable field out of
+dispatch.
+
+`AddressAutocomplete` gained an optional `id` so a label can reach it. **Five other
+call sites** still render a visible label above it with no association — same one-line
+fix, not touched because it is outside this change.
 
 ## DEPLOYED — Alerts moved into the panel, 2026-08-31
 
