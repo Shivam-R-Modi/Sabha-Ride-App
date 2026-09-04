@@ -212,6 +212,24 @@ describe('building one gathering per hall', () => {
         expect(b.event!.venue).toEqual(SOMERVILLE);
     });
 
+    it('RESOLVES THE VENUE THROUGH THE HALL when the gathering has no override', () => {
+        /**
+         * A real change in the published document, and worth pinning rather than
+         * discovering. Production had `venue: null` on `system/rideContext`, because
+         * the recurring sabha carries no per-event override — clients fell through to
+         * `settings/main` themselves.
+         *
+         * The precedence is now `event.venue → locations/{id}.venue →
+         * settings/main`, so the hall's own venue is published instead of null. The
+         * address a rider sees is unchanged today because the seed script COPIED it
+         * from `settings/main`; what changes is that the hall is now the authority, so
+         * a manager moving one hall no longer needs the global default to follow.
+         */
+        const [a] = hallContexts(SCHEDULED, halls, NOW, ZONE, '10:00');
+        expect(SCHEDULED.venue).toBeNull();
+        expect(a.event!.venue).toEqual(HUNTINGTON);
+    });
+
     it('lets the gathering own override beat the hall standing venue', () => {
         // The existing precedence, one link longer: event venue → hall → settings/main.
         const oneOff = { ...SCHEDULED, venue: { lat: 42.5, lng: -71.2, address: 'Church Hall' } };
