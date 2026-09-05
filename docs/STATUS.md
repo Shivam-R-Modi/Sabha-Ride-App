@@ -3,7 +3,7 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-04**.
 
-## IN PROGRESS — two sabha locations, A–D deployed, E written not deployed, 2026-09-04
+## DEPLOYED — two sabha locations, all five stages live, 2026-09-04
 
 Branch `claude/airport-pickup-workflow-89afab`. Client **2071**, functions **1158**,
 rules **266**. Full sweep clean. **One hall is still the only active one, so nothing a
@@ -141,9 +141,13 @@ Measured before and after the deploy, top-level fields:
 re-run with `--active`, then `node scripts/locations.cjs verify`. Every picker appears
 on its own the moment a second hall is active — nothing else to deploy.
 
-**Stage E is WRITTEN AND COMMITTED BUT NOT DEPLOYED** (`8aad404`, `34287a6`,
-`cc72084`, `563ef95`, `9bca4ce`, and the reminder commit after them). It needs the usual
-`firestore:rules` → `functions` → `hosting`, though the rules are unchanged in it.
+**Stage E — functions + hosting, DEPLOYED 2026-09-04** (`8aad404`, `34287a6`,
+`cc72084`, `563ef95`, `9bca4ce`, `51d3de1`). No rules change in it, so the order was
+functions → hosting. Deployed with the window CLOSED and zero live rides; next sabha was
+Monday the 7th. `system/rideContext` after the rollout was field-for-field identical to
+before it — same `eventId`, same times, same single `byLocation` slice — with only
+`lastUpdated` moving, which is the single-hall guarantee holding in production. Live
+bundle `index-BRvzw6lq.js` matches `dist/`. `main` fast-forwarded to `51d3de1`.
 
 What it does: a hall can diverge for one evening — its own times, its own venue, or
 closed while the other room meets. The mechanism is an ordinary exception document, so
