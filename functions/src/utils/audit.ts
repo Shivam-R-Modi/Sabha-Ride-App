@@ -72,7 +72,15 @@ export type AuditAction =
     // people expected never arrived, and `reminder.send` is the row that explains why
     // a whole congregation's phones buzzed at 10am.
     | 'settings.notifications'
-    | 'reminder.send';
+    | 'reminder.send'
+    // A sabha hall was opened or closed. Two actions rather than one, because they are
+    // not symmetrical: opening one changes what every rider is asked, while closing one
+    // leaves every rider already booked for it UNDISPATCHABLE — `rejectionFor` refuses
+    // their ride, every Sarthi is told nobody is waiting, and nobody is ever collected.
+    // These rows are the only record of which it was, and of how many people were
+    // waiting at the time.
+    | 'location.open'
+    | 'location.close';
 
 export type AuditOutcome = 'pending' | 'ok' | 'failed';
 

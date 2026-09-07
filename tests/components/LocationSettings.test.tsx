@@ -1,24 +1,21 @@
 /**
- * The manager's venue editor, now that a venue lives in two places.
+ * The default sabha times. This card no longer edits an address.
  *
- * THE ASSERTION THIS FILE EXISTS FOR is the anti-dead-button one: **saving reaches the
- * hall, not only `settings/main`.**
+ * IT USED TO, and the tests for that moved to HallManagement.test.tsx rather than being
+ * deleted — the invariant they held did not go away, it changed owner.
  *
- * Dispatch resolves a venue as `event.venue → locations/{id}.venue →
- * settings/main.sabhaLocation`. So the moment the hall became the authority, a Save
- * button that wrote only `settings/main` would report "Location updated successfully!"
- * and change nothing a driver is routed by. That is this repo's signature defect, and
- * it would have been shipped by the very change that introduced the new authority —
- * which is exactly the kind of thing a test has to hold, because both writes succeed
- * and nothing anywhere errors.
+ * The address editor here wrote a hall's venue only when EXACTLY ONE hall was open, a
+ * deliberate guard for the release where a manager could not create a second. The moment
+ * a second hall was actually opened that condition went false, so Save reported
+ * "Location updated successfully!" and wrote only `settings/main.sabhaLocation` — which
+ * loses to `locations/{id}.venue` in `resolveVenue`. A button that says it moved sabha
+ * and moves nothing: this repo's signature defect, introduced by turning on the feature
+ * the guard was waiting for.
  *
- * The other direction is asserted too: `settings/main` must STILL be written, because
- * an un-refreshed phone reads it for the address it shows a rider. Dropping it would
- * leave the two disagreeing about where sabha is, silently, for whoever has not tapped
- * the update banner.
+ * Addresses are per hall now, in `HallManagement`, with the hall named on the row. What
+ * is left here is genuinely global, so there is nothing to be ambiguous about.
  *
- * Text, roles and the payloads handed to the two writers. No class names — see
- * tests/setup.ts.
+ * Text, roles and the payload handed to the writer. No class names — see tests/setup.ts.
  */
 
 import React from 'react';
@@ -92,99 +89,21 @@ beforeEach(() => {
     openHalls = [HALL];
 });
 
-describe('saving a new venue', () => {
-    it('REACHES THE HALL, which is what dispatch routes by', async () => {
-        render(<LocationSettings />);
-        await pickAddress();
-        await save();
-
-        await waitFor(() => expect(updateLocationVenue).toHaveBeenCalled());
-        expect(updateLocationVenue).toHaveBeenCalledWith(
-            'boston-huntington',
-            { lat: 42.387, lng: -71.099, address: '5 Elm Street, Somerville, MA' },
-            'mgr_1',
-        );
-    });
-
-    it('and STILL writes settings/main, which an un-refreshed phone reads', async () => {
-        render(<LocationSettings />);
-        await pickAddress();
-        await save();
-
-        await waitFor(() => expect(updateSabhaLocation).toHaveBeenCalled());
-        expect(updateSabhaLocation).toHaveBeenCalledWith(
-            { lat: 42.387, lng: -71.099, address: '5 Elm Street, Somerville, MA' },
-            'mgr_1',
-        );
-    });
-
-    it('writes the hall FIRST, so a failure there cannot leave the two disagreeing', async () => {
-        updateLocationVenue.mockRejectedValueOnce(new Error('permission denied'));
-        render(<LocationSettings />);
-        await pickAddress();
-        await save();
-
-        await waitFor(() => expect(screen.getByText(/permission denied/i)).toBeInTheDocument());
-        expect(updateSabhaLocation).not.toHaveBeenCalled();
-    });
-
-    it('says so when the save fails, rather than looking as though it worked', async () => {
-        updateSabhaLocation.mockRejectedValueOnce(new Error('Are you a manager?'));
-        render(<LocationSettings />);
-        await pickAddress();
-        await save();
-
-        await waitFor(() => expect(screen.getByText(/Are you a manager/i)).toBeInTheDocument());
-    });
-
-    it('confirms only after both writes have landed', async () => {
-        render(<LocationSettings />);
-        await pickAddress();
-        await save();
-
-        await waitFor(() => expect(screen.getByText(/updated successfully/i)).toBeInTheDocument());
-        expect(updateLocationVenue).toHaveBeenCalledTimes(1);
-        expect(updateSabhaLocation).toHaveBeenCalledTimes(1);
-    });
-});
-
-describe('which hall it edits', () => {
-    it('edits the single open hall, unambiguously', () => {
-        // Asserted so this cannot quietly start editing an arbitrary hall once a
-        // second one can exist. A manager cannot create one from the UI yet, so one
-        // open hall is guaranteed by construction today.
-        expect(openHalls).toHaveLength(1);
-    });
-
-    it('leaves the hall alone when it cannot tell which one, rather than guessing', async () => {
-        // With two halls open there is no unambiguous target, and writing the wrong
-        // hall's venue would re-point every rider at that hall to the wrong building.
-        // `settings/main` still gets the edit, so nothing is lost.
-        openHalls = [HALL, { ...HALL, id: 'somerville', name: 'Somerville', order: 1 }];
-        render(<LocationSettings />);
-        await pickAddress();
-        await save();
-
-        await waitFor(() => expect(updateSabhaLocation).toHaveBeenCalled());
-        expect(updateLocationVenue).not.toHaveBeenCalled();
-    });
-});
-
 describe('every field is labelled', () => {
-    it('associates all three labels with their inputs', () => {
+    it('associates both time labels with their inputs', () => {
         /**
          * The time fields had labels with no `htmlFor` and inputs with no `id`, so two
          * adjacent time boxes were both announced as "time" and a screen reader user
-         * could not tell start from end. The ADDRESS field had the same defect and I
-         * only found it by rendering the screen in the preview harness — which is the
-         * argument for looking at a page rather than trusting a component test.
+         * could not tell start from end. The address field on this card had the same
+         * defect, found by rendering the screen in the preview harness rather than by a
+         * test — which is the argument for looking at a page. That field now lives in
+         * HallManagement, labelled per hall, and is asserted there.
          *
          * `getByLabelText` fails outright on an unassociated label, so this asserts the
          * association rather than the text.
          */
         render(<LocationSettings />);
 
-        expect(screen.getByLabelText(/New Address/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Default Start/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Default End/i)).toBeInTheDocument();
     });

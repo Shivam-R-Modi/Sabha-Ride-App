@@ -42,6 +42,11 @@ export { globalAssignDriver } from './http/globalAssignDriver';
 // only, no lock, no assignment — and deliberately server-side so it cannot drift from
 // what the tap actually does.
 export { previewCarloads } from './http/previewCarloads';
+// Opening and closing a hall. A callable because firestore.rules denies `active` to
+// every client in both directions — a manager may create a hall and fix its address from
+// the app, but opening one changes what every rider is asked and where every Sarthi can
+// be sent, so it goes through a guard, an acknowledgement and an audit row.
+export { setLocationActive } from './http/setLocationActive';
 export { startRide } from './http/startRide';
 export { sarthiArrived } from './http/sarthiArrived';
 export { nudgeRider } from './http/nudgeRider';

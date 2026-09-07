@@ -88,6 +88,35 @@ export function eventIdFor(dateKey: unknown, locationId: unknown): string | null
 }
 
 /**
+ * A document id derived from a hall's name.
+ *
+ * THE ID IS PERMANENT AND LOAD-BEARING. It becomes part of every `events`,
+ * `weeklyAttendance` and `statistics` key that hall ever has, so it cannot be corrected
+ * later without orphaning all of them — which is why the screen shows it before saving
+ * rather than generating it silently.
+ *
+ * Returns null when nothing usable survives, rather than a fallback like `hall-1`. A
+ * name of "会館" or "!!!" leaves no letters at all, and inventing an id a manager did not
+ * choose for a document they can never rename is worse than asking them to type one.
+ */
+export function locationIdFromName(name: string): string | null {
+    const id = name
+        .toLowerCase()
+        .normalize('NFKD')
+        // Strip accents so "Malmö" becomes "malmo" rather than losing the letter.
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        // Firestore forbids ids matching `__.*__`, and a doubled separator would also
+        // read as this app's own event-id suffix.
+        .replace(/-{2,}/g, '-')
+        .slice(0, 40)
+        .replace(/-+$/g, '');
+
+    return id && LOCATION_ID_PATTERN.test(id) ? id : null;
+}
+
+/**
  * The document id for an EXCEPTION: what one date, or one hall of it, does differently.
  *
  * A DIFFERENT CONVENTION FROM `eventIdFor`, AND DELIBERATELY SO. `eventIdFor` answers

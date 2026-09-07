@@ -131,3 +131,23 @@ export const previewCarloads = async (locationId?: string | null) => ({
         { id: 'req-10', seats: 1, reason: 'outside-every-fence' as const },
     ],
 });
+
+/**
+ * Opening and closing a hall, canned.
+ *
+ * Returns a CLOSE that would strand people, because that is the dialog worth looking at
+ * — the one where the count has to be right and the wording has to say what silence a
+ * rider would get.
+ */
+export const previewLocationActive = async (locationId: string, active: boolean) => ({
+    locationId, active,
+    name: locationId === 'somerville' ? 'Elm Street' : 'Sabha',
+    requestedRideCount: active ? 0 : 3,
+    requestedSeatCount: active ? 0 : 7,
+    openAfter: active ? 3 : 1,
+});
+
+export const setLocationActive = async (locationId: string, active: boolean) => ({
+    locationId, active, name: 'Elm Street',
+    requestedRideCount: 0, requestedSeatCount: 0, openAfter: 1, changed: true,
+});

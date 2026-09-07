@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Save, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Clock, Save, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../hooks/useSettings';
-import { useLocations } from '../../hooks/useLocations';
-import { AddressAutocomplete } from '../auth/AddressAutocomplete';
-import { PlaceDetails } from '../../hooks/useGooglePlaces';
 import {
     isUsableDuration, DROPOFF_LEAD_MINUTES, PICKUP_LEAD_DAYS,
 } from '../../src/constants/schedule';
@@ -13,24 +10,21 @@ import { messageOf } from '../../src/utils/errorText';
 export const LocationSettings: React.FC = () => {
     const { currentUser } = useAuth();
     const {
-        sabhaLocation, sabhaStartTime, sabhaEndTime, loading,
-        updateSabhaLocation, updateSabhaTimes,
+        sabhaStartTime, sabhaEndTime, loading, updateSabhaTimes,
     } = useSettings();
     /**
-     * The hall this screen is editing.
+     * THE ADDRESS EDITOR THAT USED TO BE HERE IS GONE, and it had to be.
      *
-     * ONE HALL TODAY, so there is nothing to disambiguate and no picker to offer — a
-     * control with one option is a control that cannot do anything. A manager cannot
-     * create a second hall from the UI yet, so `active[0]` is unambiguous by
-     * construction; the per-hall version arrives with the release that adds the
-     * picker, and `active.length` is asserted in the test so this cannot quietly start
-     * editing an arbitrary hall.
+     * It wrote a hall's venue only when EXACTLY ONE was open — a deliberate guard while
+     * a manager could not create a second one. The moment a second hall was opened that
+     * condition went false, so Save reported "Location updated successfully!" and wrote
+     * only `settings/main.sabhaLocation`, which loses to `locations/{id}.venue` in
+     * `resolveVenue`. A button that says it moved sabha and moves nothing.
+     *
+     * Addresses now live in `HallManagement`, per hall, with the hall named on the row —
+     * so there is nothing here to be ambiguous about. This card keeps the DEFAULT TIMES,
+     * which are genuinely global.
      */
-    const { active: openHalls, updateLocationVenue } = useLocations();
-    const editingHall = openHalls.length === 1 ? openHalls[0] : null;
-
-    const [address, setAddress] = useState('');
-    const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
     const [startInput, setStartInput] = useState('');
     const [endInput, setEndInput] = useState('');
     const [saving, setSaving] = useState(false);
@@ -40,13 +34,6 @@ export const LocationSettings: React.FC = () => {
     // Manager invites used to live on this page, under a heading about where
     // drivers are routed to. Granting someone manager rights is a people
     // decision, so it moved to the People page — components/manager/ManagerInvites.tsx.
-
-    // Initialize form with current settings from Firestore
-    useEffect(() => {
-        if (!loading && sabhaLocation) {
-            setAddress(sabhaLocation.address);
-        }
-    }, [loading, sabhaLocation]);
 
     useEffect(() => {
         if (!loading) {
@@ -61,14 +48,7 @@ export const LocationSettings: React.FC = () => {
     // rejected (anything under 16 minutes — drop-off would open before the sabha
     // started) would save here and then block the manager there.
     const timesValid = isUsableDuration(startInput, endInput);
-    const canSave = !!selectedPlace || (timesChanged && timesValid);
-
-    const handlePlaceSelect = (details: PlaceDetails) => {
-        setSelectedPlace(details);
-        setAddress(details.formattedAddress);
-        setErrorMsg(null);
-        setSavedSuccess(false);
-    };
+    const canSave = timesChanged && timesValid;
 
     const handleSave = async () => {
         if (!currentUser) return;
@@ -79,7 +59,7 @@ export const LocationSettings: React.FC = () => {
         }
 
         if (!canSave) {
-            setErrorMsg('Nothing to save — change a time, or pick an address from the suggestions.');
+            setErrorMsg('Nothing to save — change a time first.');
             return;
         }
 
@@ -88,41 +68,10 @@ export const LocationSettings: React.FC = () => {
         setSavedSuccess(false);
 
         try {
-            if (selectedPlace) {
-                const venue = {
-                    lat: selectedPlace.latitude,
-                    lng: selectedPlace.longitude,
-                    address: selectedPlace.formattedAddress,
-                };
-
-                /**
-                 * WRITTEN TO BOTH PLACES, and that is the point of this release.
-                 *
-                 * Dispatch now resolves a venue as
-                 * `event.venue → locations/{id}.venue → settings/main.sabhaLocation`.
-                 * Writing only `settings/main` would leave this Save button reporting
-                 * "Location updated successfully!" while changing nothing a driver is
-                 * routed by — the dead control this codebase keeps removing, shipped
-                 * by the change that introduced the new authority.
-                 *
-                 * Writing only the hall would be worse in the other direction: an
-                 * un-refreshed phone still reads `settings/main` for the address it
-                 * shows a rider, so the two would disagree about where sabha is.
-                 *
-                 * The hall FIRST, so a failure there aborts before the two can
-                 * diverge. Keeping `settings/main` in step also means this release is
-                 * revertible by redeploying functions alone.
-                 */
-                if (editingHall) {
-                    await updateLocationVenue(editingHall.id, venue, currentUser.uid);
-                }
-                await updateSabhaLocation(venue, currentUser.uid);
-            }
             if (timesChanged) {
                 await updateSabhaTimes(startInput, endInput, currentUser.uid);
             }
             setSavedSuccess(true);
-            setSelectedPlace(null); // Reset selection state after save
             setTimeout(() => setSavedSuccess(false), 3000);
         } catch (err: unknown) {
             console.error('[LocationSettings] Save error:', err);
@@ -145,60 +94,17 @@ export const LocationSettings: React.FC = () => {
             {/* Header */}
             <div className="px-4 py-3 border-b border-hairline/10 bg-cream-200">
                 <div className="flex items-center gap-2">
-                    <MapPin size={18} className="text-saffron" />
-                    <h3 className="text-sm font-bold text-coffee">Sabha Location</h3>
+                    <Clock size={18} className="text-saffron" />
+                    <h3 className="text-sm font-bold text-coffee">Default sabha times</h3>
                 </div>
                 <p className="text-xs text-coffee-500 mt-1">
-                    Set the venue address for rides. Changes apply immediately to all users.
-                </p>
-            </div>
-
-            {/* Current Location Display */}
-            <div className="px-4 py-3 border-b border-hairline/10 bg-[rgb(var(--warning-bg))]/50">
-                <p className="text-xs text-coffee-500 mb-1">Current Location</p>
-                <p className="text-sm font-medium text-coffee">{sabhaLocation.address}</p>
-                <p className="text-xs text-coffee-500 mt-0.5">
-                    {sabhaLocation.lat.toFixed(6)}, {sabhaLocation.lng.toFixed(6)}
+                    Used when a gathering has no time of its own. Addresses are set per
+                    location above.
                 </p>
             </div>
 
             {/* Edit Form */}
             <div className="px-4 py-4 space-y-3">
-                <div>
-                    <label
-                        htmlFor="sabha-new-address" className="block text-xs font-medium text-coffee-700 mb-1">
-                        New Address
-                    </label>
-                    <AddressAutocomplete
-                        id="sabha-new-address"
-                        value={address}
-                        onChange={(val) => {
-                            setAddress(val);
-                            setSavedSuccess(false);
-                            setErrorMsg(null);
-                            // If user edits after selecting, clear the place data
-                            if (selectedPlace && val !== selectedPlace.formattedAddress) {
-                                setSelectedPlace(null);
-                            }
-                        }}
-                        onSelect={handlePlaceSelect}
-                        disabled={saving}
-                        placeholder="Search for an address…"
-                    />
-                    {/* Selection confirmation */}
-                    {selectedPlace && (
-                        <p className="text-xs text-[rgb(var(--success-text))] mt-1 flex items-center gap-1">
-                            <CheckCircle2 size={12} />
-                            Address selected — {selectedPlace.latitude.toFixed(6)}, {selectedPlace.longitude.toFixed(6)}
-                        </p>
-                    )}
-                    {!selectedPlace && address.length >= 3 && address !== sabhaLocation.address && (
-                        <p className="text-xs text-coffee-500 mt-1">
-                            Please select an address from the suggestions
-                        </p>
-                    )}
-                </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* `min-w-0`: a grid child will not shrink below its own
                         content, and a native time control reports a wide

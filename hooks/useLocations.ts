@@ -4,6 +4,7 @@ import { db } from '../firebase/config';
 import {
     activeLocations as onlyActive,
     normaliseLocation,
+    LOCATION_ID_PATTERN,
     type SabhaLocationRecord,
 } from '../src/utils/locations';
 
@@ -35,6 +36,13 @@ export function useLocations(): {
         locationId: string,
         venue: { lat: number; lng: number; address: string },
         updatedByUid: string,
+    ) => Promise<void>;
+    /** Create a hall. It lands CLOSED — opening one goes through the callable. */
+    createLocation: (
+        locationId: string,
+        name: string,
+        venue: { lat: number; lng: number; address: string },
+        createdByUid: string,
     ) => Promise<void>;
 } {
     const [locations, setLocations] = useState<SabhaLocationRecord[]>([]);
@@ -85,5 +93,43 @@ export function useLocations(): {
         );
     };
 
-    return { locations, active: onlyActive(locations), loading, error, updateLocationVenue };
+    /**
+     * Add a hall, CLOSED.
+     *
+     * `active` is not written at all, which is what firestore.rules requires on create
+     * — `request.resource.data.get('active', false) == false`. Absent reads as closed
+     * everywhere (`normaliseLocation`), so the hall exists, can have its address
+     * corrected, and appears to nobody until a manager opens it through the callable.
+     * Creating and opening are two decisions; this is only the first.
+     *
+     * Refuses an id that already exists rather than merging into it — `setDoc` with
+     * merge would silently rename a live hall and move its venue, and the id is the one
+     * thing about a hall that can never be corrected afterwards.
+     */
+    const createLocation = async (
+        locationId: string,
+        name: string,
+        venue: { lat: number; lng: number; address: string },
+        createdByUid: string,
+    ) => {
+        if (!LOCATION_ID_PATTERN.test(locationId)) {
+            throw new Error('That name does not make a usable id. Try a simpler one.');
+        }
+        if (locations.some(h => h.id === locationId)) {
+            throw new Error(`There is already a sabha location called "${locationId}".`);
+        }
+        // `order` puts new halls after the existing ones, which is the order every
+        // picker renders in.
+        const order = locations.reduce((n, h) => Math.max(n, h.order + 1), 0);
+        await setDoc(doc(db, 'locations', locationId), {
+            name, venue, order,
+            createdAt: new Date().toISOString(),
+            createdBy: createdByUid,
+        });
+    };
+
+    return {
+        locations, active: onlyActive(locations), loading, error,
+        updateLocationVenue, createLocation,
+    };
 }

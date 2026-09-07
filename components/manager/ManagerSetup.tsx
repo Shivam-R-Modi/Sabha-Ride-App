@@ -3,6 +3,7 @@ import { CalendarDays, Clock, MapPin } from 'lucide-react';
 import { SabhaCalendar } from './SabhaCalendar';
 import { RideWindowControl } from './RideWindowControl';
 import { LocationSettings } from './LocationSettings';
+import { HallManagement } from './HallManagement';
 import { Disclosure, type DisclosureProps } from '../shared/Disclosure';
 
 /**
@@ -65,9 +66,21 @@ export const ManagerSetup: React.FC = () => {
         {
             id: 'venue',
             icon: <MapPin size={20} />,
-            title: 'Venue',
-            summary: 'Where drivers are routed to',
-            children: <LocationSettings />,
+            title: 'Sabha locations',
+            /**
+             * Both cards, under one heading, because they answer one question.
+             *
+             * `HallManagement` first: it owns the addresses now, and the addresses are
+             * what a manager comes here to change. `LocationSettings` keeps the default
+             * times below it.
+             */
+            summary: 'Where sabha is held, and which locations are open',
+            children: (
+                <div className="space-y-4">
+                    <HallManagement />
+                    <LocationSettings />
+                </div>
+            ),
         },
     ];
 

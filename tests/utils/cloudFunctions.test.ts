@@ -124,6 +124,7 @@ const WRAPPERS: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
     ['exportMembers', () => cloudFunctions.exportMembers('all')],
     ['manuallyUpdateRideContext', () => cloudFunctions.manuallyUpdateRideContext({ reset: true })],
     ['previewCarloads', () => cloudFunctions.previewCarloads(null)],
+    ['setLocationActive', () => cloudFunctions.setLocationActive('somerville', true)],
 ];
 
 /**
@@ -131,7 +132,7 @@ const WRAPPERS: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
  * above cannot hold them. Counted here so the coverage check at the bottom stays
  * honest when one is added.
  */
-const SPECIAL_CASE_SITES = 4;
+const SPECIAL_CASE_SITES = 5;
 
 describe('callable names', () => {
     it.each(WRAPPERS)('%s targets its own name', async (expected, invoke) => {
@@ -152,6 +153,16 @@ describe('callable names', () => {
         assertName(name, 'deleteSabhaEvent');
         expect(data).toMatchObject({ date: '2026-08-24', acknowledge: true });
         expect(data).not.toHaveProperty('dryRun');
+    });
+
+    it('previewLocationActive targets setLocationActive, as a dry run', async () => {
+        // The second call site on that callable. A preview that hit the wrong name would
+        // leave the dialog unable to say how many riders a close would strand — and the
+        // server would still refuse, so the manager would see only a bare error.
+        const { name, data } = await callOf(() =>
+            cloudFunctions.previewLocationActive('somerville', false));
+        assertName(name, 'setLocationActive');
+        expect(data).toMatchObject({ locationId: 'somerville', active: false, dryRun: true });
     });
 
     // Two call sites behind one wrapper, one per input shape. Either could carry

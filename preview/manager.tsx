@@ -11,6 +11,7 @@ import { SabhaCalendar } from '../components/manager/SabhaCalendar';
 import { ManagerReports } from '../components/manager/ManagerReports';
 import { NotificationSettings } from '../components/manager/NotificationSettings';
 import { LocationSettings } from '../components/manager/LocationSettings';
+import { HallManagement } from '../components/manager/HallManagement';
 import { RequestTable } from '../components/manager/RequestTable';
 import type { StudentRequest } from '../types';
 import { ToastProvider } from '../contexts/ToastContext';
@@ -98,6 +99,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           />
         </ToastProvider>
       </div>
+    </div>
+    <div>
+      {/* Never rendered outside a sign-in until now — and the reason it exists is that
+          opening the second hall turned LocationSettings' address editor into a dead
+          control. Two active halls plus a retired one, from the firestore stub. */}
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Sabha locations — add, move, open, close</p>
+      <ToastProvider><HallManagement /></ToastProvider>
     </div>
     <div>
       <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>People — approvals</p>

@@ -531,6 +531,56 @@ export async function manuallyUpdateRideContext(params?: ManuallyUpdateRideConte
 }
 
 /**
+ * Opening or closing a sabha hall.
+ *
+ * A CALLABLE BECAUSE THE FIELD IS NOT CLIENT-WRITABLE. firestore.rules denies `active`
+ * in both directions, so a manager may create a hall and correct its address from the
+ * app but cannot switch one on. That split is deliberate: an address typed wrong is
+ * visible and fixable, whereas opening a hall changes what every rider is asked and
+ * where every Sarthi can be sent — and closing one leaves everybody already booked for
+ * it undispatchable, with no error anywhere.
+ *
+ * `dryRun` first, always: the dialog needs to say how many riders would be stranded
+ * before a manager confirms.
+ */
+export interface LocationActivePreview {
+    locationId: string;
+    name: string;
+    /** What it would become. */
+    active: boolean;
+    /** Riders booked for this hall who are still waiting for a car. */
+    requestedRideCount: number;
+    /** People those requests are for — seven requests can be fourteen riders. */
+    requestedSeatCount: number;
+    /** How many halls would be open afterwards. Zero is refused. */
+    openAfter: number;
+}
+
+export async function previewLocationActive(
+    locationId: string,
+    active: boolean,
+): Promise<LocationActivePreview> {
+    return callFunction<LocationActivePreview>('setLocationActive', {
+        locationId, active, dryRun: true,
+    });
+}
+
+export async function setLocationActive(
+    locationId: string,
+    active: boolean,
+    /**
+     * Confirms that riders booked for this hall will stop being dispatchable.
+     *
+     * Only consulted when closing one with people waiting; the server refuses without
+     * it rather than trusting the dialog to have asked.
+     */
+    acknowledge = false,
+): Promise<LocationActivePreview & { changed: boolean }> {
+    return callFunction<LocationActivePreview & { changed: boolean }>(
+        'setLocationActive', { locationId, active, acknowledge });
+}
+
+/**
  * The waiting queue split into the cars dispatch would form.
  *
  * WHY THE SERVER ANSWERS THIS. The grouping has to be the same grouping
