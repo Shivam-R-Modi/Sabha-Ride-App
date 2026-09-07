@@ -79,10 +79,13 @@ export const updateNotificationSettings = async (settings: unknown) => ({
  * looking at this page is what catches a wrapping or contrast problem in the states
  * that only turn up on a busy Friday.
  */
-export const previewCarloads = async (_locationId?: string | null) => ({
+export const previewCarloads = async (locationId?: string | null) => ({
     status: 'ok' as const,
     rideType: 'home-to-sabha' as const,
-    locationId: 'boston-huntington',
+    // ECHOED BACK, because the board compares it against the picker to know whether it
+    // is still showing the hall you switched away from. Hardcoded, that check is either
+    // permanently on or permanently off and the harness cannot show either honestly.
+    locationId: locationId ?? 'boston-huntington',
     carSeats: [6, 3],
     maxFleetSeats: 6,
     groups: [

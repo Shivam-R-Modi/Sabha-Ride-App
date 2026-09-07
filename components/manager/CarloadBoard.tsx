@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertCircle, Car, Loader2, RefreshCw, Users, MapPin, Anchor } from 'lucide-react';
 import { StudentRequest } from '../../types';
+import type { SabhaLocationRecord } from '../../src/utils/locations';
 import type { CarloadPreviewResult, CarloadLeftoverReason } from '../../src/utils/cloudFunctions';
 
 /**
@@ -24,12 +25,30 @@ import type { CarloadPreviewResult, CarloadLeftoverReason } from '../../src/util
  * asked not to be split" look identical in a list and need completely different things
  * from a manager. The second cannot resolve itself — every driver skips them every
  * round, all evening — and this queue has been bitten by exactly that before.
+ *
+ * ── ONE HALL AT A TIME, AND IT SAYS WHO IS ELSEWHERE ────────────────────────────────
+ *
+ * Cars never mix halls, so a grouping is per hall and this board shows one. That leaves
+ * a hazard the picker alone does not fix: every rider bound for the OTHER hall is in
+ * neither the cars nor the leftovers, so they are simply absent from the screen a
+ * manager uses to check who is waiting. Counted from the queue this component already
+ * has and shown beside the picker — the export-not-dispatch rule this codebase already
+ * follows for the CSV: dispatch refuses the ambiguous, a view SHOWS it and says so.
+ *
+ * The same goes for a request naming no hall at all. Dispatch refuses those once two
+ * halls are open, so they appear under no hall — and a rider nobody can be sent to is
+ * precisely the one a manager needs to see.
  */
 
 /** Read-only: this board is for looking at. Assigning stays in the list view. */
 interface CarloadBoardProps {
     /** Every waiting request, for joining names onto the server's ride ids. */
     requests: StudentRequest[];
+    /** The halls open for business. A picker appears only when there are two or more. */
+    halls: SabhaLocationRecord[];
+    /** The hall being grouped. Null before the hall list has loaded. */
+    selectedHall: string | null;
+    onSelectHall: (locationId: string) => void;
     preview: CarloadPreviewResult | null;
     loading: boolean;
     error: string | null;
@@ -64,9 +83,40 @@ const LEFTOVER_COPY: Record<CarloadLeftoverReason, { label: string; detail: stri
 };
 
 export const CarloadBoard: React.FC<CarloadBoardProps> = ({
-    requests, preview, loading, error, stale, onRefresh,
+    requests, halls, selectedHall, onSelectHall, preview, loading, error, stale, onRefresh,
 }) => {
     const byId = new Map(requests.map(r => [r.id, r]));
+
+    /**
+     * How many are waiting at each OTHER hall, and how many name no hall at all.
+     *
+     * Counted here rather than asked of the server: `usePendingRequests` already carries
+     * every waiting rider's hall, so this needs no second read and cannot disagree with
+     * the list behind the toggle.
+     *
+     * Counts and seats, never names — the other hall's riders have their own board, and
+     * this line exists to say "they are not missing", not to list them twice.
+     */
+    const elsewhere = halls
+        .filter(h => h.id !== selectedHall)
+        .map(h => ({
+            name: h.name,
+            groups: requests.filter(r => r.locationId === h.id).length,
+        }))
+        .filter(h => h.groups > 0);
+
+    /**
+     * A request filed before the hall picker existed, or by a cached client.
+     *
+     * Dispatch REFUSES these once two halls are open — genuinely unknowable, and guessing
+     * sends a car to the wrong building — so they belong to no hall's board and would
+     * otherwise be invisible on every one of them.
+     *
+     * No hall-count check here: this is only ever rendered inside `hallBar`, which is
+     * null below two halls. A second copy of that rule read as intent and was in fact
+     * unreachable — mutation proved it changed nothing.
+     */
+    const unplaced = requests.filter(r => !r.locationId).length;
 
     /**
      * A rider in the grouping that this list has never heard of.
@@ -78,18 +128,76 @@ export const CarloadBoard: React.FC<CarloadBoardProps> = ({
      */
     const nameOf = (id: string) => byId.get(id)?.name ?? `Unknown rider (${id.slice(0, 6)})`;
 
+    /**
+     * The hall picker, and the count of who is at the others.
+     *
+     * Rendered ABOVE every other state — closed window, error, loading — because those
+     * are precisely the moments a manager wants to look at the other hall, and a picker
+     * that disappears when this hall is quiet is a control that vanishes when it is
+     * needed.
+     *
+     * Only when there are two or more halls. With one it would be a choice with a single
+     * option, and a hall name on a screen that has never carried one.
+     */
+    const hallBar = halls.length < 2 ? null : (
+        <div className="flex flex-wrap items-center gap-2 pb-1">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-coffee-500">
+                Carloads for
+            </span>
+            <div className="flex items-center rounded-xl border border-hairline/20 overflow-hidden">
+                {halls.map(h => (
+                    <button
+                        key={h.id}
+                        onClick={() => onSelectHall(h.id)}
+                        aria-pressed={selectedHall === h.id}
+                        className={`min-h-11 px-3 text-xs font-bold ${
+                            selectedHall === h.id
+                                ? 'bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))]'
+                                : 'bg-cream-200 text-coffee-700 hover:bg-cream-300'
+                        }`}
+                    >
+                        {h.name}
+                    </button>
+                ))}
+            </div>
+
+            {/* NOBODY VANISHES. Cars never mix halls, so this board shows one — and
+                without this line every rider bound for the other hall is absent from
+                the screen a manager uses to check who is waiting. */}
+            {elsewhere.length > 0 && (
+                <span className="text-xs text-coffee-500">
+                    {elsewhere.map(e => `${e.groups} waiting at ${e.name}`).join(' · ')}
+                </span>
+            )}
+
+            {/* A request naming no hall. Dispatch refuses these with two halls open, so
+                they sit under no hall's board — and a rider nobody can be sent to is the
+                one a manager most needs to see. */}
+            {unplaced > 0 && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))]">
+                    <AlertCircle size={11} />
+                    {unplaced} {unplaced === 1 ? 'request names' : 'requests name'} no sabha — no Sarthi can be sent
+                </span>
+            )}
+        </div>
+    );
+
     if (loading && !preview) {
         return (
-            <div className="p-6 flex items-center gap-3 text-sm text-coffee-500">
-                <Loader2 size={16} className="animate-spin" />
-                Working out the carloads…
+            <div className="p-4 space-y-3">
+                {hallBar}
+                <div className="flex items-center gap-3 text-sm text-coffee-500 px-2">
+                    <Loader2 size={16} className="animate-spin" />
+                    Working out the carloads…
+                </div>
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="p-6">
+            <div className="p-4 space-y-3">
+                {hallBar}
                 <div className="flex items-start gap-3 p-4 rounded-2xl bg-[rgb(var(--danger-bg))] text-[rgb(var(--danger-text))]">
                     <AlertCircle size={18} className="shrink-0 mt-0.5" />
                     <div className="min-w-0">
@@ -109,25 +217,52 @@ export const CarloadBoard: React.FC<CarloadBoardProps> = ({
         );
     }
 
-    if (!preview) return null;
+    if (!preview) return hallBar && <div className="p-4">{hallBar}</div>;
 
     if (preview.status === 'window-closed') {
         // Not an error: rides are simply not open. Said plainly rather than drawn as an
         // empty board, which would read as "the grouping is broken".
         return (
-            <div className="p-6 text-sm text-coffee-500">
-                <p className="font-bold text-coffee">Rides are not open right now.</p>
-                <p className="mt-1">
-                    Carloads form once the request window opens for the next sabha.
-                </p>
+            <div className="p-4 space-y-3">
+                {hallBar}
+                <div className="text-sm text-coffee-500 px-2">
+                    <p className="font-bold text-coffee">Rides are not open right now.</p>
+                    <p className="mt-1">
+                        Carloads form once the request window opens for the next sabha.
+                    </p>
+                </div>
             </div>
         );
     }
 
     const { groups, leftover, carSeats } = preview;
 
+    /**
+     * The answer on screen is for a DIFFERENT hall than the picker reads.
+     *
+     * Only true for the moment between a manager tapping a hall and the new grouping
+     * landing. Left unsaid, the board shows one hall's cars under a picker naming
+     * another — nothing loading-looking, nothing stale, and completely wrong. The server
+     * echoes the hall it answered for, which is what makes this checkable rather than
+     * assumed.
+     */
+    const showingOtherHall = selectedHall !== null
+        && preview.locationId !== undefined
+        && preview.locationId !== selectedHall;
+
     return (
         <div className="p-4 space-y-4">
+            {hallBar}
+
+            {showingOtherHall && (
+                <p
+                    role="status"
+                    className="text-xs font-bold px-3 py-2 rounded-xl bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]"
+                >
+                    Still showing {halls.find(h => h.id === preview.locationId)?.name ?? 'the other sabha'} — working out the one you picked…
+                </p>
+            )}
+
             {/* ── What this is, and what it assumed ───────────────────────── */}
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">

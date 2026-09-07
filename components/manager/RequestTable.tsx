@@ -8,6 +8,7 @@ import { useMaxFleetSeats } from '../../hooks/useVehicles';
 import { describePresence } from '../../src/utils/presence';
 import { useCarloadPreview } from '../../hooks/useCarloadPreview';
 import { CarloadBoard } from './CarloadBoard';
+import { useLocations } from '../../hooks/useLocations';
 
 interface RequestTableProps {
   requests: StudentRequest[];
@@ -80,6 +81,23 @@ export const RequestTable: React.FC<RequestTableProps> = ({
    * live there, and the board is deliberately read-only.
    */
   const [view, setView] = useState<'cars' | 'list'>('cars');
+  /**
+   * The halls, and which one the board is grouping.
+   *
+   * Cars never mix halls, so a grouping is per hall. `null` until the hall list loads;
+   * `hallOf` below then settles on the FIRST OPEN HALL — the list is ordered, so that is
+   * the founding hall in practice, and it is a choice rather than a guess because the
+   * board names it and offers the others beside it.
+   *
+   * Not stored as the resolved value: seeded from `active[0]` in state, a manager's
+   * choice would be silently overwritten the first time the hall list re-emitted.
+   */
+  const { active: openHalls } = useLocations();
+  const [chosenHall, setChosenHall] = useState<string | null>(null);
+  /** A hall that has since been retired must not stay selected. */
+  const selectedHall = openHalls.some(h => h.id === chosenHall)
+    ? chosenHall
+    : openHalls[0]?.id ?? null;
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
   const [sortField, setSortField] = useState<'name' | 'time' | 'wait'>('wait');
@@ -133,14 +151,13 @@ export const RequestTable: React.FC<RequestTableProps> = ({
    * grouping refetches when the pool it describes changes — and reports `stale` in the
    * gap, rather than showing last minute's cars as this minute's.
    *
-   * The hall is left null: with one hall that IS the hall, and with two the queue holds
-   * both, so a board for one of them would need a hall picker on this screen. The
-   * grouping for a second hall is real and reachable — the callable takes a hall — but
-   * nothing here asks for it yet, so nothing here pretends to.
+   * Scoped to ONE hall, because cars never mix them. The board renders the picker and
+   * says how many are waiting at the others, so nobody bound for a hall this grouping
+   * does not cover disappears from the screen.
    */
   const carloads = useCarloadPreview(
     requests.map(r => r.id),
-    null,
+    selectedHall,
     view === 'cars' && !loading && requests.length > 0,
   );
 
@@ -233,6 +250,9 @@ export const RequestTable: React.FC<RequestTableProps> = ({
         {view === 'cars' ? (
           <CarloadBoard
             requests={requests}
+            halls={openHalls}
+            selectedHall={selectedHall}
+            onSelectHall={setChosenHall}
             preview={carloads.preview}
             loading={carloads.loading}
             error={carloads.error}

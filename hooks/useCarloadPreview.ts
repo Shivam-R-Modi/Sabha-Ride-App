@@ -59,22 +59,39 @@ export function useCarloadPreview(
     /** The pool this grouping was computed for, so `stale` is a fact and not a guess. */
     const [computedFor, setComputedFor] = useState<string | null>(null);
 
-    // Sorted and joined: the grouping depends on WHICH riders are waiting, not on the
-    // order Firestore happened to return them in. Without sorting, a re-ordered snapshot
-    // of an unchanged queue would refetch on every tick.
-    const key = [...requestIds].sort().join(',');
+    /**
+     * WHICH RIDERS are waiting — the thing `stale` is about.
+     *
+     * Sorted and joined: the grouping depends on the SET, not on the order Firestore
+     * happened to return them in. Unsorted, a re-emitted snapshot of an unchanged queue
+     * refetches on every tick, for ever.
+     */
+    const poolKey = [...requestIds].sort().join(',');
+
+    /**
+     * WHAT WAS ASKED FOR — the pool AND the hall.
+     *
+     * Two keys, because the two questions are different. `stale` asks "has the queue
+     * moved on", which a hall switch does not change. The in-flight token asks "is this
+     * answer still the one I want", and a hall switch absolutely does change that: keyed
+     * on the pool alone, switching from Huntington to Elm Street and back leaves two
+     * requests in flight under the SAME token, so whichever lands last wins — and the
+     * board can end up showing Huntington's cars under a picker reading Elm Street, with
+     * nothing stale and nothing loading.
+     */
+    const runKey = `${locationId ?? ''}|${poolKey}`;
 
     /**
      * Guards against a slow response overwriting a newer one.
      *
-     * Two refetches in flight — a rider asks, then another asks a second later — can
-     * come back in either order, and the older answer landing last would leave the
-     * screen showing a grouping for a queue that has already moved on. Compared against
-     * the key rather than counted, so it is obvious what is being discarded.
+     * Two refetches in flight — a rider asks, then another asks a second later, or a
+     * manager switches hall twice — can come back in either order, and the older answer
+     * landing last would leave the screen describing something nobody asked for.
+     * Compared against the key rather than counted, so it is obvious what is discarded.
      */
     const inFlight = useRef<string | null>(null);
 
-    const run = useCallback(async (forKey: string) => {
+    const run = useCallback(async (forKey: string, forPool: string) => {
         inFlight.current = forKey;
         setLoading(true);
         setError(null);
@@ -82,7 +99,7 @@ export function useCarloadPreview(
             const result = await previewCarloads(locationId);
             if (inFlight.current !== forKey) return;
             setPreview(result);
-            setComputedFor(forKey);
+            setComputedFor(forPool);
         } catch (err: unknown) {
             if (inFlight.current !== forKey) return;
             // Surfaced, never swallowed. The server refuses for reasons a manager can
@@ -96,8 +113,8 @@ export function useCarloadPreview(
 
     useEffect(() => {
         if (!enabled) return;
-        void run(key);
-    }, [enabled, key, run]);
+        void run(runKey, poolKey);
+    }, [enabled, runKey, poolKey, run]);
 
     /**
      * Clear the grouping when the view is closed.
@@ -117,7 +134,7 @@ export function useCarloadPreview(
         preview,
         loading,
         error,
-        stale: preview !== null && computedFor !== key,
-        refresh: useCallback(() => { void run(key); }, [run, key]),
+        stale: preview !== null && computedFor !== poolKey,
+        refresh: useCallback(() => { void run(runKey, poolKey); }, [run, runKey, poolKey]),
     };
 }

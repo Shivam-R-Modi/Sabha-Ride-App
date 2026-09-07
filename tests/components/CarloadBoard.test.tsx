@@ -55,10 +55,27 @@ const ok = (over: Partial<CarloadPreviewResult> = {}): CarloadPreviewResult => (
     ...over,
 });
 
+/** One hall — production today, and the state in which no picker renders. */
+const ONE_HALL = [{
+    id: 'boston-huntington', name: 'Huntington Ave', active: true, order: 0,
+    venue: { lat: 42.339925, lng: -71.088182, address: '360 Huntington Ave' },
+}] as any;
+
+const TWO_HALLS = [
+    ...ONE_HALL,
+    {
+        id: 'somerville', name: 'Elm Street', active: true, order: 1,
+        venue: { lat: 42.387, lng: -71.099, address: '5 Elm Street' },
+    },
+] as any;
+
 const renderBoard = (over: Partial<React.ComponentProps<typeof CarloadBoard>> = {}) =>
     render(
         <CarloadBoard
             requests={REQUESTS}
+            halls={ONE_HALL}
+            selectedHall="boston-huntington"
+            onSelectHall={() => {}}
             preview={ok()}
             loading={false}
             error={null}
@@ -247,5 +264,169 @@ describe('CarloadBoard — states that are not a grouping', () => {
 
         expect(await screen.findByText(/No carload forms right now/i)).toBeTruthy();
         expect(screen.getByText('Anita')).toBeTruthy();
+    });
+});
+
+/**
+ * ONE HALL AT A TIME, and nobody vanishes because of it.
+ *
+ * Cars never mix halls, so a grouping is per hall. That creates the hazard this block
+ * exists for: every rider bound for the OTHER hall is in neither the cars nor the
+ * leftovers, so without a word on screen they are simply absent from the board a manager
+ * uses to check who is waiting. Same principle the CSV export already follows — dispatch
+ * refuses the ambiguous, a view shows it and says so.
+ */
+describe('CarloadBoard — the hall picker', () => {
+    it('shows NO picker with one hall open', async () => {
+        // Production today. A choice with one option, and a hall name on a screen that
+        // has never carried one.
+        renderBoard({ halls: ONE_HALL });
+
+        await screen.findByText('Car 1');
+        expect(screen.queryByText(/Carloads for/i)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Huntington Ave' })).toBeNull();
+    });
+
+    it('offers one button per hall, and marks which is showing', async () => {
+        renderBoard({ halls: TWO_HALLS, selectedHall: 'somerville' });
+
+        expect(await screen.findByRole('button', { name: 'Elm Street' }))
+            .toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Huntington Ave' }))
+            .toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('reports the pick', async () => {
+        const onSelectHall = vi.fn();
+        renderBoard({ halls: TWO_HALLS, onSelectHall });
+
+        await userEvent.click(await screen.findByRole('button', { name: 'Elm Street' }));
+        expect(onSelectHall).toHaveBeenCalledWith('somerville');
+    });
+
+    it('SAYS HOW MANY ARE WAITING AT THE OTHER HALL', async () => {
+        // The line that stops a rider disappearing. Without it, Chirag and Deepa are
+        // nowhere on this screen at all.
+        renderBoard({
+            halls: TWO_HALLS,
+            selectedHall: 'boston-huntington',
+            requests: [
+                rider('r1', 'Anita', { locationId: 'boston-huntington' }),
+                rider('r3', 'Chirag', { locationId: 'somerville' }),
+                rider('r4', 'Deepa', { locationId: 'somerville' }),
+            ],
+        });
+
+        expect(await screen.findByText(/2 waiting at Elm Street/i)).toBeTruthy();
+    });
+
+    it('says nothing about a hall with nobody waiting at it', async () => {
+        // A zero would be noise on every quiet evening.
+        renderBoard({
+            halls: TWO_HALLS,
+            selectedHall: 'boston-huntington',
+            requests: [rider('r1', 'Anita', { locationId: 'boston-huntington' })],
+        });
+
+        await screen.findByText('Car 1');
+        expect(screen.queryByText(/waiting at Elm Street/i)).toBeNull();
+    });
+
+    it('FLAGS a request that names no sabha at all', async () => {
+        /**
+         * Dispatch refuses these once two halls are open — genuinely unknowable, and
+         * guessing sends a car to the wrong building. So they belong to no hall's board
+         * and are invisible on every one of them. A rider no Sarthi can be sent to is
+         * exactly the one a manager needs to see, and the fix is on the request.
+         */
+        renderBoard({
+            halls: TWO_HALLS,
+            selectedHall: 'boston-huntington',
+            requests: [
+                rider('r1', 'Anita', { locationId: 'boston-huntington' }),
+                rider('r9', 'Unstamped'),
+            ],
+        });
+
+        expect(await screen.findByText(/1 request names no sabha/i)).toBeTruthy();
+        expect(screen.getByText(/no Sarthi can be sent/i)).toBeTruthy();
+    });
+
+    it('does not flag an unstamped request when only one hall is open', async () => {
+        // With one hall there is no ambiguity: dispatch serves it, so there is nothing
+        // to warn about and a warning would be a false alarm every evening.
+        renderBoard({
+            halls: ONE_HALL,
+            requests: [rider('r1', 'Anita'), rider('r9', 'Unstamped')],
+        });
+
+        await screen.findByText('Car 1');
+        expect(screen.queryByText(/names no sabha/i)).toBeNull();
+    });
+
+    it('keeps the picker reachable when THIS hall has no window open', async () => {
+        // Precisely when a manager wants the other hall. A picker that disappears on a
+        // quiet hall is a control that vanishes when it is needed.
+        renderBoard({
+            halls: TWO_HALLS,
+            preview: { status: 'window-closed', groups: [], leftover: [], carSeats: [] },
+        });
+
+        expect(await screen.findByRole('button', { name: 'Elm Street' })).toBeTruthy();
+        expect(screen.getByText(/Rides are not open right now/i)).toBeTruthy();
+    });
+
+    it('keeps the picker reachable through an error', async () => {
+        renderBoard({ halls: TWO_HALLS, preview: null, error: 'Something broke' });
+
+        expect(await screen.findByRole('button', { name: 'Elm Street' })).toBeTruthy();
+        expect(screen.getByText('Something broke')).toBeTruthy();
+    });
+
+    it('keeps the picker reachable while the first grouping loads', async () => {
+        renderBoard({ halls: TWO_HALLS, preview: null, loading: true });
+
+        expect(await screen.findByRole('button', { name: 'Elm Street' })).toBeTruthy();
+        expect(screen.getByText(/Working out the carloads/i)).toBeTruthy();
+    });
+
+    it('SAYS SO while it is still showing the hall you switched away from', async () => {
+        /**
+         * The moment between tapping a hall and the new grouping landing. Left unsaid,
+         * the board shows Huntington's cars under a picker reading Elm Street — nothing
+         * loading-looking, nothing stale, and completely wrong. The server echoes the
+         * hall it answered for, which is what makes this checkable rather than assumed.
+         */
+        renderBoard({
+            halls: TWO_HALLS,
+            selectedHall: 'somerville',
+            preview: ok({ locationId: 'boston-huntington' }),
+        });
+
+        expect(await screen.findByText(/Still showing Huntington Ave/i)).toBeTruthy();
+    });
+
+    it('does not say that when the answer IS for the hall showing', async () => {
+        renderBoard({
+            halls: TWO_HALLS,
+            selectedHall: 'somerville',
+            preview: ok({ locationId: 'somerville' }),
+        });
+
+        await screen.findByText('Car 1');
+        expect(screen.queryByText(/Still showing/i)).toBeNull();
+    });
+
+    it('does not say that when the server did not name a hall', async () => {
+        // An older function revision, mid-rollout. Silence beats a warning built on a
+        // field that is simply absent.
+        renderBoard({
+            halls: TWO_HALLS,
+            selectedHall: 'somerville',
+            preview: ok({ locationId: undefined }),
+        });
+
+        await screen.findByText('Car 1');
+        expect(screen.queryByText(/Still showing/i)).toBeNull();
     });
 });

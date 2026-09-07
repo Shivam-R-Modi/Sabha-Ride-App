@@ -234,3 +234,76 @@ describe('useCarloadPreview — failures and closing the view', () => {
         await waitFor(() => expect(hook.current.error).toBeNull());
     });
 });
+
+describe('useCarloadPreview — switching hall', () => {
+    it('DISCARDS an earlier hall\'s answer that lands after a later one', async () => {
+        /**
+         * The in-flight token has to carry the HALL, not just the pool. Keyed on the
+         * pool alone, switching Huntington → Elm Street → Huntington leaves requests in
+         * flight under the same token, so whichever answers last wins — and the board
+         * shows one hall's cars under a picker reading the other, with nothing stale and
+         * nothing loading. Silent, and the manager acts on it.
+         */
+        const releases: Array<(v: unknown) => void> = [];
+        previewCarloads.mockImplementation(() => new Promise(r => { releases.push(r); }));
+
+        const { result: hook, rerender } = renderHook(
+            ({ hall }) => useCarloadPreview(['a'], hall, true),
+            { initialProps: { hall: 'boston-huntington' as string | null } },
+        );
+        rerender({ hall: 'somerville' });
+        await waitFor(() => expect(releases).toHaveLength(2));
+
+        // Somerville answers, then Huntington's older request answers.
+        await act(async () => { releases[1](result('somerville')); });
+        await act(async () => { releases[0](result('huntington')); });
+
+        expect((hook.current.preview as any)?.tag).toBe('somerville');
+    });
+
+    it('does not call a hall switch STALE — the queue has not moved', async () => {
+        /**
+         * `stale` means "the riders waiting have changed", and it drives copy saying
+         * exactly that. A hall switch is a different question, and `loading` already
+         * covers it; reporting stale would tell a manager somebody had asked for a ride
+         * when nobody had.
+         *
+         * Asserted WHILE THE SWITCH IS IN FLIGHT, which is the only moment it can be
+         * wrong. Let the second request resolve first and `computedFor` catches up
+         * either way, so the test passes whichever key `stale` reads — that is how the
+         * first version of it missed the bug.
+         */
+        const { result: hook, rerender } = renderHook(
+            ({ hall }) => useCarloadPreview(['a'], hall, true),
+            { initialProps: { hall: 'boston-huntington' as string | null } },
+        );
+        await waitFor(() => expect(hook.current.preview).not.toBeNull());
+
+        previewCarloads.mockImplementation(() => new Promise(() => {}));
+        rerender({ hall: 'somerville' });
+
+        await waitFor(() => expect(hook.current.loading).toBe(true));
+        expect(hook.current.stale).toBe(false);
+    });
+
+    it('still reports stale when the queue moves on after a hall switch', async () => {
+        // The two checks are orthogonal, so splitting the keys must not make the pool
+        // one stop working. Switch hall, let it settle, THEN add a rider.
+        const { result: hook, rerender } = renderHook(
+            ({ hall, ids }) => useCarloadPreview(ids, hall, true),
+            { initialProps: { hall: 'boston-huntington' as string | null, ids: ['a'] } },
+        );
+        await waitFor(() => expect(hook.current.preview).not.toBeNull());
+
+        rerender({ hall: 'somerville', ids: ['a'] });
+        await waitFor(() => expect(previewCarloads).toHaveBeenCalledTimes(2));
+        expect(hook.current.stale).toBe(false);
+
+        // A rider asks, and this one never answers — so the board is left describing
+        // the previous queue and has to say so.
+        previewCarloads.mockImplementation(() => new Promise(() => {}));
+        rerender({ hall: 'somerville', ids: ['a', 'b'] });
+
+        await waitFor(() => expect(hook.current.stale).toBe(true));
+    });
+});

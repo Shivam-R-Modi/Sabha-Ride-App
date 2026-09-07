@@ -28,6 +28,18 @@ vi.mock('../../hooks/useVehicles', () => ({ useMaxFleetSeats: () => useMaxFleetS
  * Left real it calls a Cloud Function on every render. The board has its own tests in
  * CarloadBoard.test.tsx; what this file needs is only that mounting it is harmless.
  */
+/**
+ * The halls. Unmocked this runs a real Firestore listener and logs a permissions error
+ * on every test — and leaves `openHalls` empty, so the picker could never be seen.
+ */
+let openHalls: Array<{ id: string; name: string }>;
+vi.mock('../../hooks/useLocations', () => ({
+    useLocations: () => ({
+        locations: openHalls, active: openHalls, loading: false, error: null,
+        updateLocationVenue: vi.fn(),
+    }),
+}));
+
 let carloadPreview: any;
 /** Records the arguments the component hands the hook — `enabled` is the load-bearing one. */
 const useCarloadPreview = vi.fn((..._a: any[]) => carloadPreview);
@@ -105,6 +117,7 @@ beforeEach(() => {
     // Two cars, 4 seats each → 3 passenger seats. Measured from production;
     // see docs/plans/phase-3-seats.md.
     useMaxFleetSeats.mockReturnValue(3);
+    openHalls = [{ id: 'boston-huntington', name: 'Huntington Ave' }];
     useCarloadPreview.mockClear();
     carloadPreview = {
         preview: { status: 'ok', groups: [], leftover: [], carSeats: [3] },
@@ -512,5 +525,110 @@ describe('RequestTable — cars or list', () => {
 
         await userEvent.click(screen.getByRole('button', { name: 'List' }));
         expect(enabledOn()).toBe(false);
+    });
+});
+
+/**
+ * WHICH HALL the board is grouping.
+ *
+ * Cars never mix halls, so a grouping covers one — and the risk that creates is a rider
+ * bound for the other hall being absent from the only screen a manager uses to check who
+ * is waiting. The picker is half the answer; the count beside it is the other half, and
+ * it lives in CarloadBoard.test.tsx.
+ */
+describe('RequestTable — which hall the board groups', () => {
+    const TWO = [
+        { id: 'boston-huntington', name: 'Huntington Ave' },
+        { id: 'somerville', name: 'Elm Street' },
+    ];
+    const hallAskedFor = () => {
+        const calls = useCarloadPreview.mock.calls;
+        return calls[calls.length - 1][1];
+    };
+
+    it('asks for the FIRST OPEN HALL by default', async () => {
+        // The hall list is ordered, so that is the founding hall in practice. A choice
+        // rather than a guess, because the board names it and offers the others beside it.
+        openHalls = TWO;
+        renderRaw();
+
+        expect(hallAskedFor()).toBe('boston-huntington');
+    });
+
+    it('asks for the hall the manager picks', async () => {
+        openHalls = TWO;
+        renderRaw();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Elm Street' }));
+        expect(hallAskedFor()).toBe('somerville');
+    });
+
+    it('asks for the only hall when there is one, with no picker', async () => {
+        renderRaw();
+
+        expect(hallAskedFor()).toBe('boston-huntington');
+        expect(screen.queryByRole('button', { name: 'Huntington Ave' })).toBeNull();
+    });
+
+    it('DOES NOT LOSE the manager\'s choice when the hall list re-emits', async () => {
+        /**
+         * The bug that seeding state from `active[0]` would cause. `useLocations` is a
+         * live subscription and re-emits on any write to the collection; a selection held
+         * as seeded state would be silently reset to the founding hall mid-evening, and
+         * the board would swap under the manager with the picker following it.
+         */
+        openHalls = TWO;
+        const { rerender } = renderRaw();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Elm Street' }));
+        expect(hallAskedFor()).toBe('somerville');
+
+        // The subscription re-emits an equal-but-new array.
+        openHalls = [...TWO];
+        rerender(
+            <RequestTable
+                requests={[request()]}
+                loading={false}
+                onAssign={noop}
+                onDismiss={noop}
+                onBulkAssign={noop}
+            />,
+        );
+
+        expect(hallAskedFor()).toBe('somerville');
+    });
+
+    it('falls back to an open hall when the chosen one is RETIRED', async () => {
+        // A manager can retire a hall from another screen while this one is open.
+        // Leaving it selected asks the server for a hall it will refuse, and the board
+        // would show an error where a grouping belongs.
+        openHalls = TWO;
+        const { rerender } = renderRaw();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Elm Street' }));
+        expect(hallAskedFor()).toBe('somerville');
+
+        openHalls = [TWO[0]];
+        rerender(
+            <RequestTable
+                requests={[request()]}
+                loading={false}
+                onAssign={noop}
+                onDismiss={noop}
+                onBulkAssign={noop}
+            />,
+        );
+
+        expect(hallAskedFor()).toBe('boston-huntington');
+    });
+
+    it('asks for null when no hall is open at all', async () => {
+        // The server then answers for the founding hall, which is what
+        // `locationsOrFoundingFallback` exists for. Passing a stale id instead would be
+        // refused outright.
+        openHalls = [];
+        renderRaw();
+
+        expect(hallAskedFor()).toBeNull();
     });
 });

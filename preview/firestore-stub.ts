@@ -104,10 +104,16 @@ const COLLECTIONS: Record<string, Array<{ id: string; data: () => unknown }>> = 
     /**
      * The halls sabha runs at.
      *
-     * ONE ACTIVE, which is production, plus one RETIRED — because a screen that lists
-     * halls has to draw the retired state too, and an all-active fixture renders only
-     * the happy half. The active one's id and venue match the seeded founding hall, so
-     * the harness shows the same address the app actually routes to.
+     * TWO ACTIVE plus one RETIRED. The retired one is here because a screen that lists
+     * halls has to draw that state too, and an all-active fixture renders only the happy
+     * half. The SECOND ACTIVE one is here because every multi-hall control in the app —
+     * the rider's hall picker, the Sarthi's per-run picker, the calendar's per-hall Edit
+     * and Cancel, the carload board's picker — renders only when more than one hall is
+     * open. With a single-hall fixture none of them appear, so the harness would show a
+     * version of the app nobody is trying to look at.
+     *
+     * The founding hall's id and venue match the seeded production document, so the
+     * harness shows the same address the app actually routes to.
      */
     locations: [
         {
@@ -117,6 +123,16 @@ const COLLECTIONS: Record<string, Array<{ id: string; data: () => unknown }>> = 
                 venue: {
                     lat: 42.339362, lng: -71.0878001,
                     address: '346 Huntington Ave, Boston, MA 02115',
+                },
+            }),
+        },
+        {
+            id: 'somerville',
+            data: () => ({
+                name: 'Elm Street', active: true, order: 1,
+                venue: {
+                    lat: 42.3875, lng: -71.0995,
+                    address: '5 Elm Street, Somerville, MA 02144',
                 },
             }),
         },
