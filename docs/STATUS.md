@@ -3,6 +3,61 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-04**.
 
+## DEPLOYED — the waiting queue drawn as carloads, 2026-09-07
+
+`f9fd861`. Client **2113**, functions **1200**, rules **266**. Full sweep clean.
+
+The manager's Request Center opens on a board instead of a flat list: one card per free
+car, the riders in it, who anchors it, and everyone no car reaches with the reason. The
+list is one tap away and unchanged — search, sort, multi-select and Assign live there,
+and the board is read-only.
+
+**Computed on the server** (`previewCarloads`), calling the real `orderForCarload` /
+`remaindersFirst` / `fillBySeats` and filtering the pool with the real `rejectionFor`.
+Not mirrored into the browser: `hooks/useAutoDispatch.ts` is what that looked like last
+time. It writes nothing and takes no lock.
+
+**It states what it cannot know**, which is the point. Two inputs come from the Sarthi
+who taps and nowhere else — their car's free seats decide where a load is cut, and
+dispatch geo-fences the pool to riders within 15 miles of the DRIVER. So every card
+carries the seat count it assumed and the board says the split re-forms on every tap. A
+manager reading it as fixed would move somebody by hand to correct a split that was
+never going to happen.
+
+`ponytail:` **the geo-fence is not applied** — see the header of
+`functions/src/utils/carloadPreview.ts`. Every driver lives within ~2 miles of the
+venue, so a 15-mile fence from any of them agrees with one from the venue for every
+rider except one sitting on the boundary. The real consequence: a rider ~15 miles out
+(the Woburn case) may be shown in a car the Sarthi who taps cannot be given. Upgrade
+path is taking a driver id and previewing for that Sarthi.
+
+**One bug found by rendering, not by a test.** `hallOverrides` was required on
+`SabhaEvent`, but that type crosses untyped boundaries — the preview harness and every
+test fixture build it through a cast — and `hasOwnProperty.call(undefined, …)` took the
+WHOLE manager screen white from an unrelated panel. Now optional, read through `hallOf`,
+tested. The harness had never rendered the request queue before this; that is what
+caught it, and the queue is now a permanent panel there with the awkward evening as its
+fixture.
+
+### Deployed how, and why not the usual way
+
+**`--only functions:previewCarloads`, not the whole functions bundle.** Deployed at
+15:43 EDT on a Monday with the request window OPEN for that evening's sabha, which is
+exactly what "deploy outside the ride window" exists to prevent. Deploying the one new
+function leaves `globalAssignDriver` untouched — no new revision, so the two-revisions
+hazard cannot arise at all — rather than reasoning about whether it would have mattered.
+Zero live rides at the time. Then hosting; no rules change in this release.
+
+Verified after: window still `home-to-sabha`, scheduler still ticking, `locations.cjs
+verify` clean, live bundle `index-Ck48PDvg.js` matches `dist/`. `main` at `f9fd861`.
+
+### Not done, and deliberately
+
+**The board groups the FOUNDING hall only.** With two halls open the queue holds both,
+and the callable already takes a hall — it just needs a picker on this screen. Left out
+rather than defaulted, because a board silently showing one hall's cars while the list
+below shows both halls' riders is the quietly-wrong screen this app keeps removing.
+
 ## DEPLOYED — two sabha locations, all five stages live, 2026-09-04
 
 Branch `claude/airport-pickup-workflow-89afab`. Client **2071**, functions **1158**,
