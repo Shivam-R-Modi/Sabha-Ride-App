@@ -3,6 +3,54 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-04**.
 
+## LIVE — the second hall is OPEN, 2026-09-07
+
+**Two active halls in production.** This is the first time anything multi-hall is visible
+to a real user. No deploy was involved: the halls come from a collection the app reads
+live, so the pickers appeared on the scheduler's next tick.
+
+```
+locations/boston-huntington   "Huntington Ave"   346 Huntington Ave, Boston MA 02115
+locations/south-boston        "D Street"         320 D St, Boston MA 02127
+```
+
+`system/rideContext` now publishes `locationIds: [boston-huntington, south-boston]` and a
+slice each — the founding hall keyed on the bare date `2026-09-07`, the new one on
+`2026-09-07__south-boston`. The top-level aggregate still describes the founding hall, so
+a client on an older bundle degrades to Huntington rather than reading undefined.
+`locations.cjs verify` clean: 13 rides all naming a known hall, 3 events, no car spanning
+two halls.
+
+**The founding hall was renamed from "Sabha" to "Huntington Ave"** in the same pass. The
+name was invisible while it was the only hall; with two, the rider's picker would have
+read "Sabha" against "D Street", which tells a rider nothing about which building to walk
+to. Display only — the document id is untouched, so every `events`, `weeklyAttendance` and
+`statistics` key that hall has ever had still resolves.
+
+`scripts/locations.cjs` gained a `rename` mode for that, rather than an ad-hoc write to
+production. One field, refuses a hall that does not exist, gated behind `--apply` like
+everything else there.
+
+### Why this needed no code change, and what IS still a script
+
+Nothing caps the number of halls. Dispatch, the rider and Sarthi pickers, the carload
+board, event ids, attendance and statistics all fan out over whatever is in `locations` —
+a third or fourth hall needs no code and no deploy, which this change is the proof of.
+The only hardcoded id is `FOUNDING_LOCATION_ID`, and that is a migration anchor (its
+history keeps bare-date keys), not a limit.
+
+**What a MANAGER cannot do is add one from the app.** Adding a hall is
+`scripts/locations.cjs add`, by the owner's earlier decision that a hall is not something
+that changes and a management screen would be a control touched once a year on a page
+visited weekly. If that decision changes, the screen is the work — the data model and the
+algorithm are already ready for it.
+
+### Context for tonight
+
+The recurrence rule was set to **Mondays 20:30** by the owner on this day deliberately, to
+test — it is not a misconfiguration. Sabha is not actually on Mondays. Anyone reading
+`settings/sabhaRecurrence` later and finding Monday should ask before "fixing" it.
+
 ## DEPLOYED — the carload preview applies the geo-fence, 2026-09-07
 
 `9479f4b`. Client **2146**, functions **1225**, rules **266**. Full sweep clean. Live

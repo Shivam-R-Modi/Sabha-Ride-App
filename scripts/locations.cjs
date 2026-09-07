@@ -6,6 +6,7 @@
  *   node scripts/locations.cjs seed --apply
  *   node scripts/locations.cjs add <id> "<name>" <lat> <lng> "<address>"
  *   node scripts/locations.cjs add <id> ... --apply --active
+ *   node scripts/locations.cjs rename <id> "<new name>"   # display name only
  *   node scripts/locations.cjs verify           # EXITS NON-ZERO on any problem
  *
  * ## Why adding a hall is a script and not a screen
@@ -152,6 +153,56 @@ async function seed() {
 
     await ref.set(doc);
     console.log('\nCreated.');
+    return 0;
+}
+
+/**
+ * Change a hall's DISPLAY NAME. Nothing else.
+ *
+ * The name became load-bearing the moment a second hall opened: with one hall nothing
+ * rendered it, so the founding document could sit there called "Sabha" harmlessly. With
+ * two, the rider's picker reads "Sabha" against the other one's name, which tells a
+ * rider nothing about which building to walk to.
+ *
+ * A rename and not a general edit, deliberately. The id is untouchable — it is baked
+ * into every `events`, `weeklyAttendance` and `statistics` key that hall has ever had —
+ * and the venue is moved from the Venue screen in the app, which geocodes properly. So
+ * this writes one field, refuses a hall that does not exist, and is gated behind
+ * `--apply` like everything else here.
+ */
+async function rename() {
+    const [, , , id, name] = process.argv;
+
+    if (!id || !name) {
+        console.error('Usage: node scripts/locations.cjs rename <id> "<new name>" [--apply]');
+        return 1;
+    }
+
+    const ref = db.collection('locations').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+        console.error(`locations/${id} does not exist. \`verify\` lists the halls there are.`);
+        return 1;
+    }
+
+    const before = snap.data().name;
+    if (before === name) {
+        console.log(`locations/${id} is already called "${name}". Nothing to do.`);
+        return 0;
+    }
+
+    console.log(`locations/${id}: "${before}" -> "${name}"`);
+    console.log('\nName only. The document id and every event, attendance and statistics');
+    console.log('key that uses it are untouched.');
+
+    if (!APPLY) {
+        console.log('\nDry run. Re-run with --apply to write it.');
+        return 0;
+    }
+
+    await ref.set({ name, updatedAt: new Date().toISOString(), updatedBy: 'script:locations.cjs' },
+        { merge: true });
+    console.log(`\nRenamed locations/${id}.`);
     return 0;
 }
 
@@ -389,6 +440,7 @@ async function verify() {
 (async () => {
     if (mode === 'seed') process.exit(await seed());
     if (mode === 'add') process.exit(await add());
+    if (mode === 'rename') process.exit(await rename());
     if (mode === 'verify') process.exit(await verify());
     console.error('Usage: node scripts/locations.cjs seed [--apply]');
     console.error('       node scripts/locations.cjs add <id> "<name>" <lat> <lng> "<address>" [--active] [--apply]');
