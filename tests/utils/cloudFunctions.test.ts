@@ -123,6 +123,7 @@ const WRAPPERS: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
     })],
     ['exportMembers', () => cloudFunctions.exportMembers('all')],
     ['manuallyUpdateRideContext', () => cloudFunctions.manuallyUpdateRideContext({ reset: true })],
+    ['previewCarloads', () => cloudFunctions.previewCarloads(null)],
 ];
 
 /**

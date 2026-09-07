@@ -22,6 +22,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const useMaxFleetSeats = vi.fn();
 vi.mock('../../hooks/useVehicles', () => ({ useMaxFleetSeats: () => useMaxFleetSeats() }));
 
+/**
+ * The carload board's data, stubbed.
+ *
+ * Left real it calls a Cloud Function on every render. The board has its own tests in
+ * CarloadBoard.test.tsx; what this file needs is only that mounting it is harmless.
+ */
+let carloadPreview: any;
+/** Records the arguments the component hands the hook — `enabled` is the load-bearing one. */
+const useCarloadPreview = vi.fn((..._a: any[]) => carloadPreview);
+vi.mock('../../hooks/useCarloadPreview', () => ({
+    useCarloadPreview: (...a: any[]) => useCarloadPreview(...a),
+}));
+
 import { RequestTable } from '../../components/manager/RequestTable';
 import type { StudentRequest } from '../../types';
 
@@ -57,7 +70,7 @@ const request = (over: Partial<StudentRequest> = {}): StudentRequest => ({
 
 const noop = () => { };
 
-const renderTable = (props: Partial<React.ComponentProps<typeof RequestTable>> = {}) =>
+const renderRaw = (props: Partial<React.ComponentProps<typeof RequestTable>> = {}) =>
     render(
         <RequestTable
             requests={[request()]}
@@ -69,6 +82,22 @@ const renderTable = (props: Partial<React.ComponentProps<typeof RequestTable>> =
         />,
     );
 
+/**
+ * Render and open the LIST.
+ *
+ * The component now opens on the carload board — grouped into the cars dispatch would
+ * form, which is what a manager watching a queue build up wants. Search, sort,
+ * multi-select and Assign all live in the list, so every test below about those has to
+ * switch to it first. That is a real behaviour change and this is where it is recorded,
+ * rather than each test discovering it.
+ */
+const renderTable = (props: Partial<React.ComponentProps<typeof RequestTable>> = {}) => {
+    const result = renderRaw(props);
+    const listTab = screen.queryByRole('button', { name: 'List' });
+    if (listTab) fireEvent.click(listTab);
+    return result;
+};
+
 /** The desktop table, which is where the columns live. */
 const table = () => screen.getByRole('table');
 
@@ -76,6 +105,11 @@ beforeEach(() => {
     // Two cars, 4 seats each → 3 passenger seats. Measured from production;
     // see docs/plans/phase-3-seats.md.
     useMaxFleetSeats.mockReturnValue(3);
+    useCarloadPreview.mockClear();
+    carloadPreview = {
+        preview: { status: 'ok', groups: [], leftover: [], carSeats: [3] },
+        loading: false, error: null, stale: false, refresh: () => {},
+    };
 });
 
 describe('RequestTable — the queue itself', () => {
@@ -415,5 +449,68 @@ describe('RequestTable — how the rider said they were at sabha', () => {
 
         expect(screen.queryByText(/Arrived by ride|Confirmed by rider|Location confirmed/i))
             .not.toBeInTheDocument();
+    });
+});
+
+/**
+ * Cars or list, and which one a manager lands on.
+ *
+ * The board is what a manager watching a queue build up wants — who travels together,
+ * and who does not travel at all. But search, sort, multi-select and Assign all live in
+ * the list, so the toggle has to be findable and the list has to still work. A default
+ * that hid the only way to assign somebody would be the worse kind of improvement.
+ */
+describe('RequestTable — cars or list', () => {
+    it('OPENS ON THE CARS, not the flat list', async () => {
+        renderRaw({ requests: [request({ id: 'a', name: 'Anita' })] });
+
+        expect(await screen.findByRole('button', { name: 'Cars' })).toBeTruthy();
+        // The board is showing, so the table's own column headings are not.
+        expect(screen.queryByText('Pickup Address')).toBeNull();
+    });
+
+    it('tells a screen reader which view is showing', async () => {
+        renderRaw();
+
+        expect(screen.getByRole('button', { name: 'Cars' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('switches to the list and back', async () => {
+        renderRaw({ requests: [request({ id: 'a', name: 'Anita' })] });
+
+        await userEvent.click(screen.getByRole('button', { name: 'List' }));
+        expect(screen.getAllByText('Pickup Address').length).toBeGreaterThan(0);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Cars' }));
+        expect(screen.queryByText('Pickup Address')).toBeNull();
+    });
+
+    it('HIDES SEARCH on the board, because it would not change the grouping', async () => {
+        // Filtering the names while the cars stayed put reads as though the cars had
+        // changed. The list is where filtering belongs.
+        renderRaw();
+        expect(screen.queryByPlaceholderText(/Search students/i)).toBeNull();
+
+        await userEvent.click(screen.getByRole('button', { name: 'List' }));
+        expect(screen.getByPlaceholderText(/Search students/i)).toBeTruthy();
+    });
+
+    it('does not ask the server for a grouping while the list is showing', async () => {
+        /**
+         * `enabled` is what stops this spending a function invocation for every request
+         * that arrives, all evening, to compute something nothing renders. The hook is
+         * mocked here, so what is asserted is the flag it was handed.
+         */
+        const enabledOn = () => {
+            const calls = useCarloadPreview.mock.calls;
+            return calls[calls.length - 1][2];
+        };
+
+        renderRaw();
+        expect(enabledOn()).toBe(true);
+
+        await userEvent.click(screen.getByRole('button', { name: 'List' }));
+        expect(enabledOn()).toBe(false);
     });
 });

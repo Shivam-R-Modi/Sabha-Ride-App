@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { CalendarDays, CalendarPlus, Loader2, AlertCircle, Plus, Trash2, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useUpcomingEvents, editOccurrence, createOneOff, SabhaEvent } from '../../hooks/useEvents';
+import {
+    useUpcomingEvents, editOccurrence, createOneOff, hallOf, SabhaEvent,
+} from '../../hooks/useEvents';
 import { describeRule, labelForSource } from '../../src/utils/recurrence';
 import { formatDateLong as formatDate } from '../../src/constants/schedule';
 import { AGENDA_MAX_CHARS, agendaSummary, describeAgendaProblem } from '../../src/utils/agenda';
@@ -166,14 +168,7 @@ const EventDetail: React.FC<{
      * a write-only control — the manager saves a time, the row keeps showing the
      * evening's, and there is no way to tell whether it worked or how to undo it.
      */
-    const perHall = halls.map(h => ({
-        hall: h,
-        // `hasOwn`, not a truthiness test: `null` is a real entry meaning cancelled,
-        // and `?? evening` would quietly reopen a room the manager had shut.
-        occurrence: Object.prototype.hasOwnProperty.call(event.hallOverrides, h.id)
-            ? event.hallOverrides[h.id]
-            : event,
-    }));
+    const perHall = halls.map(h => ({ hall: h, occurrence: hallOf(event, h.id) }));
 
     /** Seed the editor from the scope being opened, not from whatever it last held. */
     const openEditor = (scope: string | null) => {

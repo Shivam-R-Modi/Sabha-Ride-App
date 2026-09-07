@@ -55,8 +55,15 @@ export interface SabhaEvent {
      * calendar draws it: without it a manager who cancelled one room would see the
      * evening's own times on the row and no sign the room was shut, which is the
      * write-only control this codebase keeps deleting.
+     *
+     * OPTIONAL, THOUGH `useUpcomingEvents` ALWAYS SETS IT. This type crosses untyped
+     * boundaries — the preview harness builds `SabhaEvent`s through a cast, and so does
+     * every test fixture — and a required field that a producer can omit in practice is
+     * a crash rather than a type error. It took the whole manager screen white the
+     * first time, from an unrelated panel, because `hasOwnProperty.call(undefined, …)`
+     * throws. Read it through `hallsOf` below, never directly.
      */
-    hallOverrides: Record<string, Occurrence | null>;
+    hallOverrides?: Record<string, Occurrence | null>;
 }
 
 /**
@@ -94,6 +101,22 @@ export function useRecurrenceRule() {
     }, []);
 
     return { rule, loading };
+}
+
+/**
+ * What one hall is doing on an evening: its own document if it has one, the evening's
+ * answer if it does not, and `null` when that room is shut.
+ *
+ * `hasOwn` and not a truthiness test, because `null` is a REAL entry meaning cancelled
+ * — `?? evening` would quietly reopen a room the manager had shut. And it tolerates
+ * `hallOverrides` being absent, which is what stops an untyped fixture taking the whole
+ * screen down. See the field's own note.
+ */
+export function hallOf(event: SabhaEvent, locationId: string): Occurrence | null {
+    const overrides = event.hallOverrides ?? {};
+    return Object.prototype.hasOwnProperty.call(overrides, locationId)
+        ? overrides[locationId]
+        : event;
 }
 
 /**

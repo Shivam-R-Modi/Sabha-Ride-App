@@ -51,7 +51,12 @@ vi.mock('../../firebase/config', () => ({ db: {} }));
 vi.mock('../../contexts/AuthContext', () => ({
     useAuth: () => ({ currentUser: { uid: 'manager_1' } }),
 }));
-vi.mock('../../hooks/useEvents', () => ({
+vi.mock('../../hooks/useEvents', async (importOriginal) => ({
+    // THE REAL `hallOf`, not a stub of it. It decides what each hall is doing on an
+    // evening — including that `null` means cancelled rather than "no override" — and a
+    // second copy here would let these tests pass while the screen reopened a room the
+    // manager had shut.
+    hallOf: (await importOriginal<typeof import('../../hooks/useEvents')>()).hallOf,
     useUpcomingEvents: () => ({
         events: upcoming, loading: false, error: null,
         rule: { enabled: true, daysOfWeek: [5], startTime: '20:30', endTime: '22:00', venue: null, agenda: '' },

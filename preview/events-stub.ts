@@ -8,6 +8,16 @@
 // reimplemented. It is a pure display helper, and a second copy here would let
 // the preview show times the app would not.
 export { formatTime } from '../hooks/useSettings';
+/**
+ * The REAL one, not a copy.
+ *
+ * `SabhaCalendar` reads every hall's answer through it, and this stub stands in for the
+ * module it lives in — so without this re-export the calendar imports `undefined` and
+ * the page goes white. Taking the real function rather than reimplementing it is what
+ * the importer guard in vite.config.ts exists for, and it means the harness cannot show
+ * a grouping the app would not.
+ */
+export { hallOf } from '../hooks/useEvents';
 
 export interface SabhaEvent {
     id: string; date: string; startTime: string; endTime: string;

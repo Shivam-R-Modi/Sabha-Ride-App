@@ -38,6 +38,10 @@ export { updateSabhaRecurrence } from './http/sabhaRecurrence';
 // unnormalised homeLocation read that produced NaN coordinates. globalAssignDriver
 // is the assignment path, and it has all three fixed.
 export { globalAssignDriver } from './http/globalAssignDriver';
+// The same grouping globalAssignDriver would form, for a manager to LOOK at. Read
+// only, no lock, no assignment — and deliberately server-side so it cannot drift from
+// what the tap actually does.
+export { previewCarloads } from './http/previewCarloads';
 export { startRide } from './http/startRide';
 export { sarthiArrived } from './http/sarthiArrived';
 export { nudgeRider } from './http/nudgeRider';

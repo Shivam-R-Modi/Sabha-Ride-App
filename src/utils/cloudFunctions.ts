@@ -531,6 +531,75 @@ export async function manuallyUpdateRideContext(params?: ManuallyUpdateRideConte
 }
 
 /**
+ * The waiting queue split into the cars dispatch would form.
+ *
+ * WHY THE SERVER ANSWERS THIS. The grouping has to be the same grouping
+ * `globalAssignDriver` produces, or a manager plans around it, moves somebody by hand,
+ * and the next tap does something else. The seed-and-grow geometry and the seat
+ * arithmetic stay in one place, on the server, and this asks for the result.
+ *
+ * WHAT IT CANNOT KNOW. A real carload depends on which Sarthi taps: their car's free
+ * seats decide where a carload is cut, and `globalAssignDriver` geo-fences the pool to
+ * riders within 15 miles of the DRIVER. So there is no single true grouping. Every
+ * group therefore carries the seat count it assumed, and the screen says the split
+ * re-forms on each tap. See functions/src/utils/carloadPreview.ts for the ceiling on
+ * the geo-fence.
+ */
+export interface CarloadGroup {
+    /** Free passenger seats assumed for this car. Rendered, not hidden. */
+    seats: number;
+    /**
+     * The rider the car was built around, or null when the anchor could not fit in it.
+     *
+     * Null rather than a name that is not in the list: "anchored on Ramesh" above three
+     * other people reads as a bug and a manager would chase it.
+     */
+    anchorId: string | null;
+    riders: Array<{
+        id: string;
+        /** Seats this car takes. Fewer than `totalSeats` when `split`. */
+        seats: number;
+        totalSeats: number;
+        split: boolean;
+    }>;
+}
+
+export type CarloadLeftoverReason =
+    /** Every simulated car was full by the time the walk reached them. */
+    | 'no-car-left'
+    /** Too big for the cars free tonight, but a vehicle in the fleet could take them. */
+    | 'waiting-for-bigger-vehicle'
+    /** No vehicle seats this many AND the rider refused to be split. Needs a manager. */
+    | 'too-large-to-keep-together';
+
+export interface CarloadPreviewResult {
+    /**
+     * `window-closed` is an ANSWER, not an error.
+     *
+     * A manager looking at the queue between sabhas has done nothing wrong, so the
+     * server reports it rather than throwing — an error on a screen nobody acted on
+     * reads as a fault in the app.
+     */
+    status: 'ok' | 'window-closed';
+    rideType?: 'home-to-sabha' | 'sabha-to-home';
+    locationId?: string;
+    groups: CarloadGroup[];
+    /** A REASON per rider, never a bare count. Two of the three need a manager. */
+    leftover: Array<{ id: string; seats: number; reason: CarloadLeftoverReason }>;
+    /** Free seats in each car it simulated, largest first. */
+    carSeats: number[];
+    /** Largest passenger capacity in the WHOLE fleet, free or not. */
+    maxFleetSeats?: number;
+}
+
+export async function previewCarloads(
+    /** One hall. Defaults to the founding hall, which is the only one with one open. */
+    locationId?: string | null,
+): Promise<CarloadPreviewResult> {
+    return callFunction<CarloadPreviewResult>('previewCarloads', { locationId: locationId ?? null });
+}
+
+/**
  * What deleting a sabha would affect. Shown to the manager before they confirm.
  */
 export interface DeleteSabhaEventPreview {

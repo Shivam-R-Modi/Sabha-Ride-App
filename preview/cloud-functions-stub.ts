@@ -69,3 +69,44 @@ export const downloadCSV = (_csv: string, filename: string) => {
 export const updateNotificationSettings = async (settings: unknown) => ({
     success: true, settings,
 });
+
+/**
+ * The carload grouping, canned.
+ *
+ * Deliberately the AWKWARD case rather than a tidy one, because a tidy grouping tells
+ * you nothing about the layout: two cars, a family split across them, a rider nobody
+ * can carry, and one still waiting. Every badge on the board appears at least once, so
+ * looking at this page is what catches a wrapping or contrast problem in the states
+ * that only turn up on a busy Friday.
+ */
+export const previewCarloads = async (_locationId?: string | null) => ({
+    status: 'ok' as const,
+    rideType: 'home-to-sabha' as const,
+    locationId: 'boston-huntington',
+    carSeats: [6, 3],
+    maxFleetSeats: 6,
+    groups: [
+        {
+            seats: 6,
+            anchorId: 'req-4',
+            riders: [
+                { id: 'req-4', seats: 1, totalSeats: 1, split: false },
+                { id: 'req-5', seats: 2, totalSeats: 2, split: false },
+                { id: 'req-2', seats: 3, totalSeats: 8, split: true },
+            ],
+        },
+        {
+            seats: 3,
+            anchorId: 'req-1',
+            riders: [
+                { id: 'req-1', seats: 1, totalSeats: 1, split: false },
+                { id: 'req-6', seats: 2, totalSeats: 2, split: false },
+            ],
+        },
+    ],
+    leftover: [
+        { id: 'req-2', seats: 5, reason: 'no-car-left' as const },
+        { id: 'req-3', seats: 7, reason: 'too-large-to-keep-together' as const },
+        { id: 'req-7', seats: 4, reason: 'waiting-for-bigger-vehicle' as const },
+    ],
+});

@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { useMaxFleetSeats } from '../../hooks/useVehicles';
 import { describePresence } from '../../src/utils/presence';
+import { useCarloadPreview } from '../../hooks/useCarloadPreview';
+import { CarloadBoard } from './CarloadBoard';
 
 interface RequestTableProps {
   requests: StudentRequest[];
@@ -69,6 +71,15 @@ export const RequestTable: React.FC<RequestTableProps> = ({
   requests, loading, onAssign, onDismiss, onBulkAssign
 }) => {
   const maxFleetSeats = useMaxFleetSeats();
+  /**
+   * Cars or list.
+   *
+   * CARS IS THE DEFAULT, because it is what a manager watching a queue build up
+   * actually wants to know — who is going together, and who is not going at all. The
+   * list stays one tap away and is not a fallback: search, sort, multi-select and Assign
+   * live there, and the board is deliberately read-only.
+   */
+  const [view, setView] = useState<'cars' | 'list'>('cars');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
   const [sortField, setSortField] = useState<'name' | 'time' | 'wait'>('wait');
@@ -114,6 +125,25 @@ export const RequestTable: React.FC<RequestTableProps> = ({
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
+  /**
+   * Called ABOVE the early returns, because a hook behind a condition throws.
+   *
+   * `enabled` is what stops it spending a function invocation per arriving request all
+   * evening for a view nobody has open. It keys on the set of waiting ids, so the
+   * grouping refetches when the pool it describes changes — and reports `stale` in the
+   * gap, rather than showing last minute's cars as this minute's.
+   *
+   * The hall is left null: with one hall that IS the hall, and with two the queue holds
+   * both, so a board for one of them would need a hall picker on this screen. The
+   * grouping for a second hall is real and reachable — the callable takes a hall — but
+   * nothing here asks for it yet, so nothing here pretends to.
+   */
+  const carloads = useCarloadPreview(
+    requests.map(r => r.id),
+    null,
+    view === 'cars' && !loading && requests.length > 0,
+  );
+
   if (loading) return <LoadingSkeleton />;
 
   if (requests.length === 0) return <EmptyState />;
@@ -123,6 +153,12 @@ export const RequestTable: React.FC<RequestTableProps> = ({
       {/* Sticky Filter Bar */}
       <div className="sticky top-0 z-sticky bg-surface/90 backdrop-blur-md border-b border-hairline/10 p-4">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+          {/* Search filters the LIST. On the board it would narrow the names without
+              changing the grouping, which reads as though the cars had changed.
+              NOT RENDERED rather than hidden by a class — a `hidden` input is still in
+              the tab order, so a manager on the board would tab into a search box they
+              cannot see and type into nothing. */}
+          {view === 'list' && (
           <div className="relative w-full sm:max-w-xs">
             <Search className="absolute left-3 top-2.5 text-coffee-500" size={18} />
             <input 
@@ -133,9 +169,10 @@ export const RequestTable: React.FC<RequestTableProps> = ({
               className="w-full pl-10 pr-4 py-2 bg-cream-200 border border-hairline/20 rounded-xl text-sm focus:ring-2 focus:ring-saffron/20 focus:outline-none transition-all"
             />
           </div>
+          )}
           
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            {selectedIds.length > 0 && (
+            {view === 'list' && selectedIds.length > 0 && (
                 <div className="flex items-center gap-2 animate-in slide-in-from-right-4">
                     <span className="text-xs font-bold text-coffee mr-2">{selectedIds.length} Selected</span>
                     <button 
@@ -155,6 +192,27 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--success))] animate-pulse" />
                 Live
             </div>
+
+            {/* Two real buttons rather than a segmented div: each is focusable, each
+                says which view it opens, and `aria-pressed` is what tells a screen
+                reader which one is showing. */}
+            <div className="flex items-center rounded-xl border border-hairline/20 overflow-hidden shrink-0">
+                {(['cars', 'list'] as const).map(option => (
+                    <button
+                        key={option}
+                        onClick={() => setView(option)}
+                        aria-pressed={view === option}
+                        className={`min-h-11 px-3 text-xs font-bold ${
+                            view === option
+                                ? 'bg-[rgb(var(--cta))] text-[rgb(var(--text-on-accent))]'
+                                : 'bg-cream-200 text-coffee-700 hover:bg-cream-300'
+                        }`}
+                    >
+                        {option === 'cars' ? 'Cars' : 'List'}
+                    </button>
+                ))}
+            </div>
+            {view === 'list' && (
             <div className="md:hidden">
                 <select 
                     value={sortField}
@@ -166,11 +224,23 @@ export const RequestTable: React.FC<RequestTableProps> = ({
                     <option value="time">Sort: Sabha Time</option>
                 </select>
             </div>
+            )}
           </div>
         </div>
       </div>
 
       <div className="flex-1 overflow-auto">
+        {view === 'cars' ? (
+          <CarloadBoard
+            requests={requests}
+            preview={carloads.preview}
+            loading={carloads.loading}
+            error={carloads.error}
+            stale={carloads.stale}
+            onRefresh={carloads.refresh}
+          />
+        ) : (
+        <>
         {/* Desktop View (Table) */}
         <div className="hidden md:block">
           <table className="w-full border-collapse text-left">
@@ -327,6 +397,8 @@ export const RequestTable: React.FC<RequestTableProps> = ({
              />
           ))}
         </div>
+        </>
+        )}
       </div>
     </div>
   );

@@ -11,6 +11,8 @@ import { SabhaCalendar } from '../components/manager/SabhaCalendar';
 import { ManagerReports } from '../components/manager/ManagerReports';
 import { NotificationSettings } from '../components/manager/NotificationSettings';
 import { LocationSettings } from '../components/manager/LocationSettings';
+import { RequestTable } from '../components/manager/RequestTable';
+import type { StudentRequest } from '../types';
 import { ToastProvider } from '../contexts/ToastContext';
 import type { Driver } from '../types';
 
@@ -26,8 +28,57 @@ const drivers = [
     avatarUrl: 'https://ui-avatars.com/api/?name=Nisha+Trivedi&background=5C4033&color=fff' },
 ] as unknown as Driver[];
 
+/**
+ * The waiting queue. Never rendered outside a sign-in until now, which is exactly the
+ * gap this folder exists for.
+ *
+ * The fixture is the awkward evening on purpose — a party of eight no vehicle can take
+ * whole, a rider who asked not to be split, two halls named, a long wait — because
+ * those are the rows that wrap badly and the ones nobody sees until a Friday.
+ */
+const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
+const requests = [
+  { id: 'req-1', name: 'Anita Shah', address: '12 Maple Ave, Boston', seats: 1,
+    requestTime: minutesAgo(4), requestedTimeSlot: '7:00 PM', status: 'pending',
+    avatarUrl: 'https://ui-avatars.com/api/?name=Anita+Shah&background=FF6B35&color=fff' },
+  { id: 'req-2', name: 'Bhavin Desai', address: '88 Chestnut Hill Ave, Brighton', seats: 8,
+    groupSeatsTotal: 8, requestTime: minutesAgo(52), requestedTimeSlot: '7:00 PM',
+    status: 'pending', locationName: 'Huntington Ave',
+    avatarUrl: 'https://ui-avatars.com/api/?name=Bhavin+Desai&background=D4AF37&color=fff' },
+  { id: 'req-3', name: 'Chirag Mehta', address: '3 Elm Street, Somerville', seats: 7,
+    keepTogether: true, requestTime: minutesAgo(96), requestedTimeSlot: '7:00 PM',
+    status: 'pending', locationName: 'Elm Street',
+    avatarUrl: 'https://ui-avatars.com/api/?name=Chirag+Mehta&background=5C4033&color=fff' },
+  { id: 'req-4', name: 'Deepa Joshi', address: '140 Main Street, Woburn', seats: 1,
+    requestTime: minutesAgo(31), requestedTimeSlot: '7:00 PM', status: 'pending',
+    avatarUrl: 'https://ui-avatars.com/api/?name=Deepa+Joshi&background=FF6B35&color=fff' },
+  { id: 'req-5', name: 'Esha Patel', address: '22 Winn Street, Woburn', seats: 2,
+    requestTime: minutesAgo(12), requestedTimeSlot: '7:00 PM', status: 'pending',
+    avatarUrl: 'https://ui-avatars.com/api/?name=Esha+Patel&background=D4AF37&color=fff' },
+  { id: 'req-6', name: 'Falguni Rao', address: '5 Boylston Place, Boston', seats: 2,
+    requestTime: minutesAgo(7), requestedTimeSlot: '7:00 PM', status: 'pending',
+    avatarUrl: 'https://ui-avatars.com/api/?name=Falguni+Rao&background=5C4033&color=fff' },
+  { id: 'req-7', name: 'Gaurav Sheth', address: '61 Beacon Street, Somerville', seats: 4,
+    requestTime: minutesAgo(19), requestedTimeSlot: '7:00 PM', status: 'pending',
+    avatarUrl: 'https://ui-avatars.com/api/?name=Gaurav+Sheth&background=FF6B35&color=fff' },
+] as unknown as StudentRequest[];
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 16, padding: 12 }}>
+    <div style={{ gridColumn: '1 / -1' }}>
+      <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>Request Center — carloads, and the flat list behind the toggle</p>
+      <div style={{ height: 720, display: 'flex' }}>
+        <ToastProvider>
+          <RequestTable
+            requests={requests}
+            loading={false}
+            onAssign={() => undefined}
+            onDismiss={() => undefined}
+            onBulkAssign={() => undefined}
+          />
+        </ToastProvider>
+      </div>
+    </div>
     <div>
       <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', opacity: .55, padding: '0 16px' }}>People — approvals</p>
       <ToastProvider><ManagerPeople /></ToastProvider>

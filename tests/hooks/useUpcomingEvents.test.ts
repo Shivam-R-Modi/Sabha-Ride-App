@@ -44,7 +44,7 @@ vi.mock('firebase/firestore', () => ({
     },
 }));
 
-import { useUpcomingEvents } from '../../hooks/useEvents';
+import { useUpcomingEvents, hallOf } from '../../hooks/useEvents';
 
 /** Anchor every case on a fixed Monday so weekday maths is readable. */
 const FROM = '2026-08-17';
@@ -282,5 +282,47 @@ describe('useUpcomingEvents — hallOverrides', () => {
             .toEqual({});
         expect(result.current.events.find(e => e.date === '2026-08-28')!.hallOverrides)
             .toHaveProperty('somerville');
+    });
+});
+
+describe('hallOf — reading a hall without crashing the screen', () => {
+    /**
+     * `hallOverrides` is optional on the type although `useUpcomingEvents` always sets
+     * it, because this type crosses untyped boundaries: the preview harness builds
+     * `SabhaEvent`s through a cast, and so does every test fixture. Read directly,
+     * `hasOwnProperty.call(undefined, …)` throws — and it took the WHOLE manager screen
+     * white, from a panel that had nothing to do with halls. Found by rendering the
+     * harness, not by a test, which is why one exists now.
+     */
+    const evening = {
+        id: '2026-08-21', date: '2026-08-21', startTime: '19:30', endTime: '22:00',
+        venue: null, status: 'scheduled' as const, agenda: 'Kirtan', source: 'rule' as const,
+    };
+
+    it('falls back to the evening when the field is absent altogether', () => {
+        expect(hallOf(evening as any, 'somerville')).toBe(evening);
+    });
+
+    it('falls back to the evening for a hall with no document of its own', () => {
+        // Identity against the ROW it was handed, which is what "the evening's own
+        // answer" means — an equal-looking copy would pass a toEqual and tell us nothing
+        // about whether the fallback fired.
+        const row = { ...evening, hallOverrides: {} };
+        expect(hallOf(row as any, 'somerville')).toBe(row);
+    });
+
+    it('returns the hall\'s own answer when it has one', () => {
+        const own = { ...evening, startTime: '18:00', source: 'hall-override' as const };
+        const row = { ...evening, hallOverrides: { somerville: own } };
+
+        expect(hallOf(row as any, 'somerville')).toBe(own);
+    });
+
+    it('returns NULL for a cancelled hall, and does not reopen it', () => {
+        // The case a truthiness test gets wrong. `?? evening` would quietly put a room
+        // the manager had shut back on the calendar at the evening's own times.
+        const row = { ...evening, hallOverrides: { somerville: null } };
+
+        expect(hallOf(row as any, 'somerville')).toBeNull();
     });
 });
