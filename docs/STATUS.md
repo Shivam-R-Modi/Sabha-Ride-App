@@ -3,6 +3,52 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-04**.
 
+## DEPLOYED — the carload board picks its hall, 2026-09-07
+
+`894a11f`. **Hosting only** — no functions, rules or indexes changed, so this went out
+mid-window safely. Client **2135**, functions **1200**, rules **266**. Full sweep clean.
+Live bundle `index-CZ8ikeda.js` matches `dist/`. `main` at `894a11f`.
+
+Cars never mix halls, so a grouping covers one. The board gets a `Carloads for …` picker
+when two or more halls are open; with one it is byte-identical to before — no picker, no
+hall names.
+
+**The picker alone would have been a defect.** Showing one hall's cars leaves every rider
+bound for the other in NEITHER the cars nor the leftovers, so they vanish from the screen
+a manager uses to check who is waiting. The bar therefore also says "2 waiting at Elm
+Street", counted from the queue the component already has — no second read, and it cannot
+disagree with the list behind the toggle. Same rule the CSV export follows: dispatch
+refuses the ambiguous, a view shows it and says so. It also flags requests naming NO hall,
+which dispatch refuses once two are open, so they belong to no hall's board at all.
+
+**A real race, fixed.** `useCarloadPreview`'s in-flight token keyed on the POOL only, so
+Huntington → Elm Street → Huntington left two requests under one token and whichever
+landed last won — one hall's cars under a picker naming the other, nothing loading and
+nothing stale. Two keys now: the pool decides `stale` (a hall switch has not moved the
+queue, and that flag drives copy saying somebody asked for a ride); pool AND hall decide
+which answer is still wanted. The board separately says when it is still showing the hall
+you switched away from, checked against the hall the SERVER echoes back.
+
+The picker renders above every other state — closed window, error, loading — because
+those are exactly when a manager wants the other hall.
+
+### The harness runs TWO ACTIVE HALLS now
+
+`preview/firestore-stub.ts`. Every multi-hall control in this app renders only above one
+open hall, so the single-active fixture was showing a version of the app nobody is trying
+to look at — **the calendar's per-hall Edit and Cancel from stage E had never been seen
+rendered either.** The retired hall is still there, so that state is still drawn. The
+queue fixture stamps halls properly, with two riders at the second hall and one
+deliberately unstamped, so both new lines have something true to say.
+
+### Still not done
+
+**The geo-fence is not applied to the preview** — `ponytail:` in
+`functions/src/utils/carloadPreview.ts`. A rider ~15 miles out (the Woburn case) can be
+shown in a car the Sarthi who actually taps cannot be given. Fixing it means the preview
+taking a driver id and answering for that Sarthi specifically, which is a bigger change
+than the picker was.
+
 ## DEPLOYED — the waiting queue drawn as carloads, 2026-09-07
 
 `f9fd861`. Client **2113**, functions **1200**, rules **266**. Full sweep clean.
