@@ -3,6 +3,59 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-04**.
 
+## DEPLOYED — the carload preview applies the geo-fence, 2026-09-07
+
+`9479f4b`. Client **2146**, functions **1225**, rules **266**. Full sweep clean. Live
+bundle `index-M2Y7yXOH.js` matches `dist/`. `main` at `9479f4b`.
+
+The last `ponytail:` marker on this feature, removed rather than reworded.
+
+`globalAssignDriver` will not send a volunteer more than fifteen miles from their OWN
+HOME, and that bound decides who is even eligible for a given Sarthi. The preview ignored
+it, so a rider fifteen miles out — the Woburn case — appeared in somebody's car while the
+Sarthi who tapped was told nobody was waiting. That rider now reads **"Too far for every
+Sarthi … waiting for a car to free up will not help"**, which is the real situation and
+needs a carpool rather than patience.
+
+**Applying it meant the cars becoming real pairs.** A fence cannot be measured without
+knowing whose car it is, so the preview takes Sarthi/vehicle pairs — seats they hold, and
+the home the fence is measured from — instead of bare seat counts. Groups are labelled
+with the Sarthi's name rather than "Car 2". The only thing left unknown is the tap ORDER.
+
+**One fence, one distance function.** Dispatch kept private copies of both, with a
+different earth radius (3959 against 3958.8 — four feet at fifteen miles, so nothing was
+broken). Both now live in `carload.ts` and dispatch imports them, because a preview
+measuring a fence differently from the code enforcing it is the failure mode the whole
+feature exists to avoid.
+
+Three states that would otherwise be silently absent, all seen rendered in the harness:
+
+- a car nobody has taken has no Sarthi and so NO fence — still simulated, because a
+  Friday before anyone picks a car is the common early state, but the card says
+  **"No Sarthi yet — limit not checked"** rather than implying one was applied;
+- a Sarthi holding a car with **no home address** is refused by dispatch outright, so
+  their car collects nobody — named on the board with the fix, instead of the card
+  quietly missing while they tap a button that refuses them;
+- same for one revoked mid-evening while still holding a car.
+
+A rider whose address never geocoded is NOT blamed on distance — that sends a manager
+looking at where somebody lives when the address needs correcting.
+
+No Sarthi's home coordinates leave the server.
+
+### Deployed inside the ride window, on the owner's instruction
+
+18:45 EDT Monday, with requests open and sabha at 20:30. `firebase deploy --only
+functions` — a full rollout, because this release touches `globalAssignDriver` (only to
+import the shared fence, but that is still a new revision).
+
+I flagged the rule and the owner confirmed. Worth recording WHY it was low risk rather
+than lucky: **the lock document id is unchanged in this release**, so both revisions hold
+`system/assignmentLock__{hall}` and the mutex still holds across the rollout. The
+documented hazard is a release that CHANGES the lock id, which this is not. Zero live
+rides at the time. Verified after: window still `home-to-sabha`, scheduler ticking on the
+new revision, `locations.cjs verify` clean.
+
 ## DEPLOYED — the carload board picks its hall, 2026-09-07
 
 `894a11f`. **Hosting only** — no functions, rules or indexes changed, so this went out
