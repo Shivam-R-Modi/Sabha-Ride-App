@@ -538,16 +538,22 @@ export async function manuallyUpdateRideContext(params?: ManuallyUpdateRideConte
  * and the next tap does something else. The seed-and-grow geometry and the seat
  * arithmetic stay in one place, on the server, and this asks for the result.
  *
- * WHAT IT CANNOT KNOW. A real carload depends on which Sarthi taps: their car's free
- * seats decide where a carload is cut, and `globalAssignDriver` geo-fences the pool to
- * riders within 15 miles of the DRIVER. So there is no single true grouping. Every
- * group therefore carries the seat count it assumed, and the screen says the split
- * re-forms on each tap. See functions/src/utils/carloadPreview.ts for the ceiling on
- * the geo-fence.
+ * WHAT IT CANNOT KNOW. The cars are real Sarthi/vehicle pairs, and the geo-fence is
+ * applied from each Sarthi's own home — the same bound and the same distance function
+ * dispatch enforces. So the only thing left unknown is the ORDER they tap in, and the
+ * split genuinely depends on it. Every group therefore names whose car it is and the
+ * screen says it re-forms on each tap.
+ *
+ * A car nobody has taken yet has no Sarthi and so no home to measure from: `fenced` is
+ * false on it and the screen has to say the limit was not checked.
  */
 export interface CarloadGroup {
     /** Free passenger seats assumed for this car. Rendered, not hidden. */
     seats: number;
+    /** Whose car — a Sarthi's uid, or a vehicle id when nobody has taken it. */
+    carId: string;
+    /** Was the 15-mile limit applied? False for a car with no Sarthi yet. */
+    fenced: boolean;
     /**
      * The rider the car was built around, or null when the anchor could not fit in it.
      *
@@ -570,7 +576,15 @@ export type CarloadLeftoverReason =
     /** Too big for the cars free tonight, but a vehicle in the fleet could take them. */
     | 'waiting-for-bigger-vehicle'
     /** No vehicle seats this many AND the rider refused to be split. Needs a manager. */
-    | 'too-large-to-keep-together';
+    | 'too-large-to-keep-together'
+    /**
+     * Too far from EVERY Sarthi on shift for dispatch to send any of them.
+     *
+     * The one reason that is not about seats. No volunteer is ALLOWED to collect them,
+     * so waiting for a car to free up will never help — it needs a manager to arrange
+     * something other than a normal pickup. Reported separately for exactly that reason.
+     */
+    | 'outside-every-fence';
 
 export interface CarloadPreviewResult {
     /**
@@ -584,10 +598,25 @@ export interface CarloadPreviewResult {
     rideType?: 'home-to-sabha' | 'sabha-to-home';
     locationId?: string;
     groups: CarloadGroup[];
-    /** A REASON per rider, never a bare count. Two of the three need a manager. */
+    /** A REASON per rider, never a bare count. Three of the four need a manager. */
     leftover: Array<{ id: string; seats: number; reason: CarloadLeftoverReason }>;
-    /** Free seats in each car it simulated, largest first. */
-    carSeats: number[];
+    /**
+     * The cars it simulated, largest first, Sarthis before unclaimed vehicles.
+     *
+     * No coordinates: the Sarthi's home is what the fence is measured FROM and it stays
+     * on the server. The board only needs to know a limit was applied.
+     */
+    cars: Array<{ id: string; seats: number; fenced: boolean }>;
+    /**
+     * Cars that exist but can collect nobody, and why.
+     *
+     * A Sarthi with no home address is refused by dispatch outright, and one revoked
+     * mid-evening while still holding a car takes nobody. Both would otherwise be a car
+     * silently absent from the board — and both are things a manager fixes in one call.
+     */
+    unusable: Array<{ id: string; reason: 'no-home-address' | 'driver-not-approved' }>;
+    /** The bound applied, so the screen names the number instead of hardcoding it. */
+    fenceMiles?: number;
     /** Largest passenger capacity in the WHOLE fleet, free or not. */
     maxFleetSeats?: number;
 }

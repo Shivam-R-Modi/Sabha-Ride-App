@@ -44,6 +44,14 @@ import type { CarloadPreviewResult, CarloadLeftoverReason } from '../../src/util
 interface CarloadBoardProps {
     /** Every waiting request, for joining names onto the server's ride ids. */
     requests: StudentRequest[];
+    /**
+     * Approved Sarthis, for naming whose car each group is.
+     *
+     * The server returns a uid, not a name — the same rule as the riders. Joined here
+     * against a subscription the manager's screens already have, so no second path
+     * carries anybody's personal details.
+     */
+    drivers: Array<{ id: string; name?: string }>;
     /** The halls open for business. A picker appears only when there are two or more. */
     halls: SabhaLocationRecord[];
     /** The hall being grouped. Null before the hall list has loaded. */
@@ -64,6 +72,13 @@ interface CarloadBoardProps {
  * the fleet; "the 7-seater is out with someone else" is a thing a person can act on.
  */
 const LEFTOVER_COPY: Record<CarloadLeftoverReason, { label: string; detail: string; grave: boolean }> = {
+    'outside-every-fence': {
+        label: 'Too far for every Sarthi',
+        detail: 'Further than any Sarthi on shift is sent, so nobody can be dispatched to '
+            + 'them — waiting for a car to free up will not help. They need a lift '
+            + 'arranged with somebody nearby, or a carpool.',
+        grave: true,
+    },
     'no-car-left': {
         label: 'No car free',
         detail: 'Every car free right now fills up before reaching them. They travel when a Sarthi finishes a run.',
@@ -83,8 +98,10 @@ const LEFTOVER_COPY: Record<CarloadLeftoverReason, { label: string; detail: stri
 };
 
 export const CarloadBoard: React.FC<CarloadBoardProps> = ({
-    requests, halls, selectedHall, onSelectHall, preview, loading, error, stale, onRefresh,
+    requests, drivers, halls, selectedHall, onSelectHall,
+    preview, loading, error, stale, onRefresh,
 }) => {
+    const driverById = new Map(drivers.map(d => [d.id, d]));
     const byId = new Map(requests.map(r => [r.id, r]));
 
     /**
@@ -235,7 +252,9 @@ export const CarloadBoard: React.FC<CarloadBoardProps> = ({
         );
     }
 
-    const { groups, leftover, carSeats } = preview;
+    const { groups, leftover } = preview;
+    const cars = preview.cars ?? [];
+    const unfencedCars = cars.filter(c => !c.fenced).length;
 
     /**
      * The answer on screen is for a DIFFERENT hall than the picker reads.
@@ -277,12 +296,24 @@ export const CarloadBoard: React.FC<CarloadBoardProps> = ({
                         a plan and moves people by hand to correct a split that was never
                         going to happen that way. */}
                     <p className="text-xs text-coffee-500 mt-1 max-w-prose">
-                        Worked out the same way a Sarthi&apos;s <strong>Assign Me</strong> works it out, using
-                        the {carSeats.length === 0 ? 'cars' : `${carSeats.length} car${carSeats.length === 1 ? '' : 's'}`} free
-                        right now{carSeats.length > 0 ? ` (${carSeats.join(', ')} seats)` : ''}.
+                        Worked out the same way a Sarthi&apos;s <strong>Assign Me</strong> works it
+                        out — same grouping, and the same {preview.fenceMiles ?? 15}-mile limit on how far
+                        each Sarthi is sent.
                         <strong> It re-forms on every tap</strong> — whoever taps first, and how big
                         their car is, changes who travels together.
                     </p>
+
+                    {/* An unclaimed car has no Sarthi, so there is no home to measure a
+                        fence from. Saying so is the difference between "these three,
+                        within 15 miles of Ramesh" and "these three, limit not checked" —
+                        and the board must not make the stronger claim by accident. */}
+                    {unfencedCars > 0 && (
+                        <p className="text-xs text-coffee-500 mt-1 max-w-prose">
+                            {unfencedCars === cars.length
+                                ? 'No Sarthi has taken a car yet, so the distance limit could not be applied.'
+                                : `${unfencedCars} of these cars has no Sarthi yet, so the distance limit was not applied to it.`}
+                        </p>
+                    )}
                 </div>
 
                 <button
@@ -317,12 +348,29 @@ export const CarloadBoard: React.FC<CarloadBoardProps> = ({
                 >
                     <div className="flex items-center gap-2 flex-wrap px-4 py-3 bg-cream-200 border-b border-hairline/10">
                         <Car size={15} className="text-saffron-800 shrink-0" />
-                        <span className="text-sm font-bold text-coffee">Car {index + 1}</span>
+                        {/* WHOSE CAR, when a Sarthi holds it. "Ramesh" is something a
+                            manager can act on; "Car 2" has to be interpreted. Falls back
+                            to a number for an unclaimed vehicle, which genuinely has
+                            nobody's name on it. */}
+                        <span className="text-sm font-bold text-coffee">
+                            {driverById.get(group.carId)?.name ?? `Car ${index + 1}`}
+                        </span>
                         {/* The seats are the honesty, so they are on the card and not in
                             a tooltip. */}
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-cream-300 text-coffee-700 tabular-nums">
                             <Users size={11} /> {group.seats} seats
                         </span>
+                        {/* The limit was not applied to this car, because nobody has
+                            taken it. On the card and not only in the summary — this is
+                            the group whose membership is unverified. */}
+                        {!group.fenced && (
+                            <span
+                                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-[rgb(var(--warning-bg))] text-[rgb(var(--warning-text))]"
+                                title="No Sarthi has taken this car, so there is no home to measure the distance limit from."
+                            >
+                                No Sarthi yet — limit not checked
+                            </span>
+                        )}
                         <span className="text-[11px] font-bold text-coffee-500 tabular-nums ml-auto">
                             {group.riders.reduce((n, r) => n + r.seats, 0)} of {group.seats} taken
                         </span>
@@ -385,6 +433,29 @@ export const CarloadBoard: React.FC<CarloadBoardProps> = ({
                     </ul>
                 </div>
             ))}
+
+            {/* ── Cars that exist but can collect nobody ───────────────────── */}
+            {(preview.unusable ?? []).length > 0 && (
+                <ul className="rounded-2xl border border-[rgb(var(--danger))]/35 bg-[rgb(var(--danger-bg))] divide-y divide-hairline/10">
+                    {(preview.unusable ?? []).map(item => (
+                        <li key={item.id} className="px-4 py-3 flex items-start gap-2">
+                            <AlertCircle size={14} className="shrink-0 mt-0.5 text-[rgb(var(--danger-text))]" />
+                            <p className="text-xs text-[rgb(var(--danger-text))]">
+                                {/* Named, because the fix is a phone call to that person.
+                                    Left out, their car is simply missing from the board
+                                    and the Sarthi spends the evening tapping a button
+                                    that refuses them. */}
+                                <strong>{driverById.get(item.id)?.name ?? 'A Sarthi'}</strong>
+                                {item.reason === 'no-home-address'
+                                    ? ' is holding a car but has no home address set, so nobody can be'
+                                        + ' assigned to them. They need to set it in their profile.'
+                                    : ' is holding a car but is no longer an approved Sarthi, so they'
+                                        + ' cannot be assigned anybody. Release the car, or approve them again.'}
+                            </p>
+                        </li>
+                    ))}
+                </ul>
+            )}
 
             {/* ── Everyone no car reached, with the reason ─────────────────── */}
             {leftover.length > 0 && (

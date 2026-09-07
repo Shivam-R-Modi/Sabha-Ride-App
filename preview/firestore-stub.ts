@@ -102,6 +102,37 @@ const DONE = {
 
 const COLLECTIONS: Record<string, Array<{ id: string; data: () => unknown }>> = {
     /**
+     * Approved Sarthis, so the carload board can NAME whose car a group is.
+     *
+     * The preview returns a uid and nothing else — the same rule as the riders — and
+     * `useAvailableDrivers` is what turns it into a name. Without these the board falls
+     * back to "Car 1", which is the state it is trying to improve on, so the harness
+     * would show the worse of the two versions.
+     *
+     * `roles` and not `role`: every driver in this congregation is recorded as a
+     * manager, and the hook queries the granted set for exactly that reason.
+     */
+    users: [
+        {
+            id: 'drv-1',
+            data: () => ({
+                name: 'Ramesh Patel', roles: ['manager', 'driver', 'student'],
+                role: 'manager', accountStatus: 'approved',
+                location: { latitude: 42.3405, longitude: -71.0895 },
+            }),
+        },
+        // Holding a car with NO home address, which is what puts them on the board's
+        // "cannot collect anybody" row. Dispatch refuses them outright.
+        {
+            id: 'drv-2',
+            data: () => ({
+                name: 'Nisha Trivedi', roles: ['driver', 'student'],
+                role: 'driver', accountStatus: 'approved',
+            }),
+        },
+    ],
+
+    /**
      * The halls sabha runs at.
      *
      * TWO ACTIVE plus one RETIRED. The retired one is here because a screen that lists

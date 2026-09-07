@@ -81,7 +81,22 @@ export interface Waiting extends LightPoint {
  */
 export const WAIT_ESCALATION_MS = 90 * 60 * 1000;
 
-/** Great-circle miles. Same formula as the one in globalAssignDriver. */
+/**
+ * How far one volunteer is asked to drive to collect somebody.
+ *
+ * Measured from the DRIVER, because it is their journey being bounded — not from the
+ * venue. `globalAssignDriver` filters the pool by it, and `carloadPreview` applies the
+ * same bound so a manager is never shown a carload the tap could not produce.
+ *
+ * ONE DEFINITION, HERE. Dispatch used to keep its own copy of this number and its own
+ * copy of the haversine below — with a different earth radius, 3959 against 3958.8. Four
+ * feet at fifteen miles, so it broke nothing; but the preview measuring the fence with a
+ * different function than dispatch enforces it with is exactly the drift that makes a
+ * preview untrustworthy, and two copies of a policy number is how one gets changed.
+ */
+export const GEO_FENCE_MILES = 15;
+
+/** Great-circle miles. THE distance function — dispatch imports this one. */
 export function milesBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
     const R = 3958.8;
     const p = Math.PI / 180;

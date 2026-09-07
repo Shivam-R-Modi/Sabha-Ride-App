@@ -9,6 +9,7 @@ import { describePresence } from '../../src/utils/presence';
 import { useCarloadPreview } from '../../hooks/useCarloadPreview';
 import { CarloadBoard } from './CarloadBoard';
 import { useLocations } from '../../hooks/useLocations';
+import { useAvailableDrivers } from '../../hooks/useUsers';
 
 interface RequestTableProps {
   requests: StudentRequest[];
@@ -93,6 +94,13 @@ export const RequestTable: React.FC<RequestTableProps> = ({
    * choice would be silently overwritten the first time the hall list re-emitted.
    */
   const { active: openHalls } = useLocations();
+  /**
+   * Approved Sarthis, so a carload can be labelled with whose car it is.
+   *
+   * The preview returns a uid, never a name — same rule as the riders — and this is the
+   * subscription that turns it into something a manager can read.
+   */
+  const { drivers } = useAvailableDrivers();
   const [chosenHall, setChosenHall] = useState<string | null>(null);
   /** A hall that has since been retired must not stay selected. */
   const selectedHall = openHalls.some(h => h.id === chosenHall)
@@ -250,6 +258,7 @@ export const RequestTable: React.FC<RequestTableProps> = ({
         {view === 'cars' ? (
           <CarloadBoard
             requests={requests}
+            drivers={drivers}
             halls={openHalls}
             selectedHall={selectedHall}
             onSelectHall={setChosenHall}

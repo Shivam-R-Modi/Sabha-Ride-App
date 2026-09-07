@@ -40,11 +40,21 @@ const REQUESTS = [
     rider('r4', 'Deepa'),
 ];
 
+/** The Sarthis, for naming whose car a group is. */
+const DRIVERS = [
+    { id: 'drv-1', name: 'Ramesh' },
+    { id: 'drv-2', name: 'Nisha' },
+];
+
 const ok = (over: Partial<CarloadPreviewResult> = {}): CarloadPreviewResult => ({
     status: 'ok',
-    carSeats: [3],
+    cars: [{ id: 'drv-1', seats: 3, fenced: true }],
+    unusable: [],
+    fenceMiles: 15,
     groups: [{
         seats: 3,
+        carId: 'drv-1',
+        fenced: true,
         anchorId: 'r1',
         riders: [
             { id: 'r1', seats: 1, totalSeats: 1, split: false },
@@ -73,6 +83,7 @@ const renderBoard = (over: Partial<React.ComponentProps<typeof CarloadBoard>> = 
     render(
         <CarloadBoard
             requests={REQUESTS}
+            drivers={DRIVERS}
             halls={ONE_HALL}
             selectedHall="boston-huntington"
             onSelectHall={() => {}}
@@ -89,14 +100,37 @@ describe('CarloadBoard — the grouping', () => {
     it('draws one card per car, with the riders in it', async () => {
         renderBoard();
 
-        expect(await screen.findByText('Car 1')).toBeTruthy();
+        expect(await screen.findByText('Ramesh')).toBeTruthy();
         expect(screen.getByText('Anita')).toBeTruthy();
         expect(screen.getByText('Bhavin')).toBeTruthy();
     });
 
+    it('NAMES THE SARTHI whose car it is, not "Car 1"', async () => {
+        // "Ramesh" is something a manager can act on; "Car 2" has to be interpreted
+        // against a fleet list on another screen.
+        renderBoard();
+
+        expect(await screen.findByText('Ramesh')).toBeTruthy();
+        expect(screen.queryByText('Car 1')).toBeNull();
+    });
+
+    it('falls back to a number for a car nobody has taken', async () => {
+        // An unclaimed vehicle genuinely has nobody's name on it, and a uid on screen
+        // would be worse than a number.
+        renderBoard({ preview: ok({
+            cars: [{ id: 'veh_0', seats: 3, fenced: false }],
+            groups: [{
+                seats: 3, carId: 'veh_0', fenced: false, anchorId: 'r1',
+                riders: [{ id: 'r1', seats: 1, totalSeats: 1, split: false }],
+            }],
+        }) });
+
+        expect(await screen.findByText('Car 1')).toBeTruthy();
+    });
+
     it('SHOWS THE SEAT COUNT it assumed, on the card', async () => {
-        // The whole of this screen's honesty. A card reading only "Car 1" implies the
-        // grouping is absolute; the seats are what say it depended on an assumption.
+        // Part of this screen's honesty. A card naming only the Sarthi implies the
+        // grouping is absolute; the seats say it depended on which car they hold.
         renderBoard();
         expect(await screen.findByText('3 seats')).toBeTruthy();
     });
@@ -121,7 +155,7 @@ describe('CarloadBoard — the grouping', () => {
         // not in the list reads as a bug and a manager would chase it.
         renderBoard({ preview: ok({
             groups: [{
-                seats: 2, anchorId: null,
+                seats: 2, carId: 'drv-1', fenced: true, anchorId: null,
                 riders: [{ id: 'r2', seats: 1, totalSeats: 1, split: false }],
             }],
         }) });
@@ -134,7 +168,7 @@ describe('CarloadBoard — the grouping', () => {
         // Silent, this looks like the whole group has a ride.
         renderBoard({ preview: ok({
             groups: [{
-                seats: 3, anchorId: 'r1',
+                seats: 3, carId: 'drv-1', fenced: true, anchorId: 'r1',
                 riders: [{ id: 'r1', seats: 3, totalSeats: 6, split: true }],
             }],
         }) });
@@ -195,7 +229,7 @@ describe('CarloadBoard — everyone is accounted for', () => {
          */
         renderBoard({ preview: ok({
             groups: [{
-                seats: 3, anchorId: 'ghost',
+                seats: 3, carId: 'drv-1', fenced: true, anchorId: 'ghost',
                 riders: [{ id: 'ghost', seats: 1, totalSeats: 1, split: false }],
             }],
         }) });
@@ -208,7 +242,7 @@ describe('CarloadBoard — states that are not a grouping', () => {
     it('says rides are not open, rather than drawing an empty board', async () => {
         // Not an error. A manager looking at the queue on a Tuesday has done nothing
         // wrong, and an empty board would read as "the grouping is broken".
-        renderBoard({ preview: { status: 'window-closed', groups: [], leftover: [], carSeats: [] } });
+        renderBoard({ preview: { status: 'window-closed', groups: [], leftover: [], cars: [], unusable: [] } });
 
         expect(await screen.findByText(/Rides are not open right now/i)).toBeTruthy();
     });
@@ -258,7 +292,7 @@ describe('CarloadBoard — states that are not a grouping', () => {
     it('says nothing forms, rather than nothing at all, when no car can take anybody', async () => {
         // Every car in use. An empty board with no words is indistinguishable from a
         // fault.
-        renderBoard({ preview: ok({ groups: [], carSeats: [], leftover: [
+        renderBoard({ preview: ok({ groups: [], cars: [], leftover: [
             { id: 'r1', seats: 1, reason: 'no-car-left' },
         ] }) });
 
@@ -282,7 +316,7 @@ describe('CarloadBoard — the hall picker', () => {
         // has never carried one.
         renderBoard({ halls: ONE_HALL });
 
-        await screen.findByText('Car 1');
+        await screen.findByText('Ramesh');
         expect(screen.queryByText(/Carloads for/i)).toBeNull();
         expect(screen.queryByRole('button', { name: 'Huntington Ave' })).toBeNull();
     });
@@ -328,7 +362,7 @@ describe('CarloadBoard — the hall picker', () => {
             requests: [rider('r1', 'Anita', { locationId: 'boston-huntington' })],
         });
 
-        await screen.findByText('Car 1');
+        await screen.findByText('Ramesh');
         expect(screen.queryByText(/waiting at Elm Street/i)).toBeNull();
     });
 
@@ -360,7 +394,7 @@ describe('CarloadBoard — the hall picker', () => {
             requests: [rider('r1', 'Anita'), rider('r9', 'Unstamped')],
         });
 
-        await screen.findByText('Car 1');
+        await screen.findByText('Ramesh');
         expect(screen.queryByText(/names no sabha/i)).toBeNull();
     });
 
@@ -369,7 +403,7 @@ describe('CarloadBoard — the hall picker', () => {
         // quiet hall is a control that vanishes when it is needed.
         renderBoard({
             halls: TWO_HALLS,
-            preview: { status: 'window-closed', groups: [], leftover: [], carSeats: [] },
+            preview: { status: 'window-closed', groups: [], leftover: [], cars: [], unusable: [] },
         });
 
         expect(await screen.findByRole('button', { name: 'Elm Street' })).toBeTruthy();
@@ -413,7 +447,7 @@ describe('CarloadBoard — the hall picker', () => {
             preview: ok({ locationId: 'somerville' }),
         });
 
-        await screen.findByText('Car 1');
+        await screen.findByText('Ramesh');
         expect(screen.queryByText(/Still showing/i)).toBeNull();
     });
 
@@ -426,7 +460,121 @@ describe('CarloadBoard — the hall picker', () => {
             preview: ok({ locationId: undefined }),
         });
 
-        await screen.findByText('Car 1');
+        await screen.findByText('Ramesh');
         expect(screen.queryByText(/Still showing/i)).toBeNull();
+    });
+});
+
+/**
+ * THE DISTANCE LIMIT, and being honest about when it was not applied.
+ *
+ * The fence is what makes this a preview rather than a guess: dispatch will not send a
+ * volunteer more than fifteen miles from their own home, so a board ignoring it showed
+ * carloads no tap could produce. Now that it is applied, the screen has two new duties —
+ * distinguish "too far for anybody" from "no car free", and admit when a car had no
+ * Sarthi and so no fence could be measured at all.
+ */
+describe('CarloadBoard — the distance limit', () => {
+    it('names the limit rather than hardcoding it', async () => {
+        renderBoard({ preview: ok({ fenceMiles: 15 }) });
+        expect(await screen.findByText(/15-mile limit/i)).toBeTruthy();
+    });
+
+    it('DISTINGUISHES too-far from no-car-free', async () => {
+        /**
+         * The reason this reason exists. "No car free" has a manager waiting for a
+         * Sarthi to finish a run that will never help — no volunteer on shift is ALLOWED
+         * to collect them. It needs a carpool or a lift from somebody nearby, which is a
+         * different conversation entirely.
+         */
+        renderBoard({ preview: ok({
+            leftover: [
+                { id: 'r3', seats: 1, reason: 'outside-every-fence' },
+                { id: 'r4', seats: 1, reason: 'no-car-left' },
+            ],
+        }) });
+
+        expect(await screen.findByText('Too far for every Sarthi')).toBeTruthy();
+        expect(screen.getByText(/nobody can be dispatched to them/i)).toBeTruthy();
+        expect(screen.getByText('No car free')).toBeTruthy();
+    });
+
+    it('SAYS THE LIMIT WAS NOT CHECKED on a car with no Sarthi', async () => {
+        // "These three, within 15 miles of Ramesh" and "these three, limit not checked"
+        // are different claims. The card must not make the stronger one by accident.
+        renderBoard({ preview: ok({
+            cars: [{ id: 'veh_0', seats: 3, fenced: false }],
+            groups: [{
+                seats: 3, carId: 'veh_0', fenced: false, anchorId: 'r1',
+                riders: [{ id: 'r1', seats: 1, totalSeats: 1, split: false }],
+            }],
+        }) });
+
+        expect(await screen.findByText(/No Sarthi yet — limit not checked/i)).toBeTruthy();
+        expect(screen.getByText(/No Sarthi has taken a car yet/i)).toBeTruthy();
+    });
+
+    it('does not say that on a fenced car', async () => {
+        renderBoard();
+
+        await screen.findByText('Ramesh');
+        expect(screen.queryByText(/limit not checked/i)).toBeNull();
+    });
+
+    it('counts the unfenced cars when only SOME are unclaimed', async () => {
+        renderBoard({ preview: ok({
+            cars: [
+                { id: 'drv-1', seats: 3, fenced: true },
+                { id: 'veh_0', seats: 6, fenced: false },
+            ],
+        }) });
+
+        expect(await screen.findByText(/1 of these cars has no Sarthi yet/i)).toBeTruthy();
+    });
+});
+
+/**
+ * A car that exists and can collect nobody.
+ *
+ * Both cases are a Sarthi who has taken a vehicle and whom dispatch will refuse — no
+ * home address set, or revoked while still holding the car. Left off the board their car
+ * is simply missing, and the Sarthi spends the evening tapping a button that refuses
+ * them while a manager wonders why the queue is not moving. Both are fixed in one call.
+ */
+describe('CarloadBoard — cars that can collect nobody', () => {
+    it('names a Sarthi with no home address, and what to do', async () => {
+        renderBoard({ preview: ok({
+            unusable: [{ id: 'drv-2', reason: 'no-home-address' }],
+        }) });
+
+        expect(await screen.findByText('Nisha')).toBeTruthy();
+        expect(screen.getByText(/no home address set/i)).toBeTruthy();
+        expect(screen.getByText(/set it in their profile/i)).toBeTruthy();
+    });
+
+    it('names a revoked Sarthi still holding a car, and what to do', async () => {
+        renderBoard({ preview: ok({
+            unusable: [{ id: 'drv-2', reason: 'driver-not-approved' }],
+        }) });
+
+        expect(await screen.findByText(/no longer an approved Sarthi/i)).toBeTruthy();
+        expect(screen.getByText(/Release the car, or approve them again/i)).toBeTruthy();
+    });
+
+    it('still says something useful for a Sarthi it cannot name', async () => {
+        // The uid came from a different read than the driver list, so the two can
+        // disagree. A blank name would make the row unreadable rather than merely vague.
+        renderBoard({ preview: ok({
+            unusable: [{ id: 'nobody-knows', reason: 'no-home-address' }],
+        }) });
+
+        expect(await screen.findByText(/A Sarthi/)).toBeTruthy();
+    });
+
+    it('says nothing when every car is usable', async () => {
+        renderBoard();
+
+        await screen.findByText('Ramesh');
+        expect(screen.queryByText(/no home address set/i)).toBeNull();
     });
 });

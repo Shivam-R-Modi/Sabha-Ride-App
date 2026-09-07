@@ -7,7 +7,9 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { RideType, RideStudent } from '../types';
-import { orderForCarload, LightPoint } from '../utils/carload';
+import {
+    orderForCarload, milesBetween, GEO_FENCE_MILES, LightPoint,
+} from '../utils/carload';
 import { fillBySeats, remaindersFirst, maxPassengerSeats } from '../utils/seats';
 import { seatsOf } from '../constants/seats';
 import { FOUNDING_CITY_ID } from '../constants/tenancy';
@@ -51,25 +53,8 @@ function lockDocFor(locationId: string): string {
     return `system/assignmentLock__${locationId}`;
 }
 const LOCK_TTL_MS = 10_000;          // 10 seconds
-const GEO_FENCE_MILES = 15;          // ignore students > 15 mi away
 
 // ── helpers ────────────────────────────────────────────────
-
-/** Haversine distance in miles */
-function haversineDistanceMiles(
-    lat1: number, lng1: number,
-    lat2: number, lng2: number
-): number {
-    const R = 3959;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}
 
 /*
  * `isValidPendingRide` and `isAssignableTo` MOVED to ../utils/ridePool.ts.
@@ -461,7 +446,7 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         // The geo-fence stays: it is a limit on how far one volunteer is sent,
         // and is measured from the DRIVER because that is whose journey it bounds.
         const withinFence = allStudentPoints.filter(s =>
-            haversineDistanceMiles(tappingDriverLoc.lat, tappingDriverLoc.lng, s.lat, s.lng)
+            milesBetween(tappingDriverLoc.lat, tappingDriverLoc.lng, s.lat, s.lng)
             <= GEO_FENCE_MILES);
 
         // Anchored on the rider farthest from the venue — remainders and

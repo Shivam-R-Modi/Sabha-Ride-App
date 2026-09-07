@@ -19,6 +19,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 let db: any;
 let rides: Array<{ id: string; data: Record<string, unknown> }>;
 let vehicles: Array<Record<string, unknown>>;
+/** Driver documents, keyed by uid, for resolving a vehicle's holder. */
+let drivers: Record<string, Record<string, unknown>>;
 let context: Record<string, unknown> | undefined;
 let openHalls: Array<{ id: string; name: string; venue: unknown; active: boolean; order: number }>;
 /** Anything written during a call. Must stay empty — see the last block. */
@@ -33,8 +35,13 @@ vi.mock('firebase-functions', () => {
 vi.mock('firebase-admin', () => ({ firestore: () => db }));
 
 const assertApprovedManager = vi.fn(async () => ({ name: 'Mira' }));
-vi.mock('../utils/authz', () => ({
+vi.mock('../utils/authz', async (importOriginal) => ({
     assertApprovedManager: (...a: any[]) => assertApprovedManager(...(a as [])),
+    // THE REAL predicate. It decides whether a Sarthi holding a car can be dispatched,
+    // and dispatch enforces the same one — a stub here would let these tests pass while
+    // the preview showed a carload for a revoked account.
+    isApprovedDriverData:
+        (await importOriginal<typeof import('../utils/authz')>()).isApprovedDriverData,
 }));
 vi.mock('../utils/rateLimiter', () => ({ checkRateLimit: async () => undefined }));
 vi.mock('../utils/settings', () => ({
@@ -49,6 +56,11 @@ vi.mock('../utils/settings', () => ({
 import { previewCarloads } from './previewCarloads';
 
 const VENUE = { lat: 42.339925, lng: -71.088182, address: 'Huntington Ave' };
+/** A Sarthi who can actually be dispatched: approved, a driver, and locatable. */
+const APPROVED_DRIVER = {
+    role: 'driver', roles: ['driver', 'student'], accountStatus: 'approved',
+    name: 'Ramesh', location: { latitude: 42.34, longitude: -71.09 },
+};
 const HUNTINGTON = {
     id: 'boston-huntington', name: 'Huntington', active: true, order: 0, venue: VENUE,
 };
@@ -87,7 +99,10 @@ function makeDb() {
                 }),
             }),
             doc: (id: string) => ({
-                get: async () => snap(true, undefined),
+                get: async () => snap(
+                    name === 'users' ? id in drivers : true,
+                    name === 'users' ? drivers[id] : undefined,
+                ),
                 set: async () => { writes.push(`${name}/${id}`); },
                 update: async () => { writes.push(`${name}/${id}`); },
             }),
@@ -111,6 +126,7 @@ beforeEach(() => {
     assertApprovedManager.mockResolvedValue({ name: 'Mira' } as any);
     openHalls = [HUNTINGTON];
     vehicles = [{ capacity: 4, status: 'available' }];
+    drivers = {};
     rides = [req('a', 1), req('b', 2), req('c', 9)];
     context = {
         rideType: 'home-to-sabha', eventId: '2026-09-07', venue: null,
@@ -163,31 +179,47 @@ describe('previewCarloads — grouping', () => {
         expect(out.groups[0].riders.map((r: any) => r.id).sort()).toEqual(['a', 'b', 'c']);
     });
 
-    it('reports the free cars it assumed, largest first', async () => {
+    it('reports the cars it simulated, largest first', async () => {
         // Published so the screen can say what it assumed. Which Sarthi taps first is
         // unknowable and the split depends on it, so hiding this would be the whole
         // defect.
         vehicles = [
             { capacity: 4, status: 'available' },
             { capacity: 7, status: 'available' },
-            { capacity: 5, status: 'in_use' },
         ];
         makeDb();
 
         const out: any = await call();
-        expect(out.carSeats).toEqual([6, 3]);
+        expect(out.cars.map((c: any) => c.seats)).toEqual([6, 3]);
     });
 
-    it('counts only vehicles that are actually free', async () => {
+    it('includes an IN-USE vehicle, because its Sarthi is the one who taps', async () => {
+        /**
+         * `in_use` means a Sarthi is holding it, which is exactly the car most likely to
+         * dispatch next — `globalAssignDriver` accepts both states. Counting only
+         * `available` ones, as an earlier version did, hid every car that had actually
+         * been taken and showed only the ones nobody was driving.
+         */
+        vehicles = [
+            { capacity: 5, status: 'in_use', assignedDriverId: 'drv-1' },
+            { capacity: 4, status: 'available' },
+        ];
+        drivers = { 'drv-1': APPROVED_DRIVER };
+        makeDb();
+
+        const out: any = await call();
+        expect(out.cars.map((c: any) => c.seats)).toEqual([4, 3]);
+    });
+
+    it('leaves out a vehicle in maintenance', async () => {
         vehicles = [
             { capacity: 4, status: 'available' },
             { capacity: 8, status: 'maintenance' },
-            { capacity: 8, status: 'in_use' },
         ];
         makeDb();
 
         const out: any = await call();
-        expect(out.carSeats).toEqual([3]);
+        expect(out.cars.map((c: any) => c.seats)).toEqual([3]);
     });
 
     it('still reports maxFleetSeats from the WHOLE fleet', async () => {
@@ -200,20 +232,22 @@ describe('previewCarloads — grouping', () => {
          */
         vehicles = [
             { capacity: 4, status: 'available' },
-            { capacity: 8, status: 'in_use' },
+            { capacity: 8, status: 'in_use', assignedDriverId: 'drv-1' },
         ];
+        drivers = { 'drv-1': APPROVED_DRIVER };
         makeDb();
 
         const out: any = await call();
-        expect(out.carSeats).toEqual([3]);
+        expect(out.cars.map((c: any) => c.seats)).toEqual([7, 3]);
         expect(out.maxFleetSeats).toBe(7);
     });
 
-    it('leaves everybody over when no car is free', async () => {
-        vehicles = [{ capacity: 4, status: 'in_use' }];
+    it('leaves everybody over when there is no usable car at all', async () => {
+        vehicles = [{ capacity: 4, status: 'maintenance' }];
         makeDb();
 
         const out: any = await call();
+        expect(out.cars).toEqual([]);
         expect(out.groups).toEqual([]);
         expect(out.leftover.map((l: any) => l.id).sort()).toEqual(['a', 'b', 'c']);
     });
@@ -370,5 +404,173 @@ describe('previewCarloads — what it returns, and what it must not', () => {
         // race a real dispatch from a screen nobody tapped.
         await call();
         expect(writes).toEqual([]);
+    });
+});
+
+/**
+ * THE CARS ARE SARTHI/VEHICLE PAIRS, and that is what makes the fence real.
+ *
+ * `globalAssignDriver` bounds how far a volunteer is sent from THEIR OWN HOME, so the
+ * fence cannot be applied without knowing whose car it is. This block pins the pairing:
+ * whose home is used, who is excluded and why, and that a car nobody has taken is
+ * simulated WITHOUT a fence rather than being dropped or silently fenced from nowhere.
+ */
+describe('previewCarloads — Sarthis and their cars', () => {
+    it('measures the fence from the SARTHI holding the car', async () => {
+        /**
+         * The rider is 9 miles north; the Sarthi lives 30 miles north, so they are 21
+         * miles apart and dispatch would refuse. Measured from the VENUE the rider is
+         * comfortably inside and would be shown in a car that cannot happen — which is
+         * the defect this whole change exists to remove.
+         */
+        vehicles = [{ capacity: 4, status: 'in_use', assignedDriverId: 'drv-far' }];
+        drivers = {
+            'drv-far': {
+                ...APPROVED_DRIVER,
+                location: { latitude: VENUE.lat + 30 / 69, longitude: VENUE.lng },
+            },
+        };
+        rides = [req('nine-miles-out', 9)];
+        makeDb();
+
+        const out: any = await call();
+
+        expect(out.groups).toEqual([]);
+        expect(out.leftover).toEqual([
+            { id: 'nine-miles-out', seats: 1, reason: 'outside-every-fence' },
+        ]);
+    });
+
+    it('names the SARTHI as the car, not the vehicle', async () => {
+        // So the board can say "Ramesh's car" instead of "Car 2". A vehicle id would be
+        // meaningless on screen and would need a second lookup to render.
+        vehicles = [{ capacity: 4, status: 'in_use', assignedDriverId: 'drv-1' }];
+        drivers = { 'drv-1': APPROVED_DRIVER };
+        makeDb();
+
+        const out: any = await call();
+        expect(out.groups[0].carId).toBe('drv-1');
+        expect(out.groups[0].fenced).toBe(true);
+    });
+
+    it('reads the OLDER holder field too', async () => {
+        // `currentDriverId` is the server's older name for `assignedDriverId`, and
+        // resolveVehicleHolder reads both. Missing it would silently unfence a car that
+        // somebody is in fact driving.
+        vehicles = [{ capacity: 4, status: 'in_use', currentDriverId: 'drv-1' }];
+        drivers = { 'drv-1': APPROVED_DRIVER };
+        makeDb();
+
+        const out: any = await call();
+        expect(out.groups[0].carId).toBe('drv-1');
+        expect(out.groups[0].fenced).toBe(true);
+    });
+
+    it('simulates an UNCLAIMED car with no fence, and says so', async () => {
+        /**
+         * Nobody has taken it, so there is no home to measure from. Refusing everybody
+         * would be worse than admitting the limit was not checked — and a Friday before
+         * anyone picks a car is the common early state, where dropping unclaimed cars
+         * would show an empty board.
+         */
+        vehicles = [{ capacity: 4, status: 'available' }];
+        rides = [req('far', 40)];
+        makeDb();
+
+        const out: any = await call();
+
+        expect(out.groups[0].fenced).toBe(false);
+        expect(out.groups[0].riders.map((r: any) => r.id)).toEqual(['far']);
+        expect(out.cars[0].fenced).toBe(false);
+    });
+
+    it('puts SARTHIS BEFORE unclaimed cars', async () => {
+        // Those are the taps that will really happen, and their fences are real. A
+        // hypothetical car ordered first would shape the whole grouping around it.
+        vehicles = [
+            { capacity: 8, status: 'available' },
+            { capacity: 4, status: 'in_use', assignedDriverId: 'drv-1' },
+        ];
+        drivers = { 'drv-1': APPROVED_DRIVER };
+        makeDb();
+
+        const out: any = await call();
+        expect(out.cars.map((c: any) => c.id)).toEqual(['drv-1', 'veh_0']);
+        expect(out.cars.map((c: any) => c.fenced)).toEqual([true, false]);
+    });
+
+    it('REPORTS a Sarthi with no home address instead of hiding the car', async () => {
+        /**
+         * `globalAssignDriver` refuses them outright — "Your location is not set" — so
+         * their car can collect nobody. Quietly leaving it out of the board hides a thing
+         * a manager can fix in one phone call, and the Sarthi spends the evening tapping
+         * a button that refuses them.
+         */
+        vehicles = [{ capacity: 4, status: 'in_use', assignedDriverId: 'drv-lost' }];
+        drivers = { 'drv-lost': { ...APPROVED_DRIVER, location: undefined } };
+        makeDb();
+
+        const out: any = await call();
+
+        expect(out.cars).toEqual([]);
+        expect(out.unusable).toEqual([{ id: 'drv-lost', reason: 'no-home-address' }]);
+    });
+
+    it('does not accept 0,0 as a home', async () => {
+        // The placeholder an ungeocoded address leaves behind. Treated as a real
+        // location it puts the fence in the Gulf of Guinea and every rider outside it.
+        vehicles = [{ capacity: 4, status: 'in_use', assignedDriverId: 'drv-zero' }];
+        drivers = { 'drv-zero': { ...APPROVED_DRIVER, location: { latitude: 0, longitude: 0 } } };
+        makeDb();
+
+        const out: any = await call();
+        expect(out.unusable).toEqual([{ id: 'drv-zero', reason: 'no-home-address' }]);
+    });
+
+    it('REPORTS a revoked Sarthi still holding a car', async () => {
+        // Revoked mid-evening. Dispatch refuses them, so their car takes nobody — and
+        // this is the one screen that would tell a manager why the queue is not moving.
+        vehicles = [{ capacity: 4, status: 'in_use', assignedDriverId: 'drv-out' }];
+        drivers = { 'drv-out': { ...APPROVED_DRIVER, accountStatus: 'revoked' } };
+        makeDb();
+
+        const out: any = await call();
+
+        expect(out.cars).toEqual([]);
+        expect(out.unusable).toEqual([{ id: 'drv-out', reason: 'driver-not-approved' }]);
+    });
+
+    it('reports a holder whose profile is GONE', async () => {
+        // A deleted account still named on a vehicle. `isApprovedDriverData` refuses
+        // undefined, which is the safe direction.
+        vehicles = [{ capacity: 4, status: 'in_use', assignedDriverId: 'ghost' }];
+        drivers = {};
+        makeDb();
+
+        const out: any = await call();
+        expect(out.unusable).toEqual([{ id: 'ghost', reason: 'driver-not-approved' }]);
+    });
+
+    it('publishes the fence distance rather than making the screen hardcode it', async () => {
+        const out: any = await call();
+        expect(out.fenceMiles).toBe(15);
+    });
+
+    it('NEVER RETURNS A SARTHI\'S HOME COORDINATES', async () => {
+        /**
+         * The fence is measured FROM their home, on the server, and that is where it
+         * stays. The board only needs to know a limit was applied — not from where — and
+         * a volunteer's home address has no business in a payload that did not need it.
+         */
+        vehicles = [{ capacity: 4, status: 'in_use', assignedDriverId: 'drv-1' }];
+        drivers = { 'drv-1': APPROVED_DRIVER };
+        makeDb();
+
+        const out: any = await call();
+        const serialised = JSON.stringify(out);
+
+        expect(serialised).not.toContain('42.34');
+        expect(serialised).not.toContain('latitude');
+        expect(serialised).not.toContain('Ramesh');
     });
 });

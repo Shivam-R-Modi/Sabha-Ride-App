@@ -86,11 +86,25 @@ export const previewCarloads = async (locationId?: string | null) => ({
     // is still showing the hall you switched away from. Hardcoded, that check is either
     // permanently on or permanently off and the harness cannot show either honestly.
     locationId: locationId ?? 'boston-huntington',
-    carSeats: [6, 3],
+    fenceMiles: 15,
     maxFleetSeats: 6,
+    /**
+     * ONE SARTHI'S CAR AND ONE NOBODY HAS TAKEN, so both halves of the fence story are
+     * on screen: a fenced group named after the Sarthi, and an unfenced one that has to
+     * admit the limit was not applied to it. `drv-1` matches a driver in the firestore
+     * stub, so the card shows a name rather than a uid.
+     */
+    cars: [
+        { id: 'drv-1', seats: 6, fenced: true },
+        { id: 'veh_1', seats: 3, fenced: false },
+    ],
+    /** A Sarthi holding a car who cannot be dispatched. The row nobody would see. */
+    unusable: [{ id: 'drv-2', reason: 'no-home-address' as const }],
     groups: [
         {
             seats: 6,
+            carId: 'drv-1',
+            fenced: true,
             anchorId: 'req-4',
             riders: [
                 { id: 'req-4', seats: 1, totalSeats: 1, split: false },
@@ -100,6 +114,8 @@ export const previewCarloads = async (locationId?: string | null) => ({
         },
         {
             seats: 3,
+            carId: 'veh_1',
+            fenced: false,
             anchorId: 'req-1',
             riders: [
                 { id: 'req-1', seats: 1, totalSeats: 1, split: false },
@@ -111,5 +127,7 @@ export const previewCarloads = async (locationId?: string | null) => ({
         { id: 'req-2', seats: 5, reason: 'no-car-left' as const },
         { id: 'req-3', seats: 7, reason: 'too-large-to-keep-together' as const },
         { id: 'req-7', seats: 4, reason: 'waiting-for-bigger-vehicle' as const },
+        // The Woburn case, which is the whole reason the fence is applied here.
+        { id: 'req-10', seats: 1, reason: 'outside-every-fence' as const },
     ],
 });

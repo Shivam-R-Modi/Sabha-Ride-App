@@ -26,13 +26,18 @@
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { assertApprovedManager } from '../utils/authz';
+import { assertApprovedManager, isApprovedDriverData } from '../utils/authz';
 import { checkRateLimit } from '../utils/rateLimiter';
 import { rejectionFor } from '../utils/ridePool';
-import { previewCarloads as simulate, PreviewRider } from '../utils/carloadPreview';
+import {
+    previewCarloads as simulate, PreviewRider, PreviewCar,
+} from '../utils/carloadPreview';
+import { resolveVehicleHolder } from '../utils/fleet';
+import { resolveHomeCoords } from '../utils/coords';
 import { maxPassengerSeats } from '../utils/seats';
 import { seatsOf } from '../constants/seats';
 import { RideType } from '../types';
+import { GEO_FENCE_MILES } from '../utils/carload';
 import { dateKeyOfEventId, LOCATION_ID_PATTERN } from '../utils/locations';
 import {
     resolveVenue, getSabhaLocation, locationsOrFoundingFallback,
@@ -41,27 +46,88 @@ import { FOUNDING_LOCATION_ID } from '../constants/tenancy';
 
 const CONTEXT_DOC = 'system/rideContext';
 
+/** Passenger seats in a vehicle — the driver occupies one. Same as globalAssignDriver. */
+function seatsOfVehicle(vehicle: unknown): number {
+    const capacity = Math.floor(Number((vehicle as { capacity?: unknown })?.capacity));
+    return Number.isFinite(capacity) ? Math.max(0, capacity - 1) : 0;
+}
+
+/** A car this preview could not simulate, and why — so it is not silently absent. */
+export interface UnusableCar {
+    /** The Sarthi holding it, or the vehicle id when the problem is the vehicle. */
+    id: string;
+    reason: 'no-home-address' | 'driver-not-approved';
+}
+
 /**
- * Passenger seats in each car free right now, largest first.
+ * The cars to simulate, in the order they are assumed to tap.
  *
- * LARGEST FIRST IS AN ASSUMPTION, and the only one this function makes about the
- * future. Which Sarthi taps first is unknowable, and the split genuinely depends on
- * it — so rather than hide that, every group is labelled with the seat count it
- * assumed and the screen says the grouping re-forms on each tap.
+ * SARTHIS WHO ACTUALLY HOLD A VEHICLE COME FIRST, largest car first, because those are
+ * the taps that will really happen and their fence is real. Unclaimed vehicles follow,
+ * with `from: null` — nobody has taken them, so there is no home to measure a fence from
+ * and the group says a limit was not checked. Without them a Friday evening before
+ * anyone has picked a car would show an empty board, which is the common early state and
+ * says nothing true.
  *
- * Largest first because it is the most useful of the arbitrary orders: it shows the
- * fewest cars needed to clear the queue, which is the question a manager watching a
- * queue build up is actually asking.
+ * Largest first WITHIN each band, and that is the one assumption left: which Sarthi taps
+ * first is unknowable and the split depends on it. Largest first shows the fewest cars
+ * needed to clear the queue, which is the question a manager watching a queue build up is
+ * actually asking. Every group is labelled, and the board says it re-forms on each tap.
  *
- * `capacity - 1` throughout — the driver occupies a seat. Same arithmetic as
- * `availableSeats` in globalAssignDriver.
+ * A Sarthi with NO HOME ADDRESS is reported rather than simulated: `globalAssignDriver`
+ * refuses them outright ("Your location is not set"), so their car can collect nobody and
+ * quietly leaving it out of the board would hide a thing a manager can fix in one call.
  */
-function freeSeatsPerCar(docs: admin.firestore.QueryDocumentSnapshot[]): number[] {
-    return docs
-        .filter(d => d.data()?.status === 'available')
-        .map(d => Math.max(0, Math.floor(Number(d.data()?.capacity)) - 1))
-        .filter(seats => seats > 0)
-        .sort((a, b) => b - a);
+async function carsToSimulate(
+    db: admin.firestore.Firestore,
+    fleet: admin.firestore.QueryDocumentSnapshot[],
+): Promise<{ cars: PreviewCar[]; unusable: UnusableCar[] }> {
+    const held: Array<PreviewCar & { seats: number }> = [];
+    const free: PreviewCar[] = [];
+    const unusable: UnusableCar[] = [];
+
+    for (const doc of fleet) {
+        const vehicle = doc.data();
+        // The same two states globalAssignDriver accepts. A vehicle in maintenance
+        // cannot be dispatched at all, by anybody.
+        if (vehicle?.status !== 'available' && vehicle?.status !== 'in_use') continue;
+
+        const seats = seatsOfVehicle(vehicle);
+        if (seats <= 0) continue;
+
+        const holder = resolveVehicleHolder(vehicle);
+        if (!holder) {
+            // Free and unclaimed. Simulated, but unfenced and labelled as such.
+            free.push({ id: doc.id, seats, from: null });
+            continue;
+        }
+
+        const driverSnap = await db.collection('users').doc(holder).get();
+        const driver = driverSnap.data();
+
+        // Revoked mid-evening while still holding a car. Dispatch refuses them, so their
+        // car takes nobody — and this is the one screen that would show a manager why.
+        if (!isApprovedDriverData(driver)) {
+            unusable.push({ id: holder, reason: 'driver-not-approved' });
+            continue;
+        }
+
+        const from = resolveHomeCoords(driver);
+        if (!from) {
+            unusable.push({ id: holder, reason: 'no-home-address' });
+            continue;
+        }
+
+        // Keyed by the SARTHI, not the vehicle: the board names a person, and the fence
+        // is measured from their home.
+        held.push({ id: holder, seats, from });
+    }
+
+    const bySeats = (a: { seats: number }, b: { seats: number }) => b.seats - a.seats;
+    return {
+        cars: [...held.sort(bySeats), ...free.sort(bySeats)],
+        unusable,
+    };
 }
 
 export const previewCarloads = functions.https.onCall(async (data, context) => {
@@ -163,10 +229,10 @@ export const previewCarloads = functions.https.onCall(async (data, context) => {
     }
 
     const fleetSnap = await db.collection('vehicles').get();
-    const carSeats = freeSeatsPerCar(fleetSnap.docs);
+    const { cars, unusable } = await carsToSimulate(db, fleetSnap.docs);
     const maxFleetSeats = maxPassengerSeats(fleetSnap.docs.map(d => d.data()?.capacity));
 
-    const { groups, leftover } = simulate(pool, venue, carSeats, maxFleetSeats);
+    const { groups, leftover } = simulate(pool, venue, cars, maxFleetSeats);
 
     /**
      * RIDE IDS ONLY — no names, no phone numbers, no addresses.
@@ -182,8 +248,18 @@ export const previewCarloads = functions.https.onCall(async (data, context) => {
         locationId,
         groups,
         leftover,
-        /** Every free car's seats, so the screen can say what it assumed. */
-        carSeats,
+        /**
+         * The cars it simulated: whose, how many seats, and whether a fence applied.
+         *
+         * No coordinates. The Sarthi's home is what the fence is measured FROM, and it
+         * has no business leaving the server — the board only needs to know that a limit
+         * was applied, not from where.
+         */
+        cars: cars.map(c => ({ id: c.id, seats: c.seats, fenced: c.from !== null })),
+        /** Cars that exist but could collect nobody, so they are not silently absent. */
+        unusable,
+        /** The bound applied, so the screen can name the number rather than hardcode it. */
+        fenceMiles: GEO_FENCE_MILES,
         maxFleetSeats,
     };
 });
