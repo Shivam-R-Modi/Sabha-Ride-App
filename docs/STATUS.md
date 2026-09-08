@@ -97,11 +97,22 @@ that changes and a management screen would be a control touched once a year on a
 visited weekly. If that decision changes, the screen is the work — the data model and the
 algorithm are already ready for it.
 
-### Context for tonight
+### THE RULE IS THE SCHEDULE. There is no other day to check it against.
 
-The recurrence rule was set to **Mondays 20:30** by the owner on this day deliberately, to
-test — it is not a misconfiguration. Sabha is not actually on Mondays. Anyone reading
-`settings/sabhaRecurrence` later and finding Monday should ask before "fixing" it.
+`settings/sabhaRecurrence` is not a cache of some real-world timetable — **whatever the
+manager sets IS the sabha day**, by definition. Nothing else in this app or outside it
+defines one.
+
+Which means: **never "correct" that document.** If it says Mondays and you expected
+Fridays, the document is right and the expectation is wrong. If it looks like a mistake,
+ask the manager — they are the only source there is.
+
+Written down because I got this backwards twice in one session. Finding the rule on
+Monday, I reported it as a live weekly defect and offered to change the recurring day;
+then, told it had been set that way to test, I recorded that "sabha is not actually on
+Mondays" — still assuming a canonical day the rule could deviate from. There isn't one.
+The mistake is cheap to make and expensive to act on: "fixing" the rule silently moves
+every window, reminder and dispatch for the whole congregation.
 
 ## DEPLOYED — the carload preview applies the geo-fence, 2026-09-07
 
