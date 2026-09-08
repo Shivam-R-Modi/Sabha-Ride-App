@@ -3,6 +3,47 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-07**.
 
+## TESTS ONLY — the hall-filter guard the plan asked for, 2026-09-07
+
+`tests/quality/location-filter-not-in-query.test.ts`, 7 cases. Nothing deployed — one new
+test file, no source touched. Client suite **2171** (was 2164), functions 1247, rules 266,
+both builds and typecheck clean.
+
+It forbids `where`/`orderBy` on `locationId` or `cityId` across `hooks`, `components`,
+`src` and `functions/src`, because a Firestore filter on a field a document may not carry
+**omits that document silently** — no error, no log, one fewer row. For a hall that reads
+as "Nobody is waiting" on a Sarthi's screen while somebody is waiting, with nothing to
+diagnose from. `cityId` is held to the same rule by the decision already recorded in
+`constants/tenancy.ts`: stamp everything, prove it with a verifier, and only then filter.
+
+### Two ways this test could have passed for the wrong reason, and both were found
+
+**It had to strip comments, or the rule's own documentation fails it.** The two clearest
+statements of this rule in the codebase are comments quoting the forbidden line verbatim —
+`deleteSabhaEvent.ts:235` and `constants/tenancy.ts:11`. A substring search cannot tell
+prose from code, so the naive version flags the explanation and the obvious fix is to
+delete it.
+
+**The other-direction assertions were satisfied by declarations, not logic.** A test that
+only forbids things passes just as happily if hall filtering vanished altogether, so there
+are three cases asserting the in-memory filtering still exists. The first versions matched
+`/locationOfRide/` and `/'no-location'/` — **and deleting the entire hall-filtering branch
+from `ridePool.ts` left the suite green**, because the bare name is an `import` on line 27
+and the literals are union members on lines 41 and 43. Now the call must carry its
+parenthesis and the reasons must carry their `return`, with comments stripped first. That
+mutation fails 2 cases.
+
+### Mutation-checked four ways
+
+- `where('locationId', …)` added to a real server query (`setLocationActive`) — caught
+- `where('cityId', …)` added to a real client query (`useUsers`), in the multi-line form — caught
+- the in-memory hall filtering deleted from `ridePool.ts` — caught, after the fix above
+- `stripComments` made to return `''`, the vacuous-pass route — fails 4 cases
+
+There is also a case asserting the scanner sees >100 files and specifically reaches
+`globalAssignDriver.ts`, because a broken `walk()` returns `[]` and everything else here
+would pass on an empty list.
+
 ## DOCS ONLY — the roadmap reconciled against the code, 2026-09-07
 
 Nothing deployed; nothing to deploy. `docs/roadmap.md` had a new **§0** added and six
@@ -27,13 +68,12 @@ driver-pull under a per-hall lock, so B7 closed with a deletion. A blocker can b
 by removing the thing that blocks, not only by building its replacement — that document
 would otherwise have ordered a year of work around it.
 
-**A guard the two-location plan called non-negotiable was never written.** The plan's
-first safety rule is "never add `where('locationId', …)` to a query", because an equality
-filter on a possibly-absent field returns silently empty — and it said this would be
-*"Guarded by a new `tests/quality/location-filter-not-in-query.test.ts`"*. That file does
-not exist. The rule holds today by discipline alone, which is exactly the thing this
-repo's test convention exists because it cannot rely on. It is now item 8 in the
-roadmap's next actions.
+**A guard the two-location plan called non-negotiable was never written — and now is.**
+The plan's first safety rule is "never add `where('locationId', …)` to a query", because
+an equality filter on a possibly-absent field returns silently empty, and it named
+`tests/quality/location-filter-not-in-query.test.ts` as the guard. That file did not
+exist; the rule held by discipline alone for three days. Written in the commit after this
+one — see the section above it.
 
 Also corrected: `docs/PLAN-airport-seva-round-2.md` still opened with **"Nothing here is
 implemented"**, having shipped in full on 2026-08-25 (`fb0a3ef` → `6ae4d72`).

@@ -29,11 +29,12 @@ the dependency graph in §5 has been overtaken. Locations are real; **cities are
 `UserRole` is still `'student' | 'driver' | 'manager'` — the four-level hierarchy in A4b is
 unbuilt.
 
-**One gap this reconciliation found.** The two-location plan made "never add
+**One gap this reconciliation found, now closed.** The two-location plan made "never add
 `where('locationId', …)` to a query" a non-negotiable safety rule and said it would be
-*"Guarded by a new `tests/quality/location-filter-not-in-query.test.ts`"*. **That test was
-never written.** The convention holds today by discipline alone, in a repo whose whole test
-convention exists because discipline does not survive contact with the next session.
+*"Guarded by a new `tests/quality/location-filter-not-in-query.test.ts`"*. That test had
+never been written, so for three days the rule held by discipline alone. **It exists now**
+— it scans both trees for a `where`/`orderBy` on `locationId` or `cityId`, and asserts the
+in-memory filtering it replaces is still there.
 
 Current authority when this document and the code disagree: **the code wins**, and the
 reasoning lives in [`functions/src/utils/locations.ts`](../functions/src/utils/locations.ts)
@@ -383,7 +384,7 @@ Both are safeguarding issues, not engineering preferences.
 | 5 | ~~Fix the write-on-read at `DriverDashboard.tsx:133`~~ — **done** | — |
 | 6 | ~~Decide the Phase 1 start date~~ — **Phase 1 shipped**, and so have 5 and 7 | — |
 | 7 | **Run one real evening across both halls.** Everything is live and every suite is green, but no actual rider has been carried under two halls. Nothing else on this list can tell you what that will | Owner |
-| 8 | **Write `tests/quality/location-filter-not-in-query.test.ts`.** The two-location plan made this rule non-negotiable and named this exact guard; it was never written, so the rule holds by discipline alone (§0) | — |
+| 8 | ~~Write `tests/quality/location-filter-not-in-query.test.ts`~~ — **done** (`0f4e1b5`+1). Mutation-checked in both trees, and against deletion of the in-memory filtering it protects | — |
 | 9 | Decide what follows: **3** (naming passengers, the visible one), **2** (`cities`), or **4** (push dispatch) | Owner |
 
 ---
