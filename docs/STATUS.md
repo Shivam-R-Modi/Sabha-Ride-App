@@ -3,6 +3,58 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-04**.
 
+## DEPLOYED — a manager screen for the sabha locations, 2026-09-07
+
+`62316ee`. Client **2164**, functions **1247**, rules **266**. Full sweep clean. Live
+bundle `index-CeKDCRrc.js` matches `dist/`. `main` at `62316ee`.
+
+Managers can now add, move, open and close sabha locations from the app. Deployed with
+`--only functions:setLocationActive` — one new callable, so `globalAssignDriver` got no
+new revision at all (the release does not touch it: `git diff` on that file is empty).
+Then hosting. No rules change; the rules already had everything this needed.
+
+### It also repaired a dead control that opening the second hall created
+
+`LocationSettings` wrote a hall's venue only when EXACTLY ONE was open — a deliberate
+guard for the release where a manager could not create a second. **The moment the second
+hall was opened, that condition went false**, so Save reported "Location updated
+successfully!" and wrote only `settings/main.sabhaLocation`, which LOSES to
+`locations/{id}.venue` in `resolveVenue`. A button that says it moved sabha and moves
+nothing — this repo's signature defect, introduced by turning on the feature the guard
+was waiting for. It was live for about an hour.
+
+Addresses are per hall now, in `HallManagement`, with the hall named on the row. The tests
+for that invariant MOVED to `tests/components/HallManagement.test.tsx` rather than being
+deleted; `LocationSettings` keeps only the default times.
+
+### Creating and opening stay separate
+
+Because firestore.rules already makes them separate — `active` is denied to every client
+in both directions, which is why no rules change was needed.
+
+- **Adding** writes the document with no `active` field at all, so it lands CLOSED and
+  the screen says so. A half-finished hall is invisible to riders.
+- **Opening and closing** go through `setLocationActive`, which refuses to close the last
+  open hall, refuses while a Sarthi is on the road to one, requires an explicit
+  acknowledgement when riders are booked, refuses to open a hall with no usable address,
+  and audits both directions as `location.open` / `location.close`.
+
+The acknowledgement is the one that matters: a closed hall is not hidden. `rejectionFor`
+refuses a ride naming it, so everybody booked for it becomes undispatchable — every
+Sarthi is told nobody is waiting and nobody is collected, with nothing thrown anywhere.
+The dialog reports the SERVER's count of who that is, in people rather than rows.
+
+### Two things worth carrying forward
+
+**A hall's id is permanent and is shown before saving.** It becomes part of every
+`events`, `weeklyAttendance` and `statistics` key that hall ever has. `locationIdFromName`
+derives it and returns null rather than inventing something like `hall-3`.
+
+**A DUPLICATE NAME has its own guard, separate from a duplicate id.** They drift: this
+project's second hall is called "D Street" and saved as `south-boston`, so typing "D
+Street" again collides on neither. Riders would see the same name twice in the picker with
+nothing to tell them apart, and one of them gets collected for the wrong building.
+
 ## LIVE — the second hall is OPEN, 2026-09-07
 
 **Two active halls in production.** This is the first time anything multi-hall is visible
