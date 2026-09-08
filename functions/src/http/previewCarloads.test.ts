@@ -54,6 +54,7 @@ vi.mock('../utils/settings', () => ({
 }));
 
 import { previewCarloads } from './previewCarloads';
+import { GEO_FENCE_MILES } from '../utils/carload';
 
 const VENUE = { lat: 42.339925, lng: -71.088182, address: 'Huntington Ave' };
 /** A Sarthi who can actually be dispatched: approved, a driver, and locatable. */
@@ -552,8 +553,16 @@ describe('previewCarloads — Sarthis and their cars', () => {
     });
 
     it('publishes the fence distance rather than making the screen hardcode it', async () => {
+        /**
+         * Asserted against the CONSTANT, not a literal. This was `toBe(15)` and it failed
+         * when the owner narrowed the fence to 8 — which was the test doing its job, but
+         * the thing worth pinning is that the number reaches the board at all. The board
+         * carried its own `?? 15` fallback until that change, so a narrowed fence would
+         * have left managers reading the old bound off a screen that claimed to describe
+         * dispatch.
+         */
         const out: any = await call();
-        expect(out.fenceMiles).toBe(15);
+        expect(out.fenceMiles).toBe(GEO_FENCE_MILES);
     });
 
     it('NEVER RETURNS A SARTHI\'S HOME COORDINATES', async () => {

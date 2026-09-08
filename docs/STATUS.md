@@ -3,6 +3,79 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-07**.
 
+## READY, NOT DEPLOYED — the geo-fence narrowed to 8 miles, 2026-09-08
+
+Owner: *"15 mi is too long. keep fencing at 8mi."* `GEO_FENCE_MILES = 8` in
+`functions/src/utils/carload.ts`, the one definition. Client **2173**, functions **1249**,
+rules 266, both builds and typecheck clean. Bundle `index-luymX6sf.js`. **Needs
+`functions` then `hosting`** — no rules change.
+
+No formula produced 15 and none produced 8. It is a judgement about how much driving it is
+fair to ask of a volunteer, so the constant now carries the value, the date and whose
+decision it was, rather than looking like arithmetic somebody could re-derive.
+
+### Nobody currently loses service, and that was measured, not assumed
+
+All **6** riders holding usable coordinates are within 8 miles of the nearer of the two
+approved Sarthis' homes. The 8–15 mile band is **empty**, so this change strands nobody
+today. It is a bound on the future, not a withdrawal.
+
+Worth flagging separately: **4 of the 10 riders have no usable home coordinates at all**
+(no `location`, or the 0,0 placeholder that means "never geocoded"). `resolveHomeCoords`
+rejects those, so they are already excluded from dispatch entirely — unrelated to the
+fence and older than it, but a bigger population than the fence change touches.
+
+### The first measurement was wrong, and would have read as reassuring
+
+The script filtered Sarthis on `registeredRole === 'driver'` and found **zero**. With no
+Sarthis, `Math.min` over an empty array is `Infinity`, so every rider fell into the
+"already unserved" bucket and the output looked like a clean "this changes nothing".
+
+`registeredRole` is only what somebody signed up as. The granted set is `roles[]` — which
+is what `useAvailableDrivers` queries with `array-contains 'driver'` — so a manager who
+also drives has `registeredRole: 'manager'`. The script now refuses to print anything when
+no Sarthi has coordinates, rather than reporting fiction with a straight face.
+
+### The board was about to keep quoting 15
+
+`CarloadBoard` had a literal `15` in its header comment and, worse, rendered
+`{preview.fenceMiles ?? 15}`. The server has always sent `fenceMiles`, so the fallback
+never fired — but it was a second copy of a policy number, which is precisely the drift
+`utils/carload.ts` consolidated the constant to prevent. A manager reading "15-mile limit"
+off a server enforcing 8 would mis-explain to a family why nobody came. The sentence now
+omits the number when the server sends none, with a test for that case.
+
+### Tests express the RULE, and exactly one pins the VALUE
+
+Four fence cases failed on the change, correctly — they were written as `at('ok', 14)`,
+meaning "just inside a fence of 15". They are now written relative to `GEO_FENCE_MILES`
+(`INSIDE`, `OUTSIDE`, `OUTSIDE_VENUE_INSIDE_NORTHERN`), because a test that must be
+rewritten whenever policy moves eventually gets rewritten carelessly.
+
+That leaves nothing asserting the bound IS 8, so `carload.test.ts` gains one case that
+does, plus a 3–30 sanity band that catches 80-instead-of-8 independently. Deliberately
+unlike `WAIT_ESCALATION_MS`, which is pinned to a range: that is a tuning threshold, this
+decides who is collected. Mutation-checked — reverting to 15 fails **only** the pin
+(1 of 1249, proving the behavioural cases are genuinely fence-agnostic); setting 80 fails
+5 across 3 files.
+
+### THE GAP THIS MAKES WORSE, and it is not fixed here
+
+A rider outside the fence is dropped by a bare `.filter()` at
+`globalAssignDriver.ts:448` and counted nowhere. The `waiting` breakdown the Sarthi's
+screen renders is built from `fillBySeats` skips plus other-hall counts, so a fenced-out
+rider is in neither — the tapping Sarthi is told **"Nobody is waiting right now. Check
+back in a few minutes."** while somebody is waiting who no car may ever be sent to.
+
+The manager's board says it correctly (`outside-every-fence`, "Too far for every Sarthi",
+`grave: true`). The Sarthi, who is the person actually deciding whether to go home, does
+not. Every other refusal reason has a bucket; this one never got one.
+
+Narrowing the fence enlarges the population that hits that silent path. Empty today, per
+the measurement above — but the fix is small (count the exclusions, push one
+`{ reason: 'outside-fence', groups, seats }` into `waiting`; the rendering already
+exists) and it should land before the band stops being empty.
+
 ## TESTS ONLY — the hall-filter guard the plan asked for, 2026-09-07
 
 `tests/quality/location-filter-not-in-query.test.ts`, 7 cases. Nothing deployed — one new

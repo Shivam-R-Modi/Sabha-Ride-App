@@ -12,8 +12,15 @@ import type { CarloadPreviewResult, CarloadLeftoverReason } from '../../src/util
  * There is no single true grouping, and a screen that implies otherwise is worse than
  * the list it replaced. A real carload depends on WHICH Sarthi taps: their car's free
  * seats decide where the load is cut, and dispatch geo-fences the pool to riders within
- * 15 miles of the DRIVER. The server therefore returns the seat count it assumed for
- * every car, and this renders it — "4 seats", not "Car 1".
+ * `GEO_FENCE_MILES` of the DRIVER. The server therefore returns the seat count it
+ * assumed for every car, and this renders it — "4 seats", not "Car 1".
+ *
+ * The fence distance is likewise SERVER-SUPPLIED (`preview.fenceMiles`) and never named
+ * here. It was a literal `15` with a `?? 15` fallback until the fence moved to 8, at
+ * which point this screen would have gone on telling managers 15 — a second copy of a
+ * policy number, which is the drift `utils/carload.ts` consolidated the constant to
+ * prevent. When the server sends no number this sentence now omits it rather than
+ * guessing one.
  *
  * The one line under the heading is doing real work: a manager who reads this as fixed
  * will move somebody by hand to "fix" a grouping that was never going to happen, and
@@ -297,7 +304,8 @@ export const CarloadBoard: React.FC<CarloadBoardProps> = ({
                         going to happen that way. */}
                     <p className="text-xs text-coffee-500 mt-1 max-w-prose">
                         Worked out the same way a Sarthi&apos;s <strong>Assign Me</strong> works it
-                        out — same grouping, and the same {preview.fenceMiles ?? 15}-mile limit on how far
+                        out — same grouping, and the same{' '}
+                        {preview.fenceMiles ? `${preview.fenceMiles}-mile ` : ''}limit on how far
                         each Sarthi is sent.
                         <strong> It re-forms on every tap</strong> — whoever taps first, and how big
                         their car is, changes who travels together.
@@ -305,7 +313,7 @@ export const CarloadBoard: React.FC<CarloadBoardProps> = ({
 
                     {/* An unclaimed car has no Sarthi, so there is no home to measure a
                         fence from. Saying so is the difference between "these three,
-                        within 15 miles of Ramesh" and "these three, limit not checked" —
+                        within the fence of Ramesh" and "these three, limit not checked" —
                         and the board must not make the stronger claim by accident. */}
                     {unfencedCars > 0 && (
                         <p className="text-xs text-coffee-500 mt-1 max-w-prose">

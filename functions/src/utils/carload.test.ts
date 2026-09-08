@@ -19,7 +19,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { orderForCarload, chooseSeed, milesBetween, WAIT_ESCALATION_MS } from './carload';
+import {
+    orderForCarload, chooseSeed, milesBetween, WAIT_ESCALATION_MS, GEO_FENCE_MILES,
+} from './carload';
 
 /** Roughly the real venue. */
 const VENUE = { lat: 42.339925, lng: -71.088182 };
@@ -235,5 +237,32 @@ describe('WAIT_ESCALATION_MS', () => {
         // been "waiting" in any sense that should outrank distance on Friday.
         expect(WAIT_ESCALATION_MS).toBeGreaterThanOrEqual(30 * 60 * 1000);
         expect(WAIT_ESCALATION_MS).toBeLessThanOrEqual(4 * 60 * 60 * 1000);
+    });
+});
+
+describe('GEO_FENCE_MILES', () => {
+    /**
+     * PINNED TO THE EXACT VALUE, on purpose, unlike `WAIT_ESCALATION_MS` above.
+     *
+     * A band would be the house style for a tuning threshold, and this is not one. This
+     * number decides WHO IS COLLECTED. Narrowing it does not make routes tighter — it
+     * makes everybody between the old bound and the new one undispatchable, and their
+     * only trace is a row on the manager's carload board. Widening it silently asks
+     * volunteers for journeys nobody agreed to.
+     *
+     * So the number is fixed here and changing it is a two-line edit: the constant, and
+     * this test. That is the intended friction. Every behavioural case around the fence
+     * — in `carloadPreview.test.ts` — is written relative to the constant instead, so a
+     * deliberate change costs exactly these two lines and no more.
+     */
+    it('is 8 miles, the owner\'s decision of 2026-09-08', () => {
+        expect(GEO_FENCE_MILES).toBe(8);
+    });
+
+    it('is a bound a volunteer could actually be asked for', () => {
+        // Catches the shapes a typo takes — 80 instead of 8, or 0.8 — independently of
+        // the assertion above, which somebody updating the policy will edit.
+        expect(GEO_FENCE_MILES).toBeGreaterThanOrEqual(3);
+        expect(GEO_FENCE_MILES).toBeLessThanOrEqual(30);
     });
 });

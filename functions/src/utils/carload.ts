@@ -89,12 +89,27 @@ export const WAIT_ESCALATION_MS = 90 * 60 * 1000;
  * same bound so a manager is never shown a carload the tap could not produce.
  *
  * ONE DEFINITION, HERE. Dispatch used to keep its own copy of this number and its own
- * copy of the haversine below — with a different earth radius, 3959 against 3958.8. Four
- * feet at fifteen miles, so it broke nothing; but the preview measuring the fence with a
- * different function than dispatch enforces it with is exactly the drift that makes a
- * preview untrustworthy, and two copies of a policy number is how one gets changed.
+ * copy of the haversine below — with a different earth radius, 3959 against 3958.8. A
+ * few feet over the whole fence, so it broke nothing; but the preview measuring the
+ * fence with a different function than dispatch enforces it with is exactly the drift
+ * that makes a preview untrustworthy, and two copies of a policy number is how one gets
+ * changed. `previewCarloads` returns this value to the manager's board rather than the
+ * board naming a number, for the same reason.
+ *
+ * **Was 15, narrowed to 8 on 2026-09-08 by the owner's decision.** No formula produced
+ * either number and none should be invented for it: it is a judgement about how much
+ * driving it is fair to ask of a volunteer, and it belongs to whoever answers to the
+ * volunteers. Recorded with a date so the next reader knows it was chosen rather than
+ * inherited.
+ *
+ * NARROWING IT MOVES RIDERS, IT DOES NOT MERELY TIGHTEN ROUTES. Anybody between the old
+ * bound and the new one — 8 to 15 miles from every Sarthi's home — stops being
+ * dispatchable at all. They are not served worse; they are not served. That population
+ * lands on the manager's carload board as `outside-every-fence` ("Too far for every
+ * Sarthi"), which is the screen that exists to catch exactly this, and it is the number
+ * to watch after a change like this one.
  */
-export const GEO_FENCE_MILES = 15;
+export const GEO_FENCE_MILES = 8;
 
 /** Great-circle miles. THE distance function — dispatch imports this one. */
 export function milesBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {

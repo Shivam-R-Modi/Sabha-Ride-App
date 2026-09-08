@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { previewCarloads, PreviewRider, PreviewCar } from './carloadPreview';
-import { orderForCarload } from './carload';
+import { orderForCarload, GEO_FENCE_MILES } from './carload';
 import { fillBySeats, remaindersFirst } from './seats';
 
 /** The venue. Every distance below is measured from here. */
@@ -45,6 +45,23 @@ const car = (seats: number): PreviewCar => ({ id: `car-${++carNo}`, seats, from:
 const driven = (id: string, seats: number, miles: number): PreviewCar => ({
     id, seats, from: { lat: VENUE.lat + miles / 69, lng: VENUE.lng },
 });
+
+/**
+ * Fence fixtures are expressed RELATIVE TO THE BOUND, never as literal miles.
+ *
+ * The bound is a policy number the owner changes — it went from 15 to 8 on 2026-09-08 —
+ * and four cases in this file were written as `at('ok', 14)`, meaning "just inside a
+ * fence of 15". They failed on the change, correctly, but a test that has to be rewritten
+ * whenever the policy moves is a test that will eventually be rewritten carelessly. These
+ * two say what they mean instead.
+ */
+const INSIDE = GEO_FENCE_MILES - 1;
+const OUTSIDE = GEO_FENCE_MILES + 5;
+/**
+ * Beyond the fence from the venue, yet within it of a Sarthi living at `INSIDE`.
+ * `(2F-2) - (F-1) = F-1`, which is inside; and `2F-2 > F` for any bound above 2.
+ */
+const OUTSIDE_VENUE_INSIDE_NORTHERN = INSIDE * 2;
 
 describe('previewCarloads — the first group IS what dispatch would take', () => {
     const pool = [at('a', 1), at('b', 2), at('c', 8), at('d', 8.2), at('e', 3)];
@@ -359,6 +376,9 @@ describe('previewCarloads — a split leftover keeps its priority', () => {
  * miles out appeared in somebody's car, and the Sarthi who tapped was told nobody was
  * waiting. The rider sat outside all evening with nothing on any screen explaining it.
  *
+ * Every distance here is written relative to `GEO_FENCE_MILES` rather than as a literal,
+ * so these cases keep testing the RULE when the owner moves the bound.
+ *
  * The distance function and the bound are both imported from carload.ts, the same ones
  * dispatch enforces with — so these tests are about the fence being APPLIED, not about
  * arithmetic that lives elsewhere.
@@ -367,14 +387,14 @@ describe('previewCarloads — the geo-fence', () => {
     it('will not offer a Sarthi a rider beyond the fence', () => {
         // The Sarthi is at the venue; the rider is 20 miles out. Dispatch would refuse,
         // so the preview must too.
-        const pool = [at('far', 20)];
+        const pool = [at('far', OUTSIDE)];
         const { groups } = previewCarloads(pool, VENUE, [driven('sarthi', 4, 0)], 7, NOW);
 
         expect(groups).toEqual([]);
     });
 
     it('offers a rider just INSIDE the fence', () => {
-        const pool = [at('ok', 14)];
+        const pool = [at('ok', INSIDE)];
         const { groups } = previewCarloads(pool, VENUE, [driven('sarthi', 4, 0)], 7, NOW);
 
         expect(idsOf(groups[0])).toEqual(['ok']);
@@ -383,13 +403,14 @@ describe('previewCarloads — the geo-fence', () => {
     it('measures from the SARTHI, not from the venue', () => {
         /**
          * The whole point, and the thing a fence-from-the-venue implementation gets
-         * wrong. This Sarthi lives 14 miles north, so a rider 25 miles north is 11 miles
-         * from THEM and perfectly reachable — while a rider at the venue itself is 14
-         * miles away and also reachable. Measured from the venue, the 25-mile rider
-         * would be refused.
+         * wrong. This Sarthi lives just inside the bound to the north, and the rider is
+         * twice that far out — beyond the bound measured from the VENUE, but comfortably
+         * inside it measured from the Sarthi's own home. Measured from the venue this
+         * rider would be refused, and the tap that could have collected them would report
+         * nobody waiting.
          */
-        const pool = [at('further-north', 25)];
-        const { groups } = previewCarloads(pool, VENUE, [driven('northern', 4, 14)], 7, NOW);
+        const pool = [at('further-north', OUTSIDE_VENUE_INSIDE_NORTHERN)];
+        const { groups } = previewCarloads(pool, VENUE, [driven('northern', 4, INSIDE)], 7, NOW);
 
         expect(idsOf(groups[0])).toEqual(['further-north']);
     });
@@ -401,7 +422,7 @@ describe('previewCarloads — the geo-fence', () => {
          * no volunteer this evening who is ALLOWED to collect them. It needs a different
          * arrangement, so it has to be distinguishable.
          */
-        const pool = [at('woburn', 20), at('near', 2)];
+        const pool = [at('woburn', OUTSIDE), at('near', 2)];
         const { groups, leftover } = previewCarloads(
             pool, VENUE, [driven('sarthi', 4, 0)], 7, NOW,
         );
@@ -415,9 +436,9 @@ describe('previewCarloads — the geo-fence', () => {
     it('does not say that when ONE Sarthi can reach them', () => {
         // Out of range for the first car, in range for the second. The reason has to be
         // about every Sarthi, not about the last one checked.
-        const pool = [at('far-north', 25)];
+        const pool = [at('far-north', OUTSIDE_VENUE_INSIDE_NORTHERN)];
         const { groups } = previewCarloads(
-            pool, VENUE, [driven('a', 4, 0), driven('b', 4, 14)], 7, NOW,
+            pool, VENUE, [driven('a', 4, 0), driven('b', 4, INSIDE)], 7, NOW,
         );
 
         expect(groups).toHaveLength(1);

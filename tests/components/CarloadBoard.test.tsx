@@ -469,15 +469,41 @@ describe('CarloadBoard — the hall picker', () => {
  * THE DISTANCE LIMIT, and being honest about when it was not applied.
  *
  * The fence is what makes this a preview rather than a guess: dispatch will not send a
- * volunteer more than fifteen miles from their own home, so a board ignoring it showed
+ * volunteer more than `GEO_FENCE_MILES` from their own home, so a board ignoring it showed
  * carloads no tap could produce. Now that it is applied, the screen has two new duties —
  * distinguish "too far for anybody" from "no car free", and admit when a car had no
  * Sarthi and so no fence could be measured at all.
  */
 describe('CarloadBoard — the distance limit', () => {
     it('names the limit rather than hardcoding it', async () => {
+        // 15 is supplied here BY THE FIXTURE, deliberately, and is no longer the real
+        // bound — the point is that whatever the server sends is what gets rendered.
         renderBoard({ preview: ok({ fenceMiles: 15 }) });
         expect(await screen.findByText(/15-mile limit/i)).toBeTruthy();
+    });
+
+    it('renders whatever bound the server sends, not a remembered one', async () => {
+        // The fence moved from 15 to 8 on 2026-09-08. This screen had a literal 15 and a
+        // `?? 15` fallback, so it would have gone on describing dispatch with the old
+        // number — a second copy of a policy value, which is what `utils/carload.ts`
+        // consolidated the constant to prevent.
+        renderBoard({ preview: ok({ fenceMiles: 8 }) });
+        expect(await screen.findByText(/8-mile limit/i)).toBeTruthy();
+        expect(screen.queryByText(/15-mile limit/i)).toBeNull();
+    });
+
+    it('CLAIMS NO NUMBER when the server sent none', async () => {
+        /**
+         * The replacement for the `?? 15` fallback. An older bundle, or a payload from
+         * before `fenceMiles` existed, must not have this screen assert a bound nobody
+         * enforced — a manager reading "15-mile limit" off a server running 8 would
+         * mis-explain to a family why nobody came for them. The sentence loses the number
+         * and keeps its meaning.
+         */
+        renderBoard({ preview: ok({ fenceMiles: undefined }) });
+
+        expect(await screen.findByText(/limit on how far/i)).toBeTruthy();
+        expect(screen.queryByText(/-mile limit/i)).toBeNull();
     });
 
     it('DISTINGUISHES too-far from no-car-free', async () => {
