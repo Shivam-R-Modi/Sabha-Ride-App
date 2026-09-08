@@ -6,7 +6,24 @@ at the end. Last updated **2026-09-07**.
 ## DEPLOYED — a manager screen for the sabha locations, 2026-09-07
 
 `62316ee`. Client **2164**, functions **1247**, rules **266**. Full sweep clean. Live
-bundle `index-CeKDCRrc.js` matches `dist/`. `main` at `62316ee`.
+bundle `index-CeKDCRrc.js` matches `dist/`. `main` at `adc363b`.
+
+**Re-verified 2026-09-07, late.** The whole sweep again — 2164 client, 1247 functions,
+266 rules, both builds, typecheck zero — then checked whether anything was actually
+undeployed. Nothing was. `git diff --name-only` from this section's commit to HEAD is
+`docs/STATUS.md` and nothing else; a fresh `npm run build` produced
+`index-CeKDCRrc.js`, the same content hash already live; `firebase deploy --only
+firestore:rules` answered *"latest version of firestore.rules already up to date,
+skipping upload"*, which is the live ruleset confirming itself rather than us inferring
+it from this file. Functions were left alone deliberately: re-uploading identical code
+buys nothing and briefly runs two revisions, which is the one thing the deploy notes
+warn about.
+
+**`main` was 17 commits behind production until now** — it sat at Stage D (`6eb6a14`)
+through five releases. Only the LOCAL one: `origin/main` was current at `38e4a5d`, so a
+phone session cloning fresh was fine and only somebody reading this Mac's checkout would
+have seen a three-day-old app. Both are now at `adc363b`. Worth noticing that the two can
+drift apart, because the convention "fast-forward `main`" reads as one action and is two.
 
 Managers can now add, move, open and close sabha locations from the app. Deployed with
 `--only functions:setLocationActive` — one new callable, so `globalAssignDriver` got no
