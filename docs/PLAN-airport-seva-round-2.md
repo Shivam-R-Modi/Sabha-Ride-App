@@ -1,6 +1,13 @@
 # Airport Seva, round two — five changes and what they knock into
 
-Planning note for the 2026-08-25 review. **Nothing here is implemented.**
+Planning note for the 2026-08-25 review. ~~**Nothing here is implemented.**~~
+
+**ALL OF THIS SHIPPED**, on 2026-08-25, in commits `fb0a3ef` → `6ae4d72` — including
+§0's `no_show` trap: `release` now runs from `no_show` as well as `claimed`, and eight
+tests fail if that widening is reverted. `reassign` is gone. See `docs/STATUS.md`.
+
+Kept as the record of *why* each change is shaped the way it is. Read it as history,
+not as a work list.
 
 Owner's five items, plus the answers given on the four questions I raised:
 

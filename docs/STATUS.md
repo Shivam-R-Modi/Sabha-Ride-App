@@ -3,6 +3,43 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-07**.
 
+## DOCS ONLY — the roadmap reconciled against the code, 2026-09-07
+
+Nothing deployed; nothing to deploy. `docs/roadmap.md` had a new **§0** added and six
+sections corrected, because it still specified an architecture the two-hall work built
+and then rejected — nested `locations/{id}/events/{eventId}`, a per-hall
+`rideContext/current`, a nested `assignmentLock`, and **A5's "events, not a recurrence
+rule"**, which the owner reversed. It also had Phase 7 listed as pending when it went
+live the same day, and §9's "one gathering per date" limitation deferred *on the grounds
+that Phase 2 would re-key events anyway* — which never happened and now will not.
+
+The divergences are recorded with their reasons rather than rewritten away. A phone
+session reads these docs before it reads code, and would have designed the second city
+against a model the rules already deny.
+
+**Two things worth carrying forward.**
+
+**The dependency graph was confidently wrong, and it is instructive.** It had Phase 4
+(server-side dispatch) as a hard prerequisite for a second location — *"a client-side
+dispatcher replicated across cities will double-assign students"*. True, and answered by
+**switching the browser dispatcher off** rather than replacing it: assignment became
+driver-pull under a per-hall lock, so B7 closed with a deletion. A blocker can be cleared
+by removing the thing that blocks, not only by building its replacement — that document
+would otherwise have ordered a year of work around it.
+
+**A guard the two-location plan called non-negotiable was never written.** The plan's
+first safety rule is "never add `where('locationId', …)` to a query", because an equality
+filter on a possibly-absent field returns silently empty — and it said this would be
+*"Guarded by a new `tests/quality/location-filter-not-in-query.test.ts`"*. That file does
+not exist. The rule holds today by discipline alone, which is exactly the thing this
+repo's test convention exists because it cannot rely on. It is now item 8 in the
+roadmap's next actions.
+
+Also corrected: `docs/PLAN-airport-seva-round-2.md` still opened with **"Nothing here is
+implemented"**, having shipped in full on 2026-08-25 (`fb0a3ef` → `6ae4d72`).
+
+Client suite re-run: 121 files, all passing. No code changed.
+
 ## DEPLOYED — a manager screen for the sabha locations, 2026-09-07
 
 `62316ee`. Client **2164**, functions **1247**, rules **266**. Full sweep clean. Live
