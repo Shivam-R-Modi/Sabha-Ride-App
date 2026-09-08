@@ -1,7 +1,7 @@
 # Where this project is right now
 
 **Handover note between machines.** Read it at the start of a session; update it
-at the end. Last updated **2026-09-04**.
+at the end. Last updated **2026-09-07**.
 
 ## DEPLOYED — a manager screen for the sabha locations, 2026-09-07
 
