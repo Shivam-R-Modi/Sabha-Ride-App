@@ -120,6 +120,26 @@ export function reasonForWaiting(
             return `${people} are waiting for the other sabha.`;
         case 'no-location':
             return `${people} did not say which sabha — a manager needs to check.`;
+        /**
+         * Beyond the distance limit FROM THIS SARTHI'S HOME, so this tap may not be
+         * given them — not "nobody can reach them", which only the manager's board can
+         * say (it considers every car and calls that `outside-every-fence`).
+         *
+         * So the sentence must do two things and avoid a third: say waiting will not
+         * help THEM, point at the person who can see whether anyone else may go, and NOT
+         * imply the rider is unreachable. A Sarthi who concluded "nobody can collect
+         * them" and went home would be right about themselves and wrong about the
+         * evening.
+         *
+         * No mileage in the wording on purpose. The bound is a policy number the owner
+         * changes — it went 15 → 8 on 2026-09-08 — and the row shape carries only
+         * `{reason, groups, seats}`. Naming a figure here would be the third copy of it,
+         * after the constant and the board, and the one nobody would remember to update.
+         */
+        case 'outside-fence':
+            return `${people} live further out than you are asked to drive. `
+                + `Waiting will not bring them nearer — a manager can see whether `
+                + `another Sarthi may go.`;
         case 'waiting-for-bigger-vehicle':
             return `${people} need a bigger car than yours (${row.seats} seats).`;
         case 'too-large-to-keep-together':

@@ -78,6 +78,7 @@ vi.mock('../utils/settings', () => ({
 
 import { globalAssignDriver, isAssignableTo, isValidPendingRide } from './globalAssignDriver';
 import { FOUNDING_LOCATION_ID } from '../constants/tenancy';
+import { GEO_FENCE_MILES } from '../utils/carload';
 
 const FOUNDING_HALL = {
     id: FOUNDING_LOCATION_ID, name: 'Sabha', active: true, order: 0,
@@ -1157,6 +1158,110 @@ describe('isAssignableTo — the pool filter, including the caller', () => {
  * written against and the one that will hold every evening until a manager adds a
  * second. That they still pass unchanged is the equivalence guarantee.
  */
+describe('globalAssignDriver — the distance limit, and saying so', () => {
+    /**
+     * THE FENCE HAD NO TEST AT THIS LEVEL AT ALL, which is how its silence survived.
+     *
+     * A rider beyond `GEO_FENCE_MILES` of the tapping Sarthi's home was removed by a
+     * bare `.filter()` and counted nowhere, so the tap returned `no_students` with an
+     * empty `waiting` and the Sarthi read "Nobody is waiting right now." while somebody
+     * sat outside who no car had been allowed to reach. The reason bucket, and these
+     * cases, are the fix.
+     *
+     * Distances are written relative to the constant — one degree of latitude is a clean
+     * ~69 miles — so these keep testing the RULE when the owner moves the bound, as they
+     * did on 2026-09-08.
+     */
+    const northOfDriver = (miles: number) => ({
+        lat: DRIVER_HOME.lat + miles / 69, lng: DRIVER_HOME.lng,
+    });
+    const riderAt = (id: string, miles: number, seats?: number) => ({
+        id,
+        data: {
+            studentId: `stu-${id}`, studentName: id.toUpperCase(),
+            pickupLat: northOfDriver(miles).lat, pickupLng: northOfDriver(miles).lng,
+            pickupAddress: `${id} St`, status: 'requested',
+            ...(seats ? { seatsRequested: seats } : {}),
+        },
+    });
+
+    const onlyFarRider = (miles = GEO_FENCE_MILES + 5, seats?: number) => {
+        const f = baseFixture('home-to-sabha');
+        f.rides = [riderAt('far', miles, seats)];
+        return f;
+    };
+
+    it('does not dispatch a rider beyond the limit', async () => {
+        const { recorder } = await run(onlyFarRider());
+        const assigned = recorder.updates
+            .filter(u => u.path.startsWith('rides/') && u.data.status === 'assigned');
+
+        expect(assigned).toEqual([]);
+    });
+
+    it('SAYS they are out of range instead of saying nobody is waiting', async () => {
+        // The whole point. An empty `waiting` renders as "Nobody is waiting right now",
+        // which is what sent this rider's evening unexplained.
+        const { result } = await run(onlyFarRider());
+
+        expect(result.status).toBe('no_students');
+        expect(result.waiting).toEqual([
+            { reason: 'outside-fence', groups: 1, seats: 1 },
+        ]);
+    });
+
+    it('counts SEATS, not just requests', async () => {
+        // Two requests can be nine people, and a manager deciding what to arrange for
+        // them needs the number of people.
+        const f = onlyFarRider();
+        f.rides = [riderAt('far', GEO_FENCE_MILES + 5, 4), riderAt('further', GEO_FENCE_MILES + 9, 3)];
+        const { result } = await run(f);
+
+        expect(result.waiting).toEqual([
+            { reason: 'outside-fence', groups: 2, seats: 7 },
+        ]);
+    });
+
+    it('still dispatches everyone INSIDE the limit, and reports only the rest', async () => {
+        // The bucket must not swallow a normal run. One reachable rider travels; the
+        // far one is reported alongside.
+        const f = onlyFarRider();
+        f.rides = [riderAt('near', 1), riderAt('far', GEO_FENCE_MILES + 5)];
+        const { result, recorder } = await run(f);
+
+        expect(recorder.updates
+            .filter(u => u.path.startsWith('rides/') && u.data.status === 'assigned')
+            .map(u => u.path)).toEqual(['rides/near']);
+        expect(result.waiting).toEqual([
+            { reason: 'outside-fence', groups: 1, seats: 1 },
+        ]);
+    });
+
+    it('says NOTHING about the fence when everybody is reachable', async () => {
+        // A bucket that always fires is noise, and would tell a Sarthi on a normal
+        // evening that somebody is stranded.
+        const { result } = await run(baseFixture('home-to-sabha'));
+
+        expect(JSON.stringify(result.waiting ?? [])).not.toMatch(/outside-fence/);
+    });
+
+    it('NAMES NOBODY, only how many', async () => {
+        // Same privacy rule as every other count on that screen.
+        const { result } = await run(onlyFarRider());
+
+        expect(JSON.stringify(result.waiting)).not.toMatch(/stu-far|FAR|St/);
+    });
+
+    it('a rider just INSIDE the limit is dispatched, not reported', async () => {
+        // Pins which side of the comparison the boundary falls on: `<=` is inside.
+        const { result, recorder } = await run(onlyFarRider(GEO_FENCE_MILES - 0.5));
+
+        expect(result.status).not.toBe('no_students');
+        expect(recorder.updates.some(u =>
+            u.path.startsWith('rides/') && u.data.status === 'assigned')).toBe(true);
+    });
+});
+
 describe('globalAssignDriver — two sabha locations', () => {
     const SOMERVILLE = {
         id: 'somerville', name: 'Somerville', active: true, order: 1,

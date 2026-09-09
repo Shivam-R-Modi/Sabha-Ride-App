@@ -445,9 +445,52 @@ export const globalAssignDriver = functions.https.onCall(async (data, context) =
         //
         // The geo-fence stays: it is a limit on how far one volunteer is sent,
         // and is measured from the DRIVER because that is whose journey it bounds.
-        const withinFence = allStudentPoints.filter(s =>
-            milesBetween(tappingDriverLoc.lat, tappingDriverLoc.lng, s.lat, s.lng)
-            <= GEO_FENCE_MILES);
+        //
+        // PARTITIONED IN ONE PASS, not two filters. The excluded half has to be
+        // reported (below), and a second `> GEO_FENCE_MILES` filter is a second copy of
+        // the predicate — one edited without the other silently double-counts a rider or
+        // drops them from both halves.
+        const withinFence: typeof allStudentPoints = [];
+        const outsideFence: typeof allStudentPoints = [];
+        for (const s of allStudentPoints) {
+            const miles = milesBetween(
+                tappingDriverLoc.lat, tappingDriverLoc.lng, s.lat, s.lng,
+            );
+            (miles <= GEO_FENCE_MILES ? withinFence : outsideFence).push(s);
+        }
+
+        /**
+         * A RIDER TOO FAR FOR THIS SARTHI IS SAID OUT LOUD.
+         *
+         * This was a bare `.filter()` and the excluded riders were counted nowhere. The
+         * `waiting` array below is built from `fillBySeats` skips plus `elsewhere`, so
+         * somebody beyond the fence appeared in neither and the tap returned
+         * `no_students` with nothing to explain it — the Sarthi read **"Nobody is waiting
+         * right now. Check back in a few minutes."** while a rider sat outside who no
+         * car had been allowed to reach. Every other refusal reason has a bucket; this
+         * one never got one, which is the same silent-empty class as
+         * `where('locationId', …)` and was live for as long.
+         *
+         * The manager's carload board has always distinguished it
+         * (`outside-every-fence`), but the Sarthi is the person deciding whether to go
+         * home, and this is the only screen they see.
+         *
+         * DELIBERATELY NOT called `outside-every-fence`: from one tap all that is known
+         * is that THIS volunteer may not be sent. A Sarthi living nearer them might be
+         * able to. Only the preview, which considers every car, can make the stronger
+         * claim — so the wording routes the Sarthi to a manager rather than telling them
+         * nobody can go.
+         *
+         * Narrowing the fence to 8 miles on 2026-09-08 enlarged the population that
+         * lands here, which is why this stopped being deferrable.
+         */
+        if (outsideFence.length > 0) {
+            elsewhere.push({
+                reason: 'outside-fence',
+                groups: outsideFence.length,
+                seats: outsideFence.reduce((n, s) => n + s.seats, 0),
+            });
+        }
 
         // Anchored on the rider farthest from the venue — remainders and
         // long-waiters first — then grown outward from that anchor by proximity.

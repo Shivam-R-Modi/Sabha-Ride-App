@@ -298,3 +298,71 @@ describe('downloadCSV', () => {
         expect(new TextDecoder().decode(bytes.slice(3))).toBe('name\nÅsa');
     });
 });
+
+describe('reasonForWaiting — why anyone nearer was passed over', () => {
+    /**
+     * These sentences had NO test. They are the only thing standing between a Sarthi and
+     * "Nobody is waiting right now", which is the shape that sent a manager hunting for
+     * a dispatch fault on 2026-08-14, so the wording is load-bearing rather than
+     * cosmetic.
+     */
+    const say = (reason: string, groups = 1, seats = 1) =>
+        cloudFunctions.reasonForWaiting({ reason, groups, seats });
+
+    it('tells a Sarthi that people are waiting at the other sabha', () => {
+        expect(say('other-location', 3)).toMatch(/3 groups are waiting for the other sabha/i);
+    });
+
+    it('says a bigger car is the fix, with the seat count', () => {
+        expect(say('waiting-for-bigger-vehicle', 1, 6)).toMatch(/bigger car than yours \(6 seats\)/i);
+    });
+
+    it('says nothing for a reason not worth words', () => {
+        // A stale request from another evening is not this driver's problem, and an
+        // unknown reason must not render as an empty sentence.
+        expect(say('no-seats-left')).toBeNull();
+        expect(say('something-invented-later')).toBeNull();
+    });
+
+    describe('outside-fence', () => {
+        /**
+         * The bucket added on 2026-09-08, when narrowing the fence to 8 miles enlarged
+         * the population it describes. Before it existed the tap returned `no_students`
+         * with nothing in `waiting`, so a rider beyond the limit produced the sentence
+         * "Nobody is waiting right now. Check back in a few minutes." while they sat
+         * outside.
+         */
+        it('says waiting will not help, and points at a manager', () => {
+            const line = say('outside-fence', 2)!;
+
+            expect(line).toMatch(/2 groups/);
+            expect(line).toMatch(/further out than you are asked to drive/i);
+            expect(line).toMatch(/waiting will not/i);
+            expect(line).toMatch(/manager/i);
+        });
+
+        it('does NOT claim the rider is unreachable', () => {
+            /**
+             * From one tap all that is known is that THIS volunteer may not be sent —
+             * a Sarthi living nearer them might be able to. Only the manager's board
+             * considers every car, and it has its own reason for that
+             * (`outside-every-fence`). A Sarthi who read "nobody can collect them" and
+             * went home would be right about themselves and wrong about the evening.
+             */
+            const line = say('outside-fence')!;
+
+            expect(line).not.toMatch(/nobody|no one|no-one|cannot be collected|unreachable/i);
+        });
+
+        it('names no mileage, so the bound lives in one place', () => {
+            // The owner moves this number — 15 to 8 on 2026-09-08. A figure here would
+            // be a third copy, after the constant and the manager's board.
+            expect(say('outside-fence')).not.toMatch(/\d+\s*(mile|mi\b)/i);
+        });
+
+        it('agrees in singular and plural', () => {
+            expect(say('outside-fence', 1)).toMatch(/^1 group /);
+            expect(say('outside-fence', 4)).toMatch(/^4 groups /);
+        });
+    });
+});
