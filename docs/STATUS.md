@@ -3,7 +3,65 @@
 **Handover note between machines.** Read it at the start of a session; update it
 at the end. Last updated **2026-09-07**.
 
-## READY, NOT DEPLOYED — the geo-fence narrowed to 8 miles, 2026-09-08
+## DEPLOYED — the 8-mile fence, and the Sarthi is told who is out of range, 2026-09-09
+
+`fca5b7e`. Client **2180**, functions **1256**, rules 266. Full sweep clean. Live bundle
+`index-zL4oNvDw.js` matches `dist/`, verified by filename AND by grepping the new sentence
+out of the served asset. `--only functions:globalAssignDriver,functions:previewCarloads` —
+the only two that import the fence — then hosting. No rules change.
+
+### Two changes, shipped together on purpose
+
+**The fence is 8 miles** (was 15), the owner's decision. Measured, before claiming
+anything: all 6 riders holding usable coordinates are already inside 8 miles of a Sarthi,
+so the 8–15 band is empty and nobody was stranded by this.
+
+**A rider beyond the fence is now reported to the tapping Sarthi.** It was a bare
+`.filter()` and the excluded riders were counted nowhere, so `waiting` held neither them
+nor a reason and the screen said *"Nobody is waiting right now. Check back in a few
+minutes."* while somebody sat outside who no car had been allowed to reach. These had to
+ship together: narrowing the fence enlarges the population that hits that silence.
+
+The bucket is `outside-fence`, deliberately NOT the board's `outside-every-fence`. One tap
+only knows that THIS volunteer may not be sent; a Sarthi living nearer them might be able
+to. So the wording routes them to a manager instead of saying nobody can go, and a test
+fails if it starts overclaiming.
+
+The fence had **no dispatch-level test at all**, which is how the silence survived a live
+release. `reasonForWaiting` had none either — the sentences that exist purely to stop
+"Nobody is waiting" were themselves unverified. Both now have suites, mutation-checked:
+removing the server bucket fails 3, removing the client case fails 4, and rewording it to
+*"Nobody can collect them tonight"* fails 2.
+
+### THE DEPLOY WENT OUT WRONG THE FIRST TIME, and the filename check is the only reason we know
+
+**Both deploys were run from the repo root while the work sat in a worktree.**
+`firebase.json` resolves `"public": "dist"` and `"source": "functions"` relative to
+**itself**, so the root's trees were uploaded: `functions/` at `main` = `9d1cd64`, which is
+`GEO_FENCE_MILES = 15` with no bucket, and a `dist/` **last built on 13 August**.
+
+So for a few minutes production ran a fresh revision of the OLD functions and served a
+**26-day-old client** — one with no knowledge of the second hall, against a server with
+two halls open. Both deploys printed `Deploy complete`. Every check that is not a byte
+comparison passed.
+
+It was caught by the one step that cannot be fooled: the live bundle came back
+`index-C0uXLQUY.js` against a built `index-zL4oNvDw.js`. Redeployed from the worktree,
+which has its own tracked `firebase.json` and `.firebaserc`; the tell in the output is the
+packaged path — `packaged /…/.claude/worktrees/<branch>/functions` is right, and the
+byte size differed too (938.67 KB against 933.76 KB).
+
+**Nobody was affected.** Checked rather than assumed: 0 rides created in the past hour, 0
+in flight, and the only audit row in the window is a scheduled `reminder.send`. The window
+*was* open (`home-to-sabha` at both halls, 12:42 EDT) — I had told the owner it was closed,
+which was true when I said it and stale by the time I acted.
+
+**Two things changed so it cannot repeat.** `CLAUDE.md`'s deploy section now carries the
+rule and the tell. And the root checkout's stale `dist/` is **deleted** — it is gitignored,
+so nothing is lost, and a root hosting deploy now fails loudly instead of silently shipping
+August.
+
+## SUPERSEDED — the geo-fence narrowed to 8 miles, 2026-09-08
 
 Owner: *"15 mi is too long. keep fencing at 8mi."* `GEO_FENCE_MILES = 8` in
 `functions/src/utils/carload.ts`, the one definition. Client **2173**, functions **1249**,

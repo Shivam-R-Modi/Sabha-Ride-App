@@ -129,6 +129,27 @@ Verify a hosting deploy by matching the live bundle filename against
 `dist/assets/index-*.js` — the service worker caches hard, so unregister it and
 clear caches first or you will confirm the previous build.
 
+**RUN EVERY DEPLOY FROM THE TREE YOU BUILT IN.** `firebase.json` resolves
+`"public": "dist"` and `"source": "functions"` **relative to its own location**, so
+`cd`-ing to the repo root to deploy while working in `.claude/worktrees/<branch>/`
+ships the ROOT checkout's `dist/` and `functions/` — whatever commit that tree
+happens to sit on. Every worktree has its own tracked `firebase.json` and
+`.firebaserc`, so just deploy from where you are; add `--project sabha-ride-app`
+if the alias does not resolve.
+
+This bit on 2026-09-09: functions and hosting were deployed from the root while
+the work was committed in a worktree, so production received a fresh revision of
+the OLD functions and a **26-day-old client bundle** — the root's `dist/` had last
+been built on 13 August. Both deploys reported complete and every check that is
+not a byte-comparison passed. It was caught only by the filename match above,
+which is why that step is not optional. Nobody was mid-request, so there was no
+harm; the same mistake during a sabha would have served riders an app with no
+knowledge of the second hall.
+
+The signal to watch in the deploy output is the **packaged path**: `functions:
+packaged /…/.claude/worktrees/<branch>/functions` is right, and the same line
+without the worktree segment means it is uploading the wrong tree.
+
 ## Housekeeping
 
 - `npm install` / `npm uninstall` need `--legacy-peer-deps` (`vite-plugin-pwa`
